@@ -28,3 +28,6 @@
       let cur = rows; const draw = ()=>{ const lim = cur.slice(0,600); box.innerHTML = `<p class="muted">${cur.length} level (hiển thị tối đa 600)</p><table class="wt"><thead><tr>${h.map(x=>`<th>${x}</th>`).join("")}</tr></thead><tbody>${lim.map(r=>`<tr>${r.map(c=>`<td>${c}</td>`).join("")}</tr>`).join("")}</tbody></table>`; };
       draw(); f.addEventListener("input", ()=>{ const v = f.value.trim().toLowerCase(); cur = !v ? rows : rows.filter(r=> r[1]===v || r.join("\t").toLowerCase().includes(v)); draw(); }); }).catch(()=>{ box.innerHTML = '<p class="muted">Không tải được levels.tsv (mở qua http:// hoặc GitHub Pages).</p>'; }); }
 })();
+
+document.addEventListener('click',function(e){var a=e.target.closest('a.shot');if(!a)return;e.preventDefault();
+var d=document.createElement('div');d.className='lightbox';d.innerHTML='<img src="'+a.getAttribute('href')+'">';d.onclick=function(){d.remove()};document.body.appendChild(d);});
