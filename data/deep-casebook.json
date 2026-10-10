@@ -1,0 +1,376 @@
+{
+  "release": "deep_20261010",
+  "case_count": 52,
+  "new_demo_images": 12,
+  "articles": [
+    "07-user-segmentation",
+    "12-gameplay-casebook",
+    "13-liveops-economy-casebook",
+    "14-implementation-design",
+    "15-demo-walkthrough"
+  ],
+  "cases": [
+    {
+      "title": "MS-S01 — Kho coin lớn nhưng vẫn non-purchaser",
+      "article": "07-user-segmentation.html",
+      "status": "Xem nhãn và nguồn trong mô tả; không mặc nhiên là case đã chạy",
+      "description": "- **Tiền điều kiện:** snapshot trước phiên 10/10, level 351; tài nguyên đã được chỉnh trong lịch sử.\n- **Hành động:** so summary segment với inventory, rồi mở offer của cùng tài khoản.\n- **Kết quả có thể xác minh:** cache đồng thời ghi non-purchaser và 999.996.759 coin. Không có phép đổi nhãn chỉ từ số dư được chứng minh.\n- **Ví dụ:** ✅ tài khoản đủ coin mua Play On hàng nghìn lần vẫn không được gọi là whale.\n- **Nguồn / trạng thái:** `before/summary.json` và MS-T10; đã đối chiếu cache và UI. Đây không phải test ngưỡng phân loại backend."
+    },
+    {
+      "title": "MS-S02 — NPP sang poor: SKU Drill đổi, target GAE không đổi",
+      "article": "07-user-segmentation.html",
+      "status": "Xem nhãn và nguồn trong mô tả; không mặc nhiên là case đã chạy",
+      "description": "- **Tiền điều kiện:** 🧪 hai event có segment lần lượt non-purchaser và poor; các gate khác giống nhau.\n- **Hành động:** chọn SKU từ bảng Drill và bảng thưởng GAE.\n- **Kỳ vọng từ cấu hình:** SKU 2 → SKU 5; cả hai dùng đường NPP với 20.705 điểm.\n- **Ví dụ:** An và Dung cùng 40 lượt thắng giả định đều qua 10 mốc; dollarEquivalent khác nhau là 2 và 5.\n- **Nguồn / trạng thái:** `treasureDrillConfigModel.segmentedIAPModel`, `GetRewardSteps`; đã đọc, chưa chạy cặp tài khoản."
+    },
+    {
+      "title": "MS-S03 — DH sang W: cùng điểm nhưng khác mốc",
+      "article": "07-user-segmentation.html",
+      "status": "Xem nhãn và nguồn trong mô tả; không mặc nhiên là case đã chạy",
+      "description": "- **Tiền điều kiện:** 🧪 Bình hamsi, Chi whale; cùng 3.641 điểm.\n- **Hành động:** cộng target từng đường và xét mốc đã qua.\n- **Kỳ vọng từ cấu hình:** DH qua 7 mốc, W qua 6; đây không phải lỗi thiếu thưởng.\n- **Ví dụ:** W mốc 7 cần tổng 4.105, còn thiếu 464; DH mốc 8 cần 3.705, còn thiếu 64.\n- **Nguồn / trạng thái:** bảng tích lũy phía trên, `CalculateCurrentRewardIndex`; đã tính từ config, chưa test tài khoản W."
+    },
+    {
+      "title": "MS-S04 — Bật Collection thay quà nhưng giữ target",
+      "article": "07-user-segmentation.html",
+      "status": "Xem nhãn và nguồn trong mô tả; không mặc nhiên là case đã chạy",
+      "description": "- **Tiền điều kiện:** 🧪 cùng NPP, so hai nhánh Collection tắt/bật, điểm sát 205.\n- **Hành động:** kiểm reward mốc 2 và tổng target.\n- **Kỳ vọng:** quà gốc mốc 2 từ 100 coin thành packType1; yêu cầu vẫn 200 riêng mốc, tức 205 tích lũy.\n- **Ví dụ:** An thấy pack thay coin chưa đủ để kết luận An vừa bị đổi nhãn thương mại.\n- **Nguồn / trạng thái:** `RewardStepsNPP`, `RewardStepsWithCollectionNPP`; config/native xác nhận nhánh, chưa thao tác bật/tắt trong phiên 10/10."
+    },
+    {
+      "title": "MS-S05 — Primary reward thay thế quà gốc",
+      "article": "07-user-segmentation.html",
+      "status": "Xem nhãn và nguồn trong mô tả; không mặc nhiên là case đã chạy",
+      "description": "- **Tiền điều kiện:** 🧪 mốc 2 NPP có 100 coin và primaryRewards là 20 Merge Energy; kiểm mini-game ở hai trạng thái khả dụng/không khả dụng.\n- **Hành động:** đi tới mốc bằng tiến độ hợp lệ, ghi reward được chọn và số dư trước/sau.\n- **Kỳ vọng từ native:** chọn primary khả dụng thay reward gốc; không tự cộng cả hai.\n- **Ví dụ:** nếu nhận 20 energy thì không dùng bảng coin 14.100 làm tổng coin thực nhận.\n- **Nguồn / trạng thái:** `RewardUtil.GetAvailableReward`, `MagicStreakGaeService.GetRewardSteps`; đã đọc native, chưa chạy nhánh quà này."
+    },
+    {
+      "title": "MS-S06 — Reset chuỗi không đồng nghĩa mất điểm tích lũy",
+      "article": "07-user-segmentation.html",
+      "status": "Xem nhãn và nguồn trong mô tả; không mặc nhiên là case đã chạy",
+      "description": "- **Tiền điều kiện:** 🧪 event đang chạy, điểm 641, multiplierIndex4 tương ứng x100.\n- **Hành động:** thua một màn đủ điều kiện, đọc điểm và index trước/sau.\n- **Kỳ vọng từ native:** `ResetStreakMultiplier` ghi index0; hàm này không ghi đè ProgressBarRewardScore.\n- **Ví dụ:** bốn lượt thắng tiếp theo dự kiến thêm 41 thay vì 400 nếu giữ chuỗi; hụt 359 điểm trong mô hình một đơn vị cơ sở.\n- **Nguồn / trạng thái:** `ResetStreakMultiplier`, `IncreaseScoreAndStreakMultiplier`; chưa test chuỗi GAE này ngày 10/10. Cảnh báo Master League không được dùng thay ảnh mất chuỗi GAE."
+    },
+    {
+      "title": "MS-S07 — Nhãn lạ: fallback GAE khác fallback Drill",
+      "article": "07-user-segmentation.html",
+      "status": "Xem nhãn và nguồn trong mô tả; không mặc nhiên là case đã chạy",
+      "description": "- **Tiền điều kiện:** 🧪 backend trả `new-segment`, dictionary Drill không chứa khóa.\n- **Hành động:** đối chiếu native chọn bảng; nếu chạy thực tế cần config QA được kiểm soát.\n- **Kỳ vọng:** GAE về NPP; Drill dùng giá trị phần tử đầu dictionary.\n- **Ví dụ:** không hardcode tiêu chí “mọi nhãn lạ luôn ra SKU 2”, vì thứ tự dictionary có thể đổi.\n- **Nguồn / trạng thái:** `GetRewardSteps`, `GetSegmentedIAPConfigModel`; đã đọc, chưa inject config hay đổi dữ liệu game."
+    },
+    {
+      "title": "MS-S08 — Gate level 109/110 của Drill",
+      "article": "07-user-segmentation.html",
+      "status": "Xem nhãn và nguồn trong mô tả; không mặc nhiên là case đã chạy",
+      "description": "- **Tiền điều kiện:** 🧪 feature bật, account ở level 109 và 110; có event hợp lệ và store sẵn sàng.\n- **Hành động:** refresh dữ liệu, mở Home, kiểm state và icon.\n- **Kỳ vọng cần kiểm thử:** level 109 chưa qua điều kiện level; 110 qua điều kiện này nhưng còn phải qua các gate khác.\n- **Ví dụ:** không gọi “Drill bị lỗi” chỉ vì level 110 chưa có icon.\n- **Nguồn / trạng thái:** cache `firstLevelToShow=110`, `isEnabled=true`; chưa chạy account ở ranh giới."
+    },
+    {
+      "title": "MS-S09 — DLB tại cap và ưu tiên Snitch",
+      "article": "07-user-segmentation.html",
+      "status": "Xem nhãn và nguồn trong mô tả; không mặc nhiên là case đã chạy",
+      "description": "- **Tiền điều kiện:** 🧪 level 39, cùng config, thử retry hiệu dụng 6/7 = max(retry − snitchRetry, 0); ghi cả hai counter, trạng thái Snitch và slSeed. Nhánh kiểm DLB cần Snitch không chọn slSeed; ví dụ snitchRetry=0 với retry thô 6/7.\n- **Hành động:** bắt đầu lượt, ghi SelectedSeedId và layout; cần ảnh bàn chơi trước/sau.\n- **Kỳ vọng từ native cũ:** retry hiệu dụng đạt cap và có DLB thì đọc bộ DLB; tại chỉ số 7 của level39 bắt đầu DLB[0]. Snitch có slSeed hợp lệ có thể được chọn trước.\n- **Ví dụ:** layout đổi không chứng minh đổi SKU hoặc nhãn thương mại.\n- **Nguồn / trạng thái:** GrandCachedRemoteConfigs hiện tại và `LevelModelService.GetSeedIdFromConfig`; chưa test bản 0.0.3129 tại cap."
+    },
+    {
+      "title": "MS-S10 — Level 351 không có DLB trong snapshot",
+      "article": "07-user-segmentation.html",
+      "status": "Xem nhãn và nguồn trong mô tả; không mặc nhiên là case đã chạy",
+      "description": "- **Tiền điều kiện:** ✅ tài khoản phiên 10/10 ở level 351, retryCount5 trước phiên.\n- **Hành động:** vào màn, chơi và quit; đối chiếu entry351 với danh sách DLB.\n- **Kết quả:** bàn 12 chai đã chạy; booster thay đổi bàn được xác minh. Không được coi thay đổi này là DLB.\n- **Ví dụ:** Extra Bottle thêm chai 12 → 13 vì người chơi nhấn booster, không phải backend tự cứu màn.\n- **Nguồn / trạng thái:** MS-T01/MS-T05; đã chạy UI, cache không có DLB ở 351."
+    },
+    {
+      "title": "MS-S11 — “FREE” bị khóa là tiến độ offer",
+      "article": "07-user-segmentation.html",
+      "status": "Xem nhãn và nguồn trong mô tả; không mặc nhiên là case đã chạy",
+      "description": "- **Tiền điều kiện:** ✅ Endless Portal ở cổng 1.300 coin / 81.000 VND; ô Extra Bottle FREE có khóa.\n- **Hành động:** chạm ô FREE.\n- **Kết quả:** hiện “Accept previous offer to open”; không cấp quà.\n- **Ví dụ:** một tài khoản non-purchaser chưa claim được ô này không có nghĩa mọi offer đều cấm người F2P. Đây là khóa thứ tự của thang đang mở.\n- **Nguồn / trạng thái:** MS-T10/MS-T11; đã chạy 10/10, ảnh dưới.\n\n![Portal: cổng trả tiền trước quà miễn phí](../assets/test_20261010/MS-14-endless-portal.png)\n\n![Portal: chạm FREE bị khóa](../assets/test_20261010/MS-15-locked-free.png)\n\n*✅ Cặp ảnh ngày 10/10: cùng tài khoản, cùng offer; thao tác chạm ô FREE sinh thông báo yêu cầu nhận offer trước. Không mua hàng hoặc đổi segment trong case.*"
+    },
+    {
+      "title": "MS-S12 — Giá cứu Daily bằng coin không phải SKU theo segment",
+      "article": "07-user-segmentation.html",
+      "status": "Xem nhãn và nguồn trong mô tả; không mặc nhiên là case đã chạy",
+      "description": "- **Tiền điều kiện:** ✅ Daily tutorial hết 180 giây.\n- **Hành động:** bấm Play On 900 coin.\n- **Kết quả:** cộng 60 giây; số dư 999.996.759 → 999.995.859.\n- **Ví dụ:** dù có nhãn non-purchaser, người chơi vẫn dùng coin sẵn có để cứu màn, không cần giao dịch IAP trong case.\n- **Nguồn / trạng thái:** MS-T14/MS-T15; đã chạy. Không gán giá 900 này thành giá của mọi chế độ."
+    },
+    {
+      "title": "MS-S13 — Một lần mua có đổi nhãn ngay không?",
+      "article": "07-user-segmentation.html",
+      "status": "Xem nhãn và nguồn trong mô tả; không mặc nhiên là case đã chạy",
+      "description": "- **Tiền điều kiện:** cần tài khoản sandbox/receipt thử hợp lệ, ghi segment global và event trước mua.\n- **Hành động:** mua thành công; đọc lại ngay, sau đồng bộ, sau đóng/mở app và sau event mới.\n- **Kỳ vọng cần đo:** thời điểm đổi nhãn; có đổi target đang dở hay chỉ đợt sau; SKU đang hiển thị có giữ ổn định không.\n- **Ví dụ:** 🧪 An mua SKU 2 không tự động được kết luận thành poor; tên nhãn không tiết lộ luật phân loại.\n- **Nguồn / trạng thái:** có đường FetchSegment và cache; phiên này không có receipt mua thành công, case chưa chạy."
+    },
+    {
+      "title": "MS-S14 — Quảng cáo khác nhau chưa đủ gọi là A/B",
+      "article": "07-user-segmentation.html",
+      "status": "Xem nhãn và nguồn trong mô tả; không mặc nhiên là case đã chạy",
+      "description": "- **Tiền điều kiện:** 🧪 hai tài khoản cùng app, country, level, quyền NoAds, thời gian từ inter trước và trạng thái mạng.\n- **Hành động:** ghi configType, cấu hình được áp dụng, điều kiện quảng cáo và SDK readiness rồi đối chiếu lần hiển thị.\n- **Kỳ vọng cần đo:** chênh lệch do config hay do quảng cáo không có sẵn; một phiên không hiện inter chưa phủ định cờ bật.\n- **Ví dụ:** ✅ cache chọn configType 48, inter từ level 61 với cooldown 240s; chưa đọc được traffic allocation hay experimentID tương ứng.\n- **Nguồn / trạng thái:** `GrandCachedAdConfig`, ad backend config; đã đọc config, chưa chạy cặp tài khoản."
+    },
+    {
+      "title": "MS-G01 — Sai màu không tạo tác động phụ · OBSERVED",
+      "article": "12-gameplay-casebook.html",
+      "status": "Xem nhãn và nguồn trong mô tả; không mặc nhiên là case đã chạy",
+      "description": "**Tiền điều kiện:** level 351, chai 1 hồng, chai 2 tím, bàn dừng. **Bước:** tap chai 1 rồi chai 2; chờ phản hồi. **Kết quả đã thấy:** bố cục giữ nguyên, không trừ booster. **Bất biến:** số ô mỗi màu và lượng coin không đổi bởi một cặp chọn sai. **Bằng chứng:** MS-T02; ảnh `MS-03-invalid-color.png`; `actions.jsonl`. **Mở rộng PROPOSED:** lặp 20 lần, tap quá nhanh và tap chai đang animation; chưa có kết quả stress test."
+    },
+    {
+      "title": "MS-G02 — Chai trống mở thông tin ẩn · OBSERVED",
+      "article": "12-gameplay-casebook.html",
+      "status": "Xem nhãn và nguồn trong mô tả; không mặc nhiên là case đã chạy",
+      "description": "**Tiền điều kiện:** cùng bàn, đích là chai trống hàng dưới. **Bước:** chọn chai 1 → đích; đợi nguồn trở về vị trí. **Kết quả:** hồng sang đích; lớp nâu trước đó che dưới dấu hỏi hiện ra. **Bất biến:** chỉ đoạn trên cùng chuyển; số màu tổng không đổi. **Bằng chứng:** MS-T03; ảnh `MS-04-valid-pour.png`; `SelectionResult.GetSelectionResult`. **Ví dụ sử dụng:** người chơi có thể quyết định gom nâu sau khi biết màu mới, thay vì tiếp tục đoán."
+    },
+    {
+      "title": "MS-G03 — Undo hoàn nước nhưng không che lại màu · OBSERVED",
+      "article": "12-gameplay-casebook.html",
+      "status": "Xem nhãn và nguồn trong mô tả; không mặc nhiên là case đã chạy",
+      "description": "**Tiền điều kiện:** ngay sau G02; Undo=9.999. **Bước:** bấm Undo một lần, đợi ổn định. **Kết quả:** đích rỗng; hồng về nguồn; nâu còn thấy; Undo=9.998. **Bất biến:** mỗi lần dùng thành công giảm một vật phẩm; thông tin lộ không được mặc định là một phần của rollback. **Bằng chứng:** MS-T04 và cặp ảnh G02/G03. **Ý nghĩa:** khi chấm độ khó cần tách attempt có Undo sau reveal khỏi attempt hoàn toàn tự giải."
+    },
+    {
+      "title": "MS-G04 — Extra Bottle làm thay đổi hit target · OBSERVED",
+      "article": "12-gameplay-casebook.html",
+      "status": "Xem nhãn và nguồn trong mô tả; không mặc nhiên là case đã chạy",
+      "description": "**Tiền điều kiện:** 12 chai, Extra Bottle=9.991. **Bước:** dùng Extra Bottle, đợi bàn reflow. **Kết quả:** 13 chai, kho còn 9.990. **Bất biến:** không mất nội dung chai cũ; tác vụ tự động phải lấy tọa độ mới sau reflow. **Bằng chứng:** MS-T05; ảnh `MS-06-extra-bottle.png`; `BottleCollection.AddExtraBottle`. **Chưa xác minh:** giới hạn tổng số chai và hành vi bấm khi chạm trần; không coi một lần thành công là đã phủ điều kiện giới hạn."
+    },
+    {
+      "title": "MS-G05 — Đổ một phần vì đích thiếu chỗ · STATIC / PROPOSED",
+      "article": "12-gameplay-casebook.html",
+      "status": "Xem nhãn và nguồn trong mô tả; không mặc nhiên là case đã chạy",
+      "description": "**Fixture:** H=4, A=[Đỏ,Xanh,Xanh], B=[Vàng,Vàng,Xanh], không blocker. **Bước:** chọn A→B. **Kỳ vọng từ code:** q=min(2,1)=1; A=[Đỏ,Xanh], B=[Vàng,Vàng,Xanh,Xanh]. **Bất biến:** không đổ tràn, không ép cả khối 2 ô. **Bằng chứng:** `SelectionResult.c`, nhánh kẹp `GetEmptyCellCount`, RVA `0xE3E338`. **Trạng thái:** chưa dựng fixture trong app; ảnh G02 chỉ minh họa thao tác vào chai trống, không chứng minh case thiếu chỗ này."
+    },
+    {
+      "title": "MS-G06 — Cùng màu nhưng bị blocker chặn · STATIC / PROPOSED",
+      "article": "12-gameplay-casebook.html",
+      "status": "Xem nhãn và nguồn trong mô tả; không mặc nhiên là case đã chạy",
+      "description": "**Fixture:** nguồn đầu Xanh; đích đầu Xanh còn chỗ nhưng overlay đang khóa. **Bước:** thử đổ, hoàn thành mục tiêu mở khóa bằng nước đi khác, đợi animation gỡ blocker, thử lại. **Kỳ vọng:** lần đầu từ chối; lần sau chỉ cho đổ nếu mọi gate đã thỏa. **Bất biến:** phép kiểm màu không được bỏ qua quyền chọn của blocker. **Bằng chứng:** `BottleItem.IsSelectableAsTarget`, `CacheBlockedIndexes`, `ABlockerItem`; `gdd/Obstacles.json`. **Cần ghi:** blocker id, mục tiêu, thời điểm xóa logic so với hiệu ứng hình ảnh."
+    },
+    {
+      "title": "MS-G07 — Cảnh báo Quit có nhiều tầng · OBSERVED",
+      "article": "12-gameplay-casebook.html",
+      "status": "Xem nhãn và nguồn trong mô tả; không mặc nhiên là case đã chạy",
+      "description": "**Tiền điều kiện:** đang ở Regular 351, 5 life. **Bước:** Settings→Quit; xác nhận cảnh báo mạng; xác nhận cảnh báo rank tiếp theo. **Kết quả:** life cảnh báo trước, Master League rank sau; Failed rồi về Home 4 life. **Bất biến:** chuỗi popup không được trừ life nhiều lần cho một lần quit. **Bằng chứng:** MS-T06/07/08, ảnh `MS-09-quit-life.png`, `MS-10-quit-followup.png`, `MS-11-failed.png`. **Giới hạn:** không có dữ liệu đủ để kết luận rank thực tế giảm bao nhiêu; ảnh chỉ chứng minh cảnh báo."
+    },
+    {
+      "title": "MS-G08 — Daily timeout và mua 60 giây · OBSERVED",
+      "article": "12-gameplay-casebook.html",
+      "status": "Xem nhãn và nguồn trong mô tả; không mặc nhiên là case đã chạy",
+      "description": "**Tiền điều kiện:** tutorial Daily, timer đã về 0, coin đủ 900. **Bước:** chụp Out of Time; bấm Play On; chụp timer và đọc cache sau thao tác. **Kết quả:** timer khoảng 00:59; coin 999.996.759→999.995.859. **Bất biến:** cộng giờ không xáo bàn; số dư giảm đúng một giao dịch. **Bằng chứng:** MS-T14/15; ảnh `MS-21-current.png`, `MS-22-daily-playon.png`; `after_playon/summary.json`. **Chưa chạy:** coin=899, coin=900, double-tap và app bị kill trong lúc mua."
+    },
+    {
+      "title": "MS-G09 — Daily thắng không tăng Regular · OBSERVED",
+      "article": "12-gameplay-casebook.html",
+      "status": "Xem nhãn và nguồn trong mô tả; không mặc nhiên là case đã chạy",
+      "description": "**Tiền điều kiện:** lượt Daily được giải bằng 53 nước hợp lệ, không booster. **Bước:** hoàn thành màu; Continue; đợi calendar settle. **Kết quả:** reward 10 coin; ngày 10 hoàn thành; lịch 0→1; Regular vẫn 351; ngày 11 khóa. **Bất biến:** không cộng nhầm tiến độ Regular hoặc 20 coin Regular. **Bằng chứng:** MS-T16–18; `MS-solve-53.png`, `MS-29-win-result.png`, `MS-31-calendar-settled.png`; before/after cache. **Giới hạn:** đây là một ngày/tutorial; chưa phủ đổi tháng và replay ngày đã xong."
+    },
+    {
+      "title": "MS-G10 — Ranh giới DLB phải tính retry hiệu dụng · STATIC / PROPOSED",
+      "article": "12-gameplay-casebook.html",
+      "status": "Xem nhãn và nguồn trong mô tả; không mặc nhiên là case đã chạy",
+      "description": "**Fixture:** entry 39; Snitch không active, không `slSeed` được chọn; dlbCap=7. **Bước:** giữ cùng config, thử ba trạng thái retry hiệu dụng 6/7/8; ghi selected seed. **Kỳ vọng:** 6 còn tập thường; 7/8 chọn DLB[0]/DLB[1]. **Bất biến:** lấy `max(retry−snitchRetry,0)`; không lấy retry thô. **Bằng chứng:** `LevelModelService.GetSeedIdFromConfig` và `IPlayerService.cs`, runtime `levelsConfig.levelConfigModels[38]`. **Trạng thái:** chưa chạy boundary test; ứng dụng 3129 có thể thay đổi thuật toán."
+    },
+    {
+      "title": "MS-G11 — Vượt số seed không lặp ngay seed cũ nếu còn lựa chọn · STATIC / PROPOSED",
+      "article": "12-gameplay-casebook.html",
+      "status": "Xem nhãn và nguồn trong mô tả; không mặc nhiên là case đã chạy",
+      "description": "**Fixture:** seeds=[A,B,C], chỉ số hiệu dụng vượt danh sách, lastSelectedSeed=B. **Bước:** gọi đường chọn lại; ghi tập ứng viên và seed kết quả. **Kỳ vọng code 3063:** copy danh sách, remove B, random A/C. Nếu chỉ có [B], loại xong rỗng thì dùng lại tập gốc. **Bất biến:** không sửa danh sách config gốc; không chia modulo cho tập rỗng sau khi đã có fallback. **Bằng chứng:** thân pseudo-C `GetSeedIdFromConfig`, các lời gọi List constructor/Remove/Random.Range. **Ý nghĩa:** giảm cảm giác chơi lại y nguyên, không chứng minh công bằng xác suất mọi kích thước tập."
+    },
+    {
+      "title": "MS-G12 — Cạnh tranh thắng và hết giờ · PROPOSED",
+      "article": "12-gameplay-casebook.html",
+      "status": "Xem nhãn và nguồn trong mô tả; không mặc nhiên là case đã chạy",
+      "description": "**Fixture:** Daily còn <1 giây, nước cuối đã được chọn nhưng animation chưa xong. **Bước:** thực hiện nước cuối, ghi video/frame, timer, `LevelEndType` và reward. **Kỳ vọng cần chốt bằng test:** chỉ một kết cục được commit; không đồng thời mở Perfect và Out of Time, không trừ Play On sau win. **Bất biến:** một attempt có một terminal outcome và một lần reward. **Bằng chứng định vị:** `LevelWinOrStuckSystem.CheckAndApplyTimeIsUp`, `IsBoardStopped`, `CheckAndApplyLevelWinOrHasNoMove`. **Không khẳng định:** thứ tự ưu tiên chính xác của hai điều kiện ở bản 3129 chưa được thực thi."
+    },
+    {
+      "title": "MS-E01 — Không coi Failed:20 là một grant · OBSERVED",
+      "article": "13-liveops-economy-casebook.html",
+      "status": "Xem nhãn và nguồn trong mô tả; không mặc nhiên là case đã chạy",
+      "description": "**Tiền điều kiện:** Regular 351, coin=999.996.759. **Bước:** Quit qua hai cảnh báo, xem Failed, về Home, đọc số dư. **Kết quả:** 20 xuất hiện trên popup nhưng coin không tăng; life 5→4. **Bất biến:** ledger chỉ ghi reward khi số dư/transaction xác nhận, không scrape chữ “Rewards” rồi cộng. **Bằng chứng:** MS-T08, `MS-11-failed.png`, cache và ảnh Home sau quit. **Chưa chạy:** mọi nhánh fail khác; không khẳng định toàn bộ game không bao giờ cấp compensation sau fail."
+    },
+    {
+      "title": "MS-E02 — Đối soát debit và credit Daily · OBSERVED",
+      "article": "13-liveops-economy-casebook.html",
+      "status": "Xem nhãn và nguồn trong mô tả; không mặc nhiên là case đã chạy",
+      "description": "**Tiền điều kiện:** số dư trước đã lưu. **Bước:** mua Play On 900, đọc snapshot after_playon; hoàn thành lượt Daily thành công, Continue, đọc after. **Kết quả:** −900 rồi +10, net −890. **Bất biến:** các booster không đổi do hai thao tác này; Regular không tăng. **Bằng chứng:** ba `summary.json`; MS-T15/17/18. **Điểm phân tích:** `spendCoin` không đổi nên không dùng nó thay số dư để xác nhận debit."
+    },
+    {
+      "title": "MS-E03 — Coin bằng giá và thiếu một coin · STATIC / PROPOSED",
+      "article": "13-liveops-economy-casebook.html",
+      "status": "Xem nhãn và nguồn trong mô tả; không mặc nhiên là case đã chạy",
+      "description": "**Fixture:** hai account test sạch ở coin 900 và 899, đã mở cùng popup Play On đầu. **Bước:** bấm một lần và ghi kết quả. **Kỳ vọng từ đường TryUse:** 900 được debit về 0 và áp hiệu ứng; 899 không được thành số âm, đi nhánh thiếu tiền/mở Store đúng source PlayOn. **Bất biến:** không cấp cứu ván trước khi giao dịch tài nguyên được chấp nhận. **Bằng chứng định vị:** `PlayOnManager.TryUse`, `InventoryService`, `StorePopUpSource.PlayOn`. Chưa thực thi trên tài khoản hiện tại vì tài nguyên dư cao."
+    },
+    {
+      "title": "MS-E04 — Giá tăng trong cùng attempt và kẹp bậc cuối · STATIC / PROPOSED",
+      "article": "13-liveops-economy-casebook.html",
+      "status": "Xem nhãn và nguồn trong mô tả; không mặc nhiên là case đã chạy",
+      "description": "**Fixture:** đủ 10.000 coin, bảng [900,1900,2300], cùng attempt. **Bước:** gọi cứu bốn lần qua điều kiện stuck thích hợp. **Kỳ vọng:** chi 900+1900+2300+2300=7.400; còn 2.600. **Bất biến:** lần mở lại popup mà chưa mua không được tăng usage; bắt đầu attempt mới phải kiểm lại reset usage. **Bằng chứng:** `GetCurrentPlayOnPrice`, `LevelStats._playOnUsage`. **Giới hạn:** hiệu ứng từng bậc Daily/Regular cần test riêng; bảng giá không đủ chứng minh effect."
+    },
+    {
+      "title": "MS-E05 — FREE bị khóa không cấp thưởng · OBSERVED",
+      "article": "13-liveops-economy-casebook.html",
+      "status": "Xem nhãn và nguồn trong mô tả; không mặc nhiên là case đã chạy",
+      "description": "**Tiền điều kiện:** Endless Portal dừng ở cửa 1.300 coin/81.000 VND. **Bước:** bấm ô Extra Bottle FREE phía sau. **Kết quả:** thông báo phải accept offer trước; không cấp Extra Bottle. **Bất biến:** tap một ô khóa không được làm bước hiện tại tăng. **Bằng chứng:** MS-T10/11; `MS-15-locked-free.png`. **Chưa chạy:** thanh toán thật, purchase cancellation, restore, refund; không dùng ảnh storefront để ghi purchase success."
+    },
+    {
+      "title": "MS-E06 — Tính cả đoạn Portal, không đếm trùng rương · STATIC / PROPOSED",
+      "article": "13-liveops-economy-casebook.html",
+      "status": "Xem nhãn và nguồn trong mô tả; không mặc nhiên là case đã chạy",
+      "description": "**Fixture:** fallbackSteps hiện tại, bắt đầu ở bước 3, event chưa hết. **Bước mô phỏng:** purchase được xác nhận một lần; claim lần lượt 4–8. **Kỳ vọng ledger:** 1.500 coin, Undo1, Shuffle3, ExtraBottle1, limitless1h. **Bất biến:** rương là container; các reward con được cấp một lần, không cộng thêm một gói booster vì có cả chestType và rewards. **Bằng chứng:** `endlessPortalV2ConfigModel.fallbackSteps[2..7]`. **Status:** tính cấu hình, chưa thực hiện IAP."
+    },
+    {
+      "title": "MS-E07 — Rơi từ 10 về checkpoint 5 · STATIC / PROPOSED",
+      "article": "13-liveops-economy-casebook.html",
+      "status": "Xem nhãn và nguồn trong mô tả; không mặc nhiên là case đã chạy",
+      "description": "**Fixture:** Broom active, winCount=10, checkpoint5 đã đạt, mốc đã claim lưu rõ. **Bước:** fail một Regular. **Kỳ vọng:** về checkpoint5 theo luật; chặng đến11 còn6 thắng. **Bất biến:** không reset event id; không xóa reward đã nhận; khi leo lại qua8 không nhân đôi rương trái với ledger. **Bằng chứng:** `BroomStreakService.TryResetWinStreak/GetCheckPointWinCount`, DataService.FallDownTo, configsteps. **Chưa chạy:** test lại grant ở mốc8 là trọng tâm cần thực thi, không mặc định đã chống trùng hoàn hảo."
+    },
+    {
+      "title": "MS-E08 — Một win có nhiều tác động nhưng một ledger rõ · STATIC / PROPOSED",
+      "article": "13-liveops-economy-casebook.html",
+      "status": "Xem nhãn và nguồn trong mô tả; không mặc nhiên là case đã chạy",
+      "description": "**Fixture:** SuperHard first-try, MiniGame active, TeamQuest tham gia, MagicLab stage có hai task liên quan; pass tắt. **Bước:** hoàn thành level, chờ các callback và claim popup. **Kỳ vọng tính config:** 6 trident; TeamQuest+5 nếu đủ điều kiện; hai task tiến bộ; pass không cộng key. **Bất biến:** progress chưa claim không được ghi như coin đã cấp. **Bằng chứng:** MiniGame config1/2/3×2, TeamQuest1/3/5, MagicLabTaskType. **Cần đo:** thứ tự callback/reward thật và phạm vi của first-try trên bản cài."
+    },
+    {
+      "title": "MS-E09 — Reach task khác delta task · STATIC / PROPOSED",
+      "article": "13-liveops-economy-casebook.html",
+      "status": "Xem nhãn và nguồn trong mô tả; không mặc nhiên là case đã chạy",
+      "description": "**Fixture:** MagicLab vừa bắt đầu; Broom đang step11; stage có task reach8 và earn100coin. **Bước:** đồng bộ event; sau đó nhận grant20coin. **Kỳ vọng theo mô hình task:** task reach không bắt người chơi làm lại step8; task earn chỉ cộng grant phù hợp20, không lấy toàn bộ số dư làm progress. **Bất biến:** mở lại popup không tăng task. **Bằng chứng:** `MagicLabService` đường nhiệm vụ reach/increase, enum EarnCoin. **Giới hạn:** ngưỡng và filter earn reason của stage đang chạy phải lấy server response; ví dụ100 là giả định."
+    },
+    {
+      "title": "MS-E10 — Popup quota không bằng số popup tổng · STATIC / PROPOSED",
+      "article": "13-liveops-economy-casebook.html",
+      "status": "Xem nhãn và nguồn trong mô tả; không mặc nhiên là case đã chạy",
+      "description": "**Fixture:** HomeReturn limit=2; hai event skippable và một reward bắt buộc đủ điều kiện trước offer. **Bước:** win→Home; ghi ordered commands, reason show/skip, số popup. **Kỳ vọng:** đánh quota đúng loại; offer cuối có thể bị hoãn; reward bắt buộc không mất vì quota. **Bất biến:** “chưa hiện” khác “không tồn tại”. **Bằng chứng:** `ReturnToHomeSequenceService`, `IReturnToHomeSequenceCommand`, runtime root config. **Không claim:** số popup chính xác trong fixture chưa chạy."
+    },
+    {
+      "title": "MS-E11 — Daily mốc tháng chỉ cấp một lần · PROPOSED",
+      "article": "13-liveops-economy-casebook.html",
+      "status": "Xem nhãn và nguồn trong mô tả; không mặc nhiên là case đã chạy",
+      "description": "**Fixture:** đã hoàn thành 2 ngày, reward mốc3 chưa nhận. **Bước:** thắng ngày thứ3; claim100coin; mở lại lịch, relaunch và đồng bộ. **Kỳ vọng:** count=3, 100coin chỉ một lần ngoài10coin thưởng ngày. **Bất biến:** claim bit/counter giữ qua restart; không cộng lại khi animation phát lại. **Bằng chứng định vị:** `DailyMonthModel.ClaimedDays`, Daily progress claim methods; cacheDaily rewards. **Chưa chạy:** tháng ngắn, đổi tháng, chơi bù, múi giờ; không suy từ một ngày đã thắng."
+    },
+    {
+      "title": "MS-E12 — Cổng active không thay thế điều kiện participation · STATIC / PROPOSED",
+      "article": "13-liveops-economy-casebook.html",
+      "status": "Xem nhãn và nguồn trong mô tả; không mặc nhiên là case đã chạy",
+      "description": "**Fixture:** BoatRush enabled, người chơi đủ level90 nhưng chưa Join; một event đã hết giờ; một event đang mở. **Bước:** so nút Home, popup Join và lời mời thưởng; không mua gì. **Kỳ vọng:** active event/eligibility/join là ba trạng thái khác nhau; expired không được cấp quà tham gia như event còn hiệu lực. **Bất biến:** cùng config flag không bảo đảm có race live. **Bằng chứng:** `BoatRushStateService`, `ShouldShowJoinPopUp`, thời gian event. Ảnh BoatRush 07/10 chỉ minh họa Join và 30 phút life, không phải run mới của fixture."
+    },
+    {
+      "title": "MS-I01 — Hai selection tranh cùng một chai · PROPOSED",
+      "article": "14-implementation-design.html",
+      "status": "Xem nhãn và nguồn trong mô tả; không mặc nhiên là case đã chạy",
+      "description": "**Fixture:** A và B có thể cùng đổ vào C; C chỉ còn 1 ô. **Bước:** tap A→C rồi B→C trong khi animation đầu chưa kết thúc; lặp với hai cặp hoàn toàn độc lập. **Kỳ vọng cần xác minh:** cùng chai bị serialize hoặc từ chối an toàn; hai cặp độc lập có thể giữ nhịp nếu game hỗ trợ. **Bất biến:** tổng nước bảo toàn, C không vượt H, mỗi selection được áp đúng một lần. **Bằng chứng định vị:** `SelectionSystem._selectionsRunning`, `BottleItem.IsBottleSelectionRunning`, `Selection.ApplySelection`. **Trạng thái:** chưa có stress-run trên 3129."
+    },
+    {
+      "title": "MS-I02 — Undo sau Shuffle và sau một nước đổ mới · OBSERVED bổ sung 10/10",
+      "article": "14-implementation-design.html",
+      "status": "Xem nhãn và nguồn trong mô tả; không mặc nhiên là case đã chạy",
+      "description": "**Tiền điều kiện:** phiên demo mới tại level 351, layout khác phiên trước; Shuffle còn 9.999, Undo còn 9.998. **Bước:** mở lựa chọn Shuffle và thử chai trống; chọn lại Shuffle rồi chai 3 hợp lệ; bấm Undo ngay; sau đó đổ màu nâu chai 3 vào chai trống 9, rồi bấm Undo. **Kết quả demo:** chọn/hủy trên chai trống không trừ Shuffle; Shuffle hợp lệ đổi thứ tự màu và giảm 9.999→9.998; Undo ngay sau Shuffle không đổi bàn và không giảm kho; sau nước đổ mới, Undo giảm 9.998→9.997 và trả bàn về trạng thái sau Shuffle. **Bất biến được kiểm trong tình huống này:** hiệu ứng Shuffle không bị Undo vừa bấm đảo lại; nước đổ mới vẫn có lịch sử riêng. **Bằng chứng:** `screens/deep_20261010/MS-D09-shuffle-result.png` đến `MS-D12-undo-pour.png`, ảnh và nhật ký đầy đủ ở [demo thao tác bổ sung](15-demo-walkthrough.html). **Giới hạn:** đây là một tình huống sau Shuffle, chưa chứng minh chính sách xóa toàn bộ lịch sử ở mọi trạng thái/collection; cần test có nhiều nước đổ trước Shuffle để phân biệt chính xác."
+    },
+    {
+      "title": "MS-I03 — Remote config đổi giữa level và retry · PROPOSED",
+      "article": "14-implementation-design.html",
+      "status": "Xem nhãn và nguồn trong mô tả; không mặc nhiên là case đã chạy",
+      "description": "**Fixture:** attempt đã vào seed A, giá Play On 900; remote mới đưa seed B và giá khác. **Bước:** nhận config khi đang chơi; mở Stuck; retry; ghi config fingerprint mỗi mốc. **Kỳ vọng đặc tả:** policy phải nhất quán và UI giá khớp debit; không thay nước đang có trong cùng attempt. **Bất biến:** transaction dùng cùng giá đã xác nhận trên popup hoặc yêu cầu refresh minh bạch. **Bằng chứng định vị:** `RemoteConfigs`, `RegularLevelManager.StartLevel`, `GetCurrentPlayOnPrice`. **Status:** chưa có test injection; không khẳng định giá được khóa hay đọc mới theo runtime 3129."
+    },
+    {
+      "title": "MS-I04 — Seed thiếu và fallback không đổi lớp dữ liệu âm thầm · STATIC / PROPOSED",
+      "article": "14-implementation-design.html",
+      "status": "Xem nhãn và nguồn trong mô tả; không mặc nhiên là case đã chạy",
+      "description": "**Fixture:** mapping remote trỏ seed không có local; network không tải được; Resources có config default. **Bước:** vào level, ghi seed / request / fallback; khôi phục network và retry. **Kỳ vọng cần kiểm:** hoặc nạp default theo nhánh code, hoặc báo trạng thái chờ có kiểm soát; không dựng bàn rỗng rồi tự win. **Bất biến:** analytics lưu seed thật đã chơi và nguồn config cuối cùng. **Bằng chứng:** `LevelModelService` nhánh kiểm catalog/fallback; `LevelModelPersistenceService`, `_maxCoolDownDurationAsSeconds=200`. **Giới hạn:** 200 là cap từ code cũ, chưa đo backoff thực trên 3129."
+    },
+    {
+      "title": "MS-I05 — Callback purchase lặp không cấp lại Portal · PROPOSED",
+      "article": "14-implementation-design.html",
+      "status": "Xem nhãn và nguồn trong mô tả; không mặc nhiên là case đã chạy",
+      "description": "**Fixture:** môi trường sandbox IAP, event và bước trả tiền đã chốt; transaction test có một receipt. **Bước:** trả callback success lặp, đóng/mở popup, restart; ghi coin/bước Portal. **Kỳ vọng đặc tả:** một transaction→một grant, một bước được vượt; cancel/failure giữ nguyên bước. **Bất biến:** khóa grant theo transaction và event-step, không theo số lần callback UI. **Bằng chứng định vị:** `IAPService`, `EndlessPortal` purchase/claim flow, `isAndroidIapVerificationEnabled=true` trong cache. **Trạng thái:** chưa giao dịch thật hay sandbox; bật verification không chứng minh đã kiểm toàn bộ receipt."
+    },
+    {
+      "title": "MS-I06 — Claim event cũ đến sau event mới · PROPOSED",
+      "article": "14-implementation-design.html",
+      "status": "Xem nhãn và nguồn trong mô tả; không mặc nhiên là case đã chạy",
+      "description": "**Fixture:** reward event A đang pending; event B bắt đầu sau khi A hết. **Bước:** trì hoãn response A; tải B; cho response A hoàn tất; mở lại app. **Kỳ vọng đặc tả:** thưởng hợp lệ của A chỉ cấp một lần theo A; không đánh dấu step B đã claim. **Bất biến:** UI, local và server không nhầm event identity. **Bằng chứng định vị:** DataService.GetSyncName, event cache models, claim endpoints. **Giới hạn:** không có response / server trace trong phiên mới, nên đây là case độ bền cần môi trường test."
+    },
+    {
+      "title": "MS-I07 — Reward biến thể không cộng cả nhánh gốc · STATIC / PROPOSED",
+      "article": "14-implementation-design.html",
+      "status": "Xem nhãn và nguồn trong mô tả; không mặc nhiên là case đã chạy",
+      "description": "**Fixture:** Broom mốc 2 có RewardModel 15 phút và WithCollection 15 phút+Pack; lần 1 Collection inactive, lần 2 active, lần 3 active nhưng WithCollection=null. **Bước:** gọi resolver và ghi reward resolved trước grant. **Kỳ vọng từ pseudo-C:** 15 phút; 15 phút + Pack; fallback 15 phút. **Bất biến:** không ra 30 phút vì cộng hai model. **Bằng chứng:** `BroomStreakService.GetUpToDateStepRewardModel` RVA 0x13B1DC4. **Mở rộng:** test primary reward availability riêng trước khi tính Merge Energy."
+    },
+    {
+      "title": "MS-I08 — SpendCoin là counter một lần, không phải lifetime spend · STATIC + OBSERVED tương thích",
+      "article": "14-implementation-design.html",
+      "status": "Xem nhãn và nguồn trong mô tả; không mặc nhiên là case đã chạy",
+      "description": "**Fixture A:** SpendEventSent=false, SpendCoin=1.800; chi 100. **Kỳ vọng code:** 1.900 vượt 1.899→gửi attribution và đặt true. **Fixture B:** true, SpendCoin=2.700; chi 900. **Kỳ vọng code:** counter giữ 2.700 dù balance giảm. **Bằng chứng quan sát B:** ba snapshot 10/10 đều 2.700, true và coin giảm 900 sau Daily. **Bất biến:** dashboard lifetime coin spent phải dùng ledger, không field này. **Nguồn:** `InventoryService.CheckCanSendEventForSpendCoin` RVA 0x3CED9DC. A chưa chạy; B là đối chiếu tương thích, không chứng minh call stack trực tiếp."
+    },
+    {
+      "title": "MS-DEMO-01: chọn và bỏ chọn một chai",
+      "article": "15-demo-walkthrough.html",
+      "status": "Đã thao tác — xem giới hạn trong case",
+      "description": "**Tiền điều kiện:** vừa vào màn, chưa đổ nước. **Thao tác:** chạm chai 1 một lần để nâng lên, chạm lại cùng chai. **Kết quả quan sát:** chai trở về vị trí, màu và kho booster giữ nguyên. **Ý nghĩa thiết kế:** lựa chọn chưa phải một nước đi; người chơi có thể đổi ý trước khi chọn đích. **Phạm vi xác nhận:** thao tác chạm lại đúng chai ở bàn này; chưa khái quát cho mọi trạng thái hoạt ảnh hoặc blocker.\n\n![MS-DEMO-01 — Chai 1 đang được chọn. So vị trí cổ chai với các chai còn lại; chưa có nước được đổ.](../assets/deep_20261010/MS-D04-selected.png)\n![MS-DEMO-01 — Chạm lại chai 1: trở về vị trí, tài nguyên không đổi.](../assets/deep_20261010/MS-D05-deselected.png)"
+    },
+    {
+      "title": "MS-DEMO-02: chọn Shuffle rồi bấm một chai rỗng",
+      "article": "15-demo-walkthrough.html",
+      "status": "Đã thao tác — xem giới hạn trong case",
+      "description": "**Tiền điều kiện:** Shuffle 9.999, chai 9 trống. **Thao tác:** chạm Shuffle, sau đó chạm chai 9. **Kết quả quan sát:** lớp chọn mục tiêu đóng; số Shuffle vẫn 9.999. **Bất biến đã kiểm:** không có mục tiêu hợp lệ thì không mất vật phẩm trong thao tác này. **Điều cần lưu ý khi viết GDD:** không mô tả “bấm nút Shuffle là trừ một lượt”; thời điểm commit nằm sau lựa chọn hợp lệ. Hành vi đóng chế độ khi bấm đích không hợp lệ có thể khiến người chơi phải bật lại công cụ.\n\n![MS-DEMO-02 — Mở công cụ: chữ SELECT BOTTLE TO SHUFFLE và hai chai rỗng bị làm tối. Chưa trừ Shuffle.](../assets/deep_20261010/MS-D06-shuffle-select.png)\n![MS-DEMO-02 — Sau khi bấm chai rỗng số 9: lớp chọn đã đóng, số lượng vẫn 9.999.](../assets/deep_20261010/MS-D07-shuffle-empty.png)"
+    },
+    {
+      "title": "MS-DEMO-03: Shuffle chai 3 có bốn màu",
+      "article": "15-demo-walkthrough.html",
+      "status": "Đã thao tác — xem giới hạn trong case",
+      "description": "**Tiền điều kiện:** chai 3 đầy, thứ tự trên xuống đỏ–xanh xám–nâu–vàng. **Thao tác:** chọn Shuffle rồi chọn chai 3. **Kết quả quan sát:** thứ tự thành nâu–xanh xám–đỏ–vàng, số lượng Shuffle giảm đúng 1. Màu và số lớp trong chai không mất đi; các chai khác không đổi trong cặp ảnh này. **Không suy rộng:** một kết quả không cho biết phân phối xác suất, cách chọn hoán vị hoặc liệu mọi lần Shuffle đều bắt buộc đổi màu trên cùng.\n\n![MS-DEMO-03 — Trước thao tác: chai 3 trên cùng là đỏ, dưới là xanh xám, nâu, vàng.](../assets/deep_20261010/MS-D03-prelevel.png)\n![MS-DEMO-03 — Sau thao tác: chai 3 trên cùng thành nâu, Shuffle 9.998. Những chai khác giữ bố cục nhìn thấy.](../assets/deep_20261010/MS-D09-shuffle-result.png)"
+    },
+    {
+      "title": "MS-DEMO-04: Undo ngay sau Shuffle, khi chưa có nước đổ",
+      "article": "15-demo-walkthrough.html",
+      "status": "Đã thao tác — xem giới hạn trong case",
+      "description": "**Thao tác:** chạm Undo sau bước Shuffle. **Kết quả quan sát:** không phục hồi thứ tự đỏ–xanh xám–nâu–vàng, số Undo vẫn 9.998. **Kết luận hẹp:** lần Shuffle đầu chuỗi không tạo một nước đổ có thể Undo. Case này không xác nhận điều gì xảy ra với lịch sử đổ cũ nếu người chơi đã đổ nhiều lần trước khi Shuffle; nhánh đó cần phiên riêng.\n\n![MS-DEMO-04 — Chạm Undo ngay sau Shuffle: nút Undo mờ; thứ tự nâu–xanh xám–đỏ–vàng vẫn giữ, số lượng 9.998.](../assets/deep_20261010/MS-D10-undo-after-shuffle.png)"
+    },
+    {
+      "title": "MS-DEMO-05: đổ sau Shuffle rồi Undo",
+      "article": "15-demo-walkthrough.html",
+      "status": "Đã thao tác — xem giới hạn trong case",
+      "description": "**Tiền điều kiện:** chai 3 có màu nâu trên cùng; chai 9 trống. **Thao tác:** chọn chai 3, chọn chai 9, đợi kết thúc đổ rồi chạm Undo. **Kết quả quan sát:** nâu đi sang chai 9 rồi quay lại chai 3; Undo giảm 1. **Bất biến:** trạng thái quay về ngay trước nước đổ, tức vẫn giữ kết quả Shuffle. **Ví dụ thiết kế:** nếu mục tiêu của người chơi là lấy màu nâu lên trên để mở đường, họ có thể thử một nước đổ và trả lại nước đó; họ không nhận lại Shuffle đã dùng.\n\n![MS-DEMO-05 — Nước đổ sau Shuffle: chai 9 nhận lớp nâu, chai 3 lộ xanh xám.](../assets/deep_20261010/MS-D11-pour-after-shuffle.png)\n![MS-DEMO-05 — Undo: nâu trở về chai 3, chai 9 rỗng; Undo còn 9.997.](../assets/deep_20261010/MS-D12-undo-pour.png)"
+    },
+    {
+      "title": "MS-DEMO-06: cảnh báo khác nhau, hậu quả khác nhau",
+      "article": "15-demo-walkthrough.html",
+      "status": "Đã thao tác — xem giới hạn trong case",
+      "description": "**Thao tác:** menu → nút thoát đỏ → Quit ở cảnh báo mạng → Quit ở cảnh báo rank. **Kết quả quan sát:** cảnh báo đầu nói mất một mạng; cảnh báo thứ hai nói có thể mất hạng. Chúng không đồng nghĩa: một cái là tài nguyên vào màn, một cái là rủi ro tương đối so với người khác. Phiên này không đo được rank thật trước/sau, vì vậy không đánh dấu “đã tụt hạng”.\n\n![MS-DEMO-06 — Chốt thứ nhất: You will lose 1 life.](../assets/deep_20261010/MS-D14-quit-first.png)\n![MS-DEMO-06 — Chốt thứ hai: You might lose your Rank. Đây là cảnh báo, không phải bằng chứng rank đã giảm.](../assets/deep_20261010/MS-D15-quit-second.png)\n![MS-DEMO-06 — Failed vẽ Rewards 20 nhưng bộ đếm coin phía trên vẫn 999.995.869; snapshot cuối cũng giữ số này.](../assets/deep_20261010/MS-D16-failed.png)\n\n**Sổ tài nguyên của cả demo:** coin 999.995.869 → 999.995.869 (0); Shuffle 9.999 → 9.998 (−1); Undo 9.998 → 9.997 (−1); Extra Bottle 9.990 → 9.990 (0); level 351 → 351; retry trước toàn phiên 6 → cuối phiên 7; snapshot sau Shuffle đã là 7, nên không quy tăng counter cho Quit. Đây là kiểm tra số dư thực, không quy đổi giá trị tiền mặt cho kho đồ đã chỉnh từ trước."
+    }
+  ],
+  "images": [
+    {
+      "file": "MS-D03-prelevel.png",
+      "sha256": "ec362d8f45a5b1b18d3b0e77ef4ac4042b293776cb4173ca4e401b11090e3a70"
+    },
+    {
+      "file": "MS-D04-selected.png",
+      "sha256": "45da0e9d854ba4b518f6a689f1ba60f5b302618f36df96782ae15d6f72b73498"
+    },
+    {
+      "file": "MS-D05-deselected.png",
+      "sha256": "ad28e8a7b08a9ad46e7bf1fecf05173f8e50a6fca9ca866a20ce417d7f85d2bf"
+    },
+    {
+      "file": "MS-D06-shuffle-select.png",
+      "sha256": "36fcea2fd66db66607d60ae745275f8b10823530635bc21b8c82f617f9c393d2"
+    },
+    {
+      "file": "MS-D07-shuffle-empty.png",
+      "sha256": "23bf3543a2ab271260944d92cdf9d7646b445cb116781bcf7a94c03fb732036d"
+    },
+    {
+      "file": "MS-D09-shuffle-result.png",
+      "sha256": "9798a13caba625bfe4f0086240519422eab04cc782c08692247b7ff398525ef4"
+    },
+    {
+      "file": "MS-D10-undo-after-shuffle.png",
+      "sha256": "be5093a19f49e5d3d87e8b4a516dd100fe6e0a5971c294f81288055f01e2f13a"
+    },
+    {
+      "file": "MS-D11-pour-after-shuffle.png",
+      "sha256": "4770d89327995a0981e170a231bd83b9e0a711b4012f03d0d76490aad89ac63a"
+    },
+    {
+      "file": "MS-D12-undo-pour.png",
+      "sha256": "32b1e18ef161f60623c77b1d7700fe1c308eacb3cc49f41e70513505a286f7b2"
+    },
+    {
+      "file": "MS-D14-quit-first.png",
+      "sha256": "63540a6ebe5b550552465f046ff8eba861c255f49bda93460e5ec07fa90c9fe8"
+    },
+    {
+      "file": "MS-D15-quit-second.png",
+      "sha256": "2a3dbab08939b03263859f9b5cb878c94e64db55f66507b833885bce250f486f"
+    },
+    {
+      "file": "MS-D16-failed.png",
+      "sha256": "0b44cc0e6e5ffd69aa3dad2b3e7374f46fa4c323fa8c96fa4cce9d2de0b47405"
+    }
+  ]
+}
