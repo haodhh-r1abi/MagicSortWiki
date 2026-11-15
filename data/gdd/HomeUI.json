@@ -881,5 +881,69 @@
       "external_dependency"
     ],
     "full_feature_verified": false
-  }
+  },
+  "runtime_review_20261116_round2": [
+    {
+      "id": "MS-R16B-HOME01",
+      "feature": "HomeUI",
+      "title": "Vuốt thật qua Home, Leaderboard và Shop; kiểm biên trái",
+      "uc": [
+        "UC-02"
+      ],
+      "related_uc": [
+        "UC-03",
+        "UC-04"
+      ],
+      "status": "observed_partial",
+      "precondition": "Build3129 xác minh hash APK; Home352, offline_existing_fixture, không popup chặn.",
+      "steps": [
+        "Vuốt từ (180,1000) tới (900,1000),650ms: Home sang Leaderboard.",
+        "Lặp lại: Leaderboard sang Shop.",
+        "Tại Shop, vuốt cùng hướng lần nữa để kiểm biên.",
+        "Vuốt ngược từ (900,1000) tới (180,1000),650ms hai lần: Shop qua Leaderboard về Home."
+      ],
+      "expected": "Trang và tab được chọn đồng bộ theo chiều kéo; không đi ra ngoài đầu danh sách; không bắt đầu level hoặc chi tiền.",
+      "actual": "Quan sát đủ Home → Leaderboard → Shop; kéo vượt đầu Shop vẫn ở Shop. Hai vuốt ngược trở về Home. Level352, coin và booster không đổi.",
+      "limitations": "Chỉ ba trang và các drag650ms được quan sát. Không đo threshold0.2, tween timing, preload, nhánh Journey hoặc snapback drag ngắn.",
+      "images": [
+        "R16B_003_entry",
+        "R16B_004_swipe_right",
+        "R16B_005_store_swipe",
+        "R16B_012_store_boundary",
+        "R16B_013_back_leaderboard",
+        "R16B_014_home_return"
+      ],
+      "before": "R16B_003_entry",
+      "after": "R16B_014_home_return",
+      "uc_scope": {
+        "UC-02": {
+          "coverage": "observed_branch",
+          "scope": "Long swipe hai chiều và biên tại Store; không phải mọi gesture/variant."
+        }
+      },
+      "date": "2026-11-16",
+      "round_tag": "20261116_round2",
+      "build": "0.0.3129 ARM64",
+      "mode": "offline_existing_fixture",
+      "source_class": "runtime_observed",
+      "full_uc_pass": false,
+      "ledger_change": {
+        "currency_amount_delta_by_raw_type": {},
+        "currency_amounts_unchanged": true,
+        "timed_currency_dates_changed": false,
+        "limitless_currency_dates_changed": false,
+        "life_fill_date_changed": false,
+        "player_before": {
+          "level": 352,
+          "isLevelInProgress": false
+        },
+        "player_after": {
+          "level": 352,
+          "isLevelInProgress": false
+        },
+        "scope": "Amount equality is not whole-inventory equality; timed/life fields and other event models are separate. Raw currency IDs are not assigned names from a different build."
+      },
+      "review_scope": "Root-supplied reviewed case record; this file validator does not infer semantic UC pass."
+    }
+  ]
 }

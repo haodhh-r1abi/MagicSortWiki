@@ -22,7 +22,7 @@
     "Daily Challenge rewarded (DailyChallengeRewarded=7)",
     "Debugger (Debugger=4)"
   ],
-  "flow": "Khởi tạo: AdService.Initialize(hasUserConsent) chạy tuần tự InitializeMaxSdk(hasUserConsent) → InitializeUnityMaxLayerForTracking() (gọi MaxSdkAndroid.SetSdkKey, InitializeSdk, SetVerboseLogging, SetCreativeDebuggerEnabled, SetExtraParameter với tham số 'disable_all_logs'='true'), rồi ShouldInitializeNeftaSdk() quyết định InitializeNefta(hasUserConsent, optimized) (đặt tham số 'disable_b2b_ad_unit_ids' với danh sách ad unit id, gắn com.nefta.sdk.AdapterCallback vào com.unity3d.player.UnityPlayer.currentActivity) và InitializeMeticaSdk(hasUserConsent) (trả MeticaInitResponse, gán _meticaUserGroup; _isMeticaForcedHoldout cho nhóm đối chứng). InitializeAds() gắn NeftaCustomAdapter.NeftaAdapterEvents.SetInterstitialLogic / SetRewardedLogic. Analytics khởi tạo: ad_service_initialization_started / ad_service_initialization_ended (kèm provider) và ad_service_initialized. Cấu hình: AdConfigService.Initialize() nạp cache qua TryGetCachedAdConfig(out AdConfigModel) (đọc file 'GrandCachedAdConfig' trong thư mục 'GrandConfigs'), rồi SendGetRequest() → AdConfigRemoteService.GetAdConfigModel(firstCpmAsDollar, adjustAttributionModel, configType, isNewUser) trả AdConfigResponseModel; SetAdConfigModels(firebaseAdConfigModel, adConfigModelFromBackend, addProviderConfigModel) gộp ba nguồn (Firebase Remote Config, backend, provider config) và CacheAdConfigs(adConfigModel) ghi xuống đĩa (dùng Interop_Sys.Rename để ghi nguyên tử). OnAttributionModelChanged() và OnCpmChanged() gọi lại cấu hình khi dữ liệu attribution (Adjust) hoặc CPM đổi. Interstitial: CanShowInterstitial() kiểm tra IsInterEnabled, level >= FirstLevelToShowInter, khoảng cách InterShowFrequencyInSeconds; CanShowEarlyInterstitial() / CanShowLaterInterstitial() (IsLaterInterEnabled) chọn thời điểm trước hay sau màn kết quả; CanShowInterWithoutFrequency() bỏ qua tần suất; IsInterResetAfterRewardedActive quyết định xem rewarded có reset đồng hồ interstitial không; ShowInterstitial(adRequestSource) / ForceShowInterstitial(adRequestSource). Rewarded: IsRewardedReady(), ShowRewarded(adRequestSource) trả Task<bool>; ShouldShow2XRewarded() và Get2XRewardedCoinAmount(levelDifficultyType) dùng CoinAmountNew2xRewardedForRegular/Hard/SuperHard (bản mới) hoặc nhân đôi phần thưởng thường; ShouldShowLifeRewarded() theo IsLifeRewardedEnabled; SkipRewarded là cờ debug bỏ qua quảng cáo. Play On: IsPlayOnWithRewardedEnabled(), GetPlayOnWithRewardedFirstLevelToShow(), GetDailyPlayOnRewardedLimit() (PlayOnWithRewardedDailyLimit) và GetPlayOnWithRewardedBehaviour() trả PlayOnWithRewardedVariantType — 10 biến thể A/B khác nhau về việc tặng chai to, chai nhỏ, undo, mega shuffle hay kết hợp inter+rewarded. Công tắc chéo: IsEndlessPortalDisabled(), IsChooseOneSpecialOfferDisabled(), IsTreasureDrillDisabled(), IsWatchAndWinEnabled, IsWheelOfFortuneEnabled/WheelOfFortuneConfigType — cấu hình quảng cáo có quyền tắt các sự kiện monetization khác. Analytics doanh thu: mỗi impression bắn ad_impression, ad_impression_d14, ad_revenue, user_cpm, ad_shown, ad_clicked, ad_show_started, ad_show_fail và ad_review_cid_generated với đầy đủ ad_unit_name, ad_source, network_placement, revenue_precision, ad_latency_millis, creative_identifier, impression_source, session_count. Bổ sung native0.0.3129ARM64: sáu failurecallbacks Interstitial/Nefta/Metica và3Rewarded đều increment counter rồi delay=2^min(6,counter), numerical2/4/8/16/32/64 vàcap64; không phải chỉ retry6lần. Init/show timeout và reset-on-success còn partial; chưa runtime16/11.",
+  "flow": "Khởi tạo: AdService.Initialize(hasUserConsent) chạy tuần tự InitializeMaxSdk(hasUserConsent) → InitializeUnityMaxLayerForTracking() (gọi MaxSdkAndroid.SetSdkKey, InitializeSdk, SetVerboseLogging, SetCreativeDebuggerEnabled, SetExtraParameter với tham số 'disable_all_logs'='true'), rồi ShouldInitializeNeftaSdk() quyết định InitializeNefta(hasUserConsent, optimized) (đặt tham số 'disable_b2b_ad_unit_ids' với danh sách ad unit id, gắn com.nefta.sdk.AdapterCallback vào com.unity3d.player.UnityPlayer.currentActivity) và InitializeMeticaSdk(hasUserConsent) (trả MeticaInitResponse, gán _meticaUserGroup; _isMeticaForcedHoldout cho nhóm đối chứng). InitializeAds() gắn NeftaCustomAdapter.NeftaAdapterEvents.SetInterstitialLogic / SetRewardedLogic. Analytics khởi tạo: ad_service_initialization_started / ad_service_initialization_ended (kèm provider) và ad_service_initialized. Cấu hình: AdConfigService.Initialize() nạp cache qua TryGetCachedAdConfig(out AdConfigModel) (đọc file 'GrandCachedAdConfig' trong thư mục 'GrandConfigs'), rồi SendGetRequest() → AdConfigRemoteService.GetAdConfigModel(firstCpmAsDollar, adjustAttributionModel, configType, isNewUser) trả AdConfigResponseModel; SetAdConfigModels(firebaseAdConfigModel, adConfigModelFromBackend, addProviderConfigModel) gộp ba nguồn (Firebase Remote Config, backend, provider config) và CacheAdConfigs(adConfigModel) ghi xuống đĩa (dùng Interop_Sys.Rename để ghi nguyên tử). OnAttributionModelChanged() và OnCpmChanged() gọi lại cấu hình khi dữ liệu attribution (Adjust) hoặc CPM đổi. Interstitial: CanShowInterstitial() kiểm tra IsInterEnabled, level >= FirstLevelToShowInter, khoảng cách InterShowFrequencyInSeconds; CanShowEarlyInterstitial() / CanShowLaterInterstitial() (IsLaterInterEnabled) chọn thời điểm trước hay sau màn kết quả; CanShowInterWithoutFrequency() bỏ qua tần suất; IsInterResetAfterRewardedActive quyết định xem rewarded có reset đồng hồ interstitial không; ShowInterstitial(adRequestSource) / ForceShowInterstitial(adRequestSource). Rewarded: IsRewardedReady(), ShowRewarded(adRequestSource) trả Task<bool>; ShouldShow2XRewarded() và Get2XRewardedCoinAmount(levelDifficultyType) dùng CoinAmountNew2xRewardedForRegular/Hard/SuperHard (bản mới) hoặc nhân đôi phần thưởng thường; ShouldShowLifeRewarded() theo IsLifeRewardedEnabled; SkipRewarded là cờ debug bỏ qua quảng cáo. Play On: IsPlayOnWithRewardedEnabled(), GetPlayOnWithRewardedFirstLevelToShow(), GetDailyPlayOnRewardedLimit() (PlayOnWithRewardedDailyLimit) và GetPlayOnWithRewardedBehaviour() trả PlayOnWithRewardedVariantType — 10 biến thể A/B khác nhau về việc tặng chai to, chai nhỏ, undo, mega shuffle hay kết hợp inter+rewarded. Công tắc chéo: IsEndlessPortalDisabled(), IsChooseOneSpecialOfferDisabled(), IsTreasureDrillDisabled(), IsWatchAndWinEnabled, IsWheelOfFortuneEnabled/WheelOfFortuneConfigType — cấu hình quảng cáo có quyền tắt các sự kiện monetization khác. Analytics doanh thu: mỗi impression bắn ad_impression, ad_impression_d14, ad_revenue, user_cpm, ad_shown, ad_clicked, ad_show_started, ad_show_fail và ad_review_cid_generated với đầy đủ ad_unit_name, ad_source, network_placement, revenue_precision, ad_latency_millis, creative_identifier, impression_source, session_count. Bổ sung native0.0.3129ARM64: sáu failurecallbacks Interstitial/Nefta/Metica và3Rewarded đều increment counter rồi delay=2^min(6,counter), numerical2/4/8/16/32/64 vàcap64; không phải chỉ retry6lần. Init/show timeout và reset-on-success còn partial; chưa runtime16/11. Native round2: accepted load-success paths của cả6adapter reset retrycount0; failure tiếp theo quay vềdelay2. Không suy queuedbackoff đã bịcancel hoặcSDKshowtimeout đãxong.",
   "use_cases": [
     {
       "id": "UC-01",
@@ -10136,5 +10136,119 @@
       "static_asset"
     ],
     "full_feature_verified": false
+  },
+  "current_native_review_20261116_round2": {
+    "scope": "static_native_branch_review; root runtime execution tracked separately",
+    "chunks": [
+      {
+        "source": "facts/review_20261116_round2/native_findings_chunk2.json",
+        "source_sha256": "663fde738887038df64533b74eba1b5201094179afae66c6728323aef640381a",
+        "chunk": "immutable_chunk2",
+        "finding_ids": [
+          "MS-NATIVE-R2-C2-03"
+        ]
+      }
+    ],
+    "findings": [
+      {
+        "id": "MS-NATIVE-R2-C2-03",
+        "gap_ids": [
+          "MS-Ads-G006"
+        ],
+        "title": "Load success reset retry counter trong cả6adapter",
+        "conclusion": "Đã đọc actual OnInterstitialLoadedEvent / OnRewardedAdLoadedEvent bodies của Interstitial,NeftaInterstitial,MeticaInterstitial,Rewarded,NeftaRewarded,MeticaRewarded. Accepted load-success path cả6 có STR WZR vào retrycount: self+0x10 cho4base/Nefta adapters; self+0x18 cho2Metica adapters. Do đó sau accepted success, failure tiếp theo tăng từ0 lên1 và quay về delay2 trong formula đã chốt; không giữ exponent64 vô hạn sau success. Một sốMetica paths có ad-unit filtering trước reset, nên không khẳng định mọi SDK callback bất kỳ đều reset. Không thấy logic hủy mọi pending delayed action chỉ từ storecounter0.",
+        "evidence": [
+          {
+            "file": "facts/review_20261116_round2/chunk2_proofs/ad_loaded_reset_37f35bc.asm.txt",
+            "line": 1,
+            "end_line": 156,
+            "sha256": "c1260727592a987c4b464aeea52319ffaf297f9fa22e5736717603f9def8d656",
+            "source_binary": "facts/review_20261116/current_build_inputs/libil2cpp.so",
+            "binary_sha256": "d901f86380bdecae3a8ec5cf9a9b60acc5132d50dfcf7ec1f606de807e22b2d5",
+            "build": "host_APK0.0.3129_ARM64",
+            "start_va": "0x37f35bc",
+            "end_va_exclusive": "0x37f3814",
+            "tool": "local_NDK_llvm-objdump_no_Editor",
+            "tool_sha256": "53307659312a8f0f3f3a8a1df20eec3de5f8933f54da176c0f89d6528e154c32",
+            "kind": "actual_native_disassembly_symbol_annotated"
+          },
+          {
+            "file": "facts/review_20261116_round2/chunk2_proofs/ad_loaded_reset_37f4f30.asm.txt",
+            "line": 1,
+            "end_line": 156,
+            "sha256": "39a330550a80628b64dfeb1e1b33e581614dc75461f73d17cdc94170dff94f32",
+            "source_binary": "facts/review_20261116/current_build_inputs/libil2cpp.so",
+            "binary_sha256": "d901f86380bdecae3a8ec5cf9a9b60acc5132d50dfcf7ec1f606de807e22b2d5",
+            "build": "host_APK0.0.3129_ARM64",
+            "start_va": "0x37f4f30",
+            "end_va_exclusive": "0x37f5188",
+            "tool": "local_NDK_llvm-objdump_no_Editor",
+            "tool_sha256": "53307659312a8f0f3f3a8a1df20eec3de5f8933f54da176c0f89d6528e154c32",
+            "kind": "actual_native_disassembly_symbol_annotated"
+          },
+          {
+            "file": "facts/review_20261116_round2/chunk2_proofs/ad_loaded_reset_37fa5d8.asm.txt",
+            "line": 1,
+            "end_line": 160,
+            "sha256": "e5e9c10eba6ac7c9f53d48be2928cfda369679054b4d3d97e5a62de8b3832df3",
+            "source_binary": "facts/review_20261116/current_build_inputs/libil2cpp.so",
+            "binary_sha256": "d901f86380bdecae3a8ec5cf9a9b60acc5132d50dfcf7ec1f606de807e22b2d5",
+            "build": "host_APK0.0.3129_ARM64",
+            "start_va": "0x37fa5d8",
+            "end_va_exclusive": "0x37fa840",
+            "tool": "local_NDK_llvm-objdump_no_Editor",
+            "tool_sha256": "53307659312a8f0f3f3a8a1df20eec3de5f8933f54da176c0f89d6528e154c32",
+            "kind": "actual_native_disassembly_symbol_annotated"
+          },
+          {
+            "file": "facts/review_20261116_round2/chunk2_proofs/ad_loaded_reset_37f65dc.asm.txt",
+            "line": 1,
+            "end_line": 176,
+            "sha256": "624a418b974fa8addf903c11ae78b307e3f8306ba779668ff159d09d2bdbb021",
+            "source_binary": "facts/review_20261116/current_build_inputs/libil2cpp.so",
+            "binary_sha256": "d901f86380bdecae3a8ec5cf9a9b60acc5132d50dfcf7ec1f606de807e22b2d5",
+            "build": "host_APK0.0.3129_ARM64",
+            "start_va": "0x37f65dc",
+            "end_va_exclusive": "0x37f6884",
+            "tool": "local_NDK_llvm-objdump_no_Editor",
+            "tool_sha256": "53307659312a8f0f3f3a8a1df20eec3de5f8933f54da176c0f89d6528e154c32",
+            "kind": "actual_native_disassembly_symbol_annotated"
+          },
+          {
+            "file": "facts/review_20261116_round2/chunk2_proofs/ad_loaded_reset_37f8c0c.asm.txt",
+            "line": 1,
+            "end_line": 176,
+            "sha256": "e3adeb29c8a9dcc9002e41858b6d68943c01f6b3d48cc02ad9ee9923f2497dbe",
+            "source_binary": "facts/review_20261116/current_build_inputs/libil2cpp.so",
+            "binary_sha256": "d901f86380bdecae3a8ec5cf9a9b60acc5132d50dfcf7ec1f606de807e22b2d5",
+            "build": "host_APK0.0.3129_ARM64",
+            "start_va": "0x37f8c0c",
+            "end_va_exclusive": "0x37f8eb4",
+            "tool": "local_NDK_llvm-objdump_no_Editor",
+            "tool_sha256": "53307659312a8f0f3f3a8a1df20eec3de5f8933f54da176c0f89d6528e154c32",
+            "kind": "actual_native_disassembly_symbol_annotated"
+          },
+          {
+            "file": "facts/review_20261116_round2/chunk2_proofs/ad_loaded_reset_12273c0.asm.txt",
+            "line": 1,
+            "end_line": 181,
+            "sha256": "af7ce352cf45b30033e383e62503120427c0480709048d666538f6fc78d28169",
+            "source_binary": "facts/review_20261116/current_build_inputs/libil2cpp.so",
+            "binary_sha256": "d901f86380bdecae3a8ec5cf9a9b60acc5132d50dfcf7ec1f606de807e22b2d5",
+            "build": "host_APK0.0.3129_ARM64",
+            "start_va": "0x12273c0",
+            "end_va_exclusive": "0x122767c",
+            "tool": "local_NDK_llvm-objdump_no_Editor",
+            "tool_sha256": "53307659312a8f0f3f3a8a1df20eec3de5f8933f54da176c0f89d6528e154c32",
+            "kind": "actual_native_disassembly_symbol_annotated"
+          }
+        ],
+        "status": "partial_static_code_current_build",
+        "remaining": "Còn display-failed vsload-failed behavior, callback ad-unit filtering chi tiết, queued delayed action cancellation, SDK init/showtimeouts và runtime adfill. Counter reset không chứng minh hủy backoff callback đã queue.",
+        "source_build": "host_APK0.0.3129_ARM64_matches_last_observed15Novversion",
+        "runtime_verified_by_this_finding": false
+      }
+    ],
+    "historical_policy": "Preserve15Nov/earlier16Nov fields and all prior round2 chunk findings. Static native review does not assert runtime execution."
   }
 }

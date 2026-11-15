@@ -4106,5 +4106,69 @@
       "static_asset"
     ],
     "full_feature_verified": false
-  }
+  },
+  "runtime_review_20261116_round2": [
+    {
+      "id": "MS-R16B-STORE01",
+      "feature": "Store",
+      "title": "Quét toàn bộ catalog Shop: 6 bundle và 6 gói coin, giá VND",
+      "uc": [
+        "UC-02"
+      ],
+      "related_uc": [
+        "UC-01",
+        "UC-11"
+      ],
+      "status": "observed_partial",
+      "precondition": "Shop mở qua vuốt; không có checkout; mode offline_existing_fixture.",
+      "steps": [
+        "Đọc Starter và Apprentice ở đầu Shop.",
+        "Vuốt dọc lần lượt để thấy Magician, Sorcerer, Mage, Wizard.",
+        "Tiếp tục tới 6 gói coin rồi vuốt thêm để xác nhận cuối danh sách.",
+        "Thử chạm icon Undo của Starter; không thấy tooltip mở."
+      ],
+      "expected": "Catalog hiển thị đủ card, nhãn giá và phần thưởng; scroll tới cuối mà không mua hàng.",
+      "actual": "6 bundle và6 gói coin được ghi nguyên theo UI trong store_catalog_observed.json. Giá VND vẫn hiển thị trong mode offline. Icon Undo được chạm không tạo overlay quan sát được. Cuối danh sách là hàng25k/50k/100k coin; vuốt thêm không lộ card khác. Số dư không đổi.",
+      "limitations": "Chỉ catalog được cache/hiển thị ở tài khoản này; chưa kiểm receipt, store price refresh, checkout, grant hoặc quyền No Ads. Nhãn ADS không chứng minh entitlement sau mua. Không coi icon không mở tooltip là lỗi nếu chưa có requirement.",
+      "images": [
+        "R16B_005_store_swipe",
+        "R16B_006_undo_tooltip",
+        "R16B_008_shop_mid1",
+        "R16B_009_shop_mid2",
+        "R16B_010_shop_coins",
+        "R16B_011_shop_bottom"
+      ],
+      "before": "R16B_005_store_swipe",
+      "after": "R16B_011_shop_bottom",
+      "uc_scope": {
+        "UC-02": {
+          "coverage": "observed_branch",
+          "scope": "Duyệt12card tại một catalog offline; không phải IAP grant."
+        }
+      },
+      "date": "2026-11-16",
+      "round_tag": "20261116_round2",
+      "build": "0.0.3129 ARM64",
+      "mode": "offline_existing_fixture",
+      "source_class": "runtime_observed",
+      "full_uc_pass": false,
+      "ledger_change": {
+        "currency_amount_delta_by_raw_type": {},
+        "currency_amounts_unchanged": true,
+        "timed_currency_dates_changed": false,
+        "limitless_currency_dates_changed": false,
+        "life_fill_date_changed": false,
+        "player_before": {
+          "level": 352,
+          "isLevelInProgress": false
+        },
+        "player_after": {
+          "level": 352,
+          "isLevelInProgress": false
+        },
+        "scope": "Amount equality is not whole-inventory equality; timed/life fields and other event models are separate. Raw currency IDs are not assigned names from a different build."
+      },
+      "review_scope": "Root-supplied reviewed case record; this file validator does not infer semantic UC pass."
+    }
+  ]
 }

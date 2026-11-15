@@ -27,7 +27,7 @@
         "GameNotificationsPlatform.RequestNotificationPermission() hiện hộp thoại hệ thống",
         "Luồng khởi động await tới khi người chơi trả lời"
       ],
-      "result": "Có quyền thì các thông báo mới được đăng ký",
+      "result": "Client initialized sau khi permission request hết keepWaiting; flag này không chứng minhOSGranted. Delivery cần kiểm permission kết quả vàOSruntime (native0.0.3129).",
       "rules": "NotificationCenter.CheckInitialized được gọi trước mọi thao tác",
       "evidence": "NotificationService.RequestPermission; NotificationSamples.GameNotificationsPlatform.RequestNotificationPermission"
     },
@@ -161,7 +161,7 @@
         "SendWelcomeBackNotification(delayAsSeconds) với WelcomeBackNotificationSo (Id 9525)"
       ],
       "result": "Thông báo \"We have a gifts for you! 🎁\" / \"Open the app now to claim your surprises! ✨\"",
-      "rules": "-",
+      "rules": "Native0.0.3129: caller WelcomeBackService.ScheduleWelcomeBackNotification truyền delay1,209,600giây=14ngày. InitializeData gọi khi WelcomeBackState!=IsDisabled, bao gồmAllClaimed/ShouldClaim. Đây là reminder delay, chưa là backend reward eligibility.",
       "evidence": "NotificationService.SendWelcomeBackNotification; Assets/MonoBehaviour/WelcomeBackNotificationSo.asset; FirebaseRemoteConfigResolver (IsWelcomeBackEnabled)"
     },
     {
@@ -624,5 +624,87 @@
       "recovered_code"
     ],
     "full_feature_verified": false
+  },
+  "current_native_review_20261116_round2": {
+    "scope": "static_native_branch_review; root runtime execution tracked separately",
+    "chunks": [
+      {
+        "source": "facts/review_20261116_round2/native_findings_chunk2.json",
+        "source_sha256": "663fde738887038df64533b74eba1b5201094179afae66c6728323aef640381a",
+        "chunk": "immutable_chunk2",
+        "finding_ids": [
+          "MS-NATIVE-R2-C2-02",
+          "MS-NATIVE-R2-C2-04"
+        ]
+      }
+    ],
+    "findings": [
+      {
+        "id": "MS-NATIVE-R2-C2-02",
+        "gap_ids": [
+          "MS-Notifications-G001"
+        ],
+        "title": "D1 được lập lịch ở home bootstrap thay vì trigger suy đoán",
+        "conclusion": "Direct B/BL scan của executable ELF cho thấy call SendD1RetNotification tại0x359BA4C thuộc BootstrapHomeContextCommand.<ExecuteAsync>d__0.MoveNext. Native caller lấy NotificationService quaDI và gọi SendD1RetNotification; không có age-of-install hay level predicate cục bộ quanh callsite này. Kết hợp sender cancel-before-schedule ở chunk1: mỗi lần execution path bootstrap tới đây, cùng notificationID được thay lịch tính từ DateTime.Now+delay. Chỉ chứng minh callsite/path, không suy ra mọi focus-resume đều chạy bootstrap hoặc D1 là chỉmộtlần saufirstinstall.",
+        "evidence": [
+          {
+            "file": "facts/review_20261116_round2/chunk2_proofs/home_bootstrap_D1_caller.asm.txt",
+            "line": 1,
+            "end_line": 268,
+            "sha256": "a3e4a80017fb4507a676eb67ad0e301bd0fe0d7147c3c0225b24d3a0da0024aa",
+            "source_binary": "facts/review_20261116/current_build_inputs/libil2cpp.so",
+            "binary_sha256": "d901f86380bdecae3a8ec5cf9a9b60acc5132d50dfcf7ec1f606de807e22b2d5",
+            "build": "host_APK0.0.3129_ARM64",
+            "start_va": "0x359b7c8",
+            "end_va_exclusive": "0x359bbe0",
+            "tool": "local_NDK_llvm-objdump_no_Editor",
+            "tool_sha256": "53307659312a8f0f3f3a8a1df20eec3de5f8933f54da176c0f89d6528e154c32",
+            "kind": "actual_native_disassembly_symbol_annotated"
+          }
+        ],
+        "status": "partial_static_code_current_build",
+        "remaining": "Cần runtime bootstrap/home return/process restart trace để biết tần suất thực; direct-call scan không loại trừ delegates/indirectcall và wrapper khác. Giữ OS delivery unknown.",
+        "source_build": "host_APK0.0.3129_ARM64_matches_last_observed15Novversion",
+        "runtime_verified_by_this_finding": false
+      },
+      {
+        "id": "MS-NATIVE-R2-C2-04",
+        "gap_ids": [
+          "MS-Notifications-G001",
+          "MS-Notifications-G003"
+        ],
+        "title": "Initialized theo permission completion, không theo Grantedstatus",
+        "conclusion": "RequestPermission.MoveNext khi bắt đầu: nếu initializeStarted hoặc initialized đãtrue thì kết thúc nhánh; nếu chưa, set initializeStarted=true rồi tạo GameNotificationsPlatform với NotificationCenterArgs.Default và gọi RequestNotificationPermission. Permission object là NotificationsPermissionRequest:CustomYieldInstruction; native virtualslot7 gọi get_keepWaiting, yield Task.Yield khi true. Khi keepWaiting=false: set initialized=true, gọi platform.OnForeground và DismissAllDisplayedNotifications rồi hoàn tất. Không đọc get_Status trong acceptedcompletionpath này. Vì vậy initialized flag là client permission-request-completed state, không phải bằng chứng OS permissionGranted. Denied/completed vẫn không được mô tả như app đã cấp quyền chỉ từ flag.",
+        "evidence": [
+          {
+            "file": "facts/review_20261116_round2/chunk2_proofs/permission_completion_gate.asm.txt",
+            "line": 1,
+            "end_line": 270,
+            "sha256": "e4e4d2abb1f13cf8efc5100911dd8e7323580c3550a2dc3fe076b30edb551412",
+            "source_binary": "facts/review_20261116/current_build_inputs/libil2cpp.so",
+            "binary_sha256": "d901f86380bdecae3a8ec5cf9a9b60acc5132d50dfcf7ec1f606de807e22b2d5",
+            "build": "host_APK0.0.3129_ARM64",
+            "start_va": "0x3a6aa1c",
+            "end_va_exclusive": "0x3a6ae3c",
+            "tool": "local_NDK_llvm-objdump_no_Editor",
+            "tool_sha256": "53307659312a8f0f3f3a8a1df20eec3de5f8933f54da176c0f89d6528e154c32",
+            "kind": "actual_native_disassembly_symbol_annotated"
+          },
+          {
+            "file": "facts/review_20261116/current_build_dump/dump.cs",
+            "line": 1086239,
+            "end_line": 1086263,
+            "sha256": "47edf53b3a3e0e82dd81316c145d0cebde72ad2bc5d2dfe3a35492e9cfbd2df2",
+            "kind": "current_metadata_field_offset_support",
+            "build": "host_APK0.0.3129_ARM64"
+          }
+        ],
+        "status": "partial_static_code_current_build",
+        "remaining": "Platform.RequestNotificationPermission/OS permissiondialog result và delivery thực còn runtime; cần denied/granted fixtures riêng. Không tuyên bố OS sẽ hiển thị notification chỉ vì service initialized.",
+        "source_build": "host_APK0.0.3129_ARM64_matches_last_observed15Novversion",
+        "runtime_verified_by_this_finding": false
+      }
+    ],
+    "historical_policy": "Preserve15Nov/earlier16Nov fields and all prior round2 chunk findings. Static native review does not assert runtime execution."
   }
 }

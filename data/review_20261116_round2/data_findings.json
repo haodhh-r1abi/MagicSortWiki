@@ -1,0 +1,325 @@
+{
+  "date": "2026-11-16",
+  "round": 2,
+  "scope": "Static-only new research from current host build. Root may perform runtime separately; this file claims no new runtime executions.",
+  "source_manifest": [
+    {
+      "path": "facts/review_20261116/current_build_dump/dump.cs",
+      "sha256": "47edf53b3a3e0e82dd81316c145d0cebde72ad2bc5d2dfe3a35492e9cfbd2df2",
+      "distribution": "local_only_large_native"
+    },
+    {
+      "path": "facts/review_20261116/current_build_inputs/libil2cpp.so",
+      "sha256": "d901f86380bdecae3a8ec5cf9a9b60acc5132d50dfcf7ec1f606de807e22b2d5",
+      "distribution": "local_only_large_native"
+    },
+    {
+      "path": "facts/review_20261116/current_build_dump/script.json",
+      "sha256": "ac920e3f639dc67bcab5e029c3303a43afb8aace403c2b313bcabca906aeecb8",
+      "distribution": "local_only_large_native"
+    },
+    {
+      "path": "facts/review_20261116/public_current_config_3129/defaults/CollectionConfigModel.json",
+      "sha256": "ae29f90e4bbc9f8df646f954be9f70ae526a3640cc45a14156d22a6049120b54",
+      "distribution": "public_sanitized_static"
+    },
+    {
+      "path": "facts/review_20261116/public_current_config_3129/defaults/GameEconomyModel.json",
+      "sha256": "2027b6e23169a78b572e5778d87be378571cf217c876e5cbe386963ad0f27598",
+      "distribution": "public_sanitized_static"
+    },
+    {
+      "path": "facts/review_20261116/public_current_config_3129/defaults/GameEconomyConfigModelFromBackend.json",
+      "sha256": "a71b56a62b7fb8f2e6590a16c4e9257d269fa11093ff2d1ac1005c6b00a967d6",
+      "distribution": "public_sanitized_static"
+    },
+    {
+      "path": "facts/review_20261116/public_current_config_3129/default_manifest.json",
+      "sha256": "488b8251ca59edd970b4e755bc88517324e4d1ec50593c19d8313a41c5fd8ca1",
+      "distribution": "public_sanitized_static"
+    },
+    {
+      "path": "facts/review_20261116/public_current_config_3129/feature_model_links.json",
+      "sha256": "2d5c764f0b3275876c398d80e1fc394572a944c0e20dad75d5636b3aa1673c6f",
+      "distribution": "public_sanitized_static"
+    }
+  ],
+  "findings": [
+    {
+      "id": "MS-R16B-S01",
+      "feature": "Collection",
+      "title": "Điều kiện và giới hạn vòng Collection lặp",
+      "source_class": "native_current_build_static",
+      "build": "0.0.3129 ARM64 host APK",
+      "status": "resolved_static_current_build_scope",
+      "conclusion": "Repeat là phase2; repeat flag được ưu tiên trước gold. Gate mở repeat kiểm AdditionalCompleteCollectionCount khác0. Cap kiểm RepeatCompletedCount >= AdditionalCompleteCollectionCount. Default đóng gói0 không mở repeat theo gate này.",
+      "evidence": [
+        {
+          "path": "facts/review_20261116_round2/native_consumer_disassembly.json",
+          "class": "CollectionService",
+          "signature": "private bool IsRepeatLimitReached() { }",
+          "rva": "0x362321c",
+          "method_bytes_sha256": "f6a1c928e934c20d584db573d7e3f8411fb171f473f0c28198357233803c40c1",
+          "dump_line": 176919
+        },
+        {
+          "path": "facts/review_20261116_round2/native_consumer_disassembly.json",
+          "class": "CollectionService",
+          "signature": "private bool CanOpenRepeatCollection() { }",
+          "rva": "0x36231c0",
+          "method_bytes_sha256": "99611978e6dc63ef7853ff011dad18ddc34da74e645f8139c34d92fcd7ab3106",
+          "dump_line": 176925
+        },
+        {
+          "path": "facts/review_20261116_round2/native_consumer_disassembly.json",
+          "class": "CollectionService",
+          "signature": "public CollectionPhase GetActivePhase() { }",
+          "rva": "0x3622fb4",
+          "method_bytes_sha256": "fa6ae34a23ca508a7500ddf366adc2c87df8a13620bd708dad4f76af229650bf",
+          "dump_line": 176994
+        }
+      ],
+      "remaining": "Chưa xác minh remote config active hoặc lượt hoàn thành Gold/Repeat thực tế; không suy 0 của default là mọi cohort đều tắt.",
+      "runtime_case_ids": [],
+      "full_uc_pass": false
+    },
+    {
+      "id": "MS-R16B-S02",
+      "feature": "Collection",
+      "title": "Thưởng theo phase, fallback và token",
+      "source_class": "native_current_build_static",
+      "build": "0.0.3129 ARM64 host APK",
+      "status": "resolved_static_current_build_scope",
+      "conclusion": "PhaseRepeat chọn RepeatThemeRewards nếu nonnull, fallback ThemeRewards; mảng rỗng không fallback. RepeatCollectionReward nonnull được chọn, null fallback GoldCollectionReward. Repeat không thêm token: tokenId trảnull và WithToken bỏ bước insert. Full15repeat-theme và reward tree được lưu nguyên vẹn.",
+      "evidence": [
+        {
+          "path": "facts/review_20261116_round2/native_consumer_disassembly.json",
+          "class": "CollectionService",
+          "signature": "public List<CollectionThemeRewardModel> GetActiveThemeRewards() { }",
+          "rva": "0x36233b4",
+          "method_bytes_sha256": "1196e3fc30806fe7e082570f9b751499c9578cb400edcc38884bcdb9a7a09027",
+          "dump_line": 176943
+        },
+        {
+          "path": "facts/review_20261116_round2/native_consumer_disassembly.json",
+          "class": "CollectionService",
+          "signature": "public string GetActiveCollectionTokenId() { }",
+          "rva": "0x362412c",
+          "method_bytes_sha256": "8caf2ed16576c053a561093159e4bd2afc3be6d5622df5a7509e2937a538c5f0",
+          "dump_line": 177033
+        },
+        {
+          "path": "facts/review_20261116_round2/native_consumer_disassembly.json",
+          "class": "CollectionService",
+          "signature": "public RewardModel GetActiveCollectionReward() { }",
+          "rva": "0x362417c",
+          "method_bytes_sha256": "9222419aa1e265dda5e3d8ba569c4b5deb44bdfc8a6e1b0b7f39262785fc4c34",
+          "dump_line": 177036
+        },
+        {
+          "path": "facts/review_20261116_round2/native_consumer_disassembly.json",
+          "class": "CollectionService",
+          "signature": "public RewardModel GetActiveCollectionRewardWithToken() { }",
+          "rva": "0x36241e0",
+          "method_bytes_sha256": "58308122955fbfbf87a986aaed61a81fb7bda92ec93ef3c27632022efe850c87",
+          "dump_line": 177042
+        },
+        {
+          "path": "facts/review_20261116_round2/native_consumer_disassembly.json",
+          "class": "CollectionService",
+          "signature": "public void AddCollectionTokenToPlayerData() { }",
+          "rva": "0x36248a0",
+          "method_bytes_sha256": "690c1a06e6b54807ec023f97527faa40a197c86ee4b41b64d5056a8930a86494",
+          "dump_line": 177048
+        }
+      ],
+      "remaining": "Chưa đo cấp thưởng/persistence/backend. Null fallback là contract native, không phải đã thử bằng remote payload null.",
+      "runtime_case_ids": [],
+      "full_uc_pass": false
+    },
+    {
+      "id": "MS-R16B-S03",
+      "feature": "Collection",
+      "title": "Chuyển phase sau hoàn thành và tên vòng",
+      "source_class": "native_current_build_static",
+      "build": "0.0.3129 ARM64 host APK",
+      "status": "resolved_static_current_build_scope",
+      "conclusion": "Normal hoàn thành chuyển Gold. Gold hoàn thành chỉ mở Repeat nếu gate khác0, nếu không TryClaimEvent. Repeat hoàn thành tăng counter, đạt cap thì claim, chưa đạt thì reset inventory. GetReadableEventId có suffix số count+2 choRepeat; Grand numeral dùng count+2 trừ1 nếu cap đã đạt.",
+      "evidence": [
+        {
+          "path": "facts/review_20261116_round2/native_consumer_disassembly.json",
+          "class": "CollectionService",
+          "signature": "public void OnCollectionCompleted() { }",
+          "rva": "0x3622ee8",
+          "method_bytes_sha256": "3811f73970bd9cbfa34ae25ee30edadbc2898898742d5ae168d2522323102b81",
+          "dump_line": 176907
+        },
+        {
+          "path": "facts/review_20261116_round2/native_consumer_disassembly.json",
+          "class": "CollectionService",
+          "signature": "private void OnGoldCollectionCompleted() { }",
+          "rva": "0x3623050",
+          "method_bytes_sha256": "f92a478c6f82e9edddbd7cb9fa37b778c59dcd34e3b3e5b8a05be6f02e032931",
+          "dump_line": 176913
+        },
+        {
+          "path": "facts/review_20261116_round2/native_consumer_disassembly.json",
+          "class": "CollectionService",
+          "signature": "private void OnRepeatCollectionCompleted() { }",
+          "rva": "0x36230e0",
+          "method_bytes_sha256": "6a7cdf21e29cc40346bfc7bc6c2f739ea0861cf1929e3c0e46cb0cc65d9e3b39",
+          "dump_line": 176916
+        },
+        {
+          "path": "facts/review_20261116_round2/native_consumer_disassembly.json",
+          "class": "CollectionService",
+          "signature": "public string GetActiveGrandNumeral() { }",
+          "rva": "0x3623f50",
+          "method_bytes_sha256": "096cd046d8f22e521cfea618d4828c7bf066b68fd19e1b48cc5cc5df282f5884",
+          "dump_line": 177128
+        },
+        {
+          "path": "facts/review_20261116_round2/native_consumer_disassembly.json",
+          "class": "CollectionService",
+          "signature": "public string GetReadableEventId() { }",
+          "rva": "0x36270cc",
+          "method_bytes_sha256": "ca558d2222418a5b1088f2492c151ff409ffd275f6abd1fcb333f113dfec1c60",
+          "dump_line": 177152
+        }
+      ],
+      "remaining": "Không coi lời gọi TryClaimEvent là request/server đã thành công; label/runtime và counter ở biên cap cần test riêng.",
+      "runtime_case_ids": [],
+      "full_uc_pass": false
+    },
+    {
+      "id": "MS-R16B-S04",
+      "feature": "LiveOps",
+      "title": "Chọn config kinh tế và ý nghĩa tiêu thụ Hierarchy",
+      "source_class": "native_current_build_static",
+      "build": "0.0.3129 ARM64 host APK",
+      "status": "resolved_static_current_build_scope",
+      "conclusion": "GetGameEconomyModel chọn Grand model chỉ khi Grand nonnull, backend config nonnull và IsEnabled=true; còn lại Firebase model. Không có phép so Hierarchy trong selector này. GetActiveConfigHierarchy đọc field0x70 của model đã chọn. Cache Grand chỉ được nạp khi modelnonnull và ApplicationVersion khớp Application.version.",
+      "evidence": [
+        {
+          "path": "facts/review_20261116_round2/native_consumer_disassembly.json",
+          "class": "GameEconomyConfigService",
+          "signature": "public void Initialize() { }",
+          "rva": "0x38f7c34",
+          "method_bytes_sha256": "5409c1bd67f34833f38376b619640d0609b37f845c2b7198901bc70a1fafe2a6",
+          "dump_line": 208691
+        },
+        {
+          "path": "facts/review_20261116_round2/native_consumer_disassembly.json",
+          "class": "GameEconomyConfigService",
+          "signature": "public GameEconomyModel GetGameEconomyModel() { }",
+          "rva": "0x38f7e38",
+          "method_bytes_sha256": "a187bbe544cbfd276bc167d5fbb444d948bc31f09b554f50938ea6aedd874ae8",
+          "dump_line": 208700
+        },
+        {
+          "path": "facts/review_20261116_round2/native_consumer_disassembly.json",
+          "class": "GameEconomyConfigService",
+          "signature": "private bool TryGetCachedGameEconomyConfig(out CachedGameEconomyConfigModel cachedGameEconomyConfigModel) { }",
+          "rva": "0x38f7c78",
+          "method_bytes_sha256": "877487e3288cea4bfa152b5d734ea13148ad68020ca841b6d0a0f525d631f8c3",
+          "dump_line": 208713
+        },
+        {
+          "path": "facts/review_20261116_round2/native_consumer_disassembly.json",
+          "class": "GameEconomyConfigService",
+          "signature": "public long GetActiveConfigHierarchy() { }",
+          "rva": "0x38f8268",
+          "method_bytes_sha256": "58cdfde136db1f9cf000598686aec706c83b384e9030b4491fb8e17328dde860",
+          "dump_line": 208716
+        }
+      ],
+      "remaining": "Không xác minh effective model trên thiết bị; mặc định backendflagfalse không quyết định config remote sau resolve. Không suy clientselector là toàn bộ chính sách version server.",
+      "runtime_case_ids": [],
+      "full_uc_pass": false
+    },
+    {
+      "id": "MS-R16B-S05",
+      "feature": "LiveOps",
+      "title": "Hierarchy trong request và response",
+      "source_class": "native_current_build_static",
+      "build": "0.0.3129 ARM64 host APK",
+      "status": "resolved_static_current_build_scope",
+      "conclusion": "SendGetRequest đọc LastSeenGameEconomyHierarchy qua IPlayerService slot70, truyền cùng ConfigType tới GetGameEconomyConfigModel; successful response cóData được CreateGameEconomyModel. Create copy responseModel.Hierarchy ở0x10 sang GameEconomyModel.Hierarchy0x70; sau đó cache model và gửi analytics lastSeen/remote hierarchy.",
+      "evidence": [
+        {
+          "path": "facts/review_20261116_round2/native_consumer_disassembly.json",
+          "class": "PlayerService",
+          "signature": "public void CacheGameEconomyHierarchy(long hierarchy) { }",
+          "rva": "0x3648fe4",
+          "method_bytes_sha256": "42633badad99ee1bbd269e76e3fdb13e09e370776d6d86790172515d5a47446e",
+          "dump_line": 202182
+        },
+        {
+          "path": "facts/review_20261116_round2/native_consumer_disassembly.json",
+          "class": "PlayerService",
+          "signature": "public long GetLastSeenGameEconomyHierarchy() { }",
+          "rva": "0x3649008",
+          "method_bytes_sha256": "b15642064c0a9a1a8787ad2d98a81cbd4ca19e3ce6f2cf4b7ae82e6608c2cfa5",
+          "dump_line": 202185
+        },
+        {
+          "path": "facts/review_20261116_round2/native_consumer_disassembly.json",
+          "class": "GameEconomyConfigService.<SendGetRequest>d__12",
+          "signature": "private void MoveNext() { }",
+          "rva": "0x38f82a8",
+          "method_bytes_sha256": "75e868709236fc070934f8fc72b9060b9aa32de5bd9b3a0bc4588061f00b2e78",
+          "dump_line": 208666
+        },
+        {
+          "path": "facts/review_20261116_round2/native_consumer_disassembly.json",
+          "class": "GameEconomyConfigService",
+          "signature": "private GameEconomyModel CreateGameEconomyModel(GameEconomyResponseModel responseModel) { }",
+          "rva": "0x38f7e60",
+          "method_bytes_sha256": "82ffac1dbaaa669ffa92bc441679c4351f1f259c5c19dd30623f4a1b3173da24",
+          "dump_line": 208707
+        }
+      ],
+      "remaining": "Chưa chứng minh response hierarchy server được chọn theo quy tắc nào hoặc backend đã nhận analytics. Không tự đóng gap backend.",
+      "runtime_case_ids": [],
+      "full_uc_pass": false
+    },
+    {
+      "id": "MS-R16B-S06",
+      "feature": "LiveOps",
+      "title": "Liên kết config mới còn thiếu trong bảng feature",
+      "source_class": "native_current_build_static",
+      "build": "0.0.3129 ARM64 host APK",
+      "status": "resolved_static_current_build_scope",
+      "conclusion": "GameEconomyConfigModelFromBackend là một trong3defaults chưa có feature link. Consumer trực tiếp GameEconomyConfigService thuộc lớp remote config, chứng minh liên kết thêm vớiLiveOps; đây là bổ sung model, không làm số feature đã matched tăng từ50. Hai model PreGame/PlayOnMultipleBottles thuộc phần core, giữ audit consumer cuối lượt.",
+      "evidence": [
+        {
+          "path": "facts/review_20261116_round2/native_consumer_disassembly.json",
+          "class": "GameEconomyConfigService",
+          "signature": "public void SetGameEconomyConfigModels(GameEconomyModel firebaseGameEconomyModel, GameEconomyConfigModelFromBackend gameEconomyConfigModelFromBackend) { }",
+          "rva": "0x38f7d50",
+          "method_bytes_sha256": "53926209ed3215655dab14c5af6a4067bc86a860bc7cfd0d9e6a6a1b7619e4d8",
+          "dump_line": 208694
+        },
+        {
+          "path": "facts/review_20261116_round2/native_consumer_disassembly.json",
+          "class": "GameEconomyConfigService",
+          "signature": "public GameEconomyModel GetGameEconomyModel() { }",
+          "rva": "0x38f7e38",
+          "method_bytes_sha256": "a187bbe544cbfd276bc167d5fbb444d948bc31f09b554f50938ea6aedd874ae8",
+          "dump_line": 208700
+        }
+      ],
+      "remaining": "Không thêm alias/substring associations. Hai model core cần consumer review riêng; tám feature chưa có dedicated default vẫn không nên gán model bằng tên gần giống.",
+      "runtime_case_ids": [],
+      "full_uc_pass": false
+    }
+  ],
+  "summary": {
+    "findings": 6,
+    "native_method_windows": 37,
+    "repeat_theme_rows": 15,
+    "new_proven_noncore_model_links": 1,
+    "new_matched_feature_count_claim": 0,
+    "runtime_cases_claimed": 0
+  }
+}

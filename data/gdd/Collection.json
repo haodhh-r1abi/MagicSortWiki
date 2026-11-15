@@ -23,7 +23,7 @@
     "Team chat: gửi/xin thẻ (CollectionCardSendRequestView)",
     "CollectionInfoPopUp / CollectionMoreInformationPopUp — luật và xác suất"
   ],
-  "flow": "CollectionStateService.GetEventState() cho ra CollectionStateType: NoCachedEvent(0) → NotIntroduced(1) → InProgress(2) → TimeIsUp(3) → Claimed(4) → ClaimedAndTimeIsUp(5) → InsufficientLevel(6) → Disable(7). Khi ShouldFetchCurrentEvent(), CollectionService.TryFetchCurrentEvent() → CollectionRemoteService.GetEventInfo(config.EventType) trả CollectionResponseModel{EventId, EventType, StartTime, FinishTime, Segment, CollectionId}. CollectionId trỏ tới file dữ liệu tĩnh trong Resources (collection_4.json / collection_5.json); InitializeCollectionDataMaps(TextAsset) nạp CollectionData{Id, Name, GoldName, TokenId, GoldTokenId, TokenName, GoldTokenName, Themes[], Packs[]} rồi dựng _cardIdDataMap, _cardIdThemeMap, _packIdCardCountMap và _cardPoolMultiplierMap. Song song, TryLoadCollectionBundleAssets() tải hai bundle: '<collectionId>_theme_icons' và các bundle icon thẻ. Nhận gói thẻ: CollectionService.OpenPack(packId, CurrencyEarnReason source) dispatch theo packId — 1,2,3 → OpenBasicPack; 4 → OpenMiddlePack; 5 → OpenPremiumPack — trả OpenedCardPackData{PackId, Cards}. AddOpenedPackCardsToInventory() cộng thẻ vào CardInventory (CardInventoryDataModel{CardId, CardCount, IsNewCard}) và bắn card_received. Thẻ trùng cộng vào sao dư: GetExtraStarCount() = tổng (CardCount − 1) × StarCount trên toàn kho. Rương thưởng: CollectionConfigModel.BonusChests là danh sách CollectionBonusChestModel{StarCount, ChestReward, ChestRewardWithoutCollection}; đủ mốc sao thì OpenBonusChest(chestIndex) → GiveBonusChestReward() với CurrencyEarnReason.CollectionChest (33) và analytics star_chest_opened. Hoàn thành theme: IsThemeCompleted(themeData) kiểm tra đủ 9 thẻ → AddCompletedTheme(), thưởng CollectionThemeRewardModel.ThemeReward với CurrencyEarnReason.CollectionThemeCompleted (34), analytics theme_completed. Hoàn thành cả bộ: IsCollectionCompleted() → OnCollectionCompleted(): trao CollectionConfigModel.CollectionReward (hoặc GoldCollectionReward) + token (GetActiveTokenReward), CurrencyEarnReason.CollectionCompleted (35), analytics collection_completed, rồi CollectionDataService.ResetInventory() và SetGoldCollectionActive(true) để bắt đầu vòng Gold. Team: SendCard(cardId) / RequestCard(cardId) qua TeamChatService; GetCardSendRequestState(cardData) trả CardSendRequestState quyết định nút hiện gì; SyncInventoryWithBackend() và CollectionRemoteService.GetCardHelps() đối chiếu thẻ đã gửi/nhận (CompareAndSyncSentCards / CompareAndSyncReceivedCards).",
+  "flow": "CollectionStateService.GetEventState() cho ra CollectionStateType: NoCachedEvent(0) → NotIntroduced(1) → InProgress(2) → TimeIsUp(3) → Claimed(4) → ClaimedAndTimeIsUp(5) → InsufficientLevel(6) → Disable(7). Khi ShouldFetchCurrentEvent(), CollectionService.TryFetchCurrentEvent() → CollectionRemoteService.GetEventInfo(config.EventType) trả CollectionResponseModel{EventId, EventType, StartTime, FinishTime, Segment, CollectionId}. CollectionId trỏ tới file dữ liệu tĩnh trong Resources (collection_4.json / collection_5.json); InitializeCollectionDataMaps(TextAsset) nạp CollectionData{Id, Name, GoldName, TokenId, GoldTokenId, TokenName, GoldTokenName, Themes[], Packs[]} rồi dựng _cardIdDataMap, _cardIdThemeMap, _packIdCardCountMap và _cardPoolMultiplierMap. Song song, TryLoadCollectionBundleAssets() tải hai bundle: '<collectionId>_theme_icons' và các bundle icon thẻ. Nhận gói thẻ: CollectionService.OpenPack(packId, CurrencyEarnReason source) dispatch theo packId — 1,2,3 → OpenBasicPack; 4 → OpenMiddlePack; 5 → OpenPremiumPack — trả OpenedCardPackData{PackId, Cards}. AddOpenedPackCardsToInventory() cộng thẻ vào CardInventory (CardInventoryDataModel{CardId, CardCount, IsNewCard}) và bắn card_received. Thẻ trùng cộng vào sao dư: GetExtraStarCount() = tổng (CardCount − 1) × StarCount trên toàn kho. Rương thưởng: CollectionConfigModel.BonusChests là danh sách CollectionBonusChestModel{StarCount, ChestReward, ChestRewardWithoutCollection}; đủ mốc sao thì OpenBonusChest(chestIndex) → GiveBonusChestReward() với CurrencyEarnReason.CollectionChest (33) và analytics star_chest_opened. Hoàn thành theme: IsThemeCompleted(themeData) kiểm tra đủ 9 thẻ → AddCompletedTheme(), thưởng CollectionThemeRewardModel.ThemeReward với CurrencyEarnReason.CollectionThemeCompleted (34), analytics theme_completed. Hoàn thành cả bộ (native 0.0.3129): GetActivePhase ưu tiên Repeat (2), sau đó Gold (1), còn lại Normal (0). GetActiveCollectionReward chọn CollectionReward/GoldCollectionReward/RepeatCollectionReward; RepeatReward null fallback GoldReward. GetActiveCollectionRewardWithToken chỉ thêm token khi phase không phải Repeat; GetActiveCollectionTokenId trả null ởRepeat. OnCollectionCompleted tăng TotalCollectionCompletedCount rồi dispatch: Normal→ActivateGoldCollection; Gold→mởRepeat nếu AdditionalCompleteCollectionCount !=0, ngược lại TryClaimEvent; Repeat→tăng RepeatCompletedCount, đạt giới hạn >=AdditionalCompleteCollectionCount thìTryClaimEvent, chưa đạt thì reset inventory. Default3129 AdditionalCompleteCollectionCount=0; đây không phải bằng chứng remote tắt ở mọi cohort. Team: SendCard(cardId) / RequestCard(cardId) qua TeamChatService; GetCardSendRequestState(cardData) trả CardSendRequestState quyết định nút hiện gì; SyncInventoryWithBackend() và CollectionRemoteService.GetCardHelps() đối chiếu thẻ đã gửi/nhận (CompareAndSyncSentCards / CompareAndSyncReceivedCards).",
   "use_cases": [
     {
       "id": "UC-01",
@@ -130,21 +130,21 @@
     },
     {
       "id": "UC-07",
-      "title": "Hoàn thành cả bộ sưu tập và nhận token",
+      "title": "Hoàn thành bộ sưu tập theo phase Normal, Gold hoặc Repeat",
       "actor": "Player",
       "trigger": "Hoàn thành đủ 15 theme",
       "precondition": "CollectionService.IsCollectionCompleted() == true",
       "steps": [
-        "OnCollectionCompleted(): GetActiveCollectionReward() (CollectionConfigModel.CollectionReward hoặc GoldCollectionReward) và GetActiveCollectionRewardWithToken()",
-        "GetActiveTokenReward() tạo RewardModel CurrencyType.ProfileToken (15) với TokenId = CollectionData.TokenId (ví dụ 'collection_4_token') hoặc GoldTokenId ('collection_4_token_gold')",
-        "AddCollectionTokenToPlayerData() và EquipCollectionToken(tokenId)",
-        "CurrencyEarnReason.CollectionCompleted (35)",
-        "CollectionDataService.ResetInventory() xoá kho thẻ, SetGoldCollectionActive(true) mở vòng Gold Collection",
-        "CollectionCompletedPopUp (text CollectionCompleted '{0}\\nCompleted!', CollectionYouGotToken 'You got\\n{0}!')",
-        "EventSender.SendCollectionCompleted()"
+        "Xác định CollectionPhase: Repeat nếu cache.IsRepeatCollectionActive, nếu khôngGold khi IsGoldCollectionActive, còn lạiNormal.",
+        "Lấy reward qua GetActiveCollectionReward; riêng RepeatReward null fallback GoldCollectionReward.",
+        "GetActiveCollectionRewardWithToken thêm token cho Normal/Gold; Repeat không thêm token, GetActiveCollectionTokenId trả null.",
+        "OnCollectionCompleted gửi event và tăng TotalCollectionCompletedCount; phase Normal mởGold.",
+        "KhiGold hoàn thành: nếu AdditionalCompleteCollectionCount !=0 thì reset inventory, xóa activation-claimed và bật Repeat; ngược lại TryClaimEvent.",
+        "KhiRepeat hoàn thành: tăng RepeatCompletedCount, so >=AdditionalCompleteCollectionCount; đạt cap thìTryClaimEvent, chưa đạt thì reset inventory và xóa activation-claimed.",
+        "Chụp reward/counter/phase và ledger khi kiểm runtime; static branch không chứng minh grant hoặc server claim."
       ],
-      "result": "Nhận token trưng bày hồ sơ và mở vòng thứ hai với tên Gold ('Grand Summer Collection', token 'Grand Summer Badge')",
-      "rules": "GetReadableEventId() = <collectionId> + '_' + ('1' nếu Gold, '0' nếu thường); GetLocalizedActiveTokenName dùng key '<tokenId>' hoặc '<tokenId>_gold'",
+      "result": "Phần thưởng và bước chuyển tiếp phụ thuộc phase. Normal mởGold; Gold có thể mởRepeat hoặc kết thúc; Repeat tăngcounter tới cap. Repeat không cấp token mới qua các method đã đọc. Chưa xác minh runtime/backend grant.",
+      "rules": "Native0.0.3129: GetReadableEventId dùng suffix 0 (Normal),1 (Gold), hoặc RepeatCompletedCount+2(Repeat). Grand numeral củaRepeat là Roman(count+2-(limitReached?1:0)). GetActiveThemeRewards dùng RepeatThemeRewards nonnull cho Repeat, nếu null fallback ThemeRewards; empty array không fallback. Default AdditionalCompleteCollectionCount=0, gate native là!=0.",
       "evidence": "CollectionService.OnCollectionCompleted; CollectionService.GetActiveTokenReward; CollectionService.AddCollectionTokenToPlayerData; CollectionService.EquipCollectionToken; CollectionService.SetGoldCollectionActive; CollectionService.GetReadableEventId; EventSender.SendCollectionCompleted"
     },
     {
@@ -2608,6 +2608,167 @@
       "value": "0",
       "meaning": "server-only (không có trong default)",
       "where": "Configs/CachedRemoteConfigs + Firebase RC template 3197 — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "packaged default0.0.3129 + current ARM64 native consumer",
+      "key": "CollectionConfigModel.AdditionalCompleteCollectionCount",
+      "type": "int",
+      "value": 0,
+      "meaning": "AdditionalCompleteCollectionCount != 0; not a >0 comparison",
+      "where": "facts/review_20261116/public_current_config_3129/defaults/CollectionConfigModel.json",
+      "build": "0.0.3129",
+      "scope": "Sanitized packaged default; not effective remote value; no runtime verification.",
+      "source_sha256": "ae29f90e4bbc9f8df646f954be9f70ae526a3640cc45a14156d22a6049120b54"
+    },
+    {
+      "source": "packaged default0.0.3129 + current ARM64 native consumer",
+      "key": "CollectionConfigModel.RepeatThemeRewards",
+      "type": "array",
+      "value": [
+        {
+          "ThemeId": "theme_1",
+          "ThemeReward": {
+            "CurrencyType": 2,
+            "TimeSpan": "01:00:00"
+          }
+        },
+        {
+          "ThemeId": "theme_2",
+          "ThemeReward": {
+            "CurrencyType": 5,
+            "Amount": 1
+          }
+        },
+        {
+          "ThemeId": "theme_3",
+          "ThemeReward": {
+            "CurrencyType": 1,
+            "Amount": 100
+          }
+        },
+        {
+          "ThemeId": "theme_4",
+          "ThemeReward": {
+            "CurrencyType": 4,
+            "Amount": 1
+          }
+        },
+        {
+          "ThemeId": "theme_5",
+          "ThemeReward": {
+            "CurrencyType": 5,
+            "Amount": 1
+          }
+        },
+        {
+          "ThemeId": "theme_6",
+          "ThemeReward": {
+            "CurrencyType": 1,
+            "Amount": 200
+          }
+        },
+        {
+          "ThemeId": "theme_7",
+          "ThemeReward": {
+            "CurrencyType": 6,
+            "Amount": 1
+          }
+        },
+        {
+          "ThemeId": "theme_8",
+          "ThemeReward": {
+            "CurrencyType": 1,
+            "Amount": 300
+          }
+        },
+        {
+          "ThemeId": "theme_9",
+          "ThemeReward": {
+            "CurrencyType": 5,
+            "Amount": 2
+          }
+        },
+        {
+          "ThemeId": "theme_10",
+          "ThemeReward": {
+            "CurrencyType": 6,
+            "Amount": 1
+          }
+        },
+        {
+          "ThemeId": "theme_11",
+          "ThemeReward": {
+            "CurrencyType": 1,
+            "Amount": 400
+          }
+        },
+        {
+          "ThemeId": "theme_12",
+          "ThemeReward": {
+            "CurrencyType": 5,
+            "Amount": 2
+          }
+        },
+        {
+          "ThemeId": "theme_13",
+          "ThemeReward": {
+            "CurrencyType": 1,
+            "Amount": 500
+          }
+        },
+        {
+          "ThemeId": "theme_14",
+          "ThemeReward": {
+            "CurrencyType": 6,
+            "Amount": 2
+          }
+        },
+        {
+          "ThemeId": "theme_15",
+          "ThemeReward": {
+            "CurrencyType": 1,
+            "Amount": 750
+          }
+        }
+      ],
+      "meaning": "phase Repeat and RepeatThemeRewards != null -> RepeatThemeRewards; otherwise ThemeRewards. Empty array is non-null and does not trigger fallback.",
+      "where": "facts/review_20261116/public_current_config_3129/defaults/CollectionConfigModel.json",
+      "build": "0.0.3129",
+      "scope": "Sanitized packaged default; not effective remote value; no runtime verification.",
+      "source_sha256": "ae29f90e4bbc9f8df646f954be9f70ae526a3640cc45a14156d22a6049120b54"
+    },
+    {
+      "source": "packaged default0.0.3129 + current ARM64 native consumer",
+      "key": "CollectionConfigModel.RepeatCollectionReward",
+      "type": "RewardModel",
+      "value": {
+        "CurrencyType": 13,
+        "ChestType": 8,
+        "Amount": 1,
+        "Rewards": [
+          {
+            "CurrencyType": 1,
+            "Amount": 8000
+          },
+          {
+            "CurrencyType": 6,
+            "Amount": 4
+          },
+          {
+            "CurrencyType": 5,
+            "Amount": 4
+          },
+          {
+            "CurrencyType": 4,
+            "Amount": 4
+          }
+        ]
+      },
+      "meaning": "phase Repeat and RepeatCollectionReward != null -> RepeatCollectionReward; Repeat null falls back to GoldCollectionReward; phase Gold -> GoldCollectionReward; otherwise CollectionReward.",
+      "where": "facts/review_20261116/public_current_config_3129/defaults/CollectionConfigModel.json",
+      "build": "0.0.3129",
+      "scope": "Sanitized packaged default; not effective remote value; no runtime verification.",
+      "source_sha256": "ae29f90e4bbc9f8df646f954be9f70ae526a3640cc45a14156d22a6049120b54"
     }
   ],
   "rewards": [
@@ -3587,5 +3748,194 @@
       "static_asset"
     ],
     "full_feature_verified": false
-  }
+  },
+  "runtime_review_20261116_round2": [
+    {
+      "id": "MS-R16B-COLLECTION01",
+      "feature": "Collection",
+      "title": "Bonus Chest: preview ba rương, đóng tooltip và chạm giá100 khi có0 sao",
+      "uc": [
+        "UC-06"
+      ],
+      "related_uc": [
+        "UC-02",
+        "UC-03",
+        "UC-04"
+      ],
+      "status": "observed_partial",
+      "precondition": "Build0.0.3129 ARM64 đã được root xác minh hash APK; fixture hiện có ở Home352, Collection8/135. Gameplay UID được cô lập mạng theo session; root thực hiện thao tác, tác giả case chỉ đọc ảnh và safe ledger.",
+      "steps": [
+        "Mở Bonus Chest; đọc0 sao và ba mức giá100/250/500.",
+        "Chạm rương vàng để xem tooltip. Sau khi trở về từ support, chạm rương xanh lá và xanh dương để xem hai tooltip còn lại.",
+        "Chạm ngoài tooltip: tooltip mất, Bonus Chest vẫn mở.",
+        "Chạm nút giá100 khi You have0; chụp lại sau thao tác."
+      ],
+      "expected": "Có thể xem preview; thiếu sao không mở rương hoặc trao thưởng; chạm ngoài chỉ đóng tooltip.",
+      "actual": "Ba tooltip hiển thị phần thưởng và gói thẻ: vàng có hai booster icon×1 và gói nâu huy hiệu2; xanh lá có icon Shuffle×1 cùng gói nâu2/xanh dương3/xanh lá4; xanh dương có icon +chai×1 cùng gói xanh lá4/hồng5/navy New. Chạm ngoài làm tooltip mất. Sau khi root chạm100, popup vẫn0 sao và ba nút100/250/500 màu xám; không thấy animation mở/grant hoặc thông báo mới. InventoryModel trong safe ledger018→032 không đổi.",
+      "limitations": "Chỉ nhánh thiếu sao và reward preview. Chưa có sao dư để kiểm spend, mở rương, grant, analytics hoặc RNG. Không suy màu/nhãn gói thành effective pack enum; preview không phải thưởng đã nhận. Lượt browser/support xen giữa thuộc case riêng; ledger endpoints không phải atomic transaction.",
+      "images": [
+        "R16B_018_bonus_chest",
+        "R16B_019_chest_preview_attempt",
+        "R16B_029_green_chest_preview",
+        "R16B_030_blue_chest_preview",
+        "R16B_031_toolbar_dismiss",
+        "R16B_032_insufficient_stars"
+      ],
+      "before": "R16B_018_bonus_chest",
+      "after": "R16B_032_insufficient_stars",
+      "uc_scope": {
+        "UC-06": {
+          "coverage": "observed_branch",
+          "scope": "Preview ba rương, outside-dismiss và insufficient-stars0<100 không mở rương; chưa kiểm spend/grant hoặc mở thành công."
+        }
+      },
+      "date": "2026-11-16",
+      "round_tag": "20261116_round2",
+      "build": "0.0.3129 ARM64",
+      "mode": "offline_existing_fixture",
+      "source_class": "runtime_observed",
+      "full_uc_pass": false,
+      "ledger_change": {
+        "currency_amount_delta_by_raw_type": {},
+        "currency_amounts_unchanged": true,
+        "timed_currency_dates_changed": false,
+        "limitless_currency_dates_changed": false,
+        "life_fill_date_changed": false,
+        "player_before": {
+          "level": 352,
+          "isLevelInProgress": false
+        },
+        "player_after": {
+          "level": 352,
+          "isLevelInProgress": false
+        },
+        "scope": "Amount equality is not whole-inventory equality; timed/life fields and other event models are separate. Raw currency IDs are not assigned names from a different build."
+      },
+      "review_scope": "Root-supplied reviewed case record; this file validator does not infer semantic UC pass."
+    },
+    {
+      "id": "MS-R16B-COLLECTION02",
+      "feature": "Collection",
+      "title": "Wonderland: badge2 và New mất sau khi xem theme rồi đóng/mở lại",
+      "uc": [
+        "UC-12"
+      ],
+      "related_uc": [
+        "UC-05",
+        "UC-16"
+      ],
+      "status": "observed_partial",
+      "precondition": "Build0.0.3129 ARM64 đã được root xác minh hash APK; fixture hiện có ở Home352, Collection8/135. Gameplay UID được cô lập mạng theo session; root thực hiện thao tác, tác giả case chỉ đọc ảnh và safe ledger.",
+      "steps": [
+        "Ở Collection8/135, Wonderland2/9 có badge2.",
+        "Mở Wonderland: Festive Bulbs và Trash Bin đều2★, có nhãn New; theme2/9.",
+        "Chạm Festive Bulbs để xem card phóng to; chạm ngoài rồi chạm Cat Entrance chưa có để xem placeholder.",
+        "Chạm ngoài và đóng theme để trở về Collection.",
+        "Mở lại Wonderland trong cùng phiên; chưa restart app."
+      ],
+      "expected": "Sau xemtheme rồiđóng/mởlại, badgeNew đãxem biếnmất; sốthẻ/progresskhôngtăngvìkhôngmởpack.",
+      "actual": "Đầu lượt, Collection8/135 và Wonderland2/9 có badge2. Ảnh033 có New trên Festive Bulbs/Trash Bin. 034 phóng to Festive Bulbs vẫn có New tại thời điểm đó;035 là placeholder Cat Entrance. 036 trở về Collection vẫn8/135, Wonderland2/9 nhưng badge2 của Wonderland đã mất; Garden/Water Play vẫn có badge2. 037 mở lại Wonderland: cả Festive Bulbs/Trash Bin không còn New, theme vẫn2/9. InventoryModel trong safe ledger015→037 không đổi.",
+      "limitations": "Chỉ quan sát UI qua đóng/mở popup trong cùng process. Chưa restart/resync, chưa trích CardInventory.IsNewCard, chưa kiểm analytics phát ra. Ảnh không phân định chính xác mark-seen xảy ra lúc entry, close hay callback. UC16 sync/restart chỉ liên quan, chưa được kiểm.",
+      "images": [
+        "R16B_015_collection_entry",
+        "R16B_033_wonderland_entry",
+        "R16B_034_owned_card",
+        "R16B_035_missing_card",
+        "R16B_036_theme_seen_return",
+        "R16B_037_theme_reopened"
+      ],
+      "before": "R16B_015_collection_entry",
+      "after": "R16B_037_theme_reopened",
+      "uc_scope": {
+        "UC-12": {
+          "coverage": "observed_branch",
+          "scope": "Badge2 và hai nhãn New của Wonderland mất qua đóng/mở lại trong cùng phiên; progress không đổi. Chưa restart, backend hoặc analytics."
+        }
+      },
+      "date": "2026-11-16",
+      "round_tag": "20261116_round2",
+      "build": "0.0.3129 ARM64",
+      "mode": "offline_existing_fixture",
+      "source_class": "runtime_observed",
+      "full_uc_pass": false,
+      "ledger_change": {
+        "currency_amount_delta_by_raw_type": {},
+        "currency_amounts_unchanged": true,
+        "timed_currency_dates_changed": false,
+        "limitless_currency_dates_changed": false,
+        "life_fill_date_changed": false,
+        "player_before": {
+          "level": 352,
+          "isLevelInProgress": false
+        },
+        "player_after": {
+          "level": 352,
+          "isLevelInProgress": false
+        },
+        "scope": "Amount equality is not whole-inventory equality; timed/life fields and other event models are separate. Raw currency IDs are not assigned names from a different build."
+      },
+      "review_scope": "Root-supplied reviewed case record; this file validator does not infer semantic UC pass."
+    },
+    {
+      "id": "MS-R16B-COLLECTION03",
+      "feature": "Collection",
+      "title": "Collection help và Learn More mở support chính thức trong Chrome rồi quay lại game",
+      "uc": [],
+      "related_uc": [
+        "UC-01",
+        "UC-02",
+        "UC-03",
+        "UC-04",
+        "UC-06"
+      ],
+      "status": "observed_partial",
+      "precondition": "Build0.0.3129 ARM64 đã được root xác minh hash APK; fixture hiện có ở Home352, Collection8/135. Gameplay UID được cô lập mạng theo session; root thực hiện thao tác, tác giả case chỉ đọc ảnh và safe ledger.",
+      "steps": [
+        "Mở Collection info: đọc help ba bước và Tap to Continue; đóng help.",
+        "Trong Bonus Chest, từ preview chạm(i): More Information mời đọc rules/probabilities tại support page.",
+        "Bấm Learn More: Chrome mở trang Collection tại magic-sort-collection.grandgamesbe.com. Root cuộn qua Card Packs, bảng Initial Probability và ghi chú dynamic pool.",
+        "Dùng Android Back: quay lại game với popup Bonus Chest vẫn0 sao."
+      ],
+      "expected": "Đường dẫn trợ giúp mở trang support và có thể quay lại game. Đọc quy tắc công bố không được tính là mở pack hoặc kiểm RNG.",
+      "actual": "Help017 hiển thị ba bước kiếm pack/tích thẻ/hoàn thành set. More Information020 có Learn More;022 Chrome hiện Collection/Card Packs;023–027 hiện năm loại pack, bảng initial probability và ghi chú dynamic pool. Source fetch độc lập xác nhận đích HTTPS https://magic-sort-collection.grandgamesbe.com/ trả200. Android Back028 trở lại Bonus Chest0 sao; không thấy mở pack.",
+      "limitations": "Đây là case quan sát informational navigation, uc=[] vì GDD không có UC help riêng; các pack UC chỉ related. Quy tắc và xác suất là published_official_rules, không phải empirical RNG, current effective config hay A/B assignment. Browser có mạng không chứng minh gameplay UID truy cập backend. Loại transient016/021 và splash001/002 khỏi curated images.",
+      "images": [
+        "R16B_017_collection_info_full",
+        "R16B_020_card_probability",
+        "R16B_022_learn_more_result",
+        "R16B_023_support_scroll",
+        "R16B_024_support_scroll",
+        "R16B_025_support_scroll",
+        "R16B_026_support_scroll",
+        "R16B_027_support_scroll",
+        "R16B_028_return_from_support"
+      ],
+      "before": "R16B_017_collection_info_full",
+      "after": "R16B_028_return_from_support",
+      "uc_scope": {},
+      "date": "2026-11-16",
+      "round_tag": "20261116_round2",
+      "build": "0.0.3129 ARM64",
+      "mode": "offline_existing_fixture",
+      "source_class": "runtime_observed",
+      "full_uc_pass": false,
+      "ledger_change": {
+        "currency_amount_delta_by_raw_type": {},
+        "currency_amounts_unchanged": true,
+        "timed_currency_dates_changed": false,
+        "limitless_currency_dates_changed": false,
+        "life_fill_date_changed": false,
+        "player_before": {
+          "level": 352,
+          "isLevelInProgress": false
+        },
+        "player_after": {
+          "level": 352,
+          "isLevelInProgress": false
+        },
+        "scope": "Amount equality is not whole-inventory equality; timed/life fields and other event models are separate. Raw currency IDs are not assigned names from a different build."
+      },
+      "review_scope": "Root-supplied reviewed case record; this file validator does not infer semantic UC pass."
+    }
+  ]
 }

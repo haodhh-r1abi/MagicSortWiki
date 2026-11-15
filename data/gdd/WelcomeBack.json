@@ -115,7 +115,7 @@
     },
     {
       "id": "UC-07",
-      "title": "Đặt lịch thông báo đẩy kéo người chơi quay lại",
+      "title": "Đặt lịch local reminder Welcome Back",
       "actor": "System",
       "trigger": "Khởi tạo Welcome Back",
       "precondition": "NotificationService khả dụng",
@@ -125,7 +125,7 @@
         "Người chơi bấm thông báo → mở game → luồng UC-01 chạy"
       ],
       "result": "Vòng lặp tái tương tác: nghỉ chơi → thông báo → quay lại → nhận quà",
-      "rules": "Thời điểm và nội dung thông báo không có trong client (do NotificationService/backend quyết định)",
+      "rules": "WelcomeBackService.InitializeData gọi WelcomeBackStateService.GetState; chỉ khi !=0 mới gọi ScheduleWelcomeBackNotification rồi TryFetchData. Metadata enum IsDisabled0,AllClaimed1,ShouldClaim2, nên path này không chỉ chạy khi có unclaimedreward. ScheduleWelcomeBackNotification tại0x2ADBCE4 lấy NotificationService, MOVZ W1,#29952 và MOVK W1,#0x12,LSL16 tạo1,209,600giây=14ngày, rồi tailcall SendWelcomeBackNotification. Đây là reminder delay client, không phải số ngày vắng mặt để backend cấp reward; backend eligibility chưa được giải bằng hằng14ngày này. Chưa là delivery/eligibility runtime proof.",
       "evidence": "WelcomeBackService.ScheduleWelcomeBackNotification; WelcomeBackService..ctor(notificationService)"
     },
     {
@@ -495,5 +495,57 @@
       "recovered_code"
     ],
     "full_feature_verified": false
+  },
+  "current_native_review_20261116_round2": {
+    "scope": "static_native_branch_review; root runtime execution tracked separately",
+    "chunks": [
+      {
+        "source": "facts/review_20261116_round2/native_findings_chunk2.json",
+        "source_sha256": "663fde738887038df64533b74eba1b5201094179afae66c6728323aef640381a",
+        "chunk": "immutable_chunk2",
+        "finding_ids": [
+          "MS-NATIVE-R2-C2-01"
+        ]
+      }
+    ],
+    "findings": [
+      {
+        "id": "MS-NATIVE-R2-C2-01",
+        "gap_ids": [
+          "MS-WelcomeBack-G003"
+        ],
+        "title": "WelcomeBack local reminder fixed14days theo caller đã xác định",
+        "conclusion": "WelcomeBackService.InitializeData gọi WelcomeBackStateService.GetState; chỉ khi !=0 mới gọi ScheduleWelcomeBackNotification rồi TryFetchData. Metadata enum IsDisabled0,AllClaimed1,ShouldClaim2, nên path này không chỉ chạy khi có unclaimedreward. ScheduleWelcomeBackNotification tại0x2ADBCE4 lấy NotificationService, MOVZ W1,#29952 và MOVK W1,#0x12,LSL16 tạo1,209,600giây=14ngày, rồi tailcall SendWelcomeBackNotification. Đây là reminder delay client, không phải số ngày vắng mặt để backend cấp reward; backend eligibility chưa được giải bằng hằng14ngày này.",
+        "evidence": [
+          {
+            "file": "facts/review_20261116_round2/chunk2_proofs/welcome_initialize_and_14day_caller.asm.txt",
+            "line": 1,
+            "end_line": 35,
+            "sha256": "97f86a5b7ce30a5b527a97e289cf9a0c28dde69698a11e91ca53dded35cf525c",
+            "source_binary": "facts/review_20261116/current_build_inputs/libil2cpp.so",
+            "binary_sha256": "d901f86380bdecae3a8ec5cf9a9b60acc5132d50dfcf7ec1f606de807e22b2d5",
+            "build": "host_APK0.0.3129_ARM64",
+            "start_va": "0x2adbc94",
+            "end_va_exclusive": "0x2adbd08",
+            "tool": "local_NDK_llvm-objdump_no_Editor",
+            "tool_sha256": "53307659312a8f0f3f3a8a1df20eec3de5f8933f54da176c0f89d6528e154c32",
+            "kind": "actual_native_disassembly_symbol_annotated"
+          },
+          {
+            "file": "facts/review_20261116/current_build_dump/dump.cs",
+            "line": 111979,
+            "end_line": 111990,
+            "sha256": "47edf53b3a3e0e82dd81316c145d0cebde72ad2bc5d2dfe3a35492e9cfbd2df2",
+            "kind": "current_metadata_field_offset_support",
+            "build": "host_APK0.0.3129_ARM64"
+          }
+        ],
+        "status": "partial_static_code_current_build",
+        "remaining": "Schedule call không chứng minh người chơi nhận được sau14ngày; còn service initialization timing, re-login/restart reschedule, permission và OS delivery. Không đồng nhất reminder14ngày với backend segmentation/reward eligibility.",
+        "source_build": "host_APK0.0.3129_ARM64_matches_last_observed15Novversion",
+        "runtime_verified_by_this_finding": false
+      }
+    ],
+    "historical_policy": "Preserve15Nov/earlier16Nov fields and all prior round2 chunk findings. Static native review does not assert runtime execution."
   }
 }

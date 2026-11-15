@@ -1,0 +1,261 @@
+{
+  "schema_version": 1,
+  "summary": {
+    "findings": 2,
+    "decisions": 3,
+    "guarded_patches": 2
+  },
+  "scope": "New noncore branch findings beyond prior constants; native source only. Runtime work by root is separate and not assessed here.",
+  "source_validation": {
+    "binary_sha256": "d901f86380bdecae3a8ec5cf9a9b60acc5132d50dfcf7ec1f606de807e22b2d5",
+    "metadata_dump_sha256": "47edf53b3a3e0e82dd81316c145d0cebde72ad2bc5d2dfe3a35492e9cfbd2df2",
+    "tool": "C:/Program Files/Unity/Hub/Editor/6000.3.24f1/Editor/Data/PlaybackEngines/AndroidPlayer/NDK/toolchains/llvm/prebuilt/windows-x86_64/bin/llvm-objdump.exe",
+    "tool_sha256": "53307659312a8f0f3f3a8a1df20eec3de5f8933f54da176c0f89d6528e154c32",
+    "host_version": "0.0.3129 ARM64",
+    "installed_current_identity": "not_checked_by_this_file_only_task"
+  },
+  "findings": [
+    {
+      "id": "MS-NATIVE-R2-01",
+      "gap_ids": [
+        "MS-Analytics-G004"
+      ],
+      "title": "Session lifecycle dùng UTC và ngưỡngstrictgreaterthan",
+      "conclusion": "OnApplicationFocus(true) tailcalls CheckAndStartSession; false gọi SaveLastData rồi SendAppFocusLostEvent khi EventSender tồn tại. Check lấy DateTime.UtcNow; nếu _lastQuitTime==DateTime.MinValue thì StartNewSession; nếu không, chỉ start khi (UtcNow−lastQuitTime)>SessionTimeout qua TimeSpan.op_GreaterThan. Bằng đúng timeout không mở session mới trong predicate. Update cộng Time.unscaledDeltaTime vào _sessionDuration, không có focus/timeScale gate trong body. SaveLastData gán lastQuitTime=UtcNow, DateTime.ToString(InvariantCulture), PlayerPrefs.SetString/SetFloat rồi Save. StartNewSession lấy persisted counter+1, SetInt; ghi persisted duration0/Save, reset in-memory duration0 rồi SaveLastData. Awake chỉ DontDestroyOnLoad và LoadLastData, không gọi CheckAndStartSession trực tiếp; focus callback là path start đã chứng minh. LoadLastData dùng GetString(defaultString.Empty), DateTime.TryParse, GetFloat(default0),GetInt(default0).",
+      "evidence": [
+        {
+          "file": "facts/review_20261116_round2/chunk1_proofs/session_lifecycle.asm.txt",
+          "line": 1,
+          "end_line": 314,
+          "sha256": "c041e535dd360c3a77c1dae405614ed2d71a533e814e80d6df9108b60443cf5c",
+          "source_binary": "facts/review_20261116/current_build_inputs/libil2cpp.so",
+          "binary_sha256": "d901f86380bdecae3a8ec5cf9a9b60acc5132d50dfcf7ec1f606de807e22b2d5",
+          "build": "host_APK0.0.3129_ARM64",
+          "start_va": "0x38fdd78",
+          "end_va_exclusive": "0x38fe248",
+          "tool": "local_NDK_llvm-objdump_no_Editor",
+          "tool_sha256": "53307659312a8f0f3f3a8a1df20eec3de5f8933f54da176c0f89d6528e154c32",
+          "kind": "actual_native_disassembly_symbol_annotated"
+        },
+        {
+          "file": "facts/review_20261116/current_build_dump/dump.cs",
+          "line": 210332,
+          "end_line": 210388,
+          "sha256": "47edf53b3a3e0e82dd81316c145d0cebde72ad2bc5d2dfe3a35492e9cfbd2df2",
+          "kind": "current_metadata_field_offset_support",
+          "build": "host_APK0.0.3129_ARM64"
+        },
+        {
+          "file": "facts/review_20261116/current_build_dump/dump.cs",
+          "line": 345021,
+          "end_line": 345060,
+          "sha256": "47edf53b3a3e0e82dd81316c145d0cebde72ad2bc5d2dfe3a35492e9cfbd2df2",
+          "kind": "current_metadata_field_offset_support",
+          "build": "host_APK0.0.3129_ARM64"
+        }
+      ],
+      "status": "partial_static_code_current_build",
+      "remaining": "Chưa kiểm focus callback order/lifecycle nền thực trên runtime hiện tại, app runInBackground, OS kill, clock rollback hay analytics emission end-to-end. UtcNow≤savedTime và exactly30min không thỏa greater-than, nhưng không gọi đây là hành vi đã playtest.",
+      "source_build": "host_APK0.0.3129_ARM64_matches_last_observed15Novversion",
+      "runtime_verified_by_this_finding": false
+    },
+    {
+      "id": "MS-NATIVE-R2-02",
+      "gap_ids": [
+        "MS-Notifications-G001",
+        "MS-Notifications-G003"
+      ],
+      "title": "Notification cancel-before-schedule và preference-off lifecycle",
+      "conclusion": "SendNotification chỉ tiếp khi _initialized(+0x81) và _initializeStarted(+0x80) đều true. Sau khi đọc LocalNotificationSo.Id(+0x18), gọi Cancel(id) TRƯỚC khi kiểm NotificationModel.IsNotificationOn(+0x10). Vì vậy notification off vẫn đi qua cancel cùng ID nếu service đã initialized. Nếu on: tạo GameNotification, lấy Title(+0x20), Message(+0x28), set Id, rồi ScheduleNotification ở DateTime.Now.AddSeconds(delay). Cancel(id) cũng có hai init gates rồi gọi CancelNotification(id); đây là replace-by-id scheduling path, không phải grant/delivery proof. OnNotificationPreferenceChanged chỉ xử lý khi hai init gates true, ghi model bool; false gọi DismissAllDisplayedNotifications và CancelAllScheduledNotifications, phát disabled analytics; true phát enabled analytics. Cả hai lưu model qua ISaveLoad interface. Không thấy bật lại tự reschedule mọi notification trong body preference handler.",
+      "evidence": [
+        {
+          "file": "facts/review_20261116_round2/chunk1_proofs/notification_schedule_cancel_preference.asm.txt",
+          "line": 1,
+          "end_line": 225,
+          "sha256": "951bed3a792a6757e4343f2298a40f4fa52d9896406016347dea8365518eaa08",
+          "source_binary": "facts/review_20261116/current_build_inputs/libil2cpp.so",
+          "binary_sha256": "d901f86380bdecae3a8ec5cf9a9b60acc5132d50dfcf7ec1f606de807e22b2d5",
+          "build": "host_APK0.0.3129_ARM64",
+          "start_va": "0x3a6a384",
+          "end_va_exclusive": "0x3a6a6f0",
+          "tool": "local_NDK_llvm-objdump_no_Editor",
+          "tool_sha256": "53307659312a8f0f3f3a8a1df20eec3de5f8933f54da176c0f89d6528e154c32",
+          "kind": "actual_native_disassembly_symbol_annotated"
+        },
+        {
+          "file": "facts/review_20261116/current_build_dump/dump.cs",
+          "line": 202442,
+          "end_line": 202454,
+          "sha256": "47edf53b3a3e0e82dd81316c145d0cebde72ad2bc5d2dfe3a35492e9cfbd2df2",
+          "kind": "current_metadata_field_offset_support",
+          "build": "host_APK0.0.3129_ARM64"
+        },
+        {
+          "file": "facts/review_20261116/current_build_dump/dump.cs",
+          "line": 13815,
+          "end_line": 13825,
+          "sha256": "47edf53b3a3e0e82dd81316c145d0cebde72ad2bc5d2dfe3a35492e9cfbd2df2",
+          "kind": "current_metadata_field_offset_support",
+          "build": "host_APK0.0.3129_ARM64"
+        },
+        {
+          "file": "facts/review_20261116/current_build_dump/dump.cs",
+          "line": 202335,
+          "end_line": 202358,
+          "sha256": "47edf53b3a3e0e82dd81316c145d0cebde72ad2bc5d2dfe3a35492e9cfbd2df2",
+          "kind": "current_metadata_field_offset_support",
+          "build": "host_APK0.0.3129_ARM64"
+        }
+      ],
+      "status": "partial_static_code_current_build",
+      "remaining": "Còn Initialize/permission callback và các caller D1/WelcomeBack để trace; OS permission/Doze/delivery không được giải bởi schedule/cancel body. Không dùng local path này để kết luận không có remote push.",
+      "source_build": "host_APK0.0.3129_ARM64_matches_last_observed15Novversion",
+      "runtime_verified_by_this_finding": false
+    }
+  ],
+  "decisions": {
+    "MS-Analytics-G004": {
+      "status": "partial_static_code_current_build",
+      "conclusion": "OnApplicationFocus(true) tailcalls CheckAndStartSession; false gọi SaveLastData rồi SendAppFocusLostEvent khi EventSender tồn tại. Check lấy DateTime.UtcNow; nếu _lastQuitTime==DateTime.MinValue thì StartNewSession; nếu không, chỉ start khi (UtcNow−lastQuitTime)>SessionTimeout qua TimeSpan.op_GreaterThan. Bằng đúng timeout không mở session mới trong predicate. Update cộng Time.unscaledDeltaTime vào _sessionDuration, không có focus/timeScale gate trong body. SaveLastData gán lastQuitTime=UtcNow, DateTime.ToString(InvariantCulture), PlayerPrefs.SetString/SetFloat rồi Save. StartNewSession lấy persisted counter+1, SetInt; ghi persisted duration0/Save, reset in-memory duration0 rồi SaveLastData. Awake chỉ DontDestroyOnLoad và LoadLastData, không gọi CheckAndStartSession trực tiếp; focus callback là path start đã chứng minh. LoadLastData dùng GetString(defaultString.Empty), DateTime.TryParse, GetFloat(default0),GetInt(default0).",
+      "evidence": [
+        "facts/review_20261116_round2/chunk1_proofs/session_lifecycle.asm.txt:1",
+        "facts/review_20261116/current_build_dump/dump.cs:210332",
+        "facts/review_20261116/current_build_dump/dump.cs:345021"
+      ],
+      "next_action": "Chưa kiểm focus callback order/lifecycle nền thực trên runtime hiện tại, app runInBackground, OS kill, clock rollback hay analytics emission end-to-end. UtcNow≤savedTime và exactly30min không thỏa greater-than, nhưng không gọi đây là hành vi đã playtest.",
+      "reviewed": "2026-11-16",
+      "mode": "file_only_current_native_round2",
+      "finding_id": "MS-NATIVE-R2-01"
+    },
+    "MS-Notifications-G001": {
+      "status": "partial_static_code_current_build",
+      "conclusion": "SendNotification chỉ tiếp khi _initialized(+0x81) và _initializeStarted(+0x80) đều true. Sau khi đọc LocalNotificationSo.Id(+0x18), gọi Cancel(id) TRƯỚC khi kiểm NotificationModel.IsNotificationOn(+0x10). Vì vậy notification off vẫn đi qua cancel cùng ID nếu service đã initialized. Nếu on: tạo GameNotification, lấy Title(+0x20), Message(+0x28), set Id, rồi ScheduleNotification ở DateTime.Now.AddSeconds(delay). Cancel(id) cũng có hai init gates rồi gọi CancelNotification(id); đây là replace-by-id scheduling path, không phải grant/delivery proof. OnNotificationPreferenceChanged chỉ xử lý khi hai init gates true, ghi model bool; false gọi DismissAllDisplayedNotifications và CancelAllScheduledNotifications, phát disabled analytics; true phát enabled analytics. Cả hai lưu model qua ISaveLoad interface. Không thấy bật lại tự reschedule mọi notification trong body preference handler.",
+      "evidence": [
+        "facts/review_20261116_round2/chunk1_proofs/notification_schedule_cancel_preference.asm.txt:1",
+        "facts/review_20261116/current_build_dump/dump.cs:202442",
+        "facts/review_20261116/current_build_dump/dump.cs:13815",
+        "facts/review_20261116/current_build_dump/dump.cs:202335"
+      ],
+      "next_action": "Còn Initialize/permission callback và các caller D1/WelcomeBack để trace; OS permission/Doze/delivery không được giải bởi schedule/cancel body. Không dùng local path này để kết luận không có remote push.",
+      "reviewed": "2026-11-16",
+      "mode": "file_only_current_native_round2",
+      "finding_id": "MS-NATIVE-R2-02"
+    },
+    "MS-Notifications-G003": {
+      "status": "partial_static_code_current_build",
+      "conclusion": "SendNotification chỉ tiếp khi _initialized(+0x81) và _initializeStarted(+0x80) đều true. Sau khi đọc LocalNotificationSo.Id(+0x18), gọi Cancel(id) TRƯỚC khi kiểm NotificationModel.IsNotificationOn(+0x10). Vì vậy notification off vẫn đi qua cancel cùng ID nếu service đã initialized. Nếu on: tạo GameNotification, lấy Title(+0x20), Message(+0x28), set Id, rồi ScheduleNotification ở DateTime.Now.AddSeconds(delay). Cancel(id) cũng có hai init gates rồi gọi CancelNotification(id); đây là replace-by-id scheduling path, không phải grant/delivery proof. OnNotificationPreferenceChanged chỉ xử lý khi hai init gates true, ghi model bool; false gọi DismissAllDisplayedNotifications và CancelAllScheduledNotifications, phát disabled analytics; true phát enabled analytics. Cả hai lưu model qua ISaveLoad interface. Không thấy bật lại tự reschedule mọi notification trong body preference handler.",
+      "evidence": [
+        "facts/review_20261116_round2/chunk1_proofs/notification_schedule_cancel_preference.asm.txt:1",
+        "facts/review_20261116/current_build_dump/dump.cs:202442",
+        "facts/review_20261116/current_build_dump/dump.cs:13815",
+        "facts/review_20261116/current_build_dump/dump.cs:202335"
+      ],
+      "next_action": "Còn Initialize/permission callback và các caller D1/WelcomeBack để trace; OS permission/Doze/delivery không được giải bởi schedule/cancel body. Không dùng local path này để kết luận không có remote push.",
+      "reviewed": "2026-11-16",
+      "mode": "file_only_current_native_round2",
+      "finding_id": "MS-NATIVE-R2-02"
+    }
+  },
+  "patches": [
+    {
+      "id": "MS-NATIVE-R2-PATCH-01",
+      "file": "gdd/Analytics.json",
+      "absolute_file": "E:/APKExport/MagicSort_HExport/GameDesign/gdd/Analytics.json",
+      "format": "json_pointer_replace",
+      "pointer": "/use_cases/4/steps/1",
+      "old": "CheckAndStartSession so thời gian rời app với SessionTimeout; quá hạn thì StartNewSession tăng bộ đếm",
+      "new": "Native0.0.3129ARM64: OnApplicationFocus(true) gọi CheckAndStartSession; DateTime.UtcNow−lastQuitTime phải >SessionTimeout mới mở phiên, hoặc savedtime==DateTime.MinValue. Bằng đúng30phút chưa thỏa predicate; chưa là runtime edge-case pass.",
+      "finding_id": "MS-NATIVE-R2-01",
+      "source": [
+        {
+          "file": "facts/review_20261116_round2/chunk1_proofs/session_lifecycle.asm.txt",
+          "line": 1,
+          "end_line": 314,
+          "sha256": "c041e535dd360c3a77c1dae405614ed2d71a533e814e80d6df9108b60443cf5c",
+          "source_binary": "facts/review_20261116/current_build_inputs/libil2cpp.so",
+          "binary_sha256": "d901f86380bdecae3a8ec5cf9a9b60acc5132d50dfcf7ec1f606de807e22b2d5",
+          "build": "host_APK0.0.3129_ARM64",
+          "start_va": "0x38fdd78",
+          "end_va_exclusive": "0x38fe248",
+          "tool": "local_NDK_llvm-objdump_no_Editor",
+          "tool_sha256": "53307659312a8f0f3f3a8a1df20eec3de5f8933f54da176c0f89d6528e154c32",
+          "kind": "actual_native_disassembly_symbol_annotated"
+        },
+        {
+          "file": "facts/review_20261116/current_build_dump/dump.cs",
+          "line": 210332,
+          "end_line": 210388,
+          "sha256": "47edf53b3a3e0e82dd81316c145d0cebde72ad2bc5d2dfe3a35492e9cfbd2df2",
+          "kind": "current_metadata_field_offset_support",
+          "build": "host_APK0.0.3129_ARM64"
+        },
+        {
+          "file": "facts/review_20261116/current_build_dump/dump.cs",
+          "line": 345021,
+          "end_line": 345060,
+          "sha256": "47edf53b3a3e0e82dd81316c145d0cebde72ad2bc5d2dfe3a35492e9cfbd2df2",
+          "kind": "current_metadata_field_offset_support",
+          "build": "host_APK0.0.3129_ARM64"
+        }
+      ],
+      "source_build": "host_APK0.0.3129_ARM64_matches_last_observed15Novversion",
+      "runtime_verified": false,
+      "snapshot_sha256": "b2d1d09b79b18689c358673549c5fd01bff306209e1dab14d8e4c8c08c54da81",
+      "apply_rule": "Only current==old; skip alreadynew; conflict otherwise."
+    },
+    {
+      "id": "MS-NATIVE-R2-PATCH-02",
+      "file": "site_meta/Analytics.json",
+      "absolute_file": "E:/APKExport/MagicSort_HExport/GameDesign/site_meta/Analytics.json",
+      "format": "json_pointer_replace",
+      "pointer": "/how_it_works/7",
+      "old": "SessionTracker.Awake đọc PlayerPrefs grand_session_counter, last_application_quit, last_session_duration; CheckAndStartSession so thời gian rời app với SessionTimeout.",
+      "new": "SessionTracker.LoadLastData đọc PlayerPrefs; Awake không start trực tiếp. Focus=true kiểm UtcNow và strict>timeout30phút hoặc MinValue để tạo session; focus=false/quit lưu UTCtime+duration và Save. Update cộng unscaledDeltaTime; native0.0.3129ARM64, chưa xác minh lifecycle runtime.",
+      "finding_id": "MS-NATIVE-R2-01",
+      "source": [
+        {
+          "file": "facts/review_20261116_round2/chunk1_proofs/session_lifecycle.asm.txt",
+          "line": 1,
+          "end_line": 314,
+          "sha256": "c041e535dd360c3a77c1dae405614ed2d71a533e814e80d6df9108b60443cf5c",
+          "source_binary": "facts/review_20261116/current_build_inputs/libil2cpp.so",
+          "binary_sha256": "d901f86380bdecae3a8ec5cf9a9b60acc5132d50dfcf7ec1f606de807e22b2d5",
+          "build": "host_APK0.0.3129_ARM64",
+          "start_va": "0x38fdd78",
+          "end_va_exclusive": "0x38fe248",
+          "tool": "local_NDK_llvm-objdump_no_Editor",
+          "tool_sha256": "53307659312a8f0f3f3a8a1df20eec3de5f8933f54da176c0f89d6528e154c32",
+          "kind": "actual_native_disassembly_symbol_annotated"
+        },
+        {
+          "file": "facts/review_20261116/current_build_dump/dump.cs",
+          "line": 210332,
+          "end_line": 210388,
+          "sha256": "47edf53b3a3e0e82dd81316c145d0cebde72ad2bc5d2dfe3a35492e9cfbd2df2",
+          "kind": "current_metadata_field_offset_support",
+          "build": "host_APK0.0.3129_ARM64"
+        },
+        {
+          "file": "facts/review_20261116/current_build_dump/dump.cs",
+          "line": 345021,
+          "end_line": 345060,
+          "sha256": "47edf53b3a3e0e82dd81316c145d0cebde72ad2bc5d2dfe3a35492e9cfbd2df2",
+          "kind": "current_metadata_field_offset_support",
+          "build": "host_APK0.0.3129_ARM64"
+        }
+      ],
+      "source_build": "host_APK0.0.3129_ARM64_matches_last_observed15Novversion",
+      "runtime_verified": false,
+      "snapshot_sha256": "f460b62d0b5225c3c10019c92474bdd01a7a873eec4a1d2590c19cff91bfd38a",
+      "apply_rule": "Only current==old; skip alreadynew; conflict otherwise."
+    }
+  ],
+  "external_runtime_identity_reference": {
+    "file": "facts/runtime/review_20261116_round2/session.json",
+    "sha256": "2a7b30d36bc9ef29b3d7626bf5ead3c646a7fb2f3b3094f7097688804e6d6d39",
+    "root_reported_installed_apk_byte_identical_to_host": true,
+    "device_interaction_by_this_file_only_task": false
+  },
+  "chunk": "immutable_chunk1",
+  "immutable_policy": "Do not regenerate or mutate this chunk/proofs; future findings use chunk2."
+}

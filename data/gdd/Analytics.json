@@ -92,7 +92,7 @@
       "precondition": "-",
       "steps": [
         "SessionTracker.Awake đọc PlayerPrefs grand_session_counter, last_application_quit, last_session_duration",
-        "CheckAndStartSession so thời gian rời app với SessionTimeout; quá hạn thì StartNewSession tăng bộ đếm",
+        "Native0.0.3129ARM64: OnApplicationFocus(true) gọi CheckAndStartSession; DateTime.UtcNow−lastQuitTime phải >SessionTimeout mới mở phiên, hoặc savedtime==DateTime.MinValue. Bằng đúng30phút chưa thỏa predicate; chưa là runtime edge-case pass.",
         "OnApplicationFocus(false) bắn app_focus_lost; OnApplicationQuit lưu SaveLastData",
         "GetSession()/GetSessionDurationInSeconds() cung cấp session_count và session_durations cho các event khác"
       ],
@@ -3358,5 +3358,64 @@
       "static_asset"
     ],
     "full_feature_verified": false
+  },
+  "current_native_review_20261116_round2": {
+    "source": "facts/review_20261116_round2/native_findings_chunk1.json",
+    "source_sha256": "f02fb08541b2b8778cf9c585c07cbeece3dc29d920fd5d584ad898872b3a447d",
+    "chunk": "immutable_chunk1",
+    "scope": "static_native_branch_review; runtime execution by root is separate",
+    "findings": [
+      {
+        "id": "MS-NATIVE-R2-01",
+        "gap_ids": [
+          "MS-Analytics-G004"
+        ],
+        "title": "Session lifecycle dùng UTC và ngưỡngstrictgreaterthan",
+        "conclusion": "OnApplicationFocus(true) tailcalls CheckAndStartSession; false gọi SaveLastData rồi SendAppFocusLostEvent khi EventSender tồn tại. Check lấy DateTime.UtcNow; nếu _lastQuitTime==DateTime.MinValue thì StartNewSession; nếu không, chỉ start khi (UtcNow−lastQuitTime)>SessionTimeout qua TimeSpan.op_GreaterThan. Bằng đúng timeout không mở session mới trong predicate. Update cộng Time.unscaledDeltaTime vào _sessionDuration, không có focus/timeScale gate trong body. SaveLastData gán lastQuitTime=UtcNow, DateTime.ToString(InvariantCulture), PlayerPrefs.SetString/SetFloat rồi Save. StartNewSession lấy persisted counter+1, SetInt; ghi persisted duration0/Save, reset in-memory duration0 rồi SaveLastData. Awake chỉ DontDestroyOnLoad và LoadLastData, không gọi CheckAndStartSession trực tiếp; focus callback là path start đã chứng minh. LoadLastData dùng GetString(defaultString.Empty), DateTime.TryParse, GetFloat(default0),GetInt(default0).",
+        "evidence": [
+          {
+            "file": "facts/review_20261116_round2/chunk1_proofs/session_lifecycle.asm.txt",
+            "line": 1,
+            "end_line": 314,
+            "sha256": "c041e535dd360c3a77c1dae405614ed2d71a533e814e80d6df9108b60443cf5c",
+            "source_binary": "facts/review_20261116/current_build_inputs/libil2cpp.so",
+            "binary_sha256": "d901f86380bdecae3a8ec5cf9a9b60acc5132d50dfcf7ec1f606de807e22b2d5",
+            "build": "host_APK0.0.3129_ARM64",
+            "start_va": "0x38fdd78",
+            "end_va_exclusive": "0x38fe248",
+            "tool": "local_NDK_llvm-objdump_no_Editor",
+            "tool_sha256": "53307659312a8f0f3f3a8a1df20eec3de5f8933f54da176c0f89d6528e154c32",
+            "kind": "actual_native_disassembly_symbol_annotated"
+          },
+          {
+            "file": "facts/review_20261116/current_build_dump/dump.cs",
+            "line": 210332,
+            "end_line": 210388,
+            "sha256": "47edf53b3a3e0e82dd81316c145d0cebde72ad2bc5d2dfe3a35492e9cfbd2df2",
+            "kind": "current_metadata_field_offset_support",
+            "build": "host_APK0.0.3129_ARM64"
+          },
+          {
+            "file": "facts/review_20261116/current_build_dump/dump.cs",
+            "line": 345021,
+            "end_line": 345060,
+            "sha256": "47edf53b3a3e0e82dd81316c145d0cebde72ad2bc5d2dfe3a35492e9cfbd2df2",
+            "kind": "current_metadata_field_offset_support",
+            "build": "host_APK0.0.3129_ARM64"
+          }
+        ],
+        "status": "partial_static_code_current_build",
+        "remaining": "Chưa kiểm focus callback order/lifecycle nền thực trên runtime hiện tại, app runInBackground, OS kill, clock rollback hay analytics emission end-to-end. UtcNow≤savedTime và exactly30min không thỏa greater-than, nhưng không gọi đây là hành vi đã playtest.",
+        "source_build": "host_APK0.0.3129_ARM64_matches_last_observed15Novversion",
+        "runtime_verified_by_this_finding": false
+      }
+    ],
+    "external_runtime_identity_reference": {
+      "file": "facts/runtime/review_20261116_round2/session.json",
+      "sha256": "2a7b30d36bc9ef29b3d7626bf5ead3c646a7fb2f3b3094f7097688804e6d6d39",
+      "root_reported_installed_apk_byte_identical_to_host": true,
+      "device_interaction_by_this_file_only_task": false
+    },
+    "historical_policy": "All15Nov and earlier16Nov review fields retained unchanged."
   }
 }

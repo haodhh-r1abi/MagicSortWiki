@@ -1,0 +1,46 @@
+{
+  "chunk_source": "facts/review_20261116_round2/native_findings_chunk1.json",
+  "chunk_sha256": "f02fb08541b2b8778cf9c585c07cbeece3dc29d920fd5d584ad898872b3a447d",
+  "proofs": [
+    {
+      "file": "facts/review_20261116_round2/chunk1_proofs/notification_schedule_cancel_preference.asm.txt",
+      "sha256": "951bed3a792a6757e4343f2298a40f4fa52d9896406016347dea8365518eaa08"
+    },
+    {
+      "file": "facts/review_20261116_round2/chunk1_proofs/session_lifecycle.asm.txt",
+      "sha256": "c041e535dd360c3a77c1dae405614ed2d71a533e814e80d6df9108b60443cf5c"
+    }
+  ],
+  "summary": {
+    "applied_patches": 2,
+    "modified_files": 2,
+    "distinct_review_fields_added": 2,
+    "historical_fields_semantically_unchanged": true,
+    "all_json_valid": true
+  },
+  "applied_patches": [
+    {
+      "id": "MS-NATIVE-R2-PATCH-01",
+      "file": "gdd/Analytics.json",
+      "pointer": "/use_cases/4/steps/1",
+      "old": "CheckAndStartSession so thời gian rời app với SessionTimeout; quá hạn thì StartNewSession tăng bộ đếm",
+      "new": "Native0.0.3129ARM64: OnApplicationFocus(true) gọi CheckAndStartSession; DateTime.UtcNow−lastQuitTime phải >SessionTimeout mới mở phiên, hoặc savedtime==DateTime.MinValue. Bằng đúng30phút chưa thỏa predicate; chưa là runtime edge-case pass.",
+      "before_sha256": "b2d1d09b79b18689c358673549c5fd01bff306209e1dab14d8e4c8c08c54da81",
+      "after_sha256": "5099b85e8dba2fcee1537c9da2c07ff06b478c8378f4bad37a4697fb50a041c9",
+      "backup": "backups/review_20261116_round2/native_chunk1/gdd/Analytics.json",
+      "finding_id": "MS-NATIVE-R2-01"
+    },
+    {
+      "id": "MS-NATIVE-R2-PATCH-02",
+      "file": "site_meta/Analytics.json",
+      "pointer": "/how_it_works/7",
+      "old": "SessionTracker.Awake đọc PlayerPrefs grand_session_counter, last_application_quit, last_session_duration; CheckAndStartSession so thời gian rời app với SessionTimeout.",
+      "new": "SessionTracker.LoadLastData đọc PlayerPrefs; Awake không start trực tiếp. Focus=true kiểm UtcNow và strict>timeout30phút hoặc MinValue để tạo session; focus=false/quit lưu UTCtime+duration và Save. Update cộng unscaledDeltaTime; native0.0.3129ARM64, chưa xác minh lifecycle runtime.",
+      "before_sha256": "f460b62d0b5225c3c10019c92474bdd01a7a873eec4a1d2590c19cff91bfd38a",
+      "after_sha256": "bb65ff71a76f83672b9808b415ff3eab298f04066c0d0cd23bdf13071f86582a",
+      "backup": "backups/review_20261116_round2/native_chunk1/site_meta/Analytics.json",
+      "finding_id": "MS-NATIVE-R2-01"
+    }
+  ],
+  "scope": "No commit/site build by child; root runtime separate"
+}

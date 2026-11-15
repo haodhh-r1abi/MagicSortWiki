@@ -1,0 +1,128 @@
+{
+  "chunk_source": "facts/review_20261116_round2/native_findings_chunk2.json",
+  "chunk_sha256": "663fde738887038df64533b74eba1b5201094179afae66c6728323aef640381a",
+  "summary": {
+    "applied_patches": 5,
+    "modified_files": 3,
+    "review_fields_updated": 3,
+    "historical_fields_semantically_unchanged": true,
+    "all_json_valid": true
+  },
+  "backups": [
+    {
+      "file": "gdd/WelcomeBack.json",
+      "backup": "backups/review_20261116_round2/native_chunk2/gdd/WelcomeBack.json",
+      "sha256": "20b6abae2bb7e0c2fc7660939a434a8d4f9f554101e7a72e6e1b6eb2c169876e"
+    },
+    {
+      "file": "gdd/Notifications.json",
+      "backup": "backups/review_20261116_round2/native_chunk2/gdd/Notifications.json",
+      "sha256": "cfa2d65051ee7b46c7f0848cd4ff79b3e2905010247ffc2f7bece83d538bc2df"
+    },
+    {
+      "file": "gdd/Ads.json",
+      "backup": "backups/review_20261116_round2/native_chunk2/gdd/Ads.json",
+      "sha256": "6b70e6beff6c0b4339907393b195b82928de617db73243714f55126a6942c335"
+    }
+  ],
+  "applied_patches": [
+    {
+      "id": "MS-NATIVE-R2-C2-PATCH-01",
+      "file": "gdd/WelcomeBack.json",
+      "pointer": "/use_cases/6/title",
+      "old": "Đặt lịch thông báo đẩy kéo người chơi quay lại",
+      "new": "Đặt lịch local reminder Welcome Back",
+      "finding_id": "MS-NATIVE-R2-C2-01",
+      "before_sha256": "20b6abae2bb7e0c2fc7660939a434a8d4f9f554101e7a72e6e1b6eb2c169876e",
+      "after_sha256": "f86c2fe26a1588b7965fb4c6e270228a616bce8f7ccb3c190b66219ae2698bf4"
+    },
+    {
+      "id": "MS-NATIVE-R2-C2-PATCH-02",
+      "file": "gdd/WelcomeBack.json",
+      "pointer": "/use_cases/6/rules",
+      "old": "Thời điểm và nội dung thông báo không có trong client (do NotificationService/backend quyết định)",
+      "new": "WelcomeBackService.InitializeData gọi WelcomeBackStateService.GetState; chỉ khi !=0 mới gọi ScheduleWelcomeBackNotification rồi TryFetchData. Metadata enum IsDisabled0,AllClaimed1,ShouldClaim2, nên path này không chỉ chạy khi có unclaimedreward. ScheduleWelcomeBackNotification tại0x2ADBCE4 lấy NotificationService, MOVZ W1,#29952 và MOVK W1,#0x12,LSL16 tạo1,209,600giây=14ngày, rồi tailcall SendWelcomeBackNotification. Đây là reminder delay client, không phải số ngày vắng mặt để backend cấp reward; backend eligibility chưa được giải bằng hằng14ngày này. Chưa là delivery/eligibility runtime proof.",
+      "finding_id": "MS-NATIVE-R2-C2-01",
+      "before_sha256": "f86c2fe26a1588b7965fb4c6e270228a616bce8f7ccb3c190b66219ae2698bf4",
+      "after_sha256": "623a16b917dded1f400180a3dfb457f2834122dad11f82538b9e52f0e5ee8b87"
+    },
+    {
+      "id": "MS-NATIVE-R2-C2-PATCH-03",
+      "file": "gdd/Notifications.json",
+      "pointer": "/use_cases/9/rules",
+      "old": "-",
+      "new": "Native0.0.3129: caller WelcomeBackService.ScheduleWelcomeBackNotification truyền delay1,209,600giây=14ngày. InitializeData gọi khi WelcomeBackState!=IsDisabled, bao gồmAllClaimed/ShouldClaim. Đây là reminder delay, chưa là backend reward eligibility.",
+      "finding_id": "MS-NATIVE-R2-C2-01",
+      "before_sha256": "cfa2d65051ee7b46c7f0848cd4ff79b3e2905010247ffc2f7bece83d538bc2df",
+      "after_sha256": "5be271b18d2c93a62840509dfa7d53a05fde70269bb6b5ba259f872d9076a11e"
+    },
+    {
+      "id": "MS-NATIVE-R2-C2-PATCH-04",
+      "file": "gdd/Notifications.json",
+      "pointer": "/use_cases/0/result",
+      "old": "Có quyền thì các thông báo mới được đăng ký",
+      "new": "Client initialized sau khi permission request hết keepWaiting; flag này không chứng minhOSGranted. Delivery cần kiểm permission kết quả vàOSruntime (native0.0.3129).",
+      "finding_id": "MS-NATIVE-R2-C2-04",
+      "before_sha256": "5be271b18d2c93a62840509dfa7d53a05fde70269bb6b5ba259f872d9076a11e",
+      "after_sha256": "ceaa12a7e27f46e75aee084fed3a5af827e9642ae1776df3f7cb6ce325fb2d85"
+    },
+    {
+      "id": "MS-NATIVE-R2-C2-PATCH-05",
+      "file": "gdd/Ads.json",
+      "pointer": "/flow",
+      "old": "Khởi tạo: AdService.Initialize(hasUserConsent) chạy tuần tự InitializeMaxSdk(hasUserConsent) → InitializeUnityMaxLayerForTracking() (gọi MaxSdkAndroid.SetSdkKey, InitializeSdk, SetVerboseLogging, SetCreativeDebuggerEnabled, SetExtraParameter với tham số 'disable_all_logs'='true'), rồi ShouldInitializeNeftaSdk() quyết định InitializeNefta(hasUserConsent, optimized) (đặt tham số 'disable_b2b_ad_unit_ids' với danh sách ad unit id, gắn com.nefta.sdk.AdapterCallback vào com.unity3d.player.UnityPlayer.currentActivity) và InitializeMeticaSdk(hasUserConsent) (trả MeticaInitResponse, gán _meticaUserGroup; _isMeticaForcedHoldout cho nhóm đối chứng). InitializeAds() gắn NeftaCustomAdapter.NeftaAdapterEvents.SetInterstitialLogic / SetRewardedLogic. Analytics khởi tạo: ad_service_initialization_started / ad_service_initialization_ended (kèm provider) và ad_service_initialized. Cấu hình: AdConfigService.Initialize() nạp cache qua TryGetCachedAdConfig(out AdConfigModel) (đọc file 'GrandCachedAdConfig' trong thư mục 'GrandConfigs'), rồi SendGetRequest() → AdConfigRemoteService.GetAdConfigModel(firstCpmAsDollar, adjustAttributionModel, configType, isNewUser) trả AdConfigResponseModel; SetAdConfigModels(firebaseAdConfigModel, adConfigModelFromBackend, addProviderConfigModel) gộp ba nguồn (Firebase Remote Config, backend, provider config) và CacheAdConfigs(adConfigModel) ghi xuống đĩa (dùng Interop_Sys.Rename để ghi nguyên tử). OnAttributionModelChanged() và OnCpmChanged() gọi lại cấu hình khi dữ liệu attribution (Adjust) hoặc CPM đổi. Interstitial: CanShowInterstitial() kiểm tra IsInterEnabled, level >= FirstLevelToShowInter, khoảng cách InterShowFrequencyInSeconds; CanShowEarlyInterstitial() / CanShowLaterInterstitial() (IsLaterInterEnabled) chọn thời điểm trước hay sau màn kết quả; CanShowInterWithoutFrequency() bỏ qua tần suất; IsInterResetAfterRewardedActive quyết định xem rewarded có reset đồng hồ interstitial không; ShowInterstitial(adRequestSource) / ForceShowInterstitial(adRequestSource). Rewarded: IsRewardedReady(), ShowRewarded(adRequestSource) trả Task<bool>; ShouldShow2XRewarded() và Get2XRewardedCoinAmount(levelDifficultyType) dùng CoinAmountNew2xRewardedForRegular/Hard/SuperHard (bản mới) hoặc nhân đôi phần thưởng thường; ShouldShowLifeRewarded() theo IsLifeRewardedEnabled; SkipRewarded là cờ debug bỏ qua quảng cáo. Play On: IsPlayOnWithRewardedEnabled(), GetPlayOnWithRewardedFirstLevelToShow(), GetDailyPlayOnRewardedLimit() (PlayOnWithRewardedDailyLimit) và GetPlayOnWithRewardedBehaviour() trả PlayOnWithRewardedVariantType — 10 biến thể A/B khác nhau về việc tặng chai to, chai nhỏ, undo, mega shuffle hay kết hợp inter+rewarded. Công tắc chéo: IsEndlessPortalDisabled(), IsChooseOneSpecialOfferDisabled(), IsTreasureDrillDisabled(), IsWatchAndWinEnabled, IsWheelOfFortuneEnabled/WheelOfFortuneConfigType — cấu hình quảng cáo có quyền tắt các sự kiện monetization khác. Analytics doanh thu: mỗi impression bắn ad_impression, ad_impression_d14, ad_revenue, user_cpm, ad_shown, ad_clicked, ad_show_started, ad_show_fail và ad_review_cid_generated với đầy đủ ad_unit_name, ad_source, network_placement, revenue_precision, ad_latency_millis, creative_identifier, impression_source, session_count. Bổ sung native0.0.3129ARM64: sáu failurecallbacks Interstitial/Nefta/Metica và3Rewarded đều increment counter rồi delay=2^min(6,counter), numerical2/4/8/16/32/64 vàcap64; không phải chỉ retry6lần. Init/show timeout và reset-on-success còn partial; chưa runtime16/11.",
+      "new": "Khởi tạo: AdService.Initialize(hasUserConsent) chạy tuần tự InitializeMaxSdk(hasUserConsent) → InitializeUnityMaxLayerForTracking() (gọi MaxSdkAndroid.SetSdkKey, InitializeSdk, SetVerboseLogging, SetCreativeDebuggerEnabled, SetExtraParameter với tham số 'disable_all_logs'='true'), rồi ShouldInitializeNeftaSdk() quyết định InitializeNefta(hasUserConsent, optimized) (đặt tham số 'disable_b2b_ad_unit_ids' với danh sách ad unit id, gắn com.nefta.sdk.AdapterCallback vào com.unity3d.player.UnityPlayer.currentActivity) và InitializeMeticaSdk(hasUserConsent) (trả MeticaInitResponse, gán _meticaUserGroup; _isMeticaForcedHoldout cho nhóm đối chứng). InitializeAds() gắn NeftaCustomAdapter.NeftaAdapterEvents.SetInterstitialLogic / SetRewardedLogic. Analytics khởi tạo: ad_service_initialization_started / ad_service_initialization_ended (kèm provider) và ad_service_initialized. Cấu hình: AdConfigService.Initialize() nạp cache qua TryGetCachedAdConfig(out AdConfigModel) (đọc file 'GrandCachedAdConfig' trong thư mục 'GrandConfigs'), rồi SendGetRequest() → AdConfigRemoteService.GetAdConfigModel(firstCpmAsDollar, adjustAttributionModel, configType, isNewUser) trả AdConfigResponseModel; SetAdConfigModels(firebaseAdConfigModel, adConfigModelFromBackend, addProviderConfigModel) gộp ba nguồn (Firebase Remote Config, backend, provider config) và CacheAdConfigs(adConfigModel) ghi xuống đĩa (dùng Interop_Sys.Rename để ghi nguyên tử). OnAttributionModelChanged() và OnCpmChanged() gọi lại cấu hình khi dữ liệu attribution (Adjust) hoặc CPM đổi. Interstitial: CanShowInterstitial() kiểm tra IsInterEnabled, level >= FirstLevelToShowInter, khoảng cách InterShowFrequencyInSeconds; CanShowEarlyInterstitial() / CanShowLaterInterstitial() (IsLaterInterEnabled) chọn thời điểm trước hay sau màn kết quả; CanShowInterWithoutFrequency() bỏ qua tần suất; IsInterResetAfterRewardedActive quyết định xem rewarded có reset đồng hồ interstitial không; ShowInterstitial(adRequestSource) / ForceShowInterstitial(adRequestSource). Rewarded: IsRewardedReady(), ShowRewarded(adRequestSource) trả Task<bool>; ShouldShow2XRewarded() và Get2XRewardedCoinAmount(levelDifficultyType) dùng CoinAmountNew2xRewardedForRegular/Hard/SuperHard (bản mới) hoặc nhân đôi phần thưởng thường; ShouldShowLifeRewarded() theo IsLifeRewardedEnabled; SkipRewarded là cờ debug bỏ qua quảng cáo. Play On: IsPlayOnWithRewardedEnabled(), GetPlayOnWithRewardedFirstLevelToShow(), GetDailyPlayOnRewardedLimit() (PlayOnWithRewardedDailyLimit) và GetPlayOnWithRewardedBehaviour() trả PlayOnWithRewardedVariantType — 10 biến thể A/B khác nhau về việc tặng chai to, chai nhỏ, undo, mega shuffle hay kết hợp inter+rewarded. Công tắc chéo: IsEndlessPortalDisabled(), IsChooseOneSpecialOfferDisabled(), IsTreasureDrillDisabled(), IsWatchAndWinEnabled, IsWheelOfFortuneEnabled/WheelOfFortuneConfigType — cấu hình quảng cáo có quyền tắt các sự kiện monetization khác. Analytics doanh thu: mỗi impression bắn ad_impression, ad_impression_d14, ad_revenue, user_cpm, ad_shown, ad_clicked, ad_show_started, ad_show_fail và ad_review_cid_generated với đầy đủ ad_unit_name, ad_source, network_placement, revenue_precision, ad_latency_millis, creative_identifier, impression_source, session_count. Bổ sung native0.0.3129ARM64: sáu failurecallbacks Interstitial/Nefta/Metica và3Rewarded đều increment counter rồi delay=2^min(6,counter), numerical2/4/8/16/32/64 vàcap64; không phải chỉ retry6lần. Init/show timeout và reset-on-success còn partial; chưa runtime16/11. Native round2: accepted load-success paths của cả6adapter reset retrycount0; failure tiếp theo quay vềdelay2. Không suy queuedbackoff đã bịcancel hoặcSDKshowtimeout đãxong.",
+      "finding_id": "MS-NATIVE-R2-C2-03",
+      "before_sha256": "6b70e6beff6c0b4339907393b195b82928de617db73243714f55126a6942c335",
+      "after_sha256": "05127332bde6062a9333905f4391ddb78e1ea725acf2b53d533fdbeca09b8096"
+    }
+  ],
+  "review_fields": [
+    {
+      "file": "gdd/WelcomeBack.json",
+      "previous_review": null,
+      "added_finding_ids": [
+        "MS-NATIVE-R2-C2-01"
+      ],
+      "before_sha256": "623a16b917dded1f400180a3dfb457f2834122dad11f82538b9e52f0e5ee8b87",
+      "after_sha256": "b56a199e34fcdb0fe8e465a236bc9535e311287eb8314d714d8a565aac0a8c2d"
+    },
+    {
+      "file": "gdd/Notifications.json",
+      "previous_review": null,
+      "added_finding_ids": [
+        "MS-NATIVE-R2-C2-02",
+        "MS-NATIVE-R2-C2-04"
+      ],
+      "before_sha256": "ceaa12a7e27f46e75aee084fed3a5af827e9642ae1776df3f7cb6ce325fb2d85",
+      "after_sha256": "0e9a9b43e71b3da3bf1cdc3d9df2b977308324ac384004b023b429e925f154cf"
+    },
+    {
+      "file": "gdd/Ads.json",
+      "previous_review": null,
+      "added_finding_ids": [
+        "MS-NATIVE-R2-C2-03"
+      ],
+      "before_sha256": "05127332bde6062a9333905f4391ddb78e1ea725acf2b53d533fdbeca09b8096",
+      "after_sha256": "15e462202170b2a1aec98874e34dae203ccadb1580a0ee1e93f114870d055c03"
+    }
+  ],
+  "files": [
+    {
+      "file": "gdd/WelcomeBack.json",
+      "before_sha256": "20b6abae2bb7e0c2fc7660939a434a8d4f9f554101e7a72e6e1b6eb2c169876e",
+      "after_sha256": "b56a199e34fcdb0fe8e465a236bc9535e311287eb8314d714d8a565aac0a8c2d"
+    },
+    {
+      "file": "gdd/Notifications.json",
+      "before_sha256": "cfa2d65051ee7b46c7f0848cd4ff79b3e2905010247ffc2f7bece83d538bc2df",
+      "after_sha256": "0e9a9b43e71b3da3bf1cdc3d9df2b977308324ac384004b023b429e925f154cf"
+    },
+    {
+      "file": "gdd/Ads.json",
+      "before_sha256": "6b70e6beff6c0b4339907393b195b82928de617db73243714f55126a6942c335",
+      "after_sha256": "15e462202170b2a1aec98874e34dae203ccadb1580a0ee1e93f114870d055c03"
+    }
+  ],
+  "scope": "No commit/site build; child static source only; root runtime separate"
+}

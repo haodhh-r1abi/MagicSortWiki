@@ -1,0 +1,313 @@
+[
+  {
+    "id": "MS-R16B-HOME01",
+    "feature": "HomeUI",
+    "title": "Vuốt thật qua Home, Leaderboard và Shop; kiểm biên trái",
+    "uc": [
+      "UC-02"
+    ],
+    "related_uc": [
+      "UC-03",
+      "UC-04"
+    ],
+    "status": "observed_partial",
+    "precondition": "Build3129 xác minh hash APK; Home352, offline_existing_fixture, không popup chặn.",
+    "steps": [
+      "Vuốt từ (180,1000) tới (900,1000),650ms: Home sang Leaderboard.",
+      "Lặp lại: Leaderboard sang Shop.",
+      "Tại Shop, vuốt cùng hướng lần nữa để kiểm biên.",
+      "Vuốt ngược từ (900,1000) tới (180,1000),650ms hai lần: Shop qua Leaderboard về Home."
+    ],
+    "expected": "Trang và tab được chọn đồng bộ theo chiều kéo; không đi ra ngoài đầu danh sách; không bắt đầu level hoặc chi tiền.",
+    "actual": "Quan sát đủ Home → Leaderboard → Shop; kéo vượt đầu Shop vẫn ở Shop. Hai vuốt ngược trở về Home. Level352, coin và booster không đổi.",
+    "limitations": "Chỉ ba trang và các drag650ms được quan sát. Không đo threshold0.2, tween timing, preload, nhánh Journey hoặc snapback drag ngắn.",
+    "images": [
+      "R16B_003_entry",
+      "R16B_004_swipe_right",
+      "R16B_005_store_swipe",
+      "R16B_012_store_boundary",
+      "R16B_013_back_leaderboard",
+      "R16B_014_home_return"
+    ],
+    "before": "R16B_003_entry",
+    "after": "R16B_014_home_return",
+    "uc_scope": {
+      "UC-02": {
+        "coverage": "observed_branch",
+        "scope": "Long swipe hai chiều và biên tại Store; không phải mọi gesture/variant."
+      }
+    },
+    "date": "2026-11-16",
+    "round_tag": "20261116_round2",
+    "build": "0.0.3129 ARM64",
+    "mode": "offline_existing_fixture",
+    "source_class": "runtime_observed",
+    "full_uc_pass": false,
+    "ledger_change": {
+      "currency_amount_delta_by_raw_type": {},
+      "currency_amounts_unchanged": true,
+      "timed_currency_dates_changed": false,
+      "limitless_currency_dates_changed": false,
+      "life_fill_date_changed": false,
+      "player_before": {
+        "level": 352,
+        "isLevelInProgress": false
+      },
+      "player_after": {
+        "level": 352,
+        "isLevelInProgress": false
+      },
+      "scope": "Amount equality is not whole-inventory equality; timed/life fields and other event models are separate. Raw currency IDs are not assigned names from a different build."
+    },
+    "review_scope": "Root-supplied reviewed case record; this file validator does not infer semantic UC pass."
+  },
+  {
+    "id": "MS-R16B-STORE01",
+    "feature": "Store",
+    "title": "Quét toàn bộ catalog Shop: 6 bundle và 6 gói coin, giá VND",
+    "uc": [
+      "UC-02"
+    ],
+    "related_uc": [
+      "UC-01",
+      "UC-11"
+    ],
+    "status": "observed_partial",
+    "precondition": "Shop mở qua vuốt; không có checkout; mode offline_existing_fixture.",
+    "steps": [
+      "Đọc Starter và Apprentice ở đầu Shop.",
+      "Vuốt dọc lần lượt để thấy Magician, Sorcerer, Mage, Wizard.",
+      "Tiếp tục tới 6 gói coin rồi vuốt thêm để xác nhận cuối danh sách.",
+      "Thử chạm icon Undo của Starter; không thấy tooltip mở."
+    ],
+    "expected": "Catalog hiển thị đủ card, nhãn giá và phần thưởng; scroll tới cuối mà không mua hàng.",
+    "actual": "6 bundle và6 gói coin được ghi nguyên theo UI trong store_catalog_observed.json. Giá VND vẫn hiển thị trong mode offline. Icon Undo được chạm không tạo overlay quan sát được. Cuối danh sách là hàng25k/50k/100k coin; vuốt thêm không lộ card khác. Số dư không đổi.",
+    "limitations": "Chỉ catalog được cache/hiển thị ở tài khoản này; chưa kiểm receipt, store price refresh, checkout, grant hoặc quyền No Ads. Nhãn ADS không chứng minh entitlement sau mua. Không coi icon không mở tooltip là lỗi nếu chưa có requirement.",
+    "images": [
+      "R16B_005_store_swipe",
+      "R16B_006_undo_tooltip",
+      "R16B_008_shop_mid1",
+      "R16B_009_shop_mid2",
+      "R16B_010_shop_coins",
+      "R16B_011_shop_bottom"
+    ],
+    "before": "R16B_005_store_swipe",
+    "after": "R16B_011_shop_bottom",
+    "uc_scope": {
+      "UC-02": {
+        "coverage": "observed_branch",
+        "scope": "Duyệt12card tại một catalog offline; không phải IAP grant."
+      }
+    },
+    "date": "2026-11-16",
+    "round_tag": "20261116_round2",
+    "build": "0.0.3129 ARM64",
+    "mode": "offline_existing_fixture",
+    "source_class": "runtime_observed",
+    "full_uc_pass": false,
+    "ledger_change": {
+      "currency_amount_delta_by_raw_type": {},
+      "currency_amounts_unchanged": true,
+      "timed_currency_dates_changed": false,
+      "limitless_currency_dates_changed": false,
+      "life_fill_date_changed": false,
+      "player_before": {
+        "level": 352,
+        "isLevelInProgress": false
+      },
+      "player_after": {
+        "level": 352,
+        "isLevelInProgress": false
+      },
+      "scope": "Amount equality is not whole-inventory equality; timed/life fields and other event models are separate. Raw currency IDs are not assigned names from a different build."
+    },
+    "review_scope": "Root-supplied reviewed case record; this file validator does not infer semantic UC pass."
+  },
+  {
+    "id": "MS-R16B-COLLECTION01",
+    "feature": "Collection",
+    "title": "Bonus Chest: preview ba rương, đóng tooltip và chạm giá100 khi có0 sao",
+    "uc": [
+      "UC-06"
+    ],
+    "related_uc": [
+      "UC-02",
+      "UC-03",
+      "UC-04"
+    ],
+    "status": "observed_partial",
+    "precondition": "Build0.0.3129 ARM64 đã được root xác minh hash APK; fixture hiện có ở Home352, Collection8/135. Gameplay UID được cô lập mạng theo session; root thực hiện thao tác, tác giả case chỉ đọc ảnh và safe ledger.",
+    "steps": [
+      "Mở Bonus Chest; đọc0 sao và ba mức giá100/250/500.",
+      "Chạm rương vàng để xem tooltip. Sau khi trở về từ support, chạm rương xanh lá và xanh dương để xem hai tooltip còn lại.",
+      "Chạm ngoài tooltip: tooltip mất, Bonus Chest vẫn mở.",
+      "Chạm nút giá100 khi You have0; chụp lại sau thao tác."
+    ],
+    "expected": "Có thể xem preview; thiếu sao không mở rương hoặc trao thưởng; chạm ngoài chỉ đóng tooltip.",
+    "actual": "Ba tooltip hiển thị phần thưởng và gói thẻ: vàng có hai booster icon×1 và gói nâu huy hiệu2; xanh lá có icon Shuffle×1 cùng gói nâu2/xanh dương3/xanh lá4; xanh dương có icon +chai×1 cùng gói xanh lá4/hồng5/navy New. Chạm ngoài làm tooltip mất. Sau khi root chạm100, popup vẫn0 sao và ba nút100/250/500 màu xám; không thấy animation mở/grant hoặc thông báo mới. InventoryModel trong safe ledger018→032 không đổi.",
+    "limitations": "Chỉ nhánh thiếu sao và reward preview. Chưa có sao dư để kiểm spend, mở rương, grant, analytics hoặc RNG. Không suy màu/nhãn gói thành effective pack enum; preview không phải thưởng đã nhận. Lượt browser/support xen giữa thuộc case riêng; ledger endpoints không phải atomic transaction.",
+    "images": [
+      "R16B_018_bonus_chest",
+      "R16B_019_chest_preview_attempt",
+      "R16B_029_green_chest_preview",
+      "R16B_030_blue_chest_preview",
+      "R16B_031_toolbar_dismiss",
+      "R16B_032_insufficient_stars"
+    ],
+    "before": "R16B_018_bonus_chest",
+    "after": "R16B_032_insufficient_stars",
+    "uc_scope": {
+      "UC-06": {
+        "coverage": "observed_branch",
+        "scope": "Preview ba rương, outside-dismiss và insufficient-stars0<100 không mở rương; chưa kiểm spend/grant hoặc mở thành công."
+      }
+    },
+    "date": "2026-11-16",
+    "round_tag": "20261116_round2",
+    "build": "0.0.3129 ARM64",
+    "mode": "offline_existing_fixture",
+    "source_class": "runtime_observed",
+    "full_uc_pass": false,
+    "ledger_change": {
+      "currency_amount_delta_by_raw_type": {},
+      "currency_amounts_unchanged": true,
+      "timed_currency_dates_changed": false,
+      "limitless_currency_dates_changed": false,
+      "life_fill_date_changed": false,
+      "player_before": {
+        "level": 352,
+        "isLevelInProgress": false
+      },
+      "player_after": {
+        "level": 352,
+        "isLevelInProgress": false
+      },
+      "scope": "Amount equality is not whole-inventory equality; timed/life fields and other event models are separate. Raw currency IDs are not assigned names from a different build."
+    },
+    "review_scope": "Root-supplied reviewed case record; this file validator does not infer semantic UC pass."
+  },
+  {
+    "id": "MS-R16B-COLLECTION02",
+    "feature": "Collection",
+    "title": "Wonderland: badge2 và New mất sau khi xem theme rồi đóng/mở lại",
+    "uc": [
+      "UC-12"
+    ],
+    "related_uc": [
+      "UC-05",
+      "UC-16"
+    ],
+    "status": "observed_partial",
+    "precondition": "Build0.0.3129 ARM64 đã được root xác minh hash APK; fixture hiện có ở Home352, Collection8/135. Gameplay UID được cô lập mạng theo session; root thực hiện thao tác, tác giả case chỉ đọc ảnh và safe ledger.",
+    "steps": [
+      "Ở Collection8/135, Wonderland2/9 có badge2.",
+      "Mở Wonderland: Festive Bulbs và Trash Bin đều2★, có nhãn New; theme2/9.",
+      "Chạm Festive Bulbs để xem card phóng to; chạm ngoài rồi chạm Cat Entrance chưa có để xem placeholder.",
+      "Chạm ngoài và đóng theme để trở về Collection.",
+      "Mở lại Wonderland trong cùng phiên; chưa restart app."
+    ],
+    "expected": "Sau xemtheme rồiđóng/mởlại, badgeNew đãxem biếnmất; sốthẻ/progresskhôngtăngvìkhôngmởpack.",
+    "actual": "Đầu lượt, Collection8/135 và Wonderland2/9 có badge2. Ảnh033 có New trên Festive Bulbs/Trash Bin. 034 phóng to Festive Bulbs vẫn có New tại thời điểm đó;035 là placeholder Cat Entrance. 036 trở về Collection vẫn8/135, Wonderland2/9 nhưng badge2 của Wonderland đã mất; Garden/Water Play vẫn có badge2. 037 mở lại Wonderland: cả Festive Bulbs/Trash Bin không còn New, theme vẫn2/9. InventoryModel trong safe ledger015→037 không đổi.",
+    "limitations": "Chỉ quan sát UI qua đóng/mở popup trong cùng process. Chưa restart/resync, chưa trích CardInventory.IsNewCard, chưa kiểm analytics phát ra. Ảnh không phân định chính xác mark-seen xảy ra lúc entry, close hay callback. UC16 sync/restart chỉ liên quan, chưa được kiểm.",
+    "images": [
+      "R16B_015_collection_entry",
+      "R16B_033_wonderland_entry",
+      "R16B_034_owned_card",
+      "R16B_035_missing_card",
+      "R16B_036_theme_seen_return",
+      "R16B_037_theme_reopened"
+    ],
+    "before": "R16B_015_collection_entry",
+    "after": "R16B_037_theme_reopened",
+    "uc_scope": {
+      "UC-12": {
+        "coverage": "observed_branch",
+        "scope": "Badge2 và hai nhãn New của Wonderland mất qua đóng/mở lại trong cùng phiên; progress không đổi. Chưa restart, backend hoặc analytics."
+      }
+    },
+    "date": "2026-11-16",
+    "round_tag": "20261116_round2",
+    "build": "0.0.3129 ARM64",
+    "mode": "offline_existing_fixture",
+    "source_class": "runtime_observed",
+    "full_uc_pass": false,
+    "ledger_change": {
+      "currency_amount_delta_by_raw_type": {},
+      "currency_amounts_unchanged": true,
+      "timed_currency_dates_changed": false,
+      "limitless_currency_dates_changed": false,
+      "life_fill_date_changed": false,
+      "player_before": {
+        "level": 352,
+        "isLevelInProgress": false
+      },
+      "player_after": {
+        "level": 352,
+        "isLevelInProgress": false
+      },
+      "scope": "Amount equality is not whole-inventory equality; timed/life fields and other event models are separate. Raw currency IDs are not assigned names from a different build."
+    },
+    "review_scope": "Root-supplied reviewed case record; this file validator does not infer semantic UC pass."
+  },
+  {
+    "id": "MS-R16B-COLLECTION03",
+    "feature": "Collection",
+    "title": "Collection help và Learn More mở support chính thức trong Chrome rồi quay lại game",
+    "uc": [],
+    "related_uc": [
+      "UC-01",
+      "UC-02",
+      "UC-03",
+      "UC-04",
+      "UC-06"
+    ],
+    "status": "observed_partial",
+    "precondition": "Build0.0.3129 ARM64 đã được root xác minh hash APK; fixture hiện có ở Home352, Collection8/135. Gameplay UID được cô lập mạng theo session; root thực hiện thao tác, tác giả case chỉ đọc ảnh và safe ledger.",
+    "steps": [
+      "Mở Collection info: đọc help ba bước và Tap to Continue; đóng help.",
+      "Trong Bonus Chest, từ preview chạm(i): More Information mời đọc rules/probabilities tại support page.",
+      "Bấm Learn More: Chrome mở trang Collection tại magic-sort-collection.grandgamesbe.com. Root cuộn qua Card Packs, bảng Initial Probability và ghi chú dynamic pool.",
+      "Dùng Android Back: quay lại game với popup Bonus Chest vẫn0 sao."
+    ],
+    "expected": "Đường dẫn trợ giúp mở trang support và có thể quay lại game. Đọc quy tắc công bố không được tính là mở pack hoặc kiểm RNG.",
+    "actual": "Help017 hiển thị ba bước kiếm pack/tích thẻ/hoàn thành set. More Information020 có Learn More;022 Chrome hiện Collection/Card Packs;023–027 hiện năm loại pack, bảng initial probability và ghi chú dynamic pool. Source fetch độc lập xác nhận đích HTTPS https://magic-sort-collection.grandgamesbe.com/ trả200. Android Back028 trở lại Bonus Chest0 sao; không thấy mở pack.",
+    "limitations": "Đây là case quan sát informational navigation, uc=[] vì GDD không có UC help riêng; các pack UC chỉ related. Quy tắc và xác suất là published_official_rules, không phải empirical RNG, current effective config hay A/B assignment. Browser có mạng không chứng minh gameplay UID truy cập backend. Loại transient016/021 và splash001/002 khỏi curated images.",
+    "images": [
+      "R16B_017_collection_info_full",
+      "R16B_020_card_probability",
+      "R16B_022_learn_more_result",
+      "R16B_023_support_scroll",
+      "R16B_024_support_scroll",
+      "R16B_025_support_scroll",
+      "R16B_026_support_scroll",
+      "R16B_027_support_scroll",
+      "R16B_028_return_from_support"
+    ],
+    "before": "R16B_017_collection_info_full",
+    "after": "R16B_028_return_from_support",
+    "uc_scope": {},
+    "date": "2026-11-16",
+    "round_tag": "20261116_round2",
+    "build": "0.0.3129 ARM64",
+    "mode": "offline_existing_fixture",
+    "source_class": "runtime_observed",
+    "full_uc_pass": false,
+    "ledger_change": {
+      "currency_amount_delta_by_raw_type": {},
+      "currency_amounts_unchanged": true,
+      "timed_currency_dates_changed": false,
+      "limitless_currency_dates_changed": false,
+      "life_fill_date_changed": false,
+      "player_before": {
+        "level": 352,
+        "isLevelInProgress": false
+      },
+      "player_after": {
+        "level": 352,
+        "isLevelInProgress": false
+      },
+      "scope": "Amount equality is not whole-inventory equality; timed/life fields and other event models are separate. Raw currency IDs are not assigned names from a different build."
+    },
+    "review_scope": "Root-supplied reviewed case record; this file validator does not infer semantic UC pass."
+  }
+]
