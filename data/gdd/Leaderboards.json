@@ -884,5 +884,159 @@
       "static_asset"
     ],
     "full_feature_verified": false
+  },
+  "runtime_review_20261116_round2": [
+    {
+      "id": "MS-R16B-LEADERBOARDS01",
+      "feature": "Leaderboards",
+      "title": "Chuyển tab Friends/Players/Teams: cache và gate hiển thị",
+      "uc": [
+        "UC-02",
+        "UC-04",
+        "UC-06",
+        "UC-08",
+        "UC-11"
+      ],
+      "related_uc": [
+        "UC-01",
+        "UC-03",
+        "UC-05",
+        "UC-07"
+      ],
+      "status": "observed_partial",
+      "precondition": "Build0.0.3129ARM64 đã xác minh hash bởi root; Home352, offline_existing_fixture và gameplayUID cô lập mạng. Root thao tác; tác giả case chỉ đọc ảnh/safe ledger.",
+      "steps": [
+        "Từ Weekly041 chạm Friends042.",
+        "Chạm Players043, World được chọn và đọc bảng cache/dòng mình.",
+        "Chạm Teams ranking044."
+      ],
+      "expected": "Các tab phản ánh đúng nội dung cache hoặc gate; không coi gate là tải thành công.",
+      "actual": "Friends042 hiện No Internet Connection. Players043 hiện World và danh sách cached gần hạng994–999; dòng mình ghim ở1000+, level352. Teams ranking044 có World/Country nhưng hiện Coming Soon!, không phải No Internet. Weekly041 có Finished/cache.",
+      "limitations": "Không kiểm Country, fetch/refresh, Facebook, friend list hoặc team ranking data. UC06 chỉ entry No Internet; UC08 chỉ tab Weekly/cache; UC11 chỉ snapshot offline, chưa kiểm chính sách cache refresh.",
+      "images": [
+        "R16B_041_leaderboard_tabs",
+        "R16B_042_friends_entry",
+        "R16B_043_players_gate",
+        "R16B_044_teams_ranking_gate"
+      ],
+      "before": "R16B_041_leaderboard_tabs",
+      "after": "R16B_044_teams_ranking_gate",
+      "uc_scope": {
+        "UC-02": {
+          "coverage": "observed_branch",
+          "scope": "World list cached có render; không fetch fresh."
+        },
+        "UC-04": {
+          "coverage": "observed_branch",
+          "scope": "Dòng mình màu xanh ghim dưới World list ở1000+, level352."
+        },
+        "UC-06": {
+          "coverage": "observed_branch",
+          "scope": "Chỉ tab Friends hiện No Internet, không danh sách bạn thành công."
+        },
+        "UC-08": {
+          "coverage": "observed_branch",
+          "scope": "Weekly tab hiển thị cached Finished bảng; không lifecycle giải."
+        },
+        "UC-11": {
+          "coverage": "observed_branch",
+          "scope": "Có cache ởWeekly/Players trong fixture offline, không chứng minh mọi bảng đều cache."
+        }
+      },
+      "date": "2026-11-16",
+      "round_tag": "20261116_round2",
+      "build": "0.0.3129 ARM64",
+      "mode": "offline_existing_fixture",
+      "source_class": "runtime_observed",
+      "full_uc_pass": false,
+      "ledger_change": {
+        "currency_amount_delta_by_raw_type": {},
+        "currency_amounts_unchanged": true,
+        "timed_currency_dates_changed": false,
+        "limitless_currency_dates_changed": false,
+        "life_fill_date_changed": false,
+        "player_before": {
+          "level": 352,
+          "isLevelInProgress": false
+        },
+        "player_after": {
+          "level": 352,
+          "isLevelInProgress": false
+        },
+        "scope": "Amount equality is not whole-inventory equality; timed/life fields and other event models are separate. Raw currency IDs are not assigned names from a different build."
+      },
+      "review_scope": "Root-supplied reviewed case record; this file validator does not infer semantic UC pass."
+    }
+  ],
+  "current_all58_status_20261116_round2": {
+    "feature": "Leaderboards",
+    "phase": "noncore_first",
+    "device_status_now": "available_now",
+    "execution_status_now": "observed_branches_round2",
+    "full_feature_runtime_verified": false,
+    "remaining_dependencies": [
+      {
+        "kind": "use_case_branch_pending",
+        "uc_ids_without_any_case": [
+          "UC-01",
+          "UC-05",
+          "UC-07",
+          "UC-09",
+          "UC-10",
+          "UC-12",
+          "UC-13",
+          "UC-14"
+        ],
+        "detail": "Đã có nhánh vòng 2; tiếp tục các branch chưa vào và biên chưa đo. Từ hàng leaderboard cached thử profile detail và đóng; kiểm tra tab team/global còn chưa render, skeleton và nút retry.",
+        "specific_condition": "Entry đã được quan sát ở case vòng 2; điều kiện của nhánh tiếp theo cần kiểm riêng. Giới hạn đã ghi: Không kiểm Country, fetch/refresh, Facebook, friend list hoặc team ranking data. UC06 chỉ entry No Internet; UC08 chỉ tab Weekly/cache; UC11 chỉ snapshot offline, chưa kiểm chính sách cache refresh."
+      },
+      {
+        "kind": "backend_contract_or_response",
+        "scope": "Historical15Nov open questions; reassess against current source/runtime updates, not automatic current closure.",
+        "questions": [
+          {
+            "id": "MS-Leaderboards-G001",
+            "question": "Cách backend tính Score (dựa trên level đã qua hay điểm riêng) không nhìn thấy trong client.",
+            "next_action": "Cần backend contract hoặc delta response score sau level; không đồng nhất Score với currentLevel từ một snapshot."
+          }
+        ]
+      },
+      {
+        "kind": "event_rotation_or_fresh_instance",
+        "scope": "Historical15Nov open questions; reassess against current source/runtime updates, not automatic current closure.",
+        "questions": [
+          {
+            "id": "MS-Leaderboards-G003",
+            "question": "Chu kỳ reset của bảng thường trực (nếu có) do server quyết định.",
+            "next_action": "Cần period/version hoặc snapshot trước/sau reset; không gọi permanent nếu thiếu reset quan sát."
+          }
+        ]
+      }
+    ],
+    "genuinely_missing_or_stale_data": [],
+    "date": "2026-11-16",
+    "source": "facts/review_20261116_round2/all58_data_quality.json",
+    "public_source": "../data/review_20261116_round2/all58_data_quality.json",
+    "source_scope": "Full source row remains external; no self/source-GDD hash embedded.",
+    "counts": {
+      "uc": 14,
+      "configs": 22,
+      "models": 3,
+      "segment_rows": 0,
+      "historical_cases": 2,
+      "round2_cases": 1,
+      "round2_images": 4
+    },
+    "round2_case_ids": [
+      "MS-R16B-LEADERBOARDS01"
+    ],
+    "round2_branch_ucs": [
+      "UC-02",
+      "UC-04",
+      "UC-06",
+      "UC-08",
+      "UC-11"
+    ],
+    "full_uc_pass": false
   }
 }

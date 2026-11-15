@@ -1531,5 +1531,141 @@
       "static_asset"
     ],
     "full_feature_verified": false
+  },
+  "runtime_review_20261116_round2": [
+    {
+      "id": "MS-R16B-WEEKLY01",
+      "feature": "WeeklyTournament",
+      "title": "Weekly Finished: xem bảng cache và dòng mình hạng9",
+      "uc": [
+        "UC-10"
+      ],
+      "related_uc": [
+        "UC-01",
+        "UC-06",
+        "UC-08",
+        "UC-13"
+      ],
+      "status": "observed_partial",
+      "precondition": "Build0.0.3129ARM64 đã xác minh hash bởi root; Home352, offline_existing_fixture và gameplayUID cô lập mạng. Root thao tác; tác giả case chỉ đọc ảnh/safe ledger.",
+      "steps": [
+        "Mở Leaderboard; tab Weekly hiện bảng đã kết thúc.",
+        "Đọc podium, các dòng và dòng mình tô xanh."
+      ],
+      "expected": "Có thể đọc snapshot bảng đã cache; không xem thao tác xem là claim hoặc fetch mới.",
+      "actual": "Ảnh041: Weekly được chọn, nhãn Finished; dòng mình hạng9, điểm0, tô xanh. Bảng và podium hiện trong fixture offline.",
+      "limitations": "Chưa refresh server, nhận thưởng, chuyển giải mới hoặc kiểm thay đổi hạng. Hạng/điểm là snapshot fixture; không đại diện live leaderboard.",
+      "images": [
+        "R16B_041_leaderboard_tabs"
+      ],
+      "before": "R16B_041_leaderboard_tabs",
+      "after": "R16B_041_leaderboard_tabs",
+      "uc_scope": {
+        "UC-10": {
+          "coverage": "observed_branch",
+          "scope": "Chỉ render cached finished standings và vị trí của mình; không claim/medalgrant/serverrefresh."
+        }
+      },
+      "date": "2026-11-16",
+      "round_tag": "20261116_round2",
+      "build": "0.0.3129 ARM64",
+      "mode": "offline_existing_fixture",
+      "source_class": "runtime_observed",
+      "full_uc_pass": false,
+      "ledger_change": {
+        "currency_amount_delta_by_raw_type": {},
+        "currency_amounts_unchanged": true,
+        "timed_currency_dates_changed": false,
+        "limitless_currency_dates_changed": false,
+        "life_fill_date_changed": false,
+        "player_before": {
+          "level": 352,
+          "isLevelInProgress": false
+        },
+        "player_after": {
+          "level": 352,
+          "isLevelInProgress": false
+        },
+        "scope": "Amount equality is not whole-inventory equality; timed/life fields and other event models are separate. Raw currency IDs are not assigned names from a different build."
+      },
+      "review_scope": "Root-supplied reviewed case record; this file validator does not infer semantic UC pass."
+    }
+  ],
+  "current_all58_status_20261116_round2": {
+    "feature": "WeeklyTournament",
+    "phase": "noncore_first",
+    "device_status_now": "available_now",
+    "execution_status_now": "observed_branches_round2",
+    "full_feature_runtime_verified": false,
+    "remaining_dependencies": [
+      {
+        "kind": "use_case_branch_pending",
+        "uc_ids_without_any_case": [
+          "UC-01",
+          "UC-02",
+          "UC-03",
+          "UC-04",
+          "UC-05",
+          "UC-06",
+          "UC-07",
+          "UC-08",
+          "UC-09",
+          "UC-11",
+          "UC-12",
+          "UC-13",
+          "UC-14"
+        ],
+        "detail": "Đã có nhánh vòng 2; tiếp tục các branch chưa vào và biên chưa đo. Tìm tab weekly trong leaderboard, xem timer/medal/reward rank info, đóng; chụp empty/error khác Players World.",
+        "specific_condition": "Entry đã được quan sát ở case vòng 2; điều kiện của nhánh tiếp theo cần kiểm riêng. Giới hạn đã ghi: Chưa refresh server, nhận thưởng, chuyển giải mới hoặc kiểm thay đổi hạng. Hạng/điểm là snapshot fixture; không đại diện live leaderboard."
+      },
+      {
+        "kind": "backend_contract_or_response",
+        "scope": "Historical15Nov open questions; reassess against current source/runtime updates, not automatic current closure.",
+        "questions": [
+          {
+            "id": "MS-WeeklyTournament-G002",
+            "question": "Số lượng người chơi trong một bảng và tỉ lệ bot do server quyết định (Players[] chỉ có cờ IsBot).",
+            "next_action": "Đếm user/bot observed; server grouping/ratio không thể chứng minh từ một snapshot."
+          }
+        ]
+      },
+      {
+        "kind": "event_rotation_or_fresh_instance",
+        "scope": "Historical15Nov open questions; reassess against current source/runtime updates, not automatic current closure.",
+        "questions": [
+          {
+            "id": "MS-WeeklyTournament-G001",
+            "question": "Độ dài chu kỳ giải (7 ngày) không có hằng số trong client — startTime/finishTime hoàn toàn do server quyết định.",
+            "next_action": "Trích period startfinish của snapshot; cần ít nhất hai vòng để kiểm7ngày và reset, không suy từ tên Weekly."
+          },
+          {
+            "id": "MS-WeeklyTournament-G003",
+            "question": "Không thấy thưởng vật phẩm ngoài coin cho giải tuần trong build này.",
+            "next_action": "Trích reward types của từng rank trong instance, không kết luận chỉcoin toàn production từ một build."
+          }
+        ]
+      }
+    ],
+    "genuinely_missing_or_stale_data": [],
+    "date": "2026-11-16",
+    "source": "facts/review_20261116_round2/all58_data_quality.json",
+    "public_source": "../data/review_20261116_round2/all58_data_quality.json",
+    "source_scope": "Full source row remains external; no self/source-GDD hash embedded.",
+    "counts": {
+      "uc": 14,
+      "configs": 129,
+      "models": 1,
+      "segment_rows": 0,
+      "historical_cases": 0,
+      "round2_cases": 1,
+      "round2_images": 1
+    },
+    "round2_case_ids": [
+      "MS-R16B-WEEKLY01"
+    ],
+    "round2_branch_ucs": [
+      "UC-10"
+    ],
+    "full_uc_pass": false
   }
 }

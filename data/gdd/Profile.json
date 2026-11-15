@@ -923,5 +923,244 @@
       "external_dependency"
     ],
     "full_feature_verified": false
+  },
+  "runtime_review_20261116_round2": [
+    {
+      "id": "MS-R16B-PROFILE01",
+      "feature": "Profile",
+      "title": "Đổi tên: blank/ab bị từ chối, abc mới là draft",
+      "uc": [
+        "UC-02"
+      ],
+      "related_uc": [
+        "UC-01",
+        "UC-14",
+        "UC-16"
+      ],
+      "status": "observed_partial",
+      "precondition": "Build0.0.3129ARM64 đã xác minh hash bởi root; Home352, offline_existing_fixture và gameplayUID cô lập mạng. Root thao tác; tác giả case chỉ đọc ảnh/safe ledger.",
+      "steps": [
+        "Mở Profile047, Edit048, bấm pencil đổi tên049.",
+        "Xoá tên và bấm AndroidOK:050 input trống, Continue xám.",
+        "Chạm Continue051: thông báo cần ít nhất3validcharacters.",
+        "Nhậpab052: thông báo vẫn hiện. Nhậpabc053: Continue xanh.",
+        "Không submit abc; đóngX và sau đó đóng Edit."
+      ],
+      "expected": "Validation chặn tên ngắn; draft không tự đổi tên nếu không submit/save.",
+      "actual": "Blank050 có Continue xám; chạm051 tạo lỗi tối thiểu3validcharacters. ab052 vẫn input2ký tự và lỗi; abc053 có Continue xanh. Không bấm Continue khiabc. Profile058 sau đóng vẫn tên gốc.",
+      "limitations": "Chỉ độ dài0/2/3 bằngASCII và cancel. Không kiểmmaxlen, Unicode, profanity, backendacceptance hoặc sync; không tínhabc là đổi tên thành công.",
+      "images": [
+        "R16B_047_profile_entry",
+        "R16B_048_profile_edit",
+        "R16B_049_rename_entry",
+        "R16B_050_empty_name",
+        "R16B_051_empty_name_continue",
+        "R16B_052_two_character_name",
+        "R16B_053_three_character_draft",
+        "R16B_058_profile_cancel_result"
+      ],
+      "before": "R16B_047_profile_entry",
+      "after": "R16B_058_profile_cancel_result",
+      "uc_scope": {
+        "UC-02": {
+          "coverage": "observed_branch",
+          "scope": "ValidationUI và cancel; không commit tên mới."
+        }
+      },
+      "date": "2026-11-16",
+      "round_tag": "20261116_round2",
+      "build": "0.0.3129 ARM64",
+      "mode": "offline_existing_fixture",
+      "source_class": "runtime_observed",
+      "full_uc_pass": false,
+      "ledger_change": {
+        "currency_amount_delta_by_raw_type": {},
+        "currency_amounts_unchanged": true,
+        "timed_currency_dates_changed": false,
+        "limitless_currency_dates_changed": false,
+        "life_fill_date_changed": false,
+        "player_before": {
+          "level": 352,
+          "isLevelInProgress": false
+        },
+        "player_after": {
+          "level": 352,
+          "isLevelInProgress": false
+        },
+        "scope": "Amount equality is not whole-inventory equality; timed/life fields and other event models are separate. Raw currency IDs are not assigned names from a different build."
+      },
+      "review_scope": "Root-supplied reviewed case record; this file validator does not infer semantic UC pass."
+    },
+    {
+      "id": "MS-R16B-PROFILE02",
+      "feature": "Profile",
+      "title": "Chọn avatar khác trong draft rồi đóng Edit",
+      "uc": [
+        "UC-03"
+      ],
+      "related_uc": [
+        "UC-14",
+        "UC-15"
+      ],
+      "status": "observed_partial",
+      "precondition": "Build0.0.3129ARM64 đã xác minh hash bởi root; Home352, offline_existing_fixture và gameplayUID cô lập mạng. Root thao tác; tác giả case chỉ đọc ảnh/safe ledger.",
+      "steps": [
+        "Edit048 đang chọn avatar đầu hàng1.",
+        "Chạm avatar giữa hàng1:057 khung xanh/check chuyển sang lựa chọn mới.",
+        "Không bấmSave; đóngEdit→058."
+      ],
+      "expected": "Draft selection đổi, đóng không Save không thay avatar đã hiển thị trên Profile.",
+      "actual": "057 check ởavatar giữa hàng1, nhưng preview header vẫnavatar gốc. 058 Profile vẫnavatar gốc như047.",
+      "limitations": "Chỉ lựa chọn/cancel một avatar; chưa Save, persistence, sync hoặc mọiavatar/frame/namestyle.",
+      "images": [
+        "R16B_048_profile_edit",
+        "R16B_057_avatar_draft",
+        "R16B_058_profile_cancel_result"
+      ],
+      "before": "R16B_048_profile_edit",
+      "after": "R16B_058_profile_cancel_result",
+      "uc_scope": {
+        "UC-03": {
+          "coverage": "observed_branch",
+          "scope": "Draft check thay đổi và cancelkhông Save; chưa trang bị avatar thành công."
+        }
+      },
+      "date": "2026-11-16",
+      "round_tag": "20261116_round2",
+      "build": "0.0.3129 ARM64",
+      "mode": "offline_existing_fixture",
+      "source_class": "runtime_observed",
+      "full_uc_pass": false,
+      "ledger_change": {
+        "currency_amount_delta_by_raw_type": {},
+        "currency_amounts_unchanged": true,
+        "timed_currency_dates_changed": false,
+        "limitless_currency_dates_changed": false,
+        "life_fill_date_changed": false,
+        "player_before": {
+          "level": 352,
+          "isLevelInProgress": false
+        },
+        "player_after": {
+          "level": 352,
+          "isLevelInProgress": false
+        },
+        "scope": "Amount equality is not whole-inventory equality; timed/life fields and other event models are separate. Raw currency IDs are not assigned names from a different build."
+      },
+      "review_scope": "Root-supplied reviewed case record; this file validator does not infer semantic UC pass."
+    },
+    {
+      "id": "MS-R16B-PROFILE03",
+      "feature": "Profile",
+      "title": "Token Wonderland bị khóa: preview và Equip bị từ chối",
+      "uc": [
+        "UC-05"
+      ],
+      "related_uc": [],
+      "status": "observed_partial",
+      "precondition": "Build0.0.3129ARM64 đã xác minh hash bởi root; Home352, offline_existing_fixture và gameplayUID cô lập mạng. Root thao tác; tác giả case chỉ đọc ảnh/safe ledger.",
+      "steps": [
+        "Mở tabToken054 thấy khóa trênWonderlandbadge.",
+        "Chạm icon055 để mởpreview.",
+        "Chạm Equip056."
+      ],
+      "expected": "Token chưa đủ điều kiện không được trang bị.",
+      "actual": "Token catalog054 có khóa. Preview055 làWonderlandBadge, Equip xám. Chạm056 hiện Token is not equippable; không có equipthànhcông.",
+      "limitations": "Chỉ negativebranch với token khóa. Không kiểm nhận Collectiontoken, token đã unlock, Save hoặc sync. CollectionUC13 chỉ liên quan.",
+      "images": [
+        "R16B_054_token_catalog",
+        "R16B_055_locked_token",
+        "R16B_056_locked_equip_attempt"
+      ],
+      "before": "R16B_054_token_catalog",
+      "after": "R16B_056_locked_equip_attempt",
+      "uc_scope": {
+        "UC-05": {
+          "coverage": "observed_branch",
+          "scope": "Lockedpreview/attemptedEquip bị chặn; không positiveequip."
+        }
+      },
+      "related_feature_uc": [
+        {
+          "feature": "Collection",
+          "uc": "UC-13",
+          "scope": "Related tokenart/eligibility only; không Collectioncompletion/unlock/equip pass."
+        }
+      ],
+      "date": "2026-11-16",
+      "round_tag": "20261116_round2",
+      "build": "0.0.3129 ARM64",
+      "mode": "offline_existing_fixture",
+      "source_class": "runtime_observed",
+      "full_uc_pass": false,
+      "ledger_change": {
+        "currency_amount_delta_by_raw_type": {},
+        "currency_amounts_unchanged": true,
+        "timed_currency_dates_changed": false,
+        "limitless_currency_dates_changed": false,
+        "life_fill_date_changed": false,
+        "player_before": {
+          "level": 352,
+          "isLevelInProgress": false
+        },
+        "player_after": {
+          "level": 352,
+          "isLevelInProgress": false
+        },
+        "scope": "Amount equality is not whole-inventory equality; timed/life fields and other event models are separate. Raw currency IDs are not assigned names from a different build."
+      },
+      "review_scope": "Root-supplied reviewed case record; this file validator does not infer semantic UC pass."
+    }
+  ],
+  "current_all58_status_20261116_round2": {
+    "feature": "Profile",
+    "phase": "noncore_first",
+    "device_status_now": "available_now",
+    "execution_status_now": "observed_branches_round2",
+    "full_feature_runtime_verified": false,
+    "remaining_dependencies": [
+      {
+        "kind": "use_case_branch_pending",
+        "uc_ids_without_any_case": [
+          "UC-01",
+          "UC-04",
+          "UC-08",
+          "UC-10",
+          "UC-11",
+          "UC-12",
+          "UC-13",
+          "UC-14",
+          "UC-16",
+          "UC-17"
+        ],
+        "detail": "Đã có nhánh vòng 2; tiếp tục các branch chưa vào và biên chưa đo. Trong rename thử khoảng trắng và giới hạn dài nếu ô cho phép, cancel; thử mở hồ sơ từ một hàng leaderboard cached và chụp thống kê đã che tên/ID.",
+        "specific_condition": "Entry đã được quan sát ở case vòng 2; điều kiện của nhánh tiếp theo cần kiểm riêng. Giới hạn đã ghi: Chỉ độ dài0/2/3 bằngASCII và cancel. Không kiểmmaxlen, Unicode, profanity, backendacceptance hoặc sync; không tínhabc là đổi tên thành công.; Chỉ lựa chọn/cancel một avatar; chưa Save, persistence, sync hoặc mọiavatar/frame/namestyle.; Chỉ negativebranch với token khóa. Không kiểm nhận Collectiontoken, token đã unlock, Save hoặc sync. CollectionUC13 chỉ liên quan."
+      }
+    ],
+    "genuinely_missing_or_stale_data": [],
+    "date": "2026-11-16",
+    "source": "facts/review_20261116_round2/all58_data_quality.json",
+    "public_source": "../data/review_20261116_round2/all58_data_quality.json",
+    "source_scope": "Full source row remains external; no self/source-GDD hash embedded.",
+    "counts": {
+      "uc": 17,
+      "configs": 22,
+      "models": 0,
+      "segment_rows": 0,
+      "historical_cases": 4,
+      "round2_cases": 3,
+      "round2_images": 12
+    },
+    "round2_case_ids": [
+      "MS-R16B-PROFILE01",
+      "MS-R16B-PROFILE02",
+      "MS-R16B-PROFILE03"
+    ],
+    "round2_branch_ucs": [
+      "UC-02",
+      "UC-03",
+      "UC-05"
+    ],
+    "full_uc_pass": false
   }
 }

@@ -706,5 +706,128 @@
       }
     ],
     "historical_policy": "Preserve15Nov/earlier16Nov fields and all prior round2 chunk findings. Static native review does not assert runtime execution."
+  },
+  "runtime_review_20261116_round2": [
+    {
+      "id": "MS-R16B-NOTIFICATIONS01",
+      "feature": "Notifications",
+      "title": "ToggleON→OFF→ON: persistedflag và hủyUnityalarms",
+      "uc": [
+        "UC-02"
+      ],
+      "related_uc": [
+        "UC-01",
+        "UC-12",
+        "UC-13"
+      ],
+      "status": "observed_partial",
+      "precondition": "Build0.0.3129ARM64 đã xác minh hash bởi root; Home352, offline_existing_fixture và gameplayUID cô lập mạng. Root thao tác; tác giả case chỉ đọc ảnh/safe ledger.",
+      "steps": [
+        "Settings059NotificationsON.",
+        "ChạmOFF060 rồiON061; root lấy privateprefs/notification/alarm snapshots mỗi phase.",
+        "Sau các bước noncore, root force-stop chỉMagicSort rồi khởi động lại, không ghi prefs.",
+        "Sau restart, 073 làHome transition; 074 thực tế làSettingsNotificationsON mặc dù filename cócore."
+      ],
+      "expected": "UI/modeltoggle được lưu; OFF hủy lịch local được quan sát; ON không mặc nhiên chứng minh đã lên lịch/delivery.",
+      "actual": "UI059/060/061 lần lượt là ON/OFF/ON; NotificationModel.isNotificationOn trong bản allowlist là true/false/true. Alarm dumps có2 Unity notification alarms của game trước OFF,0 sau OFF và0 sau ON;1 alarm khác của game vẫn còn. Sau restart, private073 lưu flag=true; ảnh073 chỉ là Home transition, ảnh074 mới là Settings ON.",
+      "limitations": "Chỉ fixture hiện tại; ảnh, prefs và dumps được lấy tuần tự, không atomic. Không công bố raw UID/intent/alarm IDs. Chưa kiểm OS permission dialog, delivery, remote push hoặc mọi send caller. Số0 sau ON chỉ mô tả snapshot đó, không khẳng định sẽ không có lịch mới về sau.",
+      "images": [
+        "R16B_059_settings_entry",
+        "R16B_060_notifications_off",
+        "R16B_061_notifications_on",
+        "R16B_074_core352_entry"
+      ],
+      "before": "R16B_059_settings_entry",
+      "after": "R16B_074_core352_entry",
+      "uc_scope": {
+        "UC-02": {
+          "coverage": "observed_branch",
+          "scope": "UI/modelON→OFF→ON, scheduledUnityalarm2→0→0 vàON cònsau restart; khôngdeliveryproof."
+        }
+      },
+      "related_feature_uc": [
+        {
+          "feature": "Settings",
+          "uc": "UC-07",
+          "scope": "RelatedsameSettingsnotificationtoggleflow; chưamọipermission/platformvariant."
+        }
+      ],
+      "additional_evidence": [
+        "facts/review_20261116_round2/notification_toggle_allowlisted_comparison.json"
+      ],
+      "date": "2026-11-16",
+      "round_tag": "20261116_round2",
+      "build": "0.0.3129 ARM64",
+      "mode": "offline_existing_fixture",
+      "source_class": "runtime_observed",
+      "full_uc_pass": false,
+      "ledger_change": {
+        "currency_amount_delta_by_raw_type": {},
+        "currency_amounts_unchanged": true,
+        "timed_currency_dates_changed": true,
+        "limitless_currency_dates_changed": true,
+        "life_fill_date_changed": true,
+        "player_before": {
+          "level": 352,
+          "isLevelInProgress": false
+        },
+        "player_after": {
+          "level": 352,
+          "isLevelInProgress": false
+        },
+        "scope": "Amount equality is not whole-inventory equality; timed/life fields and other event models are separate. Raw currency IDs are not assigned names from a different build."
+      },
+      "review_scope": "Root-supplied reviewed case record; this file validator does not infer semantic UC pass."
+    }
+  ],
+  "current_all58_status_20261116_round2": {
+    "feature": "Notifications",
+    "phase": "noncore_first",
+    "device_status_now": "available_now",
+    "execution_status_now": "observed_branches_round2",
+    "full_feature_runtime_verified": false,
+    "remaining_dependencies": [
+      {
+        "kind": "use_case_branch_pending",
+        "uc_ids_without_any_case": [
+          "UC-01",
+          "UC-03",
+          "UC-04",
+          "UC-05",
+          "UC-06",
+          "UC-07",
+          "UC-08",
+          "UC-09",
+          "UC-10",
+          "UC-11",
+          "UC-12",
+          "UC-13",
+          "UC-14"
+        ],
+        "detail": "Đã có nhánh vòng 2; tiếp tục các branch chưa vào và biên chưa đo. Đối chiếu toggle đã kiểm với permission/scheduled notification snapshot chỉ đọc nếu lấy được; kiểm tra popup xin quyền nếu app tự hiện.",
+        "specific_condition": "Entry đã được quan sát ở case vòng 2; điều kiện của nhánh tiếp theo cần kiểm riêng. Giới hạn đã ghi: Chỉ fixture hiện tại; ảnh, prefs và dumps được lấy tuần tự, không atomic. Không công bố raw UID/intent/alarm IDs. Chưa kiểm OS permission dialog, delivery, remote push hoặc mọi send caller. Số0 sau ON chỉ mô tả snapshot đó, không khẳng định sẽ không có lịch mới về sau."
+      }
+    ],
+    "genuinely_missing_or_stale_data": [],
+    "date": "2026-11-16",
+    "source": "facts/review_20261116_round2/all58_data_quality.json",
+    "public_source": "../data/review_20261116_round2/all58_data_quality.json",
+    "source_scope": "Full source row remains external; no self/source-GDD hash embedded.",
+    "counts": {
+      "uc": 14,
+      "configs": 16,
+      "models": 0,
+      "segment_rows": 0,
+      "historical_cases": 0,
+      "round2_cases": 1,
+      "round2_images": 4
+    },
+    "round2_case_ids": [
+      "MS-R16B-NOTIFICATIONS01"
+    ],
+    "round2_branch_ucs": [
+      "UC-02"
+    ],
+    "full_uc_pass": false
   }
 }

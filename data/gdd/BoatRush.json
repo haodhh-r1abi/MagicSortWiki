@@ -7935,5 +7935,202 @@
       "static_asset"
     ],
     "full_feature_verified": false
+  },
+  "runtime_review_20261116_round2": [
+    {
+      "id": "MS-R16B-BOAT01",
+      "feature": "BoatRush",
+      "title": "ChạmBoatFinishedởHomebịNo Internet",
+      "uc": [
+        "UC-16"
+      ],
+      "related_uc": [
+        "UC-01",
+        "UC-09",
+        "UC-14"
+      ],
+      "status": "observed_partial",
+      "precondition": "Build0.0.3129ARM64 đã xác minh hash bởi root; Home352, offline_existing_fixture và gameplayUID cô lập mạng. Root thao tác; tác giả case chỉ đọc ảnh/safe ledger.",
+      "steps": [
+        "ĐóngDuckpopup bằngX để vềHome.",
+        "ChạmBoatRushFinishedicon theo rootaction rồi chụp066."
+      ],
+      "expected": "Networkgatekhông bị nhầm thành event đãmở/claim.",
+      "actual": "066vẫnHome352, iconBoatFinishedhạng4 vàtoastNo InternetConnection. Không cóBoatpopup/raceviewmới.",
+      "limitations": "Chỉ entrygate. Khôngxem thứhạng4 trênlobbyicon làđã xemtoàn race/đã claim; chưa fetch/join/reward/lives. Before065làDuckresult, endpointsbao gồmcloseDuckvàentryattempt.",
+      "images": [
+        "R16B_066_boat_finished"
+      ],
+      "before": "R16B_065_duck_continue_result",
+      "after": "R16B_066_boat_finished",
+      "uc_scope": {
+        "UC-16": {
+          "coverage": "observed_branch",
+          "scope": "Chỉ HomeentryattemptNo Internet; chưaeventofflinefallback/retry/sync."
+        }
+      },
+      "date": "2026-11-16",
+      "round_tag": "20261116_round2",
+      "build": "0.0.3129 ARM64",
+      "mode": "offline_existing_fixture",
+      "source_class": "runtime_observed",
+      "full_uc_pass": false,
+      "ledger_change": {
+        "currency_amount_delta_by_raw_type": {},
+        "currency_amounts_unchanged": true,
+        "timed_currency_dates_changed": false,
+        "limitless_currency_dates_changed": false,
+        "life_fill_date_changed": false,
+        "player_before": {
+          "level": 352,
+          "isLevelInProgress": false
+        },
+        "player_after": {
+          "level": 352,
+          "isLevelInProgress": false
+        },
+        "scope": "Amount equality is not whole-inventory equality; timed/life fields and other event models are separate. Raw currency IDs are not assigned names from a different build."
+      },
+      "review_scope": "Root-supplied reviewed case record; this file validator does not infer semantic UC pass."
+    },
+    {
+      "id": "MS-R16B-BOAT02",
+      "feature": "BoatRush",
+      "title": "Post-win mở được cached Finished race và info dù direct entry trước đó bị mạng",
+      "uc": [
+        "UC-10",
+        "UC-12"
+      ],
+      "related_uc": [
+        "UC-03",
+        "UC-07",
+        "UC-11",
+        "UC-14",
+        "UC-16"
+      ],
+      "status": "observed_partial",
+      "precondition": "Root thực hiện lượt level352 sau toàn bộ nhánh noncore; build0.0.3129ARM64, offline_existing_fixture, gameplayUID cô lập mạng. Dùng một Undo và một Extra Bottle từ kho fixture lớn; không ghi prefs.",
+      "steps": [
+        "So với entry066 ở Home chỉ tạo No Internet toast, sau thắng Continue094 mở Boat095.",
+        "Đọc Finished, Stage1/4, own boat score1 và các dòng đối thủ/claimed-place labels.",
+        "MởInfo và chụp fullhelp097; Tap to Continue đóng help.",
+        "Boat Continue chuyển sang Duck098; không mở event reward chest."
+      ],
+      "expected": "Ghi nhận đúng nhánh thao tác và kết quả UI/ledger của một lượt fixture; không nâng thành full feature/UC pass.",
+      "actual": "095 có Finished và Stage1/4/Race is over, own boat1; có hai dòng đối thủ ghi1st/2nd place claimed. 097 help nói beat levels, finish race, advance stages, rewards. 098 chuyển Duck result. Đây là branch post-win khác direct entry066, không phải Home095.",
+      "limitations": "Chỉ cached result/Info và queue advancement. Không nhận thưởng Boat, join/fetch race mới, stage progress grant, unlimited life hoặc online result ack. Những claimed-place labels thuộc UI đối thủ, không là claim của tài khoản này.",
+      "images": [
+        "R16B_066_boat_finished",
+        "R16B_095_postwin_home353",
+        "R16B_097_boat_rules_full",
+        "R16B_098_boat_continue_afterwin"
+      ],
+      "before": "R16B_066_boat_finished",
+      "after": "R16B_098_boat_continue_afterwin",
+      "uc_scope": {
+        "UC-10": {
+          "coverage": "observed_branch",
+          "scope": "Xem các dòng đối thủ và ownscore trên Finished race snapshot."
+        },
+        "UC-12": {
+          "coverage": "observed_branch",
+          "scope": "ManualInfo/help render và đóng; không first-intro trigger."
+        }
+      },
+      "additional_evidence": [
+        "facts/review_20261116_round2/core352_moves_observations.json",
+        "facts/runtime/review_20261116_round2/session_end.json"
+      ],
+      "date": "2026-11-16",
+      "round_tag": "20261116_round2",
+      "build": "0.0.3129 ARM64",
+      "mode": "offline_existing_fixture",
+      "source_class": "runtime_observed",
+      "full_uc_pass": false,
+      "ledger_change": {
+        "currency_amount_delta_by_raw_type": {
+          "1": 20,
+          "6": -1,
+          "4": -1
+        },
+        "currency_amounts_unchanged": false,
+        "timed_currency_dates_changed": true,
+        "limitless_currency_dates_changed": true,
+        "life_fill_date_changed": true,
+        "player_before": {
+          "level": 352,
+          "isLevelInProgress": false
+        },
+        "player_after": {
+          "level": 353,
+          "isLevelInProgress": false
+        },
+        "scope": "Amount equality is not whole-inventory equality; timed/life fields and other event models are separate. Raw currency IDs are not assigned names from a different build."
+      },
+      "review_scope": "Root-supplied reviewed case record; this file validator does not infer semantic UC pass."
+    }
+  ],
+  "current_all58_status_20261116_round2": {
+    "feature": "BoatRush",
+    "phase": "noncore_first",
+    "device_status_now": "available_now",
+    "execution_status_now": "observed_branches_round2",
+    "full_feature_runtime_verified": false,
+    "remaining_dependencies": [
+      {
+        "kind": "use_case_branch_pending",
+        "uc_ids_without_any_case": [
+          "UC-01",
+          "UC-02",
+          "UC-03",
+          "UC-04",
+          "UC-05",
+          "UC-06",
+          "UC-07",
+          "UC-08",
+          "UC-09",
+          "UC-13",
+          "UC-14",
+          "UC-15"
+        ],
+        "detail": "Đã có nhánh vòng 2; tiếp tục các branch chưa vào và biên chưa đo. Nếu icon còn hiện, mở bản đồ race, info và hàng đối thủ cached, đóng; ghi timer/state hiện tại và retry error.",
+        "specific_condition": "Entry đã được quan sát ở case vòng 2; điều kiện của nhánh tiếp theo cần kiểm riêng. Giới hạn đã ghi: Chỉ entrygate. Khôngxem thứhạng4 trênlobbyicon làđã xemtoàn race/đã claim; chưa fetch/join/reward/lives. Before065làDuckresult, endpointsbao gồmcloseDuckvàentryattempt.; Chỉ cached result/Info và queue advancement. Không nhận thưởng Boat, join/fetch race mới, stage progress grant, unlimited life hoặc online result ack. Những claimed-place labels thuộc UI đối thủ, không là claim của tài khoản này."
+      },
+      {
+        "kind": "event_rotation_or_fresh_instance",
+        "scope": "Historical15Nov open questions; reassess against current source/runtime updates, not automatic current closure.",
+        "questions": [
+          {
+            "id": "MS-BoatRush-G003",
+            "question": "Không rõ thời lượng một cuộc đua (race) so với thời lượng cả sự kiện — cả hai đều từ server.",
+            "next_action": "So start/finish của event và race trong cùng instance; ghi countdown UI trước/sau đua, cần vòng mới để đo reset."
+          }
+        ]
+      }
+    ],
+    "genuinely_missing_or_stale_data": [],
+    "date": "2026-11-16",
+    "source": "facts/review_20261116_round2/all58_data_quality.json",
+    "public_source": "../data/review_20261116_round2/all58_data_quality.json",
+    "source_scope": "Full source row remains external; no self/source-GDD hash embedded.",
+    "counts": {
+      "uc": 16,
+      "configs": 895,
+      "models": 1,
+      "segment_rows": 2,
+      "historical_cases": 1,
+      "round2_cases": 2,
+      "round2_images": 4
+    },
+    "round2_case_ids": [
+      "MS-R16B-BOAT01",
+      "MS-R16B-BOAT02"
+    ],
+    "round2_branch_ucs": [
+      "UC-10",
+      "UC-12",
+      "UC-16"
+    ],
+    "full_uc_pass": false
   }
 }

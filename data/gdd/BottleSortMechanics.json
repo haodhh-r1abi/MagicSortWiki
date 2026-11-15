@@ -1330,5 +1330,160 @@
       "static_asset"
     ],
     "full_feature_verified": false
+  },
+  "runtime_review_20261116_round2": [
+    {
+      "id": "MS-R16B-CORE01",
+      "feature": "BottleSortMechanics",
+      "title": "Level352: full-target bị từ chối, đổ cyan3+1 và lộ màu ẩn",
+      "uc": [
+        "UC-03",
+        "UC-04",
+        "UC-05",
+        "UC-06",
+        "UC-11"
+      ],
+      "related_uc": [
+        "UC-01",
+        "UC-02",
+        "UC-07",
+        "UC-10",
+        "UC-13",
+        "UC-15",
+        "UC-20"
+      ],
+      "status": "observed_partial",
+      "precondition": "Root thực hiện lượt level352 sau toàn bộ nhánh noncore; build0.0.3129ARM64, offline_existing_fixture, gameplayUID cô lập mạng. Dùng một Undo và một Extra Bottle từ kho fixture lớn; không ghi prefs.",
+      "steps": [
+        "Mở level352:12chai, sáu chai đầu phủ cloth có icon cyan; đánh số B1..B12 theo hai hàng trái→phải.",
+        "Thử B10→B8 tại077: B8 đang đầy, không thấy chuyển nước.",
+        "Đổ B8→B11 ba lớp cyan tại078; B10→B11 một lớp cyan tại079, chai cyan hoàn thành.",
+        "Tiếp tục chuỗi root đã ghi trong observations: các lớp Question Mark ở B1/B2/B3 lộ dần;091 không còn các ô ẩn cuối;092 chỉ còn nước đi xanh dương cuối."
+      ],
+      "expected": "Ghi nhận đúng nhánh thao tác và kết quả UI/ledger của một lượt fixture; không nâng thành full feature/UC pass.",
+      "actual": "077 giữ bố cục/nước như trước, không phải ảnh uncover dù filename như vậy. 078 B11 có cyan ba lớp;079/080 B11 đầy cyan, có nút chai, sáu cloth mất. Ba chai B1/B2/B3 có các ô dấu hỏi sau uncover. Các chuỗi083/088/090/091 lần lượt lộ nâu, hồng, xanh lá và hai lớp cam cuối; các chai đồng màu có cap ở nhiều mốc. Danh sách nước đi và ảnh gốc được lưu riêng.",
+      "limitations": "Một board runtime; chưa xác định seed/sourcefile của level352, không gán catalog identity theo số level. Không kiểm mọi transfer quantity, màu/sức chứa khác, stuck/lose, long bottle hoặc multi-collection. Các màu là tên nhìn từ UI, không numeric ColorId.",
+      "images": [
+        "R16B_076_level352_open",
+        "R16B_077_cyan_uncover",
+        "R16B_078_cyan_three_to_empty",
+        "R16B_079_cyan_complete_uncover",
+        "R16B_080_uncovered_stable",
+        "R16B_083_hidden_revealed",
+        "R16B_086_red_complete_hidden_next",
+        "R16B_088_hidden_remaining",
+        "R16B_089_four_colors_complete",
+        "R16B_090_hidden_bottle2",
+        "R16B_091_last_hidden_exposed",
+        "R16B_092_before_winning_move"
+      ],
+      "before": "R16B_076_level352_open",
+      "after": "R16B_092_before_winning_move",
+      "uc_scope": {
+        "UC-03": {
+          "coverage": "observed_branch",
+          "scope": "Full B8 không nhận nước; empty B11 và các đích cùng màu nhận nước trong chuỗi này."
+        },
+        "UC-04": {
+          "coverage": "observed_branch",
+          "scope": "Cyan3 rồi cyan1 vào B11 theo quan sát UI/root actions; không đo nội bộ mọi quantity branch."
+        },
+        "UC-05": {
+          "coverage": "observed_branch",
+          "scope": "Nhiều pour hợp lệ trong một lượt, ảnh chụp các checkpoint; không đo timing/input-lock."
+        },
+        "UC-06": {
+          "coverage": "observed_branch",
+          "scope": "Một số chai đủ màu có cap, gồm cyan/red và các màu cuối; không generalize long-bottle rule."
+        },
+        "UC-11": {
+          "coverage": "observed_branch",
+          "scope": "Ba chai có Question Mark lộ dần khi lấy nước phía trên; không kiểm Undo mọi hidden state."
+        }
+      },
+      "additional_evidence": [
+        "facts/review_20261116_round2/core352_moves_observations.json",
+        "facts/runtime/review_20261116_round2/session_end.json"
+      ],
+      "date": "2026-11-16",
+      "round_tag": "20261116_round2",
+      "build": "0.0.3129 ARM64",
+      "mode": "offline_existing_fixture",
+      "source_class": "runtime_observed",
+      "full_uc_pass": false,
+      "ledger_change": {
+        "currency_amount_delta_by_raw_type": {
+          "6": -1,
+          "4": -1
+        },
+        "currency_amounts_unchanged": false,
+        "timed_currency_dates_changed": false,
+        "limitless_currency_dates_changed": false,
+        "life_fill_date_changed": false,
+        "player_before": {
+          "level": 352,
+          "isLevelInProgress": true
+        },
+        "player_after": {
+          "level": 352,
+          "isLevelInProgress": true
+        },
+        "scope": "Amount equality is not whole-inventory equality; timed/life fields and other event models are separate. Raw currency IDs are not assigned names from a different build."
+      },
+      "review_scope": "Root-supplied reviewed case record; this file validator does not infer semantic UC pass."
+    }
+  ],
+  "current_all58_status_20261116_round2": {
+    "feature": "BottleSortMechanics",
+    "phase": "core_and_levels_last",
+    "device_status_now": "available_now",
+    "execution_status_now": "observed_branches_round2",
+    "full_feature_runtime_verified": false,
+    "remaining_dependencies": [
+      {
+        "kind": "use_case_branch_pending",
+        "uc_ids_without_any_case": [
+          "UC-07",
+          "UC-08",
+          "UC-09",
+          "UC-10",
+          "UC-12",
+          "UC-13",
+          "UC-14",
+          "UC-15",
+          "UC-16",
+          "UC-17",
+          "UC-18",
+          "UC-19"
+        ],
+        "detail": "Đã có nhánh vòng 2; tiếp tục các branch chưa vào và biên chưa đo. Cuối lượt core: chọn level thực mới, kiểm lượng rót nhiều ô, chai đầy và selection cancel, ghi board/tap timeline.",
+        "specific_condition": "Entry đã được quan sát ở case vòng 2; điều kiện của nhánh tiếp theo cần kiểm riêng. Giới hạn đã ghi: Một board runtime; chưa xác định seed/sourcefile của level352, không gán catalog identity theo số level. Không kiểm mọi transfer quantity, màu/sức chứa khác, stuck/lose, long bottle hoặc multi-collection. Các màu là tên nhìn từ UI, không numeric ColorId."
+      }
+    ],
+    "genuinely_missing_or_stale_data": [],
+    "date": "2026-11-16",
+    "source": "facts/review_20261116_round2/all58_data_quality.json",
+    "public_source": "../data/review_20261116_round2/all58_data_quality.json",
+    "source_scope": "Full source row remains external; no self/source-GDD hash embedded.",
+    "counts": {
+      "uc": 20,
+      "configs": 41,
+      "models": 1,
+      "segment_rows": 3,
+      "historical_cases": 2,
+      "round2_cases": 1,
+      "round2_images": 12
+    },
+    "round2_case_ids": [
+      "MS-R16B-CORE01"
+    ],
+    "round2_branch_ucs": [
+      "UC-03",
+      "UC-04",
+      "UC-05",
+      "UC-06",
+      "UC-11"
+    ],
+    "full_uc_pass": false
   }
 }

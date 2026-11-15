@@ -204,25 +204,28 @@
       "Mở Wonderland: Festive Bulbs và Trash Bin đều2★, có nhãn New; theme2/9.",
       "Chạm Festive Bulbs để xem card phóng to; chạm ngoài rồi chạm Cat Entrance chưa có để xem placeholder.",
       "Chạm ngoài và đóng theme để trở về Collection.",
-      "Mở lại Wonderland trong cùng phiên; chưa restart app."
+      "Mở lại Wonderland trong cùng phiên; chưa restart app.",
+      "Sau các kiểm tra noncore, root force-stop chỉ MagicSort và khởi động lại, không ghi prefs; mở Collection072 sau Home071."
     ],
     "expected": "Sau xemtheme rồiđóng/mởlại, badgeNew đãxem biếnmất; sốthẻ/progresskhôngtăngvìkhôngmởpack.",
-    "actual": "Đầu lượt, Collection8/135 và Wonderland2/9 có badge2. Ảnh033 có New trên Festive Bulbs/Trash Bin. 034 phóng to Festive Bulbs vẫn có New tại thời điểm đó;035 là placeholder Cat Entrance. 036 trở về Collection vẫn8/135, Wonderland2/9 nhưng badge2 của Wonderland đã mất; Garden/Water Play vẫn có badge2. 037 mở lại Wonderland: cả Festive Bulbs/Trash Bin không còn New, theme vẫn2/9. InventoryModel trong safe ledger015→037 không đổi.",
-    "limitations": "Chỉ quan sát UI qua đóng/mở popup trong cùng process. Chưa restart/resync, chưa trích CardInventory.IsNewCard, chưa kiểm analytics phát ra. Ảnh không phân định chính xác mark-seen xảy ra lúc entry, close hay callback. UC16 sync/restart chỉ liên quan, chưa được kiểm.",
+    "actual": "Đầu lượt, Collection8/135 và Wonderland2/9 có badge2. Ảnh033 có New trên Festive Bulbs/Trash Bin. 034 phóng to Festive Bulbs vẫn có New tại thời điểm đó;035 là placeholder Cat Entrance. 036 trở về Collection vẫn8/135, Wonderland2/9 nhưng badge2 của Wonderland đã mất; Garden/Water Play vẫn có badge2. 037 mở lại Wonderland: cả Festive Bulbs/Trash Bin không còn New, theme vẫn2/9. InventoryModel trong safe ledger015→037 không đổi. Sau restart:071Home352;072Collection vẫn8/135,Wonderland2/9 không badge2, Garden/WaterPlay vẫnbadge2.",
+    "limitations": "Đã kiểm qua đóng/mở popup và một force-stop/relaunch cùng fixture offline. Chưa resync/backend, chưa trích CardInventory.IsNewCard hoặc analytics; không suy ra mọi process kill/reset/account sync. Ảnh không phân định callback mark-seen cụ thể.",
     "images": [
       "R16B_015_collection_entry",
       "R16B_033_wonderland_entry",
       "R16B_034_owned_card",
       "R16B_035_missing_card",
       "R16B_036_theme_seen_return",
-      "R16B_037_theme_reopened"
+      "R16B_037_theme_reopened",
+      "R16B_071_restart_home",
+      "R16B_072_restart_collection_seen"
     ],
     "before": "R16B_015_collection_entry",
-    "after": "R16B_037_theme_reopened",
+    "after": "R16B_072_restart_collection_seen",
     "uc_scope": {
       "UC-12": {
         "coverage": "observed_branch",
-        "scope": "Badge2 và hai nhãn New của Wonderland mất qua đóng/mở lại trong cùng phiên; progress không đổi. Chưa restart, backend hoặc analytics."
+        "scope": "Wonderlandbadge/New mấtquađóng/mởpopup;badgeclearedcònquaforce-stop/relaunchmộtlần,progress8/135khôngđổi. Chưa backend/resync/analytics."
       }
     },
     "date": "2026-11-16",
@@ -234,9 +237,9 @@
     "ledger_change": {
       "currency_amount_delta_by_raw_type": {},
       "currency_amounts_unchanged": true,
-      "timed_currency_dates_changed": false,
-      "limitless_currency_dates_changed": false,
-      "life_fill_date_changed": false,
+      "timed_currency_dates_changed": true,
+      "limitless_currency_dates_changed": true,
+      "life_fill_date_changed": true,
       "player_before": {
         "level": 352,
         "isLevelInProgress": false
@@ -304,6 +307,1097 @@
       },
       "player_after": {
         "level": 352,
+        "isLevelInProgress": false
+      },
+      "scope": "Amount equality is not whole-inventory equality; timed/life fields and other event models are separate. Raw currency IDs are not assigned names from a different build."
+    },
+    "review_scope": "Root-supplied reviewed case record; this file validator does not infer semantic UC pass."
+  },
+  {
+    "id": "MS-R16B-WEEKLY01",
+    "feature": "WeeklyTournament",
+    "title": "Weekly Finished: xem bảng cache và dòng mình hạng9",
+    "uc": [
+      "UC-10"
+    ],
+    "related_uc": [
+      "UC-01",
+      "UC-06",
+      "UC-08",
+      "UC-13"
+    ],
+    "status": "observed_partial",
+    "precondition": "Build0.0.3129ARM64 đã xác minh hash bởi root; Home352, offline_existing_fixture và gameplayUID cô lập mạng. Root thao tác; tác giả case chỉ đọc ảnh/safe ledger.",
+    "steps": [
+      "Mở Leaderboard; tab Weekly hiện bảng đã kết thúc.",
+      "Đọc podium, các dòng và dòng mình tô xanh."
+    ],
+    "expected": "Có thể đọc snapshot bảng đã cache; không xem thao tác xem là claim hoặc fetch mới.",
+    "actual": "Ảnh041: Weekly được chọn, nhãn Finished; dòng mình hạng9, điểm0, tô xanh. Bảng và podium hiện trong fixture offline.",
+    "limitations": "Chưa refresh server, nhận thưởng, chuyển giải mới hoặc kiểm thay đổi hạng. Hạng/điểm là snapshot fixture; không đại diện live leaderboard.",
+    "images": [
+      "R16B_041_leaderboard_tabs"
+    ],
+    "before": "R16B_041_leaderboard_tabs",
+    "after": "R16B_041_leaderboard_tabs",
+    "uc_scope": {
+      "UC-10": {
+        "coverage": "observed_branch",
+        "scope": "Chỉ render cached finished standings và vị trí của mình; không claim/medalgrant/serverrefresh."
+      }
+    },
+    "date": "2026-11-16",
+    "round_tag": "20261116_round2",
+    "build": "0.0.3129 ARM64",
+    "mode": "offline_existing_fixture",
+    "source_class": "runtime_observed",
+    "full_uc_pass": false,
+    "ledger_change": {
+      "currency_amount_delta_by_raw_type": {},
+      "currency_amounts_unchanged": true,
+      "timed_currency_dates_changed": false,
+      "limitless_currency_dates_changed": false,
+      "life_fill_date_changed": false,
+      "player_before": {
+        "level": 352,
+        "isLevelInProgress": false
+      },
+      "player_after": {
+        "level": 352,
+        "isLevelInProgress": false
+      },
+      "scope": "Amount equality is not whole-inventory equality; timed/life fields and other event models are separate. Raw currency IDs are not assigned names from a different build."
+    },
+    "review_scope": "Root-supplied reviewed case record; this file validator does not infer semantic UC pass."
+  },
+  {
+    "id": "MS-R16B-LEADERBOARDS01",
+    "feature": "Leaderboards",
+    "title": "Chuyển tab Friends/Players/Teams: cache và gate hiển thị",
+    "uc": [
+      "UC-02",
+      "UC-04",
+      "UC-06",
+      "UC-08",
+      "UC-11"
+    ],
+    "related_uc": [
+      "UC-01",
+      "UC-03",
+      "UC-05",
+      "UC-07"
+    ],
+    "status": "observed_partial",
+    "precondition": "Build0.0.3129ARM64 đã xác minh hash bởi root; Home352, offline_existing_fixture và gameplayUID cô lập mạng. Root thao tác; tác giả case chỉ đọc ảnh/safe ledger.",
+    "steps": [
+      "Từ Weekly041 chạm Friends042.",
+      "Chạm Players043, World được chọn và đọc bảng cache/dòng mình.",
+      "Chạm Teams ranking044."
+    ],
+    "expected": "Các tab phản ánh đúng nội dung cache hoặc gate; không coi gate là tải thành công.",
+    "actual": "Friends042 hiện No Internet Connection. Players043 hiện World và danh sách cached gần hạng994–999; dòng mình ghim ở1000+, level352. Teams ranking044 có World/Country nhưng hiện Coming Soon!, không phải No Internet. Weekly041 có Finished/cache.",
+    "limitations": "Không kiểm Country, fetch/refresh, Facebook, friend list hoặc team ranking data. UC06 chỉ entry No Internet; UC08 chỉ tab Weekly/cache; UC11 chỉ snapshot offline, chưa kiểm chính sách cache refresh.",
+    "images": [
+      "R16B_041_leaderboard_tabs",
+      "R16B_042_friends_entry",
+      "R16B_043_players_gate",
+      "R16B_044_teams_ranking_gate"
+    ],
+    "before": "R16B_041_leaderboard_tabs",
+    "after": "R16B_044_teams_ranking_gate",
+    "uc_scope": {
+      "UC-02": {
+        "coverage": "observed_branch",
+        "scope": "World list cached có render; không fetch fresh."
+      },
+      "UC-04": {
+        "coverage": "observed_branch",
+        "scope": "Dòng mình màu xanh ghim dưới World list ở1000+, level352."
+      },
+      "UC-06": {
+        "coverage": "observed_branch",
+        "scope": "Chỉ tab Friends hiện No Internet, không danh sách bạn thành công."
+      },
+      "UC-08": {
+        "coverage": "observed_branch",
+        "scope": "Weekly tab hiển thị cached Finished bảng; không lifecycle giải."
+      },
+      "UC-11": {
+        "coverage": "observed_branch",
+        "scope": "Có cache ởWeekly/Players trong fixture offline, không chứng minh mọi bảng đều cache."
+      }
+    },
+    "date": "2026-11-16",
+    "round_tag": "20261116_round2",
+    "build": "0.0.3129 ARM64",
+    "mode": "offline_existing_fixture",
+    "source_class": "runtime_observed",
+    "full_uc_pass": false,
+    "ledger_change": {
+      "currency_amount_delta_by_raw_type": {},
+      "currency_amounts_unchanged": true,
+      "timed_currency_dates_changed": false,
+      "limitless_currency_dates_changed": false,
+      "life_fill_date_changed": false,
+      "player_before": {
+        "level": 352,
+        "isLevelInProgress": false
+      },
+      "player_after": {
+        "level": 352,
+        "isLevelInProgress": false
+      },
+      "scope": "Amount equality is not whole-inventory equality; timed/life fields and other event models are separate. Raw currency IDs are not assigned names from a different build."
+    },
+    "review_scope": "Root-supplied reviewed case record; this file validator does not infer semantic UC pass."
+  },
+  {
+    "id": "MS-R16B-TEAMS01",
+    "feature": "Teams",
+    "title": "Teams entry và ranking hiển thị Coming Soon",
+    "uc": [],
+    "related_uc": [
+      "UC-02",
+      "UC-19",
+      "UC-25"
+    ],
+    "status": "observed_partial",
+    "precondition": "Build0.0.3129ARM64 đã xác minh hash bởi root; Home352, offline_existing_fixture và gameplayUID cô lập mạng. Root thao tác; tác giả case chỉ đọc ảnh/safe ledger.",
+    "steps": [
+      "Quan sát Teams ranking044.",
+      "Chạm tab Teams ở thanh dưới045."
+    ],
+    "expected": "Ghi nhận gate thực mà không suy khả năng join/create/chat.",
+    "actual": "044 ở Leaderboard/Teams có Coming Soon. 045 màn Teams riêng có artwork và Coming Soon!, không có danh sách hoặc nút join.",
+    "limitations": "Gate-only, uc=[]; chưa thực hiện suggestion, onboarding, join/create/chat/requests. Không suy Teams bị tắt toàn production từ một fixture.",
+    "images": [
+      "R16B_044_teams_ranking_gate",
+      "R16B_045_teams_entry"
+    ],
+    "before": "R16B_044_teams_ranking_gate",
+    "after": "R16B_045_teams_entry",
+    "uc_scope": {},
+    "date": "2026-11-16",
+    "round_tag": "20261116_round2",
+    "build": "0.0.3129 ARM64",
+    "mode": "offline_existing_fixture",
+    "source_class": "runtime_observed",
+    "full_uc_pass": false,
+    "ledger_change": {
+      "currency_amount_delta_by_raw_type": {},
+      "currency_amounts_unchanged": true,
+      "timed_currency_dates_changed": false,
+      "limitless_currency_dates_changed": false,
+      "life_fill_date_changed": false,
+      "player_before": {
+        "level": 352,
+        "isLevelInProgress": false
+      },
+      "player_after": {
+        "level": 352,
+        "isLevelInProgress": false
+      },
+      "scope": "Amount equality is not whole-inventory equality; timed/life fields and other event models are separate. Raw currency IDs are not assigned names from a different build."
+    },
+    "review_scope": "Root-supplied reviewed case record; this file validator does not infer semantic UC pass."
+  },
+  {
+    "id": "MS-R16B-PROFILE01",
+    "feature": "Profile",
+    "title": "Đổi tên: blank/ab bị từ chối, abc mới là draft",
+    "uc": [
+      "UC-02"
+    ],
+    "related_uc": [
+      "UC-01",
+      "UC-14",
+      "UC-16"
+    ],
+    "status": "observed_partial",
+    "precondition": "Build0.0.3129ARM64 đã xác minh hash bởi root; Home352, offline_existing_fixture và gameplayUID cô lập mạng. Root thao tác; tác giả case chỉ đọc ảnh/safe ledger.",
+    "steps": [
+      "Mở Profile047, Edit048, bấm pencil đổi tên049.",
+      "Xoá tên và bấm AndroidOK:050 input trống, Continue xám.",
+      "Chạm Continue051: thông báo cần ít nhất3validcharacters.",
+      "Nhậpab052: thông báo vẫn hiện. Nhậpabc053: Continue xanh.",
+      "Không submit abc; đóngX và sau đó đóng Edit."
+    ],
+    "expected": "Validation chặn tên ngắn; draft không tự đổi tên nếu không submit/save.",
+    "actual": "Blank050 có Continue xám; chạm051 tạo lỗi tối thiểu3validcharacters. ab052 vẫn input2ký tự và lỗi; abc053 có Continue xanh. Không bấm Continue khiabc. Profile058 sau đóng vẫn tên gốc.",
+    "limitations": "Chỉ độ dài0/2/3 bằngASCII và cancel. Không kiểmmaxlen, Unicode, profanity, backendacceptance hoặc sync; không tínhabc là đổi tên thành công.",
+    "images": [
+      "R16B_047_profile_entry",
+      "R16B_048_profile_edit",
+      "R16B_049_rename_entry",
+      "R16B_050_empty_name",
+      "R16B_051_empty_name_continue",
+      "R16B_052_two_character_name",
+      "R16B_053_three_character_draft",
+      "R16B_058_profile_cancel_result"
+    ],
+    "before": "R16B_047_profile_entry",
+    "after": "R16B_058_profile_cancel_result",
+    "uc_scope": {
+      "UC-02": {
+        "coverage": "observed_branch",
+        "scope": "ValidationUI và cancel; không commit tên mới."
+      }
+    },
+    "date": "2026-11-16",
+    "round_tag": "20261116_round2",
+    "build": "0.0.3129 ARM64",
+    "mode": "offline_existing_fixture",
+    "source_class": "runtime_observed",
+    "full_uc_pass": false,
+    "ledger_change": {
+      "currency_amount_delta_by_raw_type": {},
+      "currency_amounts_unchanged": true,
+      "timed_currency_dates_changed": false,
+      "limitless_currency_dates_changed": false,
+      "life_fill_date_changed": false,
+      "player_before": {
+        "level": 352,
+        "isLevelInProgress": false
+      },
+      "player_after": {
+        "level": 352,
+        "isLevelInProgress": false
+      },
+      "scope": "Amount equality is not whole-inventory equality; timed/life fields and other event models are separate. Raw currency IDs are not assigned names from a different build."
+    },
+    "review_scope": "Root-supplied reviewed case record; this file validator does not infer semantic UC pass."
+  },
+  {
+    "id": "MS-R16B-PROFILE02",
+    "feature": "Profile",
+    "title": "Chọn avatar khác trong draft rồi đóng Edit",
+    "uc": [
+      "UC-03"
+    ],
+    "related_uc": [
+      "UC-14",
+      "UC-15"
+    ],
+    "status": "observed_partial",
+    "precondition": "Build0.0.3129ARM64 đã xác minh hash bởi root; Home352, offline_existing_fixture và gameplayUID cô lập mạng. Root thao tác; tác giả case chỉ đọc ảnh/safe ledger.",
+    "steps": [
+      "Edit048 đang chọn avatar đầu hàng1.",
+      "Chạm avatar giữa hàng1:057 khung xanh/check chuyển sang lựa chọn mới.",
+      "Không bấmSave; đóngEdit→058."
+    ],
+    "expected": "Draft selection đổi, đóng không Save không thay avatar đã hiển thị trên Profile.",
+    "actual": "057 check ởavatar giữa hàng1, nhưng preview header vẫnavatar gốc. 058 Profile vẫnavatar gốc như047.",
+    "limitations": "Chỉ lựa chọn/cancel một avatar; chưa Save, persistence, sync hoặc mọiavatar/frame/namestyle.",
+    "images": [
+      "R16B_048_profile_edit",
+      "R16B_057_avatar_draft",
+      "R16B_058_profile_cancel_result"
+    ],
+    "before": "R16B_048_profile_edit",
+    "after": "R16B_058_profile_cancel_result",
+    "uc_scope": {
+      "UC-03": {
+        "coverage": "observed_branch",
+        "scope": "Draft check thay đổi và cancelkhông Save; chưa trang bị avatar thành công."
+      }
+    },
+    "date": "2026-11-16",
+    "round_tag": "20261116_round2",
+    "build": "0.0.3129 ARM64",
+    "mode": "offline_existing_fixture",
+    "source_class": "runtime_observed",
+    "full_uc_pass": false,
+    "ledger_change": {
+      "currency_amount_delta_by_raw_type": {},
+      "currency_amounts_unchanged": true,
+      "timed_currency_dates_changed": false,
+      "limitless_currency_dates_changed": false,
+      "life_fill_date_changed": false,
+      "player_before": {
+        "level": 352,
+        "isLevelInProgress": false
+      },
+      "player_after": {
+        "level": 352,
+        "isLevelInProgress": false
+      },
+      "scope": "Amount equality is not whole-inventory equality; timed/life fields and other event models are separate. Raw currency IDs are not assigned names from a different build."
+    },
+    "review_scope": "Root-supplied reviewed case record; this file validator does not infer semantic UC pass."
+  },
+  {
+    "id": "MS-R16B-PROFILE03",
+    "feature": "Profile",
+    "title": "Token Wonderland bị khóa: preview và Equip bị từ chối",
+    "uc": [
+      "UC-05"
+    ],
+    "related_uc": [],
+    "status": "observed_partial",
+    "precondition": "Build0.0.3129ARM64 đã xác minh hash bởi root; Home352, offline_existing_fixture và gameplayUID cô lập mạng. Root thao tác; tác giả case chỉ đọc ảnh/safe ledger.",
+    "steps": [
+      "Mở tabToken054 thấy khóa trênWonderlandbadge.",
+      "Chạm icon055 để mởpreview.",
+      "Chạm Equip056."
+    ],
+    "expected": "Token chưa đủ điều kiện không được trang bị.",
+    "actual": "Token catalog054 có khóa. Preview055 làWonderlandBadge, Equip xám. Chạm056 hiện Token is not equippable; không có equipthànhcông.",
+    "limitations": "Chỉ negativebranch với token khóa. Không kiểm nhận Collectiontoken, token đã unlock, Save hoặc sync. CollectionUC13 chỉ liên quan.",
+    "images": [
+      "R16B_054_token_catalog",
+      "R16B_055_locked_token",
+      "R16B_056_locked_equip_attempt"
+    ],
+    "before": "R16B_054_token_catalog",
+    "after": "R16B_056_locked_equip_attempt",
+    "uc_scope": {
+      "UC-05": {
+        "coverage": "observed_branch",
+        "scope": "Lockedpreview/attemptedEquip bị chặn; không positiveequip."
+      }
+    },
+    "related_feature_uc": [
+      {
+        "feature": "Collection",
+        "uc": "UC-13",
+        "scope": "Related tokenart/eligibility only; không Collectioncompletion/unlock/equip pass."
+      }
+    ],
+    "date": "2026-11-16",
+    "round_tag": "20261116_round2",
+    "build": "0.0.3129 ARM64",
+    "mode": "offline_existing_fixture",
+    "source_class": "runtime_observed",
+    "full_uc_pass": false,
+    "ledger_change": {
+      "currency_amount_delta_by_raw_type": {},
+      "currency_amounts_unchanged": true,
+      "timed_currency_dates_changed": false,
+      "limitless_currency_dates_changed": false,
+      "life_fill_date_changed": false,
+      "player_before": {
+        "level": 352,
+        "isLevelInProgress": false
+      },
+      "player_after": {
+        "level": 352,
+        "isLevelInProgress": false
+      },
+      "scope": "Amount equality is not whole-inventory equality; timed/life fields and other event models are separate. Raw currency IDs are not assigned names from a different build."
+    },
+    "review_scope": "Root-supplied reviewed case record; this file validator does not infer semantic UC pass."
+  },
+  {
+    "id": "MS-R16B-NOTIFICATIONS01",
+    "feature": "Notifications",
+    "title": "ToggleON→OFF→ON: persistedflag và hủyUnityalarms",
+    "uc": [
+      "UC-02"
+    ],
+    "related_uc": [
+      "UC-01",
+      "UC-12",
+      "UC-13"
+    ],
+    "status": "observed_partial",
+    "precondition": "Build0.0.3129ARM64 đã xác minh hash bởi root; Home352, offline_existing_fixture và gameplayUID cô lập mạng. Root thao tác; tác giả case chỉ đọc ảnh/safe ledger.",
+    "steps": [
+      "Settings059NotificationsON.",
+      "ChạmOFF060 rồiON061; root lấy privateprefs/notification/alarm snapshots mỗi phase.",
+      "Sau các bước noncore, root force-stop chỉMagicSort rồi khởi động lại, không ghi prefs.",
+      "Sau restart, 073 làHome transition; 074 thực tế làSettingsNotificationsON mặc dù filename cócore."
+    ],
+    "expected": "UI/modeltoggle được lưu; OFF hủy lịch local được quan sát; ON không mặc nhiên chứng minh đã lên lịch/delivery.",
+    "actual": "UI059/060/061 lần lượt là ON/OFF/ON; NotificationModel.isNotificationOn trong bản allowlist là true/false/true. Alarm dumps có2 Unity notification alarms của game trước OFF,0 sau OFF và0 sau ON;1 alarm khác của game vẫn còn. Sau restart, private073 lưu flag=true; ảnh073 chỉ là Home transition, ảnh074 mới là Settings ON.",
+    "limitations": "Chỉ fixture hiện tại; ảnh, prefs và dumps được lấy tuần tự, không atomic. Không công bố raw UID/intent/alarm IDs. Chưa kiểm OS permission dialog, delivery, remote push hoặc mọi send caller. Số0 sau ON chỉ mô tả snapshot đó, không khẳng định sẽ không có lịch mới về sau.",
+    "images": [
+      "R16B_059_settings_entry",
+      "R16B_060_notifications_off",
+      "R16B_061_notifications_on",
+      "R16B_074_core352_entry"
+    ],
+    "before": "R16B_059_settings_entry",
+    "after": "R16B_074_core352_entry",
+    "uc_scope": {
+      "UC-02": {
+        "coverage": "observed_branch",
+        "scope": "UI/modelON→OFF→ON, scheduledUnityalarm2→0→0 vàON cònsau restart; khôngdeliveryproof."
+      }
+    },
+    "related_feature_uc": [
+      {
+        "feature": "Settings",
+        "uc": "UC-07",
+        "scope": "RelatedsameSettingsnotificationtoggleflow; chưamọipermission/platformvariant."
+      }
+    ],
+    "additional_evidence": [
+      "facts/review_20261116_round2/notification_toggle_allowlisted_comparison.json"
+    ],
+    "date": "2026-11-16",
+    "round_tag": "20261116_round2",
+    "build": "0.0.3129 ARM64",
+    "mode": "offline_existing_fixture",
+    "source_class": "runtime_observed",
+    "full_uc_pass": false,
+    "ledger_change": {
+      "currency_amount_delta_by_raw_type": {},
+      "currency_amounts_unchanged": true,
+      "timed_currency_dates_changed": true,
+      "limitless_currency_dates_changed": true,
+      "life_fill_date_changed": true,
+      "player_before": {
+        "level": 352,
+        "isLevelInProgress": false
+      },
+      "player_after": {
+        "level": 352,
+        "isLevelInProgress": false
+      },
+      "scope": "Amount equality is not whole-inventory equality; timed/life fields and other event models are separate. Raw currency IDs are not assigned names from a different build."
+    },
+    "review_scope": "Root-supplied reviewed case record; this file validator does not infer semantic UC pass."
+  },
+  {
+    "id": "MS-R16B-DUCK01",
+    "feature": "DuckFestival",
+    "title": "Finishedrank45, rulesUI vàContinuebịNo Internet",
+    "uc": [
+      "UC-08",
+      "UC-12",
+      "UC-15"
+    ],
+    "related_uc": [
+      "UC-04",
+      "UC-11",
+      "UC-13"
+    ],
+    "status": "observed_partial",
+    "precondition": "Build0.0.3129ARM64 đã xác minh hash bởi root; Home352, offline_existing_fixture và gameplayUID cô lập mạng. Root thao tác; tác giả case chỉ đọc ảnh/safe ledger.",
+    "steps": [
+      "MởDuckFestival062: đọcFinished, rank45, rewarddash.",
+      "BấmInfo vàđọcfullhelp064:Normal×1/Hard×3/SuperHard×5; TaptoContinueđónghelp.",
+      "BấmContinue trênresult065."
+    ],
+    "expected": "Khi offline, ghi nhận resultcached vàgate Continue; không mặc định đã claim.",
+    "actual": "062 bảngFinished córank45, điểm6, reward—. Help064 hiển thịmultiplier1/3/5. Continue065 hiệnNo InternetConnection trênbảngresult vẫn mở.",
+    "limitations": "Không chơi levelđể kiểmduckmultiplier; helplàUIruleskhôngempiricalscoring. Chưa claim/rewardgrant/serverack/newinstance; negativeContinuekhông fullUC12pass.",
+    "images": [
+      "R16B_062_duck_finished_entry",
+      "R16B_064_duck_rules_full",
+      "R16B_065_duck_continue_result"
+    ],
+    "before": "R16B_062_duck_finished_entry",
+    "after": "R16B_065_duck_continue_result",
+    "uc_scope": {
+      "UC-08": {
+        "coverage": "observed_branch",
+        "scope": "Cachedfinishedranking render."
+      },
+      "UC-12": {
+        "coverage": "observed_branch",
+        "scope": "Chỉ result vàattemptContinuebịnetworkgate; chưa claim/reset."
+      },
+      "UC-15": {
+        "coverage": "observed_branch",
+        "scope": "OfflineContinue tạoNo Internet; chưarecovery/onlineack."
+      }
+    },
+    "date": "2026-11-16",
+    "round_tag": "20261116_round2",
+    "build": "0.0.3129 ARM64",
+    "mode": "offline_existing_fixture",
+    "source_class": "runtime_observed",
+    "full_uc_pass": false,
+    "ledger_change": {
+      "currency_amount_delta_by_raw_type": {},
+      "currency_amounts_unchanged": true,
+      "timed_currency_dates_changed": false,
+      "limitless_currency_dates_changed": false,
+      "life_fill_date_changed": false,
+      "player_before": {
+        "level": 352,
+        "isLevelInProgress": false
+      },
+      "player_after": {
+        "level": 352,
+        "isLevelInProgress": false
+      },
+      "scope": "Amount equality is not whole-inventory equality; timed/life fields and other event models are separate. Raw currency IDs are not assigned names from a different build."
+    },
+    "review_scope": "Root-supplied reviewed case record; this file validator does not infer semantic UC pass."
+  },
+  {
+    "id": "MS-R16B-BOAT01",
+    "feature": "BoatRush",
+    "title": "ChạmBoatFinishedởHomebịNo Internet",
+    "uc": [
+      "UC-16"
+    ],
+    "related_uc": [
+      "UC-01",
+      "UC-09",
+      "UC-14"
+    ],
+    "status": "observed_partial",
+    "precondition": "Build0.0.3129ARM64 đã xác minh hash bởi root; Home352, offline_existing_fixture và gameplayUID cô lập mạng. Root thao tác; tác giả case chỉ đọc ảnh/safe ledger.",
+    "steps": [
+      "ĐóngDuckpopup bằngX để vềHome.",
+      "ChạmBoatRushFinishedicon theo rootaction rồi chụp066."
+    ],
+    "expected": "Networkgatekhông bị nhầm thành event đãmở/claim.",
+    "actual": "066vẫnHome352, iconBoatFinishedhạng4 vàtoastNo InternetConnection. Không cóBoatpopup/raceviewmới.",
+    "limitations": "Chỉ entrygate. Khôngxem thứhạng4 trênlobbyicon làđã xemtoàn race/đã claim; chưa fetch/join/reward/lives. Before065làDuckresult, endpointsbao gồmcloseDuckvàentryattempt.",
+    "images": [
+      "R16B_066_boat_finished"
+    ],
+    "before": "R16B_065_duck_continue_result",
+    "after": "R16B_066_boat_finished",
+    "uc_scope": {
+      "UC-16": {
+        "coverage": "observed_branch",
+        "scope": "Chỉ HomeentryattemptNo Internet; chưaeventofflinefallback/retry/sync."
+      }
+    },
+    "date": "2026-11-16",
+    "round_tag": "20261116_round2",
+    "build": "0.0.3129 ARM64",
+    "mode": "offline_existing_fixture",
+    "source_class": "runtime_observed",
+    "full_uc_pass": false,
+    "ledger_change": {
+      "currency_amount_delta_by_raw_type": {},
+      "currency_amounts_unchanged": true,
+      "timed_currency_dates_changed": false,
+      "limitless_currency_dates_changed": false,
+      "life_fill_date_changed": false,
+      "player_before": {
+        "level": 352,
+        "isLevelInProgress": false
+      },
+      "player_after": {
+        "level": 352,
+        "isLevelInProgress": false
+      },
+      "scope": "Amount equality is not whole-inventory equality; timed/life fields and other event models are separate. Raw currency IDs are not assigned names from a different build."
+    },
+    "review_scope": "Root-supplied reviewed case record; this file validator does not infer semantic UC pass."
+  },
+  {
+    "id": "MS-R16B-DAILY01",
+    "feature": "DailyLevel",
+    "title": "Lịch tháng11: chạm ngày17/15 không đổi Play November16",
+    "uc": [
+      "UC-03",
+      "UC-09"
+    ],
+    "related_uc": [
+      "UC-04",
+      "UC-10",
+      "UC-16"
+    ],
+    "status": "observed_partial",
+    "precondition": "Build0.0.3129ARM64 đã xác minh hash bởi root; Home352, offline_existing_fixture và gameplayUID cô lập mạng. Root thao tác; tác giả case chỉ đọc ảnh/safe ledger.",
+    "steps": [
+      "MởDailycalendar067.",
+      "ĐọcNovember2026, ngày16 chọn, progress0vàrewardmilestones.",
+      "Chạmngày tương lai17→068 rồingày trước15→069. KhôngbấmPlay."
+    ],
+    "expected": "Ghi nhậncalendarUIvàresponsecủahaitap; không suy disabled nếukhông có labelrõ.",
+    "actual": "067 hiển thị November2026, ngày16 màu xanh và nút Play November16; thanh tháng ở0, Home entry trước đó là0/30. Preview mốc:3ngày100coin;7ngày30phút unlimited life;14ngày500coin;25ngày2500coin. Sau khi chạm17 rồi15,068/069 vẫn chọn16 và nút vẫn Play November16; không thấy overlay hoặc selection mới.",
+    "limitations": "Chỉ calendar/reward preview và hai lần chạm không tạo thay đổi nhìn thấy. Chưa xác định nguyên nhân hoặc disabled predicate của các ô ngày. Không bấm Play, mở khóa, spend, win hoặc nhận mốc; UC09 chỉ là render preview.",
+    "images": [
+      "R16B_067_daily_calendar",
+      "R16B_068_daily_future_day",
+      "R16B_069_daily_previous_day"
+    ],
+    "before": "R16B_067_daily_calendar",
+    "after": "R16B_069_daily_previous_day",
+    "uc_scope": {
+      "UC-03": {
+        "coverage": "observed_branch",
+        "scope": "RenderNovembercalendar vàcurrentselection; haiothertapsnoobservedchange."
+      },
+      "UC-09": {
+        "coverage": "observed_branch",
+        "scope": "Progress0và4milestonepreviews; chưa đạt/claimmốc."
+      }
+    },
+    "date": "2026-11-16",
+    "round_tag": "20261116_round2",
+    "build": "0.0.3129 ARM64",
+    "mode": "offline_existing_fixture",
+    "source_class": "runtime_observed",
+    "full_uc_pass": false,
+    "ledger_change": {
+      "currency_amount_delta_by_raw_type": {},
+      "currency_amounts_unchanged": true,
+      "timed_currency_dates_changed": false,
+      "limitless_currency_dates_changed": false,
+      "life_fill_date_changed": false,
+      "player_before": {
+        "level": 352,
+        "isLevelInProgress": false
+      },
+      "player_after": {
+        "level": 352,
+        "isLevelInProgress": false
+      },
+      "scope": "Amount equality is not whole-inventory equality; timed/life fields and other event models are separate. Raw currency IDs are not assigned names from a different build."
+    },
+    "review_scope": "Root-supplied reviewed case record; this file validator does not infer semantic UC pass."
+  },
+  {
+    "id": "MS-R16B-CORE01",
+    "feature": "BottleSortMechanics",
+    "title": "Level352: full-target bị từ chối, đổ cyan3+1 và lộ màu ẩn",
+    "uc": [
+      "UC-03",
+      "UC-04",
+      "UC-05",
+      "UC-06",
+      "UC-11"
+    ],
+    "related_uc": [
+      "UC-01",
+      "UC-02",
+      "UC-07",
+      "UC-10",
+      "UC-13",
+      "UC-15",
+      "UC-20"
+    ],
+    "status": "observed_partial",
+    "precondition": "Root thực hiện lượt level352 sau toàn bộ nhánh noncore; build0.0.3129ARM64, offline_existing_fixture, gameplayUID cô lập mạng. Dùng một Undo và một Extra Bottle từ kho fixture lớn; không ghi prefs.",
+    "steps": [
+      "Mở level352:12chai, sáu chai đầu phủ cloth có icon cyan; đánh số B1..B12 theo hai hàng trái→phải.",
+      "Thử B10→B8 tại077: B8 đang đầy, không thấy chuyển nước.",
+      "Đổ B8→B11 ba lớp cyan tại078; B10→B11 một lớp cyan tại079, chai cyan hoàn thành.",
+      "Tiếp tục chuỗi root đã ghi trong observations: các lớp Question Mark ở B1/B2/B3 lộ dần;091 không còn các ô ẩn cuối;092 chỉ còn nước đi xanh dương cuối."
+    ],
+    "expected": "Ghi nhận đúng nhánh thao tác và kết quả UI/ledger của một lượt fixture; không nâng thành full feature/UC pass.",
+    "actual": "077 giữ bố cục/nước như trước, không phải ảnh uncover dù filename như vậy. 078 B11 có cyan ba lớp;079/080 B11 đầy cyan, có nút chai, sáu cloth mất. Ba chai B1/B2/B3 có các ô dấu hỏi sau uncover. Các chuỗi083/088/090/091 lần lượt lộ nâu, hồng, xanh lá và hai lớp cam cuối; các chai đồng màu có cap ở nhiều mốc. Danh sách nước đi và ảnh gốc được lưu riêng.",
+    "limitations": "Một board runtime; chưa xác định seed/sourcefile của level352, không gán catalog identity theo số level. Không kiểm mọi transfer quantity, màu/sức chứa khác, stuck/lose, long bottle hoặc multi-collection. Các màu là tên nhìn từ UI, không numeric ColorId.",
+    "images": [
+      "R16B_076_level352_open",
+      "R16B_077_cyan_uncover",
+      "R16B_078_cyan_three_to_empty",
+      "R16B_079_cyan_complete_uncover",
+      "R16B_080_uncovered_stable",
+      "R16B_083_hidden_revealed",
+      "R16B_086_red_complete_hidden_next",
+      "R16B_088_hidden_remaining",
+      "R16B_089_four_colors_complete",
+      "R16B_090_hidden_bottle2",
+      "R16B_091_last_hidden_exposed",
+      "R16B_092_before_winning_move"
+    ],
+    "before": "R16B_076_level352_open",
+    "after": "R16B_092_before_winning_move",
+    "uc_scope": {
+      "UC-03": {
+        "coverage": "observed_branch",
+        "scope": "Full B8 không nhận nước; empty B11 và các đích cùng màu nhận nước trong chuỗi này."
+      },
+      "UC-04": {
+        "coverage": "observed_branch",
+        "scope": "Cyan3 rồi cyan1 vào B11 theo quan sát UI/root actions; không đo nội bộ mọi quantity branch."
+      },
+      "UC-05": {
+        "coverage": "observed_branch",
+        "scope": "Nhiều pour hợp lệ trong một lượt, ảnh chụp các checkpoint; không đo timing/input-lock."
+      },
+      "UC-06": {
+        "coverage": "observed_branch",
+        "scope": "Một số chai đủ màu có cap, gồm cyan/red và các màu cuối; không generalize long-bottle rule."
+      },
+      "UC-11": {
+        "coverage": "observed_branch",
+        "scope": "Ba chai có Question Mark lộ dần khi lấy nước phía trên; không kiểm Undo mọi hidden state."
+      }
+    },
+    "additional_evidence": [
+      "facts/review_20261116_round2/core352_moves_observations.json",
+      "facts/runtime/review_20261116_round2/session_end.json"
+    ],
+    "date": "2026-11-16",
+    "round_tag": "20261116_round2",
+    "build": "0.0.3129 ARM64",
+    "mode": "offline_existing_fixture",
+    "source_class": "runtime_observed",
+    "full_uc_pass": false,
+    "ledger_change": {
+      "currency_amount_delta_by_raw_type": {
+        "6": -1,
+        "4": -1
+      },
+      "currency_amounts_unchanged": false,
+      "timed_currency_dates_changed": false,
+      "limitless_currency_dates_changed": false,
+      "life_fill_date_changed": false,
+      "player_before": {
+        "level": 352,
+        "isLevelInProgress": true
+      },
+      "player_after": {
+        "level": 352,
+        "isLevelInProgress": true
+      },
+      "scope": "Amount equality is not whole-inventory equality; timed/life fields and other event models are separate. Raw currency IDs are not assigned names from a different build."
+    },
+    "review_scope": "Root-supplied reviewed case record; this file validator does not infer semantic UC pass."
+  },
+  {
+    "id": "MS-R16B-OBSTACLES01",
+    "feature": "Obstacles",
+    "title": "Curtain/Question Mark/Generator và cloth không phục hồi sau Undo",
+    "uc": [
+      "UC-01",
+      "UC-02",
+      "UC-12",
+      "UC-26"
+    ],
+    "related_uc": [
+      "UC-25"
+    ],
+    "status": "observed_partial",
+    "precondition": "Root thực hiện lượt level352 sau toàn bộ nhánh noncore; build0.0.3129ARM64, offline_existing_fixture, gameplayUID cô lập mạng. Dùng một Undo và một Extra Bottle từ kho fixture lớn; không ghi prefs.",
+    "steps": [
+      "Cyan hoàn thành tại079/080 làm sáu cloth cùng icon cyan biến mất.",
+      "Dùng Undo081: cyan một lớp trở lại B10, B11 mất cap; sáu cloth vẫn không trở lại. Đổ lại bằng thao tác thường082.",
+      "Sau Extra Bottle, B12 generator đổ pink vào B13 tại085: hiện blue và counter1.",
+      "Đổ blue từ B12 sang B9 trong nhóm087: grey xuất hiện, counter/base không còn; đổ grey sang B3 ở088 làm chai mini trống.",
+      "Theo dõi các ô dấu hỏi ở B1/B2/B3 lộ màu qua083/088/090/091."
+    ],
+    "expected": "Ghi nhận đúng nhánh thao tác và kết quả UI/ledger của một lượt fixture; không nâng thành full feature/UC pass.",
+    "actual": "Ảnh076 có sáu cloth. 080 không còn cloth;081 Undo phục hồi nước/cap nhưng không phục hồi cloth,082 đổ lại không tái che. Generator bắt đầu pink/counter2;085 blue/counter1;087 grey và mất nhãn/base counter;088 chai mini trống. Hidden cells lộ dần.",
+    "limitations": "Chỉ ba họ vật cản trên một fixture. Cloth không phục hồi là hành vi quan sát, chưa phân loại lỗi nếu chưa có requirement. Không suy counter label bằng internal state hoặc capacity từ ảnh. Chưa kiểm Undo generator/hidden, mọi blocker, intro hoặc booster khác.",
+    "images": [
+      "R16B_076_level352_open",
+      "R16B_080_uncovered_stable",
+      "R16B_081_undo_after_uncover",
+      "R16B_082_redo_cyan_no_recloth",
+      "R16B_083_hidden_revealed",
+      "R16B_085_generator_first_emit",
+      "R16B_087_generator_final_emit",
+      "R16B_088_hidden_remaining",
+      "R16B_090_hidden_bottle2",
+      "R16B_091_last_hidden_exposed"
+    ],
+    "before": "R16B_076_level352_open",
+    "after": "R16B_091_last_hidden_exposed",
+    "uc_scope": {
+      "UC-01": {
+        "coverage": "observed_branch",
+        "scope": "Các Question Mark của ba chai lộ trong chuỗi đã ghi."
+      },
+      "UC-02": {
+        "coverage": "observed_branch",
+        "scope": "Sáu cloth cùng cyan icon mất sau hoàn thành cyan."
+      },
+      "UC-12": {
+        "coverage": "observed_branch",
+        "scope": "Pink→blue→grey và counter2→1→nhãn mất; không xác minh source config/color queue IDs."
+      },
+      "UC-26": {
+        "coverage": "observed_branch",
+        "scope": "Một Undo sau cloth removal không tái che, dù nước quay lại; không kiểm mọi tương tác."
+      }
+    },
+    "additional_evidence": [
+      "facts/review_20261116_round2/core352_moves_observations.json",
+      "facts/runtime/review_20261116_round2/session_end.json"
+    ],
+    "related_feature_uc": [
+      {
+        "feature": "BottleSortMechanics",
+        "uc": "UC-10",
+        "scope": "Related water undo/cap restoration; không full blocker rollback contract."
+      }
+    ],
+    "date": "2026-11-16",
+    "round_tag": "20261116_round2",
+    "build": "0.0.3129 ARM64",
+    "mode": "offline_existing_fixture",
+    "source_class": "runtime_observed",
+    "full_uc_pass": false,
+    "ledger_change": {
+      "currency_amount_delta_by_raw_type": {
+        "6": -1,
+        "4": -1
+      },
+      "currency_amounts_unchanged": false,
+      "timed_currency_dates_changed": false,
+      "limitless_currency_dates_changed": false,
+      "life_fill_date_changed": false,
+      "player_before": {
+        "level": 352,
+        "isLevelInProgress": true
+      },
+      "player_after": {
+        "level": 352,
+        "isLevelInProgress": true
+      },
+      "scope": "Amount equality is not whole-inventory equality; timed/life fields and other event models are separate. Raw currency IDs are not assigned names from a different build."
+    },
+    "review_scope": "Root-supplied reviewed case record; this file validator does not infer semantic UC pass."
+  },
+  {
+    "id": "MS-R16B-BOOSTERS01",
+    "feature": "Boosters",
+    "title": "Undo và Extra Bottle mỗi loại tiêu đúng một trong lượt352",
+    "uc": [
+      "UC-02",
+      "UC-05"
+    ],
+    "related_uc": [
+      "UC-01",
+      "UC-09",
+      "UC-15"
+    ],
+    "status": "observed_partial",
+    "precondition": "Root thực hiện lượt level352 sau toàn bộ nhánh noncore; build0.0.3129ARM64, offline_existing_fixture, gameplayUID cô lập mạng. Dùng một Undo và một Extra Bottle từ kho fixture lớn; không ghi prefs.",
+    "steps": [
+      "Ở080, Undo UI/ledger9998 và Extra Bottle9988.",
+      "Chạm Undo081: số Undo còn9997; nước cyan quay lại B10/B11 mất cap.",
+      "Lặp lại B10→B11 bằng tap thường082, không phải gọi Redo nội bộ.",
+      "Chạm Extra Bottle084: chai mới B13 xuất hiện, layout từ12 thành13; Extra Bottle còn9987."
+    ],
+    "expected": "Ghi nhận đúng nhánh thao tác và kết quả UI/ledger của một lượt fixture; không nâng thành full feature/UC pass.",
+    "actual": "Safe ledger080→081 currency4 giảm9998→9997; UI trùng mức giảm1. Safe ledger083→084 currency6 giảm9988→9987, ảnh có chai mới rỗng. Shuffle currency5 giữ9997. Hai booster balances vẫn9997/9987 ở Home100 sau thắng và restart.",
+    "limitations": "Kho fixture rất lớn, không đại diện new-player economy. Chưa mua booster, hết hàng, affordability, SDK ads, server sync hoặc dùng khi animation đang chạy. Không kiểm mọi Undo state; cloth không phục hồi được ghi riêng ở Obstacles.",
+    "images": [
+      "R16B_080_uncovered_stable",
+      "R16B_081_undo_after_uncover",
+      "R16B_082_redo_cyan_no_recloth",
+      "R16B_084_extra_bottle",
+      "R16B_085_generator_first_emit",
+      "R16B_100_final_restart_home"
+    ],
+    "before": "R16B_080_uncovered_stable",
+    "after": "R16B_100_final_restart_home",
+    "uc_scope": {
+      "UC-02": {
+        "coverage": "observed_branch",
+        "scope": "Một Undo phục hồi last pour và tiêu1; không toàn bộ history/blocker rollback."
+      },
+      "UC-05": {
+        "coverage": "observed_branch",
+        "scope": "Một Extra Bottle thêm chai rỗng và tiêu1; không kiểm giới hạn tối đa/offer khi hết hàng."
+      }
+    },
+    "additional_evidence": [
+      "facts/review_20261116_round2/core352_moves_observations.json",
+      "facts/runtime/review_20261116_round2/session_end.json"
+    ],
+    "related_feature_uc": [
+      {
+        "feature": "Inventory",
+        "uc": "UC-10",
+        "scope": "Related allowlisted currency4/6 spend deltas, mỗi loại−1; không purchase/sync pass."
+      }
+    ],
+    "date": "2026-11-16",
+    "round_tag": "20261116_round2",
+    "build": "0.0.3129 ARM64",
+    "mode": "offline_existing_fixture",
+    "source_class": "runtime_observed",
+    "full_uc_pass": false,
+    "ledger_change": {
+      "currency_amount_delta_by_raw_type": {
+        "1": 20,
+        "6": -1,
+        "4": -1
+      },
+      "currency_amounts_unchanged": false,
+      "timed_currency_dates_changed": true,
+      "limitless_currency_dates_changed": true,
+      "life_fill_date_changed": true,
+      "player_before": {
+        "level": 352,
+        "isLevelInProgress": true
+      },
+      "player_after": {
+        "level": 353,
+        "isLevelInProgress": false
+      },
+      "scope": "Amount equality is not whole-inventory equality; timed/life fields and other event models are separate. Raw currency IDs are not assigned names from a different build."
+    },
+    "review_scope": "Root-supplied reviewed case record; this file validator does not infer semantic UC pass."
+  },
+  {
+    "id": "MS-R16B-LEVELFLOW01",
+    "feature": "LevelFlow",
+    "title": "Thắng352→353, thưởng20 sau Continue, Boat→Duck→Home và restart",
+    "uc": [
+      "UC-01",
+      "UC-11",
+      "UC-14"
+    ],
+    "related_uc": [
+      "UC-02",
+      "UC-09",
+      "UC-18",
+      "UC-19"
+    ],
+    "status": "observed_partial",
+    "precondition": "Root thực hiện lượt level352 sau toàn bộ nhánh noncore; build0.0.3129ARM64, offline_existing_fixture, gameplayUID cô lập mạng. Dùng một Undo và một Extra Bottle từ kho fixture lớn; không ghi prefs.",
+    "steps": [
+      "Home075 hiển thị352; root bấm Play để mở board076.",
+      "Sau chuỗi solve, B2→B9 tại093 là nước đi thắng;094 popup Level352 PERFECT thưởng20.",
+      "Bấm Continue:095 thực tế là Boat Rush Finished result, không phải Home như filename.",
+      "Mở/đóng Boat info097 rồi Boat Continue:098 là Duck Festival Finished. Đóng Duck bằngX:099 Home353.",
+      "Root force-stop/relaunch chỉ MagicSort;100 vẫn Home353 và số dư cuối."
+    ],
+    "expected": "Ghi nhận đúng nhánh thao tác và kết quả UI/ledger của một lượt fixture; không nâng thành full feature/UC pass.",
+    "actual": "PlayerModel075 level352/inProgressfalse;076 true;093/094 level353/inProgressfalse. 094 popup20 nhưng coin vẫn999994989. Sau Continue,095 coin đã999995009 (+20), giữ tới099/100; credit window là094→095, không đợi đến Home. Queue nhìn thấy là win popup→Boat Finished→Duck Finished→Home353. Home100 sau cold restart vẫn353, coin999995009,5livesUI, Undo9997/Shuffle9997/Extra9987.",
+    "limitations": "Một win branch trong fixture offline; PERFECT là label UI, không suy không dùng booster. Chưa kiểm full command queue, skippable rules, analytics, backend ack, lose/PlayOn hoặc reward duplication qua nhiều lần restart. Popup của event khác là cached navigation, không chứng minh backend claim của Boat/Duck.",
+    "images": [
+      "R16B_075_before_core_home",
+      "R16B_076_level352_open",
+      "R16B_092_before_winning_move",
+      "R16B_093_win_transition",
+      "R16B_094_win_result_stable",
+      "R16B_095_postwin_home353",
+      "R16B_098_boat_continue_afterwin",
+      "R16B_099_home353_stable",
+      "R16B_100_final_restart_home"
+    ],
+    "before": "R16B_075_before_core_home",
+    "after": "R16B_100_final_restart_home",
+    "uc_scope": {
+      "UC-01": {
+        "coverage": "observed_branch",
+        "scope": "Home352→board352 và inProgressfalse→true một lần."
+      },
+      "UC-11": {
+        "coverage": "observed_branch",
+        "scope": "Một thắng thực, popup20 và Player353; coincredit chốt bằng ledger094→095."
+      },
+      "UC-14": {
+        "coverage": "observed_branch",
+        "scope": "Observed queue Boat→Duck→Home và một restart; không toàn bộ57commands/variant."
+      }
+    },
+    "additional_evidence": [
+      "facts/review_20261116_round2/core352_moves_observations.json",
+      "facts/runtime/review_20261116_round2/session_end.json"
+    ],
+    "related_feature_uc": [
+      {
+        "feature": "HomeUI",
+        "uc": "UC-14",
+        "scope": "Related observed return-home popup order only."
+      },
+      {
+        "feature": "Inventory",
+        "uc": "UC-14",
+        "scope": "Related reward20 credited after Continue; chưa đọc pendingreward-list hoặc callback nội bộ."
+      },
+      {
+        "feature": "BoatRush",
+        "uc": "UC-11",
+        "scope": "Related post-win cached popup; không backend claim."
+      }
+    ],
+    "date": "2026-11-16",
+    "round_tag": "20261116_round2",
+    "build": "0.0.3129 ARM64",
+    "mode": "offline_existing_fixture",
+    "source_class": "runtime_observed",
+    "full_uc_pass": false,
+    "ledger_change": {
+      "currency_amount_delta_by_raw_type": {
+        "1": 20,
+        "6": -1,
+        "4": -1
+      },
+      "currency_amounts_unchanged": false,
+      "timed_currency_dates_changed": true,
+      "limitless_currency_dates_changed": true,
+      "life_fill_date_changed": true,
+      "player_before": {
+        "level": 352,
+        "isLevelInProgress": false
+      },
+      "player_after": {
+        "level": 353,
+        "isLevelInProgress": false
+      },
+      "scope": "Amount equality is not whole-inventory equality; timed/life fields and other event models are separate. Raw currency IDs are not assigned names from a different build."
+    },
+    "review_scope": "Root-supplied reviewed case record; this file validator does not infer semantic UC pass."
+  },
+  {
+    "id": "MS-R16B-BOAT02",
+    "feature": "BoatRush",
+    "title": "Post-win mở được cached Finished race và info dù direct entry trước đó bị mạng",
+    "uc": [
+      "UC-10",
+      "UC-12"
+    ],
+    "related_uc": [
+      "UC-03",
+      "UC-07",
+      "UC-11",
+      "UC-14",
+      "UC-16"
+    ],
+    "status": "observed_partial",
+    "precondition": "Root thực hiện lượt level352 sau toàn bộ nhánh noncore; build0.0.3129ARM64, offline_existing_fixture, gameplayUID cô lập mạng. Dùng một Undo và một Extra Bottle từ kho fixture lớn; không ghi prefs.",
+    "steps": [
+      "So với entry066 ở Home chỉ tạo No Internet toast, sau thắng Continue094 mở Boat095.",
+      "Đọc Finished, Stage1/4, own boat score1 và các dòng đối thủ/claimed-place labels.",
+      "MởInfo và chụp fullhelp097; Tap to Continue đóng help.",
+      "Boat Continue chuyển sang Duck098; không mở event reward chest."
+    ],
+    "expected": "Ghi nhận đúng nhánh thao tác và kết quả UI/ledger của một lượt fixture; không nâng thành full feature/UC pass.",
+    "actual": "095 có Finished và Stage1/4/Race is over, own boat1; có hai dòng đối thủ ghi1st/2nd place claimed. 097 help nói beat levels, finish race, advance stages, rewards. 098 chuyển Duck result. Đây là branch post-win khác direct entry066, không phải Home095.",
+    "limitations": "Chỉ cached result/Info và queue advancement. Không nhận thưởng Boat, join/fetch race mới, stage progress grant, unlimited life hoặc online result ack. Những claimed-place labels thuộc UI đối thủ, không là claim của tài khoản này.",
+    "images": [
+      "R16B_066_boat_finished",
+      "R16B_095_postwin_home353",
+      "R16B_097_boat_rules_full",
+      "R16B_098_boat_continue_afterwin"
+    ],
+    "before": "R16B_066_boat_finished",
+    "after": "R16B_098_boat_continue_afterwin",
+    "uc_scope": {
+      "UC-10": {
+        "coverage": "observed_branch",
+        "scope": "Xem các dòng đối thủ và ownscore trên Finished race snapshot."
+      },
+      "UC-12": {
+        "coverage": "observed_branch",
+        "scope": "ManualInfo/help render và đóng; không first-intro trigger."
+      }
+    },
+    "additional_evidence": [
+      "facts/review_20261116_round2/core352_moves_observations.json",
+      "facts/runtime/review_20261116_round2/session_end.json"
+    ],
+    "date": "2026-11-16",
+    "round_tag": "20261116_round2",
+    "build": "0.0.3129 ARM64",
+    "mode": "offline_existing_fixture",
+    "source_class": "runtime_observed",
+    "full_uc_pass": false,
+    "ledger_change": {
+      "currency_amount_delta_by_raw_type": {
+        "1": 20,
+        "6": -1,
+        "4": -1
+      },
+      "currency_amounts_unchanged": false,
+      "timed_currency_dates_changed": true,
+      "limitless_currency_dates_changed": true,
+      "life_fill_date_changed": true,
+      "player_before": {
+        "level": 352,
+        "isLevelInProgress": false
+      },
+      "player_after": {
+        "level": 353,
         "isLevelInProgress": false
       },
       "scope": "Amount equality is not whole-inventory equality; timed/life fields and other event models are separate. Raw currency IDs are not assigned names from a different build."
