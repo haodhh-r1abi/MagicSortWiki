@@ -4,7 +4,7 @@
   const q = document.getElementById("q"), res = document.getElementById("results");
   const strip = s => s.normalize("NFD").replace(/[\u0300-\u036f]/g,"").replace(/đ/g,"d").replace(/Đ/g,"D").toLowerCase();
   let idx = null, sel = -1;
-  async function load(){ if(idx) return idx; try{ const r = await fetch(root+"assets/search.json"); idx = await r.json(); }catch(e){ idx = []; } return idx; }
+  async function load(){ if(idx) return idx; if(window.MS_SEARCH){idx=window.MS_SEARCH;return idx;} try{ const r = await fetch(root+"assets/search.json"); idx = await r.json(); }catch(e){ idx = []; } return idx; }
   function render(items){ if(!items.length){ res.hidden = true; return; } res.innerHTML = items.map((it,i)=>`<a href="${root}${it.u}" class="${i===0?'sel':''}"><div>${it.t} <span class="r-c">· ${it.c}</span></div><div class="r-c">${it.g||''}</div></a>`).join(""); res.hidden = false; sel = 0; }
   if(q){
     q.addEventListener("input", async ()=>{ const v = strip(q.value.trim()); if(v.length<2){ res.hidden=true; return; } const ix = await load();
