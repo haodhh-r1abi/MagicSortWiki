@@ -1,0 +1,3115 @@
+{
+  "id": "TeamArena",
+  "name": "Đấu trường đội (Team Arena)",
+  "category": "Event",
+  "managers": [
+    "Modules.Contexts.Home.TeamArena.TeamArenaService",
+    "Modules.Contexts.Home.TeamArena.TeamArenaDataService",
+    "Modules.Contexts.Home.TeamArena.TeamArenaStateService",
+    "Modules.Contexts.Home.TeamArena.TeamArenaRemoteService",
+    "Modules.Contexts.Home.TeamArena.TeamArenaConfigModel"
+  ],
+  "summary": "Team Arena (backend: 'team competition') là sự kiện đội-đấu-đội. Người chơi đóng góp điểm cho đội bằng cách thắng level (Normal 1 / Hard 3 / SuperHard 5 điểm), điểm cá nhân vừa mở khoá thang phần thưởng cá nhân 10 mốc (10→100 điểm), vừa cộng vào tổng điểm đội để tranh hạng với các đội khác trên bảng xếp hạng đội. Kết thúc, top 3 đội nhận thưởng đội (2000/1000/500 coin) và top 3 người đóng góp trong đội nhận thưởng cá nhân (ExtraBottle/Shuffle/Undo, hoặc Collection pack khi Collection bật). Đội phải có tối thiểu MinimumUserToJoinEvent = 10 thành viên mới được tham gia. Sự kiện dùng hệ Elo của đội (previousElo/currentElo) để ghép các đội cùng trình. Đây là lớp cạnh tranh xã hội cao nhất của game, gắn chặt với hệ thống Teams.",
+  "unlock": "TeamArenaStateService.GetState(): Disabled(0) nếu TeamArenaConfigModel.IsEnabled == false; InsufficientProgress(1) nếu level < FirstLevelToShow; NoCache(2) nếu chưa fetch được. Điều kiện tham gia còn phụ thuộc TeamArenaEligibility: Eligible(1), NoTeam(2) — chưa có đội, NotHaveEnoughMembers(3) — đội < MinimumUserToJoinEvent. Client default: IsEnabled=false, TournamentType=1, FirstLevelToShow=45, MinimumUserToJoinEvent=10 (Resources/defaultconfigs/TeamArenaConfigModel.json).",
+  "entry_points": [
+    "TeamArenaLobbyButton ở lobby (ShouldShowLobbyIcon)",
+    "TeamArenaInfoView — thẻ sự kiện trong chat đội (ITeamChatEventView)",
+    "TeamArenaJoinPopup — mời tham gia (ShouldShowJoinPopup / ShouldShowJoinPopupForce)",
+    "TeamArenaEventPopup — bảng xếp hạng đội + người chơi + thang thưởng (ShouldShowEventPopup / ShouldShowForceEventPopup)",
+    "TeamArenaInfoPopup — nút info",
+    "Cảnh báo khi định rời đội giữa sự kiện (ShouldShowWarningLeaveTeam)"
+  ],
+  "flow": "Initialize() subscribe signal đội (OnUserTeamDataUpdated). InitializeData/IntervalUpdate → TeamArenaStateService.ShouldGetEvent() → TryFetchCurrentEvent() → GetEvent() gọi TeamArenaRemoteService.FetchEvent(TeamArenaRequestModel{tournamentID, tournamentType, teamID, score}) tới teamArenaLeaderboard (/v1/get-team-competition). ProcessEventData(response) đọc TeamArenaEventResponse{eventStatusResponse: TeamArenaEventStatusData{tournamentID, teamID, startTime, finishTime, isFinished, isJoined, isJoinWindowEnded}, eventLeaderboardResponse: TeamArenaTournamentData{isClaimed, totalScore, canContribute, teamRank, previousElo, elo, teamCompetitionLeaderboard[], teamCompetitionUserLeaderboard[]}, custom_error, message}; nếu tournamentID đổi thì ResetEventData()/ResetTournamentCache(); RequestProfileImages() tải avatar qua ProfileSpriteCacheService. Tham gia: TryJoinEvent() (Task<int> trả mã kết quả) gọi JoinEvent tới teamArenaJoin (/v1/join-team-competition); trước đó UserTeamHasEnoughMemberToJoin() và GetEligibility() kiểm tra điều kiện. Đóng góp: mỗi lần thắng level, TryIncreaseProgress(LevelDifficultyType) quy đổi 1/3/5 điểm rồi TeamArenaDataService.IncreaseProgress(progress) cập nhật TeamArenaProgressCacheModel{Progress, CurrentStep, CurrentProgressInStep}. Thang thưởng cá nhân: GetSteps() dựng TeamArenaProgressStepViewModel từ Steps (hoặc StepsWithCollection khi Collection bật); GetClaimableProgressRewards() trả thưởng của các mốc đã vượt kể từ LastClaimedStep; ProgressRewardsClaimed() → UpdateLastClaimedStep() và phát TeamArenaProgressRewardsClaimed. Kết thúc: state LocalEnd(6)/RemoteEnd(7); TryGetEventResult() dựng TeamArenaEventResultViewModel gồm hạng đội (TeamRank), Elo trước/sau, thưởng đội (TeamLeaderboardRewards theo hạng 1/2/3) và thưởng cá nhân (LeaderboardRewards theo hạng đóng góp 1/2/3); TryClaimEvent() gọi ClaimEvent tới teamArenaClaim (/v1/claim-team-competition), state → Claimed(8); analytics team_arena_finished ghi previous_elo, current_elo, team_rank, rank, reward, team_reward.",
+  "use_cases": [
+    {
+      "id": "UC-01",
+      "title": "Xác định trạng thái và điều kiện tham gia",
+      "actor": "System",
+      "trigger": "Vào lobby / IntervalUpdate",
+      "precondition": "RemoteConfigs + TeamsService sẵn sàng",
+      "steps": [
+        "TeamArenaStateService.GetState() trả Disabled(0)/InsufficientProgress(1)/NoCache(2)/NotIntroduced(3)/PreJoin(4)/InProgress(5)/LocalEnd(6)/RemoteEnd(7)/Claimed(8)",
+        "TeamArenaService.GetEligibility() trả TeamArenaEligibility: None(0), Eligible(1), NoTeam(2), NotHaveEnoughMembers(3)",
+        "UserTeamHasEnoughMemberToJoin() so số thành viên với GetMinMemberCountToJoinEvent()",
+        "ShouldShowLobbyIcon() quyết định hiện nút; UpdateState() phát TeamArenaStateChangedSignal"
+      ],
+      "result": "Nút lobby hiện/ẩn; popup Join chỉ mời khi đủ điều kiện",
+      "rules": "Client default: MinimumUserToJoinEvent = 10, FirstLevelToShow = 45, IsEnabled = false",
+      "evidence": "TeamArenaStateService.GetState; TeamArenaService.GetEligibility; TeamArenaService.UserTeamHasEnoughMemberToJoin; TeamArenaService.GetMinMemberCountToJoinEvent; TeamArenaStateService.ShouldShowLobbyIcon; TeamArenaStateService.UpdateState"
+    },
+    {
+      "id": "UC-02",
+      "title": "Fetch dữ liệu sự kiện từ server",
+      "actor": "Server",
+      "trigger": "InitializeData / IntervalUpdate khi ShouldGetEvent()",
+      "precondition": "Có đội",
+      "steps": [
+        "TeamArenaService.TryFetchCurrentEvent() → GetEvent()",
+        "TeamArenaRemoteService.FetchEvent(TeamArenaRequestModel{tournamentID, tournamentType, teamID, score}) → teamArenaLeaderboard (/v1/get-team-competition)",
+        "ProcessEventData(response): nếu tournamentID khác → TeamArenaDataService.ResetEventData() + ResetTournamentCache()",
+        "UpdateStatusCache(TeamArenaStatusCacheModel) và UpdateTournamentCache(TeamArenaTournamentCacheModel)",
+        "RequestProfileImages() nạp avatar cho leaderboard qua ProfileSpriteCacheService"
+      ],
+      "result": "Cache có tổng điểm đội, hạng đội, Elo, 2 bảng xếp hạng (đội và thành viên)",
+      "rules": "TeamArenaRemoteService.CancelRequests() huỷ request cũ khi rời màn",
+      "evidence": "TeamArenaService.TryFetchCurrentEvent; TeamArenaService.GetEvent; TeamArenaRemoteService.FetchEvent; TeamArenaService.ProcessEventData; TeamArenaDataService.UpdateStatusCache; TeamArenaDataService.UpdateTournamentCache; TeamArenaService.RequestProfileImages"
+    },
+    {
+      "id": "UC-03",
+      "title": "Tham gia đấu trường",
+      "actor": "Player",
+      "trigger": "Bấm Join ở TeamArenaJoinPopup",
+      "precondition": "Eligibility == Eligible(1), chưa hết join window",
+      "steps": [
+        "TeamArenaService.TryJoinEvent() (Task<int>)",
+        "TeamArenaRemoteService.JoinEvent(request) → teamArenaJoin (/v1/join-team-competition)",
+        "Thành công → TeamArenaDataService.SetIsJoined(true); SetJoinIntroduced(true)",
+        "SetEventJoinPopupIntroduced() phát signal",
+        "EventSender: team_arena_joined"
+      ],
+      "result": "Đội của người chơi được ghép vào một bảng xếp hạng đội theo Elo",
+      "rules": "TeamArenaDataService.IsJoinWindowEnded() chặn tham gia muộn; TeamArenaStatusCacheModel.IsJoinWindowEnded",
+      "evidence": "TeamArenaService.TryJoinEvent; TeamArenaRemoteService.JoinEvent; TeamArenaDataService.SetIsJoined; TeamArenaDataService.SetJoinIntroduced; TeamArenaService.SetEventJoinPopupIntroduced; TeamArenaDataService.IsJoinWindowEnded"
+    },
+    {
+      "id": "UC-04",
+      "title": "Thắng level → đóng góp điểm cho đội",
+      "actor": "Player",
+      "trigger": "Hoàn thành level",
+      "precondition": "Đã Join, state InProgress(5), CanContribute == true",
+      "steps": [
+        "TeamArenaService.TryIncreaseProgress(LevelDifficultyType difficulty)",
+        "Quy đổi: Normal → NormalScore(1), Hard → HardScore(3), SuperHard → SuperHardScore(5)",
+        "TeamArenaDataService.IncreaseProgress(progress) cập nhật TeamArenaProgressCacheModel{Progress, CurrentStep, CurrentProgressInStep, LobbyProgressCount}",
+        "Điểm gửi lên server qua trường 'score' của TeamArenaRequestModel ở lần fetch kế tiếp",
+        "Phát signal cập nhật UI"
+      ],
+      "result": "Điểm cá nhân và tổng điểm đội tăng; thang thưởng cá nhân tiến lên",
+      "rules": "TeamArenaTournamentCacheModel.CanContribute (server) quyết định có được đóng góp không (ví dụ mới vào đội)",
+      "evidence": "TeamArenaService.TryIncreaseProgress; TeamArenaDataService.IncreaseProgress; TeamArenaDataService.GetCanContribute; TeamArenaDataService.GetProgress"
+    },
+    {
+      "id": "UC-05",
+      "title": "Nhận thưởng theo mốc điểm cá nhân",
+      "actor": "Player",
+      "trigger": "Vượt mốc RequiredProgress",
+      "precondition": "CurrentStep > LastClaimedStep",
+      "steps": [
+        "TeamArenaService.GetSteps() dựng List<TeamArenaProgressStepViewModel>; GetStepRewards() dựng List<TeamArenaStepRewardViewModel>",
+        "GetClaimableProgressRewards() trả List<RewardModel> của các mốc chưa nhận",
+        "ProgressRewardsClaimed() → TeamArenaDataService.UpdateLastClaimedStep(); phát TeamArenaProgressRewardsClaimed",
+        "AllStepsAreCompleted() / GetTotalStepsCount() / GetCurrentStep() cho UI",
+        "EventSender: team_arena_step_completed"
+      ],
+      "result": "Nhận life vô hạn, booster, coin, collection pack theo bảng mốc",
+      "rules": "10 mốc mặc định: 10, 15, 20, 25, 30, 35, 40, 50, 70, 100 điểm. Dùng StepsWithCollection khi Collection bật.",
+      "evidence": "TeamArenaService.GetSteps; TeamArenaService.GetStepRewards; TeamArenaService.GetClaimableProgressRewards; TeamArenaService.ProgressRewardsClaimed; TeamArenaDataService.UpdateLastClaimedStep; TeamArenaService.AllStepsAreCompleted"
+    },
+    {
+      "id": "UC-06",
+      "title": "Xem bảng xếp hạng đội",
+      "actor": "Player",
+      "trigger": "Mở TeamArenaEventPopup tab đội",
+      "precondition": "Có TeamLeaderboard trong cache",
+      "steps": [
+        "TeamArenaService.GetTeamLeaderboard(selectable) dựng List<ITeamArenaLeaderboardViewModel> từ TeamArenaTeamData{name, teamID, badge, memberCount, activityType, score}",
+        "TeamArenaTeamViewModel + TeamArenaTeamView + TeamArenaTeamLeaderboardViewAdapter + TeamArenaTeamViewFactory dựng danh sách",
+        "TeamArenaLeaderboardRewardView / TeamArenaRewardsContainer hiển thị thưởng top 3",
+        "TeamArenaEmptyLeaderboardViewModel khi bảng trống"
+      ],
+      "result": "Danh sách các đội đối thủ cùng điểm và hạng",
+      "rules": "TeamArenaTournamentCacheModel.TeamRank là hạng hiện tại của đội mình",
+      "evidence": "TeamArenaService.GetTeamLeaderboard; TeamArenaTeamViewFactory; TeamArenaLeaderboardController; TeamArenaRewardsContainer"
+    },
+    {
+      "id": "UC-07",
+      "title": "Xem bảng đóng góp trong đội",
+      "actor": "Player",
+      "trigger": "Mở TeamArenaEventPopup tab thành viên",
+      "precondition": "Có PlayerLeaderboard",
+      "steps": [
+        "TeamArenaService.GetPlayerLeaderboard(selectable) từ TeamArenaUserData{userPublicId, userName, score, fbImageUrl, imageID, tokenID, frameID, nameStyle, isMe}",
+        "TeamArenaPlayerViewModel + TeamArenaPlayerView + TeamArenaPlayerLeaderboardViewAdapter/Factory",
+        "TeamArenaNoContributionViewModel + TeamArenaLeaderboardNoContributionView cho thành viên chưa đóng góp"
+      ],
+      "result": "Thấy ai đóng góp nhiều nhất; áp lực xã hội để cày",
+      "rules": "Top 3 người đóng góp nhận LeaderboardRewards khi kết thúc",
+      "evidence": "TeamArenaService.GetPlayerLeaderboard; TeamArenaPlayerLeaderboardViewFactory; TeamArenaLeaderboardNoContributionView"
+    },
+    {
+      "id": "UC-08",
+      "title": "Kết thúc sự kiện và nhận thưởng tổng",
+      "actor": "Player",
+      "trigger": "Hết giờ hoặc server báo isFinished",
+      "precondition": "Đã tham gia",
+      "steps": [
+        "TeamArenaService.GetRemainingTime() / GetEndDate() / GetStartTimeAsUnixTime() từ TeamArenaStatusCacheModel.StartTime/EndTime",
+        "State → LocalEnd(6) hoặc RemoteEnd(7)",
+        "TryGetEventResult() dựng TeamArenaEventResultViewModel: hạng đội, Elo trước/sau (GetPreviousTeamElo/GetCurrentTeamElo), thưởng đội + thưởng cá nhân",
+        "TeamArenaDataService.GetTeamLeaderboardRewards() và GetLeaderboardRewards() lấy đúng nhánh (Collection hay không)",
+        "TryClaimEvent() → TeamArenaRemoteService.ClaimEvent(request) → teamArenaClaim (/v1/claim-team-competition); state → Claimed(8)",
+        "EventSender.SendTeamArenaFinished(previousElo, currentElo, teamRank, teamReward, rank, contributionReward)"
+      ],
+      "result": "Coin/booster/collection pack vào túi; Elo đội cập nhật cho lần ghép sau",
+      "rules": "Thưởng đội mặc định: hạng 1 = 2000 Coin, hạng 2 = 1000 Coin, hạng 3 = 500 Coin. Thưởng cá nhân mặc định: hạng 1 = 1 ExtraBottle, hạng 2 = 1 Shuffle, hạng 3 = 1 Undo (bản Collection: CollectionPack loại 3/2/1).",
+      "evidence": "TeamArenaService.TryGetEventResult; TeamArenaService.TryClaimEvent; TeamArenaRemoteService.ClaimEvent; TeamArenaDataService.GetTeamLeaderboardRewards; TeamArenaDataService.GetLeaderboardRewards; TeamArenaService.GetPreviousTeamElo; TeamArenaService.GetCurrentTeamElo; EventSender.SendTeamArenaFinished"
+    },
+    {
+      "id": "UC-09",
+      "title": "Cảnh báo khi định rời đội giữa sự kiện",
+      "actor": "Player",
+      "trigger": "Bấm rời/đổi đội trong Teams",
+      "precondition": "Đang tham gia Team Arena",
+      "steps": [
+        "TeamArenaStateService.ShouldShowWarningLeaveTeam()",
+        "Hiện cảnh báo sẽ mất tiến độ/thưởng của đội hiện tại"
+      ],
+      "result": "Giảm tình trạng nhảy đội để farm thưởng",
+      "rules": "-",
+      "evidence": "TeamArenaStateService.ShouldShowWarningLeaveTeam"
+    },
+    {
+      "id": "UC-10",
+      "title": "Đổi đội → reset cache sự kiện",
+      "actor": "System",
+      "trigger": "Dữ liệu đội thay đổi (signal)",
+      "precondition": "-",
+      "steps": [
+        "TeamArenaService.OnUserTeamDataUpdated() (đăng ký ở Initialize)",
+        "TeamArenaDataService.ResetTournamentCache() xoá bảng cũ; phát signal cập nhật UI",
+        "Lần fetch kế tiếp lấy dữ liệu của đội mới"
+      ],
+      "result": "Bảng xếp hạng và tiến độ khớp với đội hiện tại",
+      "rules": "-",
+      "evidence": "TeamArenaService.OnUserTeamDataUpdated; TeamArenaDataService.ResetTournamentCache; TeamArenaDataService.ResetEventData"
+    },
+    {
+      "id": "UC-11",
+      "title": "Popup tự mở và thẻ trong chat đội",
+      "actor": "System",
+      "trigger": "Vào lobby / mở chat đội",
+      "precondition": "State phù hợp",
+      "steps": [
+        "TeamArenaStateService.ShouldShowJoinPopup() / ShouldShowJoinPopupForce() / ShouldShowEventPopup() / ShouldShowForceEventPopup()",
+        "Mở TeamArenaJoinPopup (TeamArenaJoinPopupArguments) hoặc TeamArenaEventPopup (TeamArenaEventPopupArgs) hoặc TeamArenaInfoPopup (TeamArenaInfoPopupArgs)",
+        "TeamArenaInfoView hiển thị trong chat đội; GetTeamArenaInfoViewModel(); SetInfoViewExpanded(expanded)",
+        "SetIsEventIntroducedEver(true) / TeamArenaDataService.SetEventIntroducedEver",
+        "EventSender: team_arena_event_popup_impression / team_arena_join_popup_impression / team_arena_info_popup_impression (kèm eligibility, reason, segment)"
+      ],
+      "result": "Sự kiện được đẩy tới người chơi và ghi nhận impression",
+      "rules": "TeamArenaDataService.GetInfoViewExpanded() ghi nhớ trạng thái thu/mở của thẻ",
+      "evidence": "TeamArenaStateService.ShouldShowJoinPopup; TeamArenaStateService.ShouldShowForceEventPopup; TeamArenaService.GetTeamArenaInfoViewModel; TeamArenaService.SetInfoViewExpanded; TeamArenaDataService.GetInfoViewExpanded; TeamArenaService.SetIsEventIntroducedEver"
+    },
+    {
+      "id": "UC-12",
+      "title": "Chấm đỏ và tiến độ chưa xem trên nút lobby",
+      "actor": "System",
+      "trigger": "Về lobby sau khi đóng góp",
+      "precondition": "-",
+      "steps": [
+        "TeamArenaService.GetLobbyProgress() đọc TeamArenaProgressCacheModel.LobbyProgressCount",
+        "GetTeamArenaIconButtonViewModel() dựng TeamArenaLobbyIconViewModel (dùng GetUserTeamProgress())",
+        "TrySetLastSeenLobbyButtonProgress() và ProgressSeen() → TeamArenaDataService.UpdateSeenProgress() / ResetLobbyProgressCount()",
+        "Animation theo TeamArenaLobbyButtonAnimationConfig"
+      ],
+      "result": "Nút lobby chạy animation cộng điểm rồi tắt chấm đỏ",
+      "rules": "LastSeenStep / LastSeenProgressInStep dùng để so sánh",
+      "evidence": "TeamArenaService.GetLobbyProgress; TeamArenaService.GetTeamArenaIconButtonViewModel; TeamArenaService.TrySetLastSeenLobbyButtonProgress; TeamArenaService.ProgressSeen; TeamArenaDataService.UpdateSeenProgress; TeamArenaDataService.ResetLobbyProgressCount"
+    },
+    {
+      "id": "UC-13",
+      "title": "Thưởng có Collection",
+      "actor": "System",
+      "trigger": "Collection đang bật khi nhận thưởng",
+      "precondition": "CollectionService bật",
+      "steps": [
+        "TeamArenaDataService dùng StepsWithCollection thay Steps, LeaderboardRewardsWithCollection và TeamLeaderboardRewardsWithCollection",
+        "TeamArenaService.ShouldShowCollectibleEarnAnimationOnLobbyReturn() hoãn animation thẻ tới khi về lobby"
+      ],
+      "result": "Người chơi nhận CollectionPack (CurrencyType 14) với CollectionPackType 2/3/4 tuỳ mốc",
+      "rules": "Ví dụ mốc 15 điểm: bản thường 1 Shuffle, bản Collection 1 CollectionPack loại 2",
+      "evidence": "TeamArenaDataService.GetLeaderboardRewards; TeamArenaDataService.GetTeamLeaderboardRewards; TeamArenaService.ShouldShowCollectibleEarnAnimationOnLobbyReturn; TeamArenaConfigModel.StepsWithCollection"
+    },
+    {
+      "id": "UC-14",
+      "title": "Offline / lỗi request",
+      "actor": "System",
+      "trigger": "FetchEvent/JoinEvent/ClaimEvent thất bại",
+      "precondition": "-",
+      "steps": [
+        "TeamArenaEventResponse.custom_error / message chứa lỗi backend",
+        "TryJoinEvent()/TryClaimEvent() trả int mã kết quả để UI hiển thị thông báo",
+        "State giữ NoCache(2) nếu chưa có cache; IntervalUpdate thử lại",
+        "TeamArenaRemoteService.CancelRequests() khi rời màn"
+      ],
+      "result": "Điểm đóng góp vẫn tích local, đẩy lên khi có mạng; join/claim bị chặn",
+      "rules": "-",
+      "evidence": "TeamArenaService.TryJoinEvent; TeamArenaService.TryClaimEvent; TeamArenaService.ProcessEventData; TeamArenaRemoteService.CancelRequests; TeamArenaDataService.HasTournamentCache"
+    },
+    {
+      "id": "UC-15",
+      "title": "Đồng bộ dữ liệu Team Arena",
+      "actor": "Server",
+      "trigger": "Sync / đổi thiết bị",
+      "precondition": "ISyncable",
+      "steps": [
+        "TeamArenaDataService.GetSyncName() = 'TeamArenaSyncModel'",
+        "SerializeModelForSync() gửi TeamArenaModel (status cache + tournament cache + progress cache + cờ introduced)",
+        "OverwriteModelFromSync(data); DataSynced(); MarkForLateUpdate(shouldSyncWithBackend) / LateUpdate()",
+        "DeleteData() khi reset tài khoản"
+      ],
+      "result": "Tiến độ đóng góp và trạng thái tham gia giữ nguyên khi đổi máy",
+      "rules": "MarkForLateUpdate có cờ shouldSyncWithBackend để phân biệt thay đổi cần đẩy server",
+      "evidence": "TeamArenaDataService.GetSyncName; TeamArenaDataService.SerializeModelForSync; TeamArenaDataService.OverwriteModelFromSync; TeamArenaDataService.MarkForLateUpdate; TeamArenaDataService.DeleteData"
+    }
+  ],
+  "configs": [
+    {
+      "source": "json default",
+      "key": "IsEnabled",
+      "type": "bool",
+      "value": "false",
+      "meaning": "Bật/tắt Team Arena",
+      "where": "Resources/defaultconfigs/TeamArenaConfigModel.json"
+    },
+    {
+      "source": "json default",
+      "key": "TournamentType",
+      "type": "int",
+      "value": "1",
+      "meaning": "Mã loại giải gửi backend",
+      "where": "TeamArenaConfigModel.json"
+    },
+    {
+      "source": "json default",
+      "key": "FirstLevelToShow",
+      "type": "int",
+      "value": "45",
+      "meaning": "Level tối thiểu",
+      "where": "TeamArenaConfigModel.json"
+    },
+    {
+      "source": "json default",
+      "key": "MinimumUserToJoinEvent",
+      "type": "int",
+      "value": "10",
+      "meaning": "Số thành viên tối thiểu của đội để tham gia",
+      "where": "TeamArenaConfigModel.json"
+    },
+    {
+      "source": "json default",
+      "key": "NormalScore / HardScore / SuperHardScore",
+      "type": "int",
+      "value": "1 / 3 / 5",
+      "meaning": "Điểm đóng góp theo độ khó level",
+      "where": "TeamArenaConfigModel.json"
+    },
+    {
+      "source": "json default",
+      "key": "Steps[0] RequiredProgress 10",
+      "type": "reward",
+      "value": "Life(2) vô hạn 00:15:00",
+      "meaning": "Mốc cá nhân 10 điểm",
+      "where": "TeamArenaConfigModel.json"
+    },
+    {
+      "source": "json default",
+      "key": "Steps[1] RequiredProgress 15",
+      "type": "reward",
+      "value": "1 Shuffle(5)",
+      "meaning": "Mốc 15 điểm (bản Collection: 1 CollectionPack loại 2)",
+      "where": "TeamArenaConfigModel.json"
+    },
+    {
+      "source": "json default",
+      "key": "Steps[2] RequiredProgress 20",
+      "type": "reward",
+      "value": "1 Undo(4)",
+      "meaning": "Mốc 20 điểm",
+      "where": "TeamArenaConfigModel.json"
+    },
+    {
+      "source": "json default",
+      "key": "Steps[3] RequiredProgress 25",
+      "type": "reward",
+      "value": "100 Coin(1)",
+      "meaning": "Mốc 25 điểm",
+      "where": "TeamArenaConfigModel.json"
+    },
+    {
+      "source": "json default",
+      "key": "Steps[4] RequiredProgress 30",
+      "type": "reward",
+      "value": "Life(2) vô hạn 00:30:00",
+      "meaning": "Mốc 30 điểm",
+      "where": "TeamArenaConfigModel.json"
+    },
+    {
+      "source": "json default",
+      "key": "Steps[5] RequiredProgress 35",
+      "type": "reward",
+      "value": "1 Undo(4)",
+      "meaning": "Mốc 35 điểm (bản Collection: 1 CollectionPack loại 3)",
+      "where": "TeamArenaConfigModel.json"
+    },
+    {
+      "source": "json default",
+      "key": "Steps[6] RequiredProgress 40",
+      "type": "reward",
+      "value": "1 Shuffle(5)",
+      "meaning": "Mốc 40 điểm",
+      "where": "TeamArenaConfigModel.json"
+    },
+    {
+      "source": "json default",
+      "key": "Steps[7] RequiredProgress 50",
+      "type": "reward",
+      "value": "200 Coin(1)",
+      "meaning": "Mốc 50 điểm",
+      "where": "TeamArenaConfigModel.json"
+    },
+    {
+      "source": "json default",
+      "key": "Steps[8] RequiredProgress 70",
+      "type": "reward",
+      "value": "1 ExtraBottle(6)",
+      "meaning": "Mốc 70 điểm",
+      "where": "TeamArenaConfigModel.json"
+    },
+    {
+      "source": "json default",
+      "key": "Steps[9] RequiredProgress 100",
+      "type": "reward",
+      "value": "250 Coin(1) — bản Collection: 1 CollectionPack loại 4",
+      "meaning": "Mốc cuối 100 điểm",
+      "where": "TeamArenaConfigModel.json"
+    },
+    {
+      "source": "json default",
+      "key": "LeaderboardRewards",
+      "type": "list",
+      "value": "[1 ExtraBottle(6), 1 Shuffle(5), 1 Undo(4)]",
+      "meaning": "Thưởng cho top 1/2/3 người đóng góp trong đội",
+      "where": "TeamArenaConfigModel.json"
+    },
+    {
+      "source": "json default",
+      "key": "LeaderboardRewardsWithCollection",
+      "type": "list",
+      "value": "[CollectionPack loại 3, loại 2, loại 1]",
+      "meaning": "Bản Collection của thưởng cá nhân",
+      "where": "TeamArenaConfigModel.json"
+    },
+    {
+      "source": "json default",
+      "key": "TeamLeaderboardRewards",
+      "type": "list",
+      "value": "[2000 Coin, 1000 Coin, 500 Coin]",
+      "meaning": "Thưởng cho đội hạng 1/2/3",
+      "where": "TeamArenaConfigModel.json"
+    },
+    {
+      "source": "json default",
+      "key": "TeamLeaderboardRewardsWithCollection",
+      "type": "list",
+      "value": "[2000 Coin, 1000 Coin, 500 Coin] (giống bản thường)",
+      "meaning": "Bản Collection của thưởng đội",
+      "where": "TeamArenaConfigModel.json"
+    },
+    {
+      "source": "code enum",
+      "key": "TeamArenaStateType",
+      "type": "enum",
+      "value": "Disabled=0, InsufficientProgress=1, NoCache=2, NotIntroduced=3, PreJoin=4, InProgress=5, LocalEnd=6, RemoteEnd=7, Claimed=8",
+      "meaning": "Trạng thái sự kiện",
+      "where": "dump.cs TypeDefIndex 2208"
+    },
+    {
+      "source": "code enum",
+      "key": "TeamArenaEligibility",
+      "type": "enum",
+      "value": "None=0, Eligible=1, NoTeam=2, NotHaveEnoughMembers=3",
+      "meaning": "Điều kiện tham gia (ghi vào analytics 'eligibility')",
+      "where": "dump.cs TypeDefIndex 2200"
+    },
+    {
+      "source": "server info",
+      "key": "TeamArenaEventStatusData",
+      "type": "object",
+      "value": "tournamentID, teamID, startTime, finishTime, isFinished, isJoined, isJoinWindowEnded",
+      "meaning": "Trạng thái sự kiện của đội",
+      "where": "dump.cs TypeDefIndex 2191"
+    },
+    {
+      "source": "server info",
+      "key": "TeamArenaTournamentData",
+      "type": "object",
+      "value": "isClaimed, totalScore, canContribute, teamRank, previousElo, elo, teamCompetitionLeaderboard[], teamCompetitionUserLeaderboard[]",
+      "meaning": "Dữ liệu bảng xếp hạng và Elo",
+      "where": "dump.cs TypeDefIndex 2192"
+    },
+    {
+      "source": "server info",
+      "key": "TeamArenaTeamData",
+      "type": "object",
+      "value": "name, teamID, badge, memberCount, activityType, score",
+      "meaning": "Một đội trong bảng",
+      "where": "dump.cs TypeDefIndex 2193"
+    },
+    {
+      "source": "server info",
+      "key": "TeamArenaUserData",
+      "type": "object",
+      "value": "userPublicId, userName, score, fbImageUrl, imageID, tokenID, frameID, nameStyle, isMe",
+      "meaning": "Một thành viên trong bảng đóng góp",
+      "where": "dump.cs TypeDefIndex 2194"
+    },
+    {
+      "source": "server info",
+      "key": "TeamArenaRequestModel",
+      "type": "object",
+      "value": "tournamentID, tournamentType, teamID, score",
+      "meaning": "Payload chung fetch/join/claim",
+      "where": "dump.cs TypeDefIndex 2195"
+    },
+    {
+      "source": "storage key",
+      "key": "TeamArenaSyncModel",
+      "type": "string",
+      "value": "-",
+      "meaning": "Tên khối sync",
+      "where": "TeamArenaDataService.GetSyncName"
+    },
+    {
+      "source": "storage key",
+      "key": "TeamArenaStatusCacheModel.{StartTime, EndTime, TournamentId, TeamId, IsJoinWindowEnded, IsFinished, IsJoined}",
+      "type": "object",
+      "value": "-",
+      "meaning": "Cache trạng thái",
+      "where": "TeamArenaStatusCacheModel"
+    },
+    {
+      "source": "storage key",
+      "key": "TeamArenaTournamentCacheModel.{IsClaimed, CanContribute, PreviousElo, CurrentElo, TeamRank, TeamLeaderboard, PlayerLeaderboard}",
+      "type": "object",
+      "value": "-",
+      "meaning": "Cache bảng xếp hạng",
+      "where": "TeamArenaTournamentCacheModel"
+    },
+    {
+      "source": "storage key",
+      "key": "TeamArenaProgressCacheModel.{Progress, LastClaimedStep, CurrentStep, CurrentProgressInStep, LastSeenStep, LastSeenProgressInStep, LobbyProgressCount}",
+      "type": "object",
+      "value": "-",
+      "meaning": "Tiến độ đóng góp cá nhân",
+      "where": "TeamArenaProgressCacheModel"
+    },
+    {
+      "source": "asset",
+      "key": "TeamArenaLobbyButtonAnimationConfig",
+      "type": "ScriptableObject",
+      "value": "-",
+      "meaning": "Hoạt ảnh nút lobby",
+      "where": "dump.cs TypeDefIndex 2251"
+    },
+    {
+      "source": "json default",
+      "key": "TeamArenaConfigModel.json: NormalScore",
+      "type": "",
+      "value": "1",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/TeamArenaConfigModel.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "TeamArenaConfigModel.json: HardScore",
+      "type": "",
+      "value": "3",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/TeamArenaConfigModel.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "TeamArenaConfigModel.json: SuperHardScore",
+      "type": "",
+      "value": "5",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/TeamArenaConfigModel.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "TeamArenaConfigModel.json: StepsWithCollection[0].RequiredProgress",
+      "type": "",
+      "value": "10",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/TeamArenaConfigModel.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "TeamArenaConfigModel.json: StepsWithCollection[0].RewardModel.CurrencyType",
+      "type": "",
+      "value": "2",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/TeamArenaConfigModel.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "TeamArenaConfigModel.json: StepsWithCollection[0].RewardModel.TimeSpan",
+      "type": "",
+      "value": "00:15:00",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/TeamArenaConfigModel.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "TeamArenaConfigModel.json: StepsWithCollection[1].RequiredProgress",
+      "type": "",
+      "value": "15",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/TeamArenaConfigModel.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "TeamArenaConfigModel.json: StepsWithCollection[1].RewardModel.CurrencyType",
+      "type": "",
+      "value": "14",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/TeamArenaConfigModel.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "TeamArenaConfigModel.json: StepsWithCollection[1].RewardModel.Amount",
+      "type": "",
+      "value": "1",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/TeamArenaConfigModel.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "TeamArenaConfigModel.json: StepsWithCollection[1].RewardModel.CollectionPackType",
+      "type": "",
+      "value": "2",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/TeamArenaConfigModel.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "TeamArenaConfigModel.json: StepsWithCollection[2].RequiredProgress",
+      "type": "",
+      "value": "20",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/TeamArenaConfigModel.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "TeamArenaConfigModel.json: StepsWithCollection[2].RewardModel.CurrencyType",
+      "type": "",
+      "value": "4",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/TeamArenaConfigModel.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "TeamArenaConfigModel.json: StepsWithCollection[2].RewardModel.Amount",
+      "type": "",
+      "value": "1",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/TeamArenaConfigModel.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "TeamArenaConfigModel.json: StepsWithCollection[3].RequiredProgress",
+      "type": "",
+      "value": "25",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/TeamArenaConfigModel.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "TeamArenaConfigModel.json: StepsWithCollection[3].RewardModel.CurrencyType",
+      "type": "",
+      "value": "1",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/TeamArenaConfigModel.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "TeamArenaConfigModel.json: StepsWithCollection[3].RewardModel.Amount",
+      "type": "",
+      "value": "100",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/TeamArenaConfigModel.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "TeamArenaConfigModel.json: StepsWithCollection[4].RequiredProgress",
+      "type": "",
+      "value": "30",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/TeamArenaConfigModel.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "TeamArenaConfigModel.json: StepsWithCollection[4].RewardModel.CurrencyType",
+      "type": "",
+      "value": "2",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/TeamArenaConfigModel.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "TeamArenaConfigModel.json: StepsWithCollection[4].RewardModel.TimeSpan",
+      "type": "",
+      "value": "00:30:00",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/TeamArenaConfigModel.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "TeamArenaConfigModel.json: StepsWithCollection[5].RequiredProgress",
+      "type": "",
+      "value": "35",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/TeamArenaConfigModel.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "TeamArenaConfigModel.json: StepsWithCollection[5].RewardModel.CurrencyType",
+      "type": "",
+      "value": "14",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/TeamArenaConfigModel.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "TeamArenaConfigModel.json: StepsWithCollection[5].RewardModel.Amount",
+      "type": "",
+      "value": "1",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/TeamArenaConfigModel.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "TeamArenaConfigModel.json: StepsWithCollection[5].RewardModel.CollectionPackType",
+      "type": "",
+      "value": "3",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/TeamArenaConfigModel.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "TeamArenaConfigModel.json: StepsWithCollection[6].RequiredProgress",
+      "type": "",
+      "value": "40",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/TeamArenaConfigModel.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "TeamArenaConfigModel.json: StepsWithCollection[6].RewardModel.CurrencyType",
+      "type": "",
+      "value": "5",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/TeamArenaConfigModel.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "TeamArenaConfigModel.json: StepsWithCollection[6].RewardModel.Amount",
+      "type": "",
+      "value": "1",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/TeamArenaConfigModel.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "TeamArenaConfigModel.json: StepsWithCollection[7].RequiredProgress",
+      "type": "",
+      "value": "50",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/TeamArenaConfigModel.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "TeamArenaConfigModel.json: StepsWithCollection[7].RewardModel.CurrencyType",
+      "type": "",
+      "value": "1",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/TeamArenaConfigModel.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "TeamArenaConfigModel.json: StepsWithCollection[7].RewardModel.Amount",
+      "type": "",
+      "value": "200",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/TeamArenaConfigModel.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "TeamArenaConfigModel.json: StepsWithCollection[8].RequiredProgress",
+      "type": "",
+      "value": "70",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/TeamArenaConfigModel.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "TeamArenaConfigModel.json: StepsWithCollection[8].RewardModel.CurrencyType",
+      "type": "",
+      "value": "6",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/TeamArenaConfigModel.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "TeamArenaConfigModel.json: StepsWithCollection[8].RewardModel.Amount",
+      "type": "",
+      "value": "1",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/TeamArenaConfigModel.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "TeamArenaConfigModel.json: StepsWithCollection[9].RequiredProgress",
+      "type": "",
+      "value": "100",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/TeamArenaConfigModel.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "TeamArenaConfigModel.json: StepsWithCollection[9].RewardModel.CurrencyType",
+      "type": "",
+      "value": "14",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/TeamArenaConfigModel.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "TeamArenaConfigModel.json: StepsWithCollection[9].RewardModel.Amount",
+      "type": "",
+      "value": "1",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/TeamArenaConfigModel.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "TeamArenaConfigModel.json: StepsWithCollection[9].RewardModel.CollectionPackType",
+      "type": "",
+      "value": "4",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/TeamArenaConfigModel.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "TeamArenaConfigModel.json: Steps[0].RequiredProgress",
+      "type": "",
+      "value": "10",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/TeamArenaConfigModel.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "TeamArenaConfigModel.json: Steps[0].RewardModel.CurrencyType",
+      "type": "",
+      "value": "2",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/TeamArenaConfigModel.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "TeamArenaConfigModel.json: Steps[0].RewardModel.TimeSpan",
+      "type": "",
+      "value": "00:15:00",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/TeamArenaConfigModel.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "TeamArenaConfigModel.json: Steps[1].RequiredProgress",
+      "type": "",
+      "value": "15",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/TeamArenaConfigModel.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "TeamArenaConfigModel.json: Steps[1].RewardModel.CurrencyType",
+      "type": "",
+      "value": "5",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/TeamArenaConfigModel.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "TeamArenaConfigModel.json: Steps[1].RewardModel.Amount",
+      "type": "",
+      "value": "1",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/TeamArenaConfigModel.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "TeamArenaConfigModel.json: Steps[2].RequiredProgress",
+      "type": "",
+      "value": "20",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/TeamArenaConfigModel.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "TeamArenaConfigModel.json: Steps[2].RewardModel.CurrencyType",
+      "type": "",
+      "value": "4",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/TeamArenaConfigModel.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "TeamArenaConfigModel.json: Steps[2].RewardModel.Amount",
+      "type": "",
+      "value": "1",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/TeamArenaConfigModel.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "TeamArenaConfigModel.json: Steps[3].RequiredProgress",
+      "type": "",
+      "value": "25",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/TeamArenaConfigModel.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "TeamArenaConfigModel.json: Steps[3].RewardModel.CurrencyType",
+      "type": "",
+      "value": "1",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/TeamArenaConfigModel.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "TeamArenaConfigModel.json: Steps[3].RewardModel.Amount",
+      "type": "",
+      "value": "100",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/TeamArenaConfigModel.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "TeamArenaConfigModel.json: Steps[4].RequiredProgress",
+      "type": "",
+      "value": "30",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/TeamArenaConfigModel.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "TeamArenaConfigModel.json: Steps[4].RewardModel.CurrencyType",
+      "type": "",
+      "value": "2",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/TeamArenaConfigModel.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "TeamArenaConfigModel.json: Steps[4].RewardModel.TimeSpan",
+      "type": "",
+      "value": "00:30:00",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/TeamArenaConfigModel.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "TeamArenaConfigModel.json: Steps[5].RequiredProgress",
+      "type": "",
+      "value": "35",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/TeamArenaConfigModel.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "TeamArenaConfigModel.json: Steps[5].RewardModel.CurrencyType",
+      "type": "",
+      "value": "4",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/TeamArenaConfigModel.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "TeamArenaConfigModel.json: Steps[5].RewardModel.Amount",
+      "type": "",
+      "value": "1",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/TeamArenaConfigModel.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "TeamArenaConfigModel.json: Steps[6].RequiredProgress",
+      "type": "",
+      "value": "40",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/TeamArenaConfigModel.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "TeamArenaConfigModel.json: Steps[6].RewardModel.CurrencyType",
+      "type": "",
+      "value": "5",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/TeamArenaConfigModel.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "TeamArenaConfigModel.json: Steps[6].RewardModel.Amount",
+      "type": "",
+      "value": "1",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/TeamArenaConfigModel.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "TeamArenaConfigModel.json: Steps[7].RequiredProgress",
+      "type": "",
+      "value": "50",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/TeamArenaConfigModel.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "TeamArenaConfigModel.json: Steps[7].RewardModel.CurrencyType",
+      "type": "",
+      "value": "1",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/TeamArenaConfigModel.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "TeamArenaConfigModel.json: Steps[7].RewardModel.Amount",
+      "type": "",
+      "value": "200",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/TeamArenaConfigModel.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "TeamArenaConfigModel.json: Steps[8].RequiredProgress",
+      "type": "",
+      "value": "70",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/TeamArenaConfigModel.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "TeamArenaConfigModel.json: Steps[8].RewardModel.CurrencyType",
+      "type": "",
+      "value": "6",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/TeamArenaConfigModel.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "TeamArenaConfigModel.json: Steps[8].RewardModel.Amount",
+      "type": "",
+      "value": "1",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/TeamArenaConfigModel.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "TeamArenaConfigModel.json: Steps[9].RequiredProgress",
+      "type": "",
+      "value": "100",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/TeamArenaConfigModel.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "TeamArenaConfigModel.json: Steps[9].RewardModel.CurrencyType",
+      "type": "",
+      "value": "1",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/TeamArenaConfigModel.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "TeamArenaConfigModel.json: Steps[9].RewardModel.Amount",
+      "type": "",
+      "value": "250",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/TeamArenaConfigModel.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "TeamArenaConfigModel.json: LeaderboardRewards[0].CurrencyType",
+      "type": "",
+      "value": "6",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/TeamArenaConfigModel.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "TeamArenaConfigModel.json: LeaderboardRewards[0].Amount",
+      "type": "",
+      "value": "1",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/TeamArenaConfigModel.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "TeamArenaConfigModel.json: LeaderboardRewards[1].CurrencyType",
+      "type": "",
+      "value": "5",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/TeamArenaConfigModel.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "TeamArenaConfigModel.json: LeaderboardRewards[1].Amount",
+      "type": "",
+      "value": "1",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/TeamArenaConfigModel.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "TeamArenaConfigModel.json: LeaderboardRewards[2].CurrencyType",
+      "type": "",
+      "value": "4",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/TeamArenaConfigModel.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "TeamArenaConfigModel.json: LeaderboardRewards[2].Amount",
+      "type": "",
+      "value": "1",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/TeamArenaConfigModel.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "TeamArenaConfigModel.json: LeaderboardRewardsWithCollection[0].CurrencyType",
+      "type": "",
+      "value": "14",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/TeamArenaConfigModel.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "TeamArenaConfigModel.json: LeaderboardRewardsWithCollection[0].Amount",
+      "type": "",
+      "value": "1",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/TeamArenaConfigModel.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "TeamArenaConfigModel.json: LeaderboardRewardsWithCollection[0].CollectionPackType",
+      "type": "",
+      "value": "3",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/TeamArenaConfigModel.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "TeamArenaConfigModel.json: LeaderboardRewardsWithCollection[1].CurrencyType",
+      "type": "",
+      "value": "14",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/TeamArenaConfigModel.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "TeamArenaConfigModel.json: LeaderboardRewardsWithCollection[1].Amount",
+      "type": "",
+      "value": "1",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/TeamArenaConfigModel.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "TeamArenaConfigModel.json: LeaderboardRewardsWithCollection[1].CollectionPackType",
+      "type": "",
+      "value": "2",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/TeamArenaConfigModel.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "TeamArenaConfigModel.json: LeaderboardRewardsWithCollection[2].CurrencyType",
+      "type": "",
+      "value": "14",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/TeamArenaConfigModel.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "TeamArenaConfigModel.json: LeaderboardRewardsWithCollection[2].Amount",
+      "type": "",
+      "value": "1",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/TeamArenaConfigModel.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "TeamArenaConfigModel.json: LeaderboardRewardsWithCollection[2].CollectionPackType",
+      "type": "",
+      "value": "1",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/TeamArenaConfigModel.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "TeamArenaConfigModel.json: TeamLeaderboardRewards[0].CurrencyType",
+      "type": "",
+      "value": "1",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/TeamArenaConfigModel.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "TeamArenaConfigModel.json: TeamLeaderboardRewards[0].Amount",
+      "type": "",
+      "value": "2000",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/TeamArenaConfigModel.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "TeamArenaConfigModel.json: TeamLeaderboardRewards[1].CurrencyType",
+      "type": "",
+      "value": "1",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/TeamArenaConfigModel.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "TeamArenaConfigModel.json: TeamLeaderboardRewards[1].Amount",
+      "type": "",
+      "value": "1000",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/TeamArenaConfigModel.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "TeamArenaConfigModel.json: TeamLeaderboardRewards[2].CurrencyType",
+      "type": "",
+      "value": "1",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/TeamArenaConfigModel.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "TeamArenaConfigModel.json: TeamLeaderboardRewards[2].Amount",
+      "type": "",
+      "value": "500",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/TeamArenaConfigModel.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "TeamArenaConfigModel.json: TeamLeaderboardRewardsWithCollection[0].CurrencyType",
+      "type": "",
+      "value": "1",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/TeamArenaConfigModel.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "TeamArenaConfigModel.json: TeamLeaderboardRewardsWithCollection[0].Amount",
+      "type": "",
+      "value": "2000",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/TeamArenaConfigModel.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "TeamArenaConfigModel.json: TeamLeaderboardRewardsWithCollection[1].CurrencyType",
+      "type": "",
+      "value": "1",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/TeamArenaConfigModel.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "TeamArenaConfigModel.json: TeamLeaderboardRewardsWithCollection[1].Amount",
+      "type": "",
+      "value": "1000",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/TeamArenaConfigModel.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "TeamArenaConfigModel.json: TeamLeaderboardRewardsWithCollection[2].CurrencyType",
+      "type": "",
+      "value": "1",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/TeamArenaConfigModel.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "TeamArenaConfigModel.json: TeamLeaderboardRewardsWithCollection[2].Amount",
+      "type": "",
+      "value": "500",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/TeamArenaConfigModel.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "server cache (historical)",
+      "key": "TeamArenaConfigModel (live) = default?",
+      "type": "",
+      "value": "34/159 key trùng default, 125 key khác/thêm",
+      "meaning": "Đối chiếu config server thật (CachedRemoteConfigs) với TeamArenaConfigModel.json",
+      "where": "Configs/CachedRemoteConfigs + Firebase RC template 3197 — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server cache (historical)",
+      "key": "TeamArenaConfigModel: isEnabled",
+      "type": "",
+      "value": "true",
+      "meaning": "server ghi đè (default = false)",
+      "where": "Configs/CachedRemoteConfigs + Firebase RC template 3197 — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server cache (historical)",
+      "key": "TeamArenaConfigModel: tournamentType",
+      "type": "",
+      "value": "4",
+      "meaning": "server ghi đè (default = 1)",
+      "where": "Configs/CachedRemoteConfigs + Firebase RC template 3197 — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server cache (historical)",
+      "key": "TeamArenaConfigModel: steps[0].requiredProgress",
+      "type": "",
+      "value": "1",
+      "meaning": "server ghi đè (default = 10)",
+      "where": "Configs/CachedRemoteConfigs + Firebase RC template 3197 — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server cache (historical)",
+      "key": "TeamArenaConfigModel: steps[0].rewardModel.amount",
+      "type": "",
+      "value": "0",
+      "meaning": "server-only (không có trong default)",
+      "where": "Configs/CachedRemoteConfigs + Firebase RC template 3197 — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server cache (historical)",
+      "key": "TeamArenaConfigModel: steps[0].rewardModel.chestType",
+      "type": "",
+      "value": "0",
+      "meaning": "server-only (không có trong default)",
+      "where": "Configs/CachedRemoteConfigs + Firebase RC template 3197 — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server cache (historical)",
+      "key": "TeamArenaConfigModel: steps[0].rewardModel.collectionPackType",
+      "type": "",
+      "value": "0",
+      "meaning": "server-only (không có trong default)",
+      "where": "Configs/CachedRemoteConfigs + Firebase RC template 3197 — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server cache (historical)",
+      "key": "TeamArenaConfigModel: steps[1].requiredProgress",
+      "type": "",
+      "value": "4",
+      "meaning": "server ghi đè (default = 15)",
+      "where": "Configs/CachedRemoteConfigs + Firebase RC template 3197 — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server cache (historical)",
+      "key": "TeamArenaConfigModel: steps[1].rewardModel.currencyType",
+      "type": "",
+      "value": "4",
+      "meaning": "server ghi đè (default = 5)",
+      "where": "Configs/CachedRemoteConfigs + Firebase RC template 3197 — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server cache (historical)",
+      "key": "TeamArenaConfigModel: steps[1].rewardModel.timeSpan",
+      "type": "",
+      "value": "00:00:00",
+      "meaning": "server-only (không có trong default)",
+      "where": "Configs/CachedRemoteConfigs + Firebase RC template 3197 — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server cache (historical)",
+      "key": "TeamArenaConfigModel: steps[1].rewardModel.chestType",
+      "type": "",
+      "value": "0",
+      "meaning": "server-only (không có trong default)",
+      "where": "Configs/CachedRemoteConfigs + Firebase RC template 3197 — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server cache (historical)",
+      "key": "TeamArenaConfigModel: steps[1].rewardModel.collectionPackType",
+      "type": "",
+      "value": "0",
+      "meaning": "server-only (không có trong default)",
+      "where": "Configs/CachedRemoteConfigs + Firebase RC template 3197 — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server cache (historical)",
+      "key": "TeamArenaConfigModel: steps[2].requiredProgress",
+      "type": "",
+      "value": "8",
+      "meaning": "server ghi đè (default = 20)",
+      "where": "Configs/CachedRemoteConfigs + Firebase RC template 3197 — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server cache (historical)",
+      "key": "TeamArenaConfigModel: steps[2].rewardModel.currencyType",
+      "type": "",
+      "value": "5",
+      "meaning": "server ghi đè (default = 4)",
+      "where": "Configs/CachedRemoteConfigs + Firebase RC template 3197 — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server cache (historical)",
+      "key": "TeamArenaConfigModel: steps[2].rewardModel.timeSpan",
+      "type": "",
+      "value": "00:00:00",
+      "meaning": "server-only (không có trong default)",
+      "where": "Configs/CachedRemoteConfigs + Firebase RC template 3197 — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server cache (historical)",
+      "key": "TeamArenaConfigModel: steps[2].rewardModel.chestType",
+      "type": "",
+      "value": "0",
+      "meaning": "server-only (không có trong default)",
+      "where": "Configs/CachedRemoteConfigs + Firebase RC template 3197 — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server cache (historical)",
+      "key": "TeamArenaConfigModel: steps[2].rewardModel.collectionPackType",
+      "type": "",
+      "value": "0",
+      "meaning": "server-only (không có trong default)",
+      "where": "Configs/CachedRemoteConfigs + Firebase RC template 3197 — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server cache (historical)",
+      "key": "TeamArenaConfigModel: steps[3].requiredProgress",
+      "type": "",
+      "value": "10",
+      "meaning": "server ghi đè (default = 25)",
+      "where": "Configs/CachedRemoteConfigs + Firebase RC template 3197 — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server cache (historical)",
+      "key": "TeamArenaConfigModel: steps[3].rewardModel.currencyType",
+      "type": "",
+      "value": "2",
+      "meaning": "server ghi đè (default = 1)",
+      "where": "Configs/CachedRemoteConfigs + Firebase RC template 3197 — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server cache (historical)",
+      "key": "TeamArenaConfigModel: steps[3].rewardModel.amount",
+      "type": "",
+      "value": "0",
+      "meaning": "server ghi đè (default = 100)",
+      "where": "Configs/CachedRemoteConfigs + Firebase RC template 3197 — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server cache (historical)",
+      "key": "TeamArenaConfigModel: steps[3].rewardModel.timeSpan",
+      "type": "",
+      "value": "00:30:00",
+      "meaning": "server-only (không có trong default)",
+      "where": "Configs/CachedRemoteConfigs + Firebase RC template 3197 — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server cache (historical)",
+      "key": "TeamArenaConfigModel: steps[3].rewardModel.chestType",
+      "type": "",
+      "value": "0",
+      "meaning": "server-only (không có trong default)",
+      "where": "Configs/CachedRemoteConfigs + Firebase RC template 3197 — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server cache (historical)",
+      "key": "TeamArenaConfigModel: steps[3].rewardModel.collectionPackType",
+      "type": "",
+      "value": "0",
+      "meaning": "server-only (không có trong default)",
+      "where": "Configs/CachedRemoteConfigs + Firebase RC template 3197 — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server cache (historical)",
+      "key": "TeamArenaConfigModel: steps[4].requiredProgress",
+      "type": "",
+      "value": "15",
+      "meaning": "server ghi đè (default = 30)",
+      "where": "Configs/CachedRemoteConfigs + Firebase RC template 3197 — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server cache (historical)",
+      "key": "TeamArenaConfigModel: steps[4].rewardModel.currencyType",
+      "type": "",
+      "value": "1",
+      "meaning": "server ghi đè (default = 2)",
+      "where": "Configs/CachedRemoteConfigs + Firebase RC template 3197 — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server cache (historical)",
+      "key": "TeamArenaConfigModel: steps[4].rewardModel.amount",
+      "type": "",
+      "value": "100",
+      "meaning": "server-only (không có trong default)",
+      "where": "Configs/CachedRemoteConfigs + Firebase RC template 3197 — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server cache (historical)",
+      "key": "TeamArenaConfigModel: steps[4].rewardModel.timeSpan",
+      "type": "",
+      "value": "00:00:00",
+      "meaning": "server ghi đè (default = 00:30:00)",
+      "where": "Configs/CachedRemoteConfigs + Firebase RC template 3197 — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server cache (historical)",
+      "key": "TeamArenaConfigModel: steps[4].rewardModel.chestType",
+      "type": "",
+      "value": "0",
+      "meaning": "server-only (không có trong default)",
+      "where": "Configs/CachedRemoteConfigs + Firebase RC template 3197 — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server cache (historical)",
+      "key": "TeamArenaConfigModel: steps[4].rewardModel.collectionPackType",
+      "type": "",
+      "value": "0",
+      "meaning": "server-only (không có trong default)",
+      "where": "Configs/CachedRemoteConfigs + Firebase RC template 3197 — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server cache (historical)",
+      "key": "TeamArenaConfigModel: steps[5].requiredProgress",
+      "type": "",
+      "value": "10",
+      "meaning": "server ghi đè (default = 35)",
+      "where": "Configs/CachedRemoteConfigs + Firebase RC template 3197 — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server cache (historical)",
+      "key": "TeamArenaConfigModel: steps[5].rewardModel.timeSpan",
+      "type": "",
+      "value": "00:00:00",
+      "meaning": "server-only (không có trong default)",
+      "where": "Configs/CachedRemoteConfigs + Firebase RC template 3197 — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server cache (historical)",
+      "key": "TeamArenaConfigModel: steps[5].rewardModel.chestType",
+      "type": "",
+      "value": "0",
+      "meaning": "server-only (không có trong default)",
+      "where": "Configs/CachedRemoteConfigs + Firebase RC template 3197 — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server cache (historical)",
+      "key": "TeamArenaConfigModel: steps[5].rewardModel.collectionPackType",
+      "type": "",
+      "value": "0",
+      "meaning": "server-only (không có trong default)",
+      "where": "Configs/CachedRemoteConfigs + Firebase RC template 3197 — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server cache (historical)",
+      "key": "TeamArenaConfigModel: steps[6].requiredProgress",
+      "type": "",
+      "value": "8",
+      "meaning": "server ghi đè (default = 40)",
+      "where": "Configs/CachedRemoteConfigs + Firebase RC template 3197 — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server cache (historical)",
+      "key": "TeamArenaConfigModel: steps[6].rewardModel.timeSpan",
+      "type": "",
+      "value": "00:00:00",
+      "meaning": "server-only (không có trong default)",
+      "where": "Configs/CachedRemoteConfigs + Firebase RC template 3197 — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server cache (historical)",
+      "key": "TeamArenaConfigModel: steps[6].rewardModel.chestType",
+      "type": "",
+      "value": "0",
+      "meaning": "server-only (không có trong default)",
+      "where": "Configs/CachedRemoteConfigs + Firebase RC template 3197 — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server cache (historical)",
+      "key": "TeamArenaConfigModel: steps[6].rewardModel.collectionPackType",
+      "type": "",
+      "value": "0",
+      "meaning": "server-only (không có trong default)",
+      "where": "Configs/CachedRemoteConfigs + Firebase RC template 3197 — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server cache (historical)",
+      "key": "TeamArenaConfigModel: steps[7].requiredProgress",
+      "type": "",
+      "value": "12",
+      "meaning": "server ghi đè (default = 50)",
+      "where": "Configs/CachedRemoteConfigs + Firebase RC template 3197 — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server cache (historical)",
+      "key": "TeamArenaConfigModel: steps[7].rewardModel.currencyType",
+      "type": "",
+      "value": "2",
+      "meaning": "server ghi đè (default = 1)",
+      "where": "Configs/CachedRemoteConfigs + Firebase RC template 3197 — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server cache (historical)",
+      "key": "TeamArenaConfigModel: steps[7].rewardModel.amount",
+      "type": "",
+      "value": "0",
+      "meaning": "server ghi đè (default = 200)",
+      "where": "Configs/CachedRemoteConfigs + Firebase RC template 3197 — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server cache (historical)",
+      "key": "TeamArenaConfigModel: steps[7].rewardModel.timeSpan",
+      "type": "",
+      "value": "00:30:00",
+      "meaning": "server-only (không có trong default)",
+      "where": "Configs/CachedRemoteConfigs + Firebase RC template 3197 — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server cache (historical)",
+      "key": "TeamArenaConfigModel: steps[7].rewardModel.chestType",
+      "type": "",
+      "value": "0",
+      "meaning": "server-only (không có trong default)",
+      "where": "Configs/CachedRemoteConfigs + Firebase RC template 3197 — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server cache (historical)",
+      "key": "TeamArenaConfigModel: steps[7].rewardModel.collectionPackType",
+      "type": "",
+      "value": "0",
+      "meaning": "server-only (không có trong default)",
+      "where": "Configs/CachedRemoteConfigs + Firebase RC template 3197 — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server cache (historical)",
+      "key": "TeamArenaConfigModel: steps[8].requiredProgress",
+      "type": "",
+      "value": "25",
+      "meaning": "server ghi đè (default = 70)",
+      "where": "Configs/CachedRemoteConfigs + Firebase RC template 3197 — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server cache (historical)",
+      "key": "TeamArenaConfigModel: steps[8].rewardModel.currencyType",
+      "type": "",
+      "value": "4",
+      "meaning": "server ghi đè (default = 6)",
+      "where": "Configs/CachedRemoteConfigs + Firebase RC template 3197 — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server cache (historical)",
+      "key": "TeamArenaConfigModel: steps[8].rewardModel.timeSpan",
+      "type": "",
+      "value": "00:00:00",
+      "meaning": "server-only (không có trong default)",
+      "where": "Configs/CachedRemoteConfigs + Firebase RC template 3197 — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server cache (historical)",
+      "key": "TeamArenaConfigModel: steps[8].rewardModel.chestType",
+      "type": "",
+      "value": "0",
+      "meaning": "server-only (không có trong default)",
+      "where": "Configs/CachedRemoteConfigs + Firebase RC template 3197 — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server cache (historical)",
+      "key": "TeamArenaConfigModel: steps[8].rewardModel.collectionPackType",
+      "type": "",
+      "value": "0",
+      "meaning": "server-only (không có trong default)",
+      "where": "Configs/CachedRemoteConfigs + Firebase RC template 3197 — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server cache (historical)",
+      "key": "TeamArenaConfigModel: steps[9].requiredProgress",
+      "type": "",
+      "value": "40",
+      "meaning": "server ghi đè (default = 100)",
+      "where": "Configs/CachedRemoteConfigs + Firebase RC template 3197 — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server cache (historical)",
+      "key": "TeamArenaConfigModel: steps[9].rewardModel.amount",
+      "type": "",
+      "value": "200",
+      "meaning": "server ghi đè (default = 250)",
+      "where": "Configs/CachedRemoteConfigs + Firebase RC template 3197 — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server cache (historical)",
+      "key": "TeamArenaConfigModel: steps[9].rewardModel.timeSpan",
+      "type": "",
+      "value": "00:00:00",
+      "meaning": "server-only (không có trong default)",
+      "where": "Configs/CachedRemoteConfigs + Firebase RC template 3197 — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server cache (historical)",
+      "key": "TeamArenaConfigModel: steps[9].rewardModel.chestType",
+      "type": "",
+      "value": "0",
+      "meaning": "server-only (không có trong default)",
+      "where": "Configs/CachedRemoteConfigs + Firebase RC template 3197 — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server cache (historical)",
+      "key": "TeamArenaConfigModel: steps[9].rewardModel.collectionPackType",
+      "type": "",
+      "value": "0",
+      "meaning": "server-only (không có trong default)",
+      "where": "Configs/CachedRemoteConfigs + Firebase RC template 3197 — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server cache (historical)",
+      "key": "TeamArenaConfigModel: stepsWithCollection[0].requiredProgress",
+      "type": "",
+      "value": "1",
+      "meaning": "server ghi đè (default = 10)",
+      "where": "Configs/CachedRemoteConfigs + Firebase RC template 3197 — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server cache (historical)",
+      "key": "TeamArenaConfigModel: stepsWithCollection[0].rewardModel.amount",
+      "type": "",
+      "value": "0",
+      "meaning": "server-only (không có trong default)",
+      "where": "Configs/CachedRemoteConfigs + Firebase RC template 3197 — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server cache (historical)",
+      "key": "TeamArenaConfigModel: stepsWithCollection[0].rewardModel.chestType",
+      "type": "",
+      "value": "0",
+      "meaning": "server-only (không có trong default)",
+      "where": "Configs/CachedRemoteConfigs + Firebase RC template 3197 — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server cache (historical)",
+      "key": "TeamArenaConfigModel: stepsWithCollection[0].rewardModel.collectionPackType",
+      "type": "",
+      "value": "0",
+      "meaning": "server-only (không có trong default)",
+      "where": "Configs/CachedRemoteConfigs + Firebase RC template 3197 — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server cache (historical)",
+      "key": "TeamArenaConfigModel: stepsWithCollection[1].requiredProgress",
+      "type": "",
+      "value": "4",
+      "meaning": "server ghi đè (default = 15)",
+      "where": "Configs/CachedRemoteConfigs + Firebase RC template 3197 — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server cache (historical)",
+      "key": "TeamArenaConfigModel: stepsWithCollection[1].rewardModel.currencyType",
+      "type": "",
+      "value": "4",
+      "meaning": "server ghi đè (default = 14)",
+      "where": "Configs/CachedRemoteConfigs + Firebase RC template 3197 — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server cache (historical)",
+      "key": "TeamArenaConfigModel: stepsWithCollection[1].rewardModel.timeSpan",
+      "type": "",
+      "value": "00:00:00",
+      "meaning": "server-only (không có trong default)",
+      "where": "Configs/CachedRemoteConfigs + Firebase RC template 3197 — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server cache (historical)",
+      "key": "TeamArenaConfigModel: stepsWithCollection[1].rewardModel.chestType",
+      "type": "",
+      "value": "0",
+      "meaning": "server-only (không có trong default)",
+      "where": "Configs/CachedRemoteConfigs + Firebase RC template 3197 — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server cache (historical)",
+      "key": "TeamArenaConfigModel: stepsWithCollection[1].rewardModel.collectionPackType",
+      "type": "",
+      "value": "0",
+      "meaning": "server ghi đè (default = 2)",
+      "where": "Configs/CachedRemoteConfigs + Firebase RC template 3197 — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server cache (historical)",
+      "key": "TeamArenaConfigModel: stepsWithCollection[2].requiredProgress",
+      "type": "",
+      "value": "8",
+      "meaning": "server ghi đè (default = 20)",
+      "where": "Configs/CachedRemoteConfigs + Firebase RC template 3197 — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server cache (historical)",
+      "key": "TeamArenaConfigModel: stepsWithCollection[2].rewardModel.currencyType",
+      "type": "",
+      "value": "14",
+      "meaning": "server ghi đè (default = 4)",
+      "where": "Configs/CachedRemoteConfigs + Firebase RC template 3197 — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server cache (historical)",
+      "key": "TeamArenaConfigModel: stepsWithCollection[2].rewardModel.timeSpan",
+      "type": "",
+      "value": "00:00:00",
+      "meaning": "server-only (không có trong default)",
+      "where": "Configs/CachedRemoteConfigs + Firebase RC template 3197 — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server cache (historical)",
+      "key": "TeamArenaConfigModel: stepsWithCollection[2].rewardModel.chestType",
+      "type": "",
+      "value": "0",
+      "meaning": "server-only (không có trong default)",
+      "where": "Configs/CachedRemoteConfigs + Firebase RC template 3197 — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server cache (historical)",
+      "key": "TeamArenaConfigModel: stepsWithCollection[2].rewardModel.collectionPackType",
+      "type": "",
+      "value": "1",
+      "meaning": "server-only (không có trong default)",
+      "where": "Configs/CachedRemoteConfigs + Firebase RC template 3197 — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server cache (historical)",
+      "key": "TeamArenaConfigModel: stepsWithCollection[3].requiredProgress",
+      "type": "",
+      "value": "10",
+      "meaning": "server ghi đè (default = 25)",
+      "where": "Configs/CachedRemoteConfigs + Firebase RC template 3197 — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server cache (historical)",
+      "key": "TeamArenaConfigModel: stepsWithCollection[3].rewardModel.currencyType",
+      "type": "",
+      "value": "2",
+      "meaning": "server ghi đè (default = 1)",
+      "where": "Configs/CachedRemoteConfigs + Firebase RC template 3197 — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server cache (historical)",
+      "key": "TeamArenaConfigModel: stepsWithCollection[3].rewardModel.amount",
+      "type": "",
+      "value": "0",
+      "meaning": "server ghi đè (default = 100)",
+      "where": "Configs/CachedRemoteConfigs + Firebase RC template 3197 — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server cache (historical)",
+      "key": "TeamArenaConfigModel: stepsWithCollection[3].rewardModel.timeSpan",
+      "type": "",
+      "value": "00:30:00",
+      "meaning": "server-only (không có trong default)",
+      "where": "Configs/CachedRemoteConfigs + Firebase RC template 3197 — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server cache (historical)",
+      "key": "TeamArenaConfigModel: stepsWithCollection[3].rewardModel.chestType",
+      "type": "",
+      "value": "0",
+      "meaning": "server-only (không có trong default)",
+      "where": "Configs/CachedRemoteConfigs + Firebase RC template 3197 — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server cache (historical)",
+      "key": "TeamArenaConfigModel: stepsWithCollection[3].rewardModel.collectionPackType",
+      "type": "",
+      "value": "0",
+      "meaning": "server-only (không có trong default)",
+      "where": "Configs/CachedRemoteConfigs + Firebase RC template 3197 — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server cache (historical)",
+      "key": "TeamArenaConfigModel: stepsWithCollection[4].requiredProgress",
+      "type": "",
+      "value": "15",
+      "meaning": "server ghi đè (default = 30)",
+      "where": "Configs/CachedRemoteConfigs + Firebase RC template 3197 — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server cache (historical)",
+      "key": "TeamArenaConfigModel: stepsWithCollection[4].rewardModel.currencyType",
+      "type": "",
+      "value": "1",
+      "meaning": "server ghi đè (default = 2)",
+      "where": "Configs/CachedRemoteConfigs + Firebase RC template 3197 — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server cache (historical)",
+      "key": "TeamArenaConfigModel: stepsWithCollection[4].rewardModel.amount",
+      "type": "",
+      "value": "100",
+      "meaning": "server-only (không có trong default)",
+      "where": "Configs/CachedRemoteConfigs + Firebase RC template 3197 — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server cache (historical)",
+      "key": "TeamArenaConfigModel: stepsWithCollection[4].rewardModel.timeSpan",
+      "type": "",
+      "value": "00:00:00",
+      "meaning": "server ghi đè (default = 00:30:00)",
+      "where": "Configs/CachedRemoteConfigs + Firebase RC template 3197 — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server cache (historical)",
+      "key": "TeamArenaConfigModel: stepsWithCollection[4].rewardModel.chestType",
+      "type": "",
+      "value": "0",
+      "meaning": "server-only (không có trong default)",
+      "where": "Configs/CachedRemoteConfigs + Firebase RC template 3197 — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server cache (historical)",
+      "key": "TeamArenaConfigModel: stepsWithCollection[4].rewardModel.collectionPackType",
+      "type": "",
+      "value": "0",
+      "meaning": "server-only (không có trong default)",
+      "where": "Configs/CachedRemoteConfigs + Firebase RC template 3197 — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server cache (historical)",
+      "key": "TeamArenaConfigModel: stepsWithCollection[5].requiredProgress",
+      "type": "",
+      "value": "10",
+      "meaning": "server ghi đè (default = 35)",
+      "where": "Configs/CachedRemoteConfigs + Firebase RC template 3197 — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server cache (historical)",
+      "key": "TeamArenaConfigModel: stepsWithCollection[5].rewardModel.timeSpan",
+      "type": "",
+      "value": "00:00:00",
+      "meaning": "server-only (không có trong default)",
+      "where": "Configs/CachedRemoteConfigs + Firebase RC template 3197 — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server cache (historical)",
+      "key": "TeamArenaConfigModel: stepsWithCollection[5].rewardModel.chestType",
+      "type": "",
+      "value": "0",
+      "meaning": "server-only (không có trong default)",
+      "where": "Configs/CachedRemoteConfigs + Firebase RC template 3197 — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server cache (historical)",
+      "key": "TeamArenaConfigModel: stepsWithCollection[5].rewardModel.collectionPackType",
+      "type": "",
+      "value": "2",
+      "meaning": "server ghi đè (default = 3)",
+      "where": "Configs/CachedRemoteConfigs + Firebase RC template 3197 — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server cache (historical)",
+      "key": "TeamArenaConfigModel: stepsWithCollection[6].requiredProgress",
+      "type": "",
+      "value": "8",
+      "meaning": "server ghi đè (default = 40)",
+      "where": "Configs/CachedRemoteConfigs + Firebase RC template 3197 — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server cache (historical)",
+      "key": "TeamArenaConfigModel: stepsWithCollection[6].rewardModel.timeSpan",
+      "type": "",
+      "value": "00:00:00",
+      "meaning": "server-only (không có trong default)",
+      "where": "Configs/CachedRemoteConfigs + Firebase RC template 3197 — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server cache (historical)",
+      "key": "TeamArenaConfigModel: stepsWithCollection[6].rewardModel.chestType",
+      "type": "",
+      "value": "0",
+      "meaning": "server-only (không có trong default)",
+      "where": "Configs/CachedRemoteConfigs + Firebase RC template 3197 — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server cache (historical)",
+      "key": "TeamArenaConfigModel: stepsWithCollection[6].rewardModel.collectionPackType",
+      "type": "",
+      "value": "0",
+      "meaning": "server-only (không có trong default)",
+      "where": "Configs/CachedRemoteConfigs + Firebase RC template 3197 — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server cache (historical)",
+      "key": "TeamArenaConfigModel: stepsWithCollection[7].requiredProgress",
+      "type": "",
+      "value": "12",
+      "meaning": "server ghi đè (default = 50)",
+      "where": "Configs/CachedRemoteConfigs + Firebase RC template 3197 — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server cache (historical)",
+      "key": "TeamArenaConfigModel: stepsWithCollection[7].rewardModel.currencyType",
+      "type": "",
+      "value": "2",
+      "meaning": "server ghi đè (default = 1)",
+      "where": "Configs/CachedRemoteConfigs + Firebase RC template 3197 — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server cache (historical)",
+      "key": "TeamArenaConfigModel: stepsWithCollection[7].rewardModel.amount",
+      "type": "",
+      "value": "0",
+      "meaning": "server ghi đè (default = 200)",
+      "where": "Configs/CachedRemoteConfigs + Firebase RC template 3197 — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server cache (historical)",
+      "key": "TeamArenaConfigModel: stepsWithCollection[7].rewardModel.timeSpan",
+      "type": "",
+      "value": "00:30:00",
+      "meaning": "server-only (không có trong default)",
+      "where": "Configs/CachedRemoteConfigs + Firebase RC template 3197 — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server cache (historical)",
+      "key": "TeamArenaConfigModel: stepsWithCollection[7].rewardModel.chestType",
+      "type": "",
+      "value": "0",
+      "meaning": "server-only (không có trong default)",
+      "where": "Configs/CachedRemoteConfigs + Firebase RC template 3197 — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server cache (historical)",
+      "key": "TeamArenaConfigModel: stepsWithCollection[7].rewardModel.collectionPackType",
+      "type": "",
+      "value": "0",
+      "meaning": "server-only (không có trong default)",
+      "where": "Configs/CachedRemoteConfigs + Firebase RC template 3197 — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server cache (historical)",
+      "key": "TeamArenaConfigModel: stepsWithCollection[8].requiredProgress",
+      "type": "",
+      "value": "25",
+      "meaning": "server ghi đè (default = 70)",
+      "where": "Configs/CachedRemoteConfigs + Firebase RC template 3197 — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server cache (historical)",
+      "key": "TeamArenaConfigModel: stepsWithCollection[8].rewardModel.currencyType",
+      "type": "",
+      "value": "14",
+      "meaning": "server ghi đè (default = 6)",
+      "where": "Configs/CachedRemoteConfigs + Firebase RC template 3197 — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server cache (historical)",
+      "key": "TeamArenaConfigModel: stepsWithCollection[8].rewardModel.timeSpan",
+      "type": "",
+      "value": "00:00:00",
+      "meaning": "server-only (không có trong default)",
+      "where": "Configs/CachedRemoteConfigs + Firebase RC template 3197 — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server cache (historical)",
+      "key": "TeamArenaConfigModel: stepsWithCollection[8].rewardModel.chestType",
+      "type": "",
+      "value": "0",
+      "meaning": "server-only (không có trong default)",
+      "where": "Configs/CachedRemoteConfigs + Firebase RC template 3197 — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server cache (historical)",
+      "key": "TeamArenaConfigModel: stepsWithCollection[8].rewardModel.collectionPackType",
+      "type": "",
+      "value": "3",
+      "meaning": "server-only (không có trong default)",
+      "where": "Configs/CachedRemoteConfigs + Firebase RC template 3197 — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server cache (historical)",
+      "key": "TeamArenaConfigModel: stepsWithCollection[9].requiredProgress",
+      "type": "",
+      "value": "40",
+      "meaning": "server ghi đè (default = 100)",
+      "where": "Configs/CachedRemoteConfigs + Firebase RC template 3197 — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server cache (historical)",
+      "key": "TeamArenaConfigModel: stepsWithCollection[9].rewardModel.currencyType",
+      "type": "",
+      "value": "1",
+      "meaning": "server ghi đè (default = 14)",
+      "where": "Configs/CachedRemoteConfigs + Firebase RC template 3197 — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server cache (historical)",
+      "key": "TeamArenaConfigModel: stepsWithCollection[9].rewardModel.amount",
+      "type": "",
+      "value": "200",
+      "meaning": "server ghi đè (default = 1)",
+      "where": "Configs/CachedRemoteConfigs + Firebase RC template 3197 — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server cache (historical)",
+      "key": "TeamArenaConfigModel: stepsWithCollection[9].rewardModel.timeSpan",
+      "type": "",
+      "value": "00:00:00",
+      "meaning": "server-only (không có trong default)",
+      "where": "Configs/CachedRemoteConfigs + Firebase RC template 3197 — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server cache (historical)",
+      "key": "TeamArenaConfigModel: stepsWithCollection[9].rewardModel.chestType",
+      "type": "",
+      "value": "0",
+      "meaning": "server-only (không có trong default)",
+      "where": "Configs/CachedRemoteConfigs + Firebase RC template 3197 — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server cache (historical)",
+      "key": "TeamArenaConfigModel: stepsWithCollection[9].rewardModel.collectionPackType",
+      "type": "",
+      "value": "0",
+      "meaning": "server ghi đè (default = 4)",
+      "where": "Configs/CachedRemoteConfigs + Firebase RC template 3197 — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server cache (historical)",
+      "key": "TeamArenaConfigModel: leaderboardRewards",
+      "type": "",
+      "value": "[]",
+      "meaning": "server-only (không có trong default)",
+      "where": "Configs/CachedRemoteConfigs + Firebase RC template 3197 — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server cache (historical)",
+      "key": "TeamArenaConfigModel: leaderboardRewardsWithCollection",
+      "type": "",
+      "value": "[]",
+      "meaning": "server-only (không có trong default)",
+      "where": "Configs/CachedRemoteConfigs + Firebase RC template 3197 — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server cache (historical)",
+      "key": "TeamArenaConfigModel: teamLeaderboardRewards[0].amount",
+      "type": "",
+      "value": "1500",
+      "meaning": "server ghi đè (default = 2000)",
+      "where": "Configs/CachedRemoteConfigs + Firebase RC template 3197 — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server cache (historical)",
+      "key": "TeamArenaConfigModel: teamLeaderboardRewards[0].timeSpan",
+      "type": "",
+      "value": "00:00:00",
+      "meaning": "server-only (không có trong default)",
+      "where": "Configs/CachedRemoteConfigs + Firebase RC template 3197 — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server cache (historical)",
+      "key": "TeamArenaConfigModel: teamLeaderboardRewards[0].chestType",
+      "type": "",
+      "value": "0",
+      "meaning": "server-only (không có trong default)",
+      "where": "Configs/CachedRemoteConfigs + Firebase RC template 3197 — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server cache (historical)",
+      "key": "TeamArenaConfigModel: teamLeaderboardRewards[0].collectionPackType",
+      "type": "",
+      "value": "0",
+      "meaning": "server-only (không có trong default)",
+      "where": "Configs/CachedRemoteConfigs + Firebase RC template 3197 — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server cache (historical)",
+      "key": "TeamArenaConfigModel: teamLeaderboardRewards[1].timeSpan",
+      "type": "",
+      "value": "00:00:00",
+      "meaning": "server-only (không có trong default)",
+      "where": "Configs/CachedRemoteConfigs + Firebase RC template 3197 — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server cache (historical)",
+      "key": "TeamArenaConfigModel: teamLeaderboardRewards[1].chestType",
+      "type": "",
+      "value": "0",
+      "meaning": "server-only (không có trong default)",
+      "where": "Configs/CachedRemoteConfigs + Firebase RC template 3197 — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server cache (historical)",
+      "key": "TeamArenaConfigModel: teamLeaderboardRewards[1].collectionPackType",
+      "type": "",
+      "value": "0",
+      "meaning": "server-only (không có trong default)",
+      "where": "Configs/CachedRemoteConfigs + Firebase RC template 3197 — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server cache (historical)",
+      "key": "TeamArenaConfigModel: teamLeaderboardRewards[2].timeSpan",
+      "type": "",
+      "value": "00:00:00",
+      "meaning": "server-only (không có trong default)",
+      "where": "Configs/CachedRemoteConfigs + Firebase RC template 3197 — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server cache (historical)",
+      "key": "TeamArenaConfigModel: teamLeaderboardRewards[2].chestType",
+      "type": "",
+      "value": "0",
+      "meaning": "server-only (không có trong default)",
+      "where": "Configs/CachedRemoteConfigs + Firebase RC template 3197 — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server cache (historical)",
+      "key": "TeamArenaConfigModel: teamLeaderboardRewards[2].collectionPackType",
+      "type": "",
+      "value": "0",
+      "meaning": "server-only (không có trong default)",
+      "where": "Configs/CachedRemoteConfigs + Firebase RC template 3197 — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server cache (historical)",
+      "key": "TeamArenaConfigModel: teamLeaderboardRewardsWithCollection[0].amount",
+      "type": "",
+      "value": "1500",
+      "meaning": "server ghi đè (default = 2000)",
+      "where": "Configs/CachedRemoteConfigs + Firebase RC template 3197 — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server cache (historical)",
+      "key": "TeamArenaConfigModel: teamLeaderboardRewardsWithCollection[0].timeSpan",
+      "type": "",
+      "value": "00:00:00",
+      "meaning": "server-only (không có trong default)",
+      "where": "Configs/CachedRemoteConfigs + Firebase RC template 3197 — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server cache (historical)",
+      "key": "TeamArenaConfigModel: teamLeaderboardRewardsWithCollection[0].chestType",
+      "type": "",
+      "value": "0",
+      "meaning": "server-only (không có trong default)",
+      "where": "Configs/CachedRemoteConfigs + Firebase RC template 3197 — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server cache (historical)",
+      "key": "TeamArenaConfigModel: teamLeaderboardRewardsWithCollection[0].collectionPackType",
+      "type": "",
+      "value": "0",
+      "meaning": "server-only (không có trong default)",
+      "where": "Configs/CachedRemoteConfigs + Firebase RC template 3197 — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server cache (historical)",
+      "key": "TeamArenaConfigModel: teamLeaderboardRewardsWithCollection[1].timeSpan",
+      "type": "",
+      "value": "00:00:00",
+      "meaning": "server-only (không có trong default)",
+      "where": "Configs/CachedRemoteConfigs + Firebase RC template 3197 — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server cache (historical)",
+      "key": "TeamArenaConfigModel: teamLeaderboardRewardsWithCollection[1].chestType",
+      "type": "",
+      "value": "0",
+      "meaning": "server-only (không có trong default)",
+      "where": "Configs/CachedRemoteConfigs + Firebase RC template 3197 — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server cache (historical)",
+      "key": "TeamArenaConfigModel: teamLeaderboardRewardsWithCollection[1].collectionPackType",
+      "type": "",
+      "value": "0",
+      "meaning": "server-only (không có trong default)",
+      "where": "Configs/CachedRemoteConfigs + Firebase RC template 3197 — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server cache (historical)",
+      "key": "TeamArenaConfigModel: teamLeaderboardRewardsWithCollection[2].timeSpan",
+      "type": "",
+      "value": "00:00:00",
+      "meaning": "server-only (không có trong default)",
+      "where": "Configs/CachedRemoteConfigs + Firebase RC template 3197 — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server cache (historical)",
+      "key": "TeamArenaConfigModel: teamLeaderboardRewardsWithCollection[2].chestType",
+      "type": "",
+      "value": "0",
+      "meaning": "server-only (không có trong default)",
+      "where": "Configs/CachedRemoteConfigs + Firebase RC template 3197 — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server cache (historical)",
+      "key": "TeamArenaConfigModel: teamLeaderboardRewardsWithCollection[2].collectionPackType",
+      "type": "",
+      "value": "0",
+      "meaning": "server-only (không có trong default)",
+      "where": "Configs/CachedRemoteConfigs + Firebase RC template 3197 — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server instance (historical)",
+      "key": "TeamArenaModel (instance)",
+      "type": "",
+      "value": "22 key, xem facts/runtime/event_instances/TeamArenaModel.json",
+      "meaning": "Dữ liệu phiên event đang chạy (ngày, mốc, thưởng, đối thủ)",
+      "where": "PlayerPrefs TeamArenaModel (instance event đang chạy) — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server instance (historical)",
+      "key": "TeamArenaModel: statusCache.startTime",
+      "type": "",
+      "value": "0",
+      "meaning": "",
+      "where": "PlayerPrefs TeamArenaModel (instance event đang chạy) — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server instance (historical)",
+      "key": "TeamArenaModel: statusCache.endTime",
+      "type": "",
+      "value": "0",
+      "meaning": "",
+      "where": "PlayerPrefs TeamArenaModel (instance event đang chạy) — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server instance (historical)",
+      "key": "TeamArenaModel: statusCache.tournamentId",
+      "type": "",
+      "value": "",
+      "meaning": "",
+      "where": "PlayerPrefs TeamArenaModel (instance event đang chạy) — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server instance (historical)",
+      "key": "TeamArenaModel: statusCache.teamId",
+      "type": "",
+      "value": "",
+      "meaning": "",
+      "where": "PlayerPrefs TeamArenaModel (instance event đang chạy) — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server instance (historical)",
+      "key": "TeamArenaModel: statusCache.isJoinWindowEnded",
+      "type": "",
+      "value": "false",
+      "meaning": "",
+      "where": "PlayerPrefs TeamArenaModel (instance event đang chạy) — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server instance (historical)",
+      "key": "TeamArenaModel: statusCache.isFinished",
+      "type": "",
+      "value": "false",
+      "meaning": "",
+      "where": "PlayerPrefs TeamArenaModel (instance event đang chạy) — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server instance (historical)",
+      "key": "TeamArenaModel: statusCache.isJoined",
+      "type": "",
+      "value": "false",
+      "meaning": "",
+      "where": "PlayerPrefs TeamArenaModel (instance event đang chạy) — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server instance (historical)",
+      "key": "TeamArenaModel: tournamentCache.isClaimed",
+      "type": "",
+      "value": "false",
+      "meaning": "",
+      "where": "PlayerPrefs TeamArenaModel (instance event đang chạy) — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server instance (historical)",
+      "key": "TeamArenaModel: tournamentCache.canContribute",
+      "type": "",
+      "value": "false",
+      "meaning": "",
+      "where": "PlayerPrefs TeamArenaModel (instance event đang chạy) — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server instance (historical)",
+      "key": "TeamArenaModel: tournamentCache.previousElo",
+      "type": "",
+      "value": "0",
+      "meaning": "",
+      "where": "PlayerPrefs TeamArenaModel (instance event đang chạy) — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server instance (historical)",
+      "key": "TeamArenaModel: tournamentCache.currentElo",
+      "type": "",
+      "value": "0",
+      "meaning": "",
+      "where": "PlayerPrefs TeamArenaModel (instance event đang chạy) — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server instance (historical)",
+      "key": "TeamArenaModel: tournamentCache.teamRank",
+      "type": "",
+      "value": "0",
+      "meaning": "",
+      "where": "PlayerPrefs TeamArenaModel (instance event đang chạy) — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server instance (historical)",
+      "key": "TeamArenaModel: isEventIntroducedEver",
+      "type": "",
+      "value": "false",
+      "meaning": "",
+      "where": "PlayerPrefs TeamArenaModel (instance event đang chạy) — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server instance (historical)",
+      "key": "TeamArenaModel: isJoinIntroduced",
+      "type": "",
+      "value": "false",
+      "meaning": "",
+      "where": "PlayerPrefs TeamArenaModel (instance event đang chạy) — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server instance (historical)",
+      "key": "TeamArenaModel: infoViewExpanded",
+      "type": "",
+      "value": "true",
+      "meaning": "",
+      "where": "PlayerPrefs TeamArenaModel (instance event đang chạy) — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server instance (historical)",
+      "key": "TeamArenaModel: progressCache.progress",
+      "type": "",
+      "value": "0",
+      "meaning": "",
+      "where": "PlayerPrefs TeamArenaModel (instance event đang chạy) — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server instance (historical)",
+      "key": "TeamArenaModel: progressCache.lastClaimedStep",
+      "type": "",
+      "value": "-1",
+      "meaning": "",
+      "where": "PlayerPrefs TeamArenaModel (instance event đang chạy) — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server instance (historical)",
+      "key": "TeamArenaModel: progressCache.currentStep",
+      "type": "",
+      "value": "0",
+      "meaning": "",
+      "where": "PlayerPrefs TeamArenaModel (instance event đang chạy) — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server instance (historical)",
+      "key": "TeamArenaModel: progressCache.currentProgressInStep",
+      "type": "",
+      "value": "0",
+      "meaning": "",
+      "where": "PlayerPrefs TeamArenaModel (instance event đang chạy) — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server instance (historical)",
+      "key": "TeamArenaModel: progressCache.lastSeenStep",
+      "type": "",
+      "value": "0",
+      "meaning": "",
+      "where": "PlayerPrefs TeamArenaModel (instance event đang chạy) — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server instance (historical)",
+      "key": "TeamArenaModel: progressCache.lastSeenProgressInStep",
+      "type": "",
+      "value": "0",
+      "meaning": "",
+      "where": "PlayerPrefs TeamArenaModel (instance event đang chạy) — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server instance (historical)",
+      "key": "TeamArenaModel: progressCache.lobbyProgressCount",
+      "type": "",
+      "value": "0",
+      "meaning": "",
+      "where": "PlayerPrefs TeamArenaModel (instance event đang chạy) — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "device event cache (observed 2026-11-15)",
+      "key": "TeamArenaModel.statusCache.startTime",
+      "type": "int",
+      "value": "0",
+      "meaning": "Cache instance/progress lịch sử đọc15/11; một mẫu fixture offline, không xác nhận production hoặc mọi rotation.",
+      "where": "facts/runtime/review_20261115/event_instances/TeamArenaModel.json#statusCache.startTime"
+    },
+    {
+      "source": "device event cache (observed 2026-11-15)",
+      "key": "TeamArenaModel.statusCache.endTime",
+      "type": "int",
+      "value": "0",
+      "meaning": "Cache instance/progress lịch sử đọc15/11; một mẫu fixture offline, không xác nhận production hoặc mọi rotation.",
+      "where": "facts/runtime/review_20261115/event_instances/TeamArenaModel.json#statusCache.endTime"
+    },
+    {
+      "source": "device event cache (observed 2026-11-15)",
+      "key": "TeamArenaModel.statusCache.isJoinWindowEnded",
+      "type": "bool",
+      "value": "false",
+      "meaning": "Cache instance/progress lịch sử đọc15/11; một mẫu fixture offline, không xác nhận production hoặc mọi rotation.",
+      "where": "facts/runtime/review_20261115/event_instances/TeamArenaModel.json#statusCache.isJoinWindowEnded"
+    },
+    {
+      "source": "device event cache (observed 2026-11-15)",
+      "key": "TeamArenaModel.statusCache.isFinished",
+      "type": "bool",
+      "value": "false",
+      "meaning": "Cache instance/progress lịch sử đọc15/11; một mẫu fixture offline, không xác nhận production hoặc mọi rotation.",
+      "where": "facts/runtime/review_20261115/event_instances/TeamArenaModel.json#statusCache.isFinished"
+    },
+    {
+      "source": "device event cache (observed 2026-11-15)",
+      "key": "TeamArenaModel.statusCache.isJoined",
+      "type": "bool",
+      "value": "false",
+      "meaning": "Cache instance/progress lịch sử đọc15/11; một mẫu fixture offline, không xác nhận production hoặc mọi rotation.",
+      "where": "facts/runtime/review_20261115/event_instances/TeamArenaModel.json#statusCache.isJoined"
+    },
+    {
+      "source": "device event cache (observed 2026-11-15)",
+      "key": "TeamArenaModel.tournamentCache.isClaimed",
+      "type": "bool",
+      "value": "false",
+      "meaning": "Cache instance/progress lịch sử đọc15/11; một mẫu fixture offline, không xác nhận production hoặc mọi rotation.",
+      "where": "facts/runtime/review_20261115/event_instances/TeamArenaModel.json#tournamentCache.isClaimed"
+    },
+    {
+      "source": "device event cache (observed 2026-11-15)",
+      "key": "TeamArenaModel.tournamentCache.canContribute",
+      "type": "bool",
+      "value": "false",
+      "meaning": "Cache instance/progress lịch sử đọc15/11; một mẫu fixture offline, không xác nhận production hoặc mọi rotation.",
+      "where": "facts/runtime/review_20261115/event_instances/TeamArenaModel.json#tournamentCache.canContribute"
+    },
+    {
+      "source": "device event cache (observed 2026-11-15)",
+      "key": "TeamArenaModel.tournamentCache.previousElo",
+      "type": "int",
+      "value": "0",
+      "meaning": "Cache instance/progress lịch sử đọc15/11; một mẫu fixture offline, không xác nhận production hoặc mọi rotation.",
+      "where": "facts/runtime/review_20261115/event_instances/TeamArenaModel.json#tournamentCache.previousElo"
+    },
+    {
+      "source": "device event cache (observed 2026-11-15)",
+      "key": "TeamArenaModel.tournamentCache.currentElo",
+      "type": "int",
+      "value": "0",
+      "meaning": "Cache instance/progress lịch sử đọc15/11; một mẫu fixture offline, không xác nhận production hoặc mọi rotation.",
+      "where": "facts/runtime/review_20261115/event_instances/TeamArenaModel.json#tournamentCache.currentElo"
+    },
+    {
+      "source": "device event cache (observed 2026-11-15)",
+      "key": "TeamArenaModel.progressCache.progress",
+      "type": "int",
+      "value": "0",
+      "meaning": "Cache instance/progress lịch sử đọc15/11; một mẫu fixture offline, không xác nhận production hoặc mọi rotation.",
+      "where": "facts/runtime/review_20261115/event_instances/TeamArenaModel.json#progressCache.progress"
+    },
+    {
+      "source": "device event cache (observed 2026-11-15)",
+      "key": "TeamArenaModel.progressCache.lastClaimedStep",
+      "type": "int",
+      "value": "-1",
+      "meaning": "Cache instance/progress lịch sử đọc15/11; một mẫu fixture offline, không xác nhận production hoặc mọi rotation.",
+      "where": "facts/runtime/review_20261115/event_instances/TeamArenaModel.json#progressCache.lastClaimedStep"
+    },
+    {
+      "source": "device event cache (observed 2026-11-15)",
+      "key": "TeamArenaModel.progressCache.currentStep",
+      "type": "int",
+      "value": "0",
+      "meaning": "Cache instance/progress lịch sử đọc15/11; một mẫu fixture offline, không xác nhận production hoặc mọi rotation.",
+      "where": "facts/runtime/review_20261115/event_instances/TeamArenaModel.json#progressCache.currentStep"
+    },
+    {
+      "source": "device event cache (observed 2026-11-15)",
+      "key": "TeamArenaModel.progressCache.currentProgressInStep",
+      "type": "int",
+      "value": "0",
+      "meaning": "Cache instance/progress lịch sử đọc15/11; một mẫu fixture offline, không xác nhận production hoặc mọi rotation.",
+      "where": "facts/runtime/review_20261115/event_instances/TeamArenaModel.json#progressCache.currentProgressInStep"
+    },
+    {
+      "source": "device event cache (observed 2026-11-15)",
+      "key": "TeamArenaModel.progressCache.lastSeenStep",
+      "type": "int",
+      "value": "0",
+      "meaning": "Cache instance/progress lịch sử đọc15/11; một mẫu fixture offline, không xác nhận production hoặc mọi rotation.",
+      "where": "facts/runtime/review_20261115/event_instances/TeamArenaModel.json#progressCache.lastSeenStep"
+    },
+    {
+      "source": "device event cache (observed 2026-11-15)",
+      "key": "TeamArenaModel.progressCache.lastSeenProgressInStep",
+      "type": "int",
+      "value": "0",
+      "meaning": "Cache instance/progress lịch sử đọc15/11; một mẫu fixture offline, không xác nhận production hoặc mọi rotation.",
+      "where": "facts/runtime/review_20261115/event_instances/TeamArenaModel.json#progressCache.lastSeenProgressInStep"
+    },
+    {
+      "source": "device event cache (observed 2026-11-15)",
+      "key": "TeamArenaModel.progressCache.lobbyProgressCount",
+      "type": "int",
+      "value": "0",
+      "meaning": "Cache instance/progress lịch sử đọc15/11; một mẫu fixture offline, không xác nhận production hoặc mọi rotation.",
+      "where": "facts/runtime/review_20261115/event_instances/TeamArenaModel.json#progressCache.lobbyProgressCount"
+    }
+  ],
+  "rewards": [
+    {
+      "context": "Thang mốc cá nhân (10 mốc: 10/15/20/25/30/35/40/50/70/100 điểm)",
+      "reward": "Life 15', Shuffle, Undo, 100 Coin, Life 30', Undo, Shuffle, 200 Coin, ExtraBottle, 250 Coin",
+      "evidence": "TeamArenaConfigModel.json Steps; TeamArenaService.GetStepRewards"
+    },
+    {
+      "context": "Thang mốc cá nhân bản Collection",
+      "reward": "Thay mốc 15/35/100 bằng CollectionPack loại 2/3/4",
+      "evidence": "TeamArenaConfigModel.json StepsWithCollection"
+    },
+    {
+      "context": "Top 3 đội",
+      "reward": "2000 / 1000 / 500 Coin",
+      "evidence": "TeamArenaConfigModel.json TeamLeaderboardRewards; TeamArenaDataService.GetTeamLeaderboardRewards"
+    },
+    {
+      "context": "Top 3 người đóng góp trong đội",
+      "reward": "1 ExtraBottle / 1 Shuffle / 1 Undo (bản Collection: CollectionPack loại 3/2/1)",
+      "evidence": "TeamArenaConfigModel.json LeaderboardRewards; TeamArenaDataService.GetLeaderboardRewards"
+    }
+  ],
+  "backend": [
+    {
+      "command": "teamArenaLeaderboard = {base}/v1/get-team-competition",
+      "direction": "client→server",
+      "purpose": "Lấy trạng thái + 2 bảng xếp hạng (TeamArenaRemoteService.FetchEvent)"
+    },
+    {
+      "command": "teamArenaJoin = {base}/v1/join-team-competition",
+      "direction": "client→server",
+      "purpose": "Tham gia sự kiện (JoinEvent)"
+    },
+    {
+      "command": "teamArenaClaim = {base}/v1/claim-team-competition",
+      "direction": "client→server",
+      "purpose": "Nhận thưởng kết thúc (ClaimEvent)"
+    },
+    {
+      "command": "Sync block 'TeamArenaSyncModel'",
+      "direction": "client↔server",
+      "purpose": "Đồng bộ tiến độ và trạng thái tham gia"
+    }
+  ],
+  "ui": [
+    {
+      "element": "Popup sự kiện",
+      "class": "Modules.Contexts.Home.TeamArena.UI.Popups.TeamArenaEventPopup / TeamArenaEventPopupArgs",
+      "purpose": "Bảng xếp hạng đội & thành viên, thang thưởng"
+    },
+    {
+      "element": "Popup tham gia",
+      "class": "TeamArenaJoinPopup / TeamArenaJoinPopupArguments",
+      "purpose": "Mời Join"
+    },
+    {
+      "element": "Popup thông tin",
+      "class": "TeamArenaInfoPopup / TeamArenaInfoPopupArgs",
+      "purpose": "Luật chơi"
+    },
+    {
+      "element": "Thẻ trong chat đội",
+      "class": "TeamArenaInfoView (ITeamChatEventView) / TeamArenaInfoViewModel",
+      "purpose": "Quảng bá trong Teams, có thu/mở"
+    },
+    {
+      "element": "Controller",
+      "class": "TeamArenaEventInProgressController / TeamArenaEventResultController / TeamArenaEventProgressBarController / TeamArenaLeaderboardController",
+      "purpose": "Điều phối các trạng thái popup"
+    },
+    {
+      "element": "Bảng đội",
+      "class": "TeamArenaTeamView / TeamArenaTeamLeaderboardViewAdapter / TeamArenaTeamViewFactory / TeamArenaTeamViewModel",
+      "purpose": "Danh sách đội"
+    },
+    {
+      "element": "Bảng thành viên",
+      "class": "TeamArenaPlayerView / TeamArenaPlayerLeaderboardViewAdapter / TeamArenaPlayerLeaderboardViewFactory / TeamArenaPlayerViewModel",
+      "purpose": "Danh sách đóng góp"
+    },
+    {
+      "element": "Trạng thái rỗng",
+      "class": "TeamArenaLeaderboardEmptyView / TeamArenaEmptyLeaderboardViewModel / TeamArenaLeaderboardNoContributionView / TeamArenaNoContributionViewModel",
+      "purpose": "Bảng trống hoặc chưa đóng góp"
+    },
+    {
+      "element": "Thưởng",
+      "class": "TeamArenaRewardsContainer / TeamArenaLeaderboardRewardView / TeamArenaStepRewardView / TeamArenaStepRewardViewAdapter / TeamArenaStepRewardViewFactory / TeamArenaStepsRewardTooltip",
+      "purpose": "Hiển thị thưởng mốc và thưởng hạng"
+    },
+    {
+      "element": "Nút lobby",
+      "class": "TeamArenaLobbyButton + TeamArenaLobbyButtonAnimationConfig + TeamArenaLobbyIconViewModel",
+      "purpose": "Icon, tiến độ, chấm đỏ"
+    },
+    {
+      "element": "Signals",
+      "class": "TeamArenaStateChangedSignal / TeamArenaProgressRewardsClaimed",
+      "purpose": "Đồng bộ UI"
+    }
+  ],
+  "analytics": [
+    {
+      "event": "team_arena_started",
+      "params": "event_id, segment, progress, start_time, remaining_duration",
+      "when": "Sự kiện mới bắt đầu"
+    },
+    {
+      "event": "team_arena_joined",
+      "params": "event_id, segment, eligibility, progress, start_time",
+      "when": "Join thành công"
+    },
+    {
+      "event": "team_arena_event_popup_impression",
+      "params": "event_id, segment, current_step, progress, eligibility, remaining_duration, start_time, reason",
+      "when": "EventSender.SendTeamArenaEventPopupSeen(directory)"
+    },
+    {
+      "event": "team_arena_join_popup_impression",
+      "params": "event_id, segment, current_step, progress, eligibility, reason",
+      "when": "EventSender.SendTeamArenaJoinPopupSeen(showForced)"
+    },
+    {
+      "event": "team_arena_info_popup_impression",
+      "params": "event_id, segment, current_step, progress, eligibility, remaining_duration, start_time, reason",
+      "when": "EventSender.SendTeamArenaInfoPopupSeen(showForced)"
+    },
+    {
+      "event": "team_arena_step_completed",
+      "params": "event_id, current_step, progress",
+      "when": "Vượt một mốc cá nhân"
+    },
+    {
+      "event": "team_arena_finished",
+      "params": "event_id, leaderboard_id, segment, previous_elo, current_elo, team_rank, rank, reward, reward_amount, reward_time, team_reward, team_reward_amount, team_reward_time, current_step, progress, start_time",
+      "when": "EventSender.SendTeamArenaFinished khi kết thúc và nhận thưởng"
+    }
+  ],
+  "storage_keys": [
+    "TeamArenaSyncModel",
+    "TeamArenaStatusCacheModel.TournamentId",
+    "TeamArenaStatusCacheModel.TeamId",
+    "TeamArenaStatusCacheModel.IsJoined",
+    "TeamArenaStatusCacheModel.IsJoinWindowEnded",
+    "TeamArenaTournamentCacheModel.IsClaimed",
+    "TeamArenaTournamentCacheModel.CanContribute",
+    "TeamArenaTournamentCacheModel.TeamRank",
+    "TeamArenaTournamentCacheModel.PreviousElo",
+    "TeamArenaTournamentCacheModel.CurrentElo",
+    "TeamArenaProgressCacheModel.Progress",
+    "TeamArenaProgressCacheModel.LastClaimedStep",
+    "TeamArenaProgressCacheModel.CurrentStep",
+    "TeamArenaProgressCacheModel.LastSeenStep",
+    "TeamArenaProgressCacheModel.LobbyProgressCount"
+  ],
+  "related_features": [
+    "Teams",
+    "TeamQuest",
+    "Collection",
+    "ChampionsLeague",
+    "EventsFramework"
+  ],
+  "gaps": [
+    "Thuật toán ghép đội theo Elo và cách tính previousElo→currentElo nằm hoàn toàn ở server.",
+    "Số đội trong một bảng và độ dài sự kiện do server quyết định (startTime/finishTime).",
+    "15/11 — partial_static_code_unresolved: TeamArenaTeamData khai báo ActivityType:int. Các body teamview không có enum mappingđầyđủ trongđợtđọc; TeamsUtils có copy từFlatBufferActivityType vàoUI khác, chưa chứng minh cùngmeaning củaArena. Không gán nhãn active/inactive theo số tùyý. Còn lại: Cần mapping backend Arena activityType và consumer display; genericTeams activity không đủ đồngnhất schema.",
+    "TryJoinEvent()/TryClaimEvent() trả int mã kết quả nhưng bảng mã không đọc được rõ từ pseudo-C.",
+    "[Runtime 2026-09-10] Config server LIVE đã đọc trực tiếp từ cache máy (không cần request); các hàng 'server live' là giá trị server ghi đè/thêm so với default.",
+    "[Runtime 2026-09-10] Instance phiên event đang chạy đã đọc (TeamArenaModel); phần từng ghi 'do server gửi' nay có giá trị thật trong các hàng 'server instance'."
+  ],
+  "sources": [
+    "GameDesign/features/TeamArenaService.md",
+    "GameDesign/features/TeamArenaStateService.md",
+    "GameDesign/features/TeamArenaDataService.md",
+    "GameDesign/features/TeamArenaConfigModel.md",
+    "GameDesign/features/TeamArenaStepModel.md",
+    "RecoveredNative/PseudoC/Assembly-CSharp/Modules/Contexts/Home/TeamArena/*.c",
+    "RecoveredNative/Il2CppDumper/dump.cs (TypeDefIndex 2181-2251)",
+    "UnityExport/ExportedProject/Assets/Resources/defaultconfigs/TeamArenaConfigModel.json",
+    "UnityExport/ExportedProject/Assets/MonoBehaviour/BackendEnvironmentConfig.asset",
+    "RecoveredNative/strings-by-type.tsv (EventSender.SendTeamArena*)",
+    "facts/runtime/review_20261115/event_instances/TeamArenaModel.json"
+  ],
+  "related_feature_aliases": [
+    {
+      "original": "LobbyEventsService",
+      "feature": "EventsFramework"
+    }
+  ],
+  "audit_provenance": {
+    "review_date": "2026-11-15",
+    "mode": "offline_existing_files",
+    "code_build": "0.0.3063 ARMv7",
+    "runtime_build_observed_historically": "0.0.3129 ARM64 (audit 2026-10-18); not rechecked 2026-11-15",
+    "new_playtests": 0,
+    "uc_status": "See facts/audit_20261115/uc_registry.json; image reference is not pass",
+    "workbook_status": "Existing XLSX is historical; JSON and local web include 2026-11-15 corrections",
+    "static_review": "facts/local_code_gap_results_20261115.json; facts/local_asset_gap_results_20261115.json; facts/final_data_gap_decisions_20261115.json; facts/core_body_gap_decisions_20261115.json; facts/remaining_asset_gap_decisions_20261115.json"
+  },
+  "static_review_20261115": {
+    "date": "2026-11-15",
+    "scope": "Historical code/assets 0.0.3063, dated caches, device 0.0.3129 cached bundles and explicitly scoped runtime evidence. Not full runtime pass.",
+    "findings": [
+      {
+        "kind": "code",
+        "source_report": "facts/local_code_gap_results_20261115.json",
+        "id": "MS-CODE-75",
+        "gap_ids": [
+          "MS-TeamArena-G003"
+        ],
+        "title": "TeamArena ActivityType vẫn là rawint",
+        "status": "partial_static_code",
+        "conclusion": "TeamArenaTeamData khai báo ActivityType:int. Các body teamview không có enum mappingđầyđủ trongđợtđọc; TeamsUtils có copy từFlatBufferActivityType vàoUI khác, chưa chứng minh cùngmeaning củaArena. Không gán nhãn active/inactive theo số tùyý.",
+        "evidence": [
+          {
+            "file": "../com.grandgames.magicsort_Unity_20260909_112501/UnityExport/ExportedProject/Assets/Scripts/Assembly-CSharp/Modules/Contexts/Home/TeamArena/TeamArenaTeamData.cs",
+            "line": 20,
+            "end_line": 44,
+            "method": "public int ActivityType;",
+            "sha256": "e68956092408d37d1d57231445f9e771f497199e522816a965a7f82087f31287",
+            "body_checked": false,
+            "definition_checked": true,
+            "build": "0.0.3063 ARMv7",
+            "required_body_tokens": []
+          }
+        ],
+        "remaining": "Cần mapping backend Arena activityType và consumer display; genericTeams activity không đủ đồngnhất schema.",
+        "scope": "recovered_native_0.0.3063_only",
+        "runtime_verified": false
+      }
+    ]
+  },
+  "acceptance_review_20261115": {
+    "source": "facts/feature_acceptance_20261115.json",
+    "feature_id": "TeamArena",
+    "scope": "All eleven dossier dimensions reviewed; full_feature_verified is not implied; read per-dimension gaps and actual runtime evidence."
+  },
+  "segment_ab_review_20261115": {
+    "status": "not_identified_in_sources",
+    "segment_ids": [],
+    "matching_basis": "explicit_gd_config_map_or_exact_model_token_in_gdd_configs_where_key_sources; rootfieldscoped",
+    "rows": [],
+    "classifications": {},
+    "assignment_verified": false,
+    "uplift_verified": false,
+    "note": "No matchingrow does not prove no segmentation/AB. Rewardbucketfalsepositives remain explicitly classified."
+  },
+  "continuation_review_20261116": {
+    "date": "2026-11-16",
+    "build": "0.0.3129 ARM64 host APK",
+    "build_scope": "Host APK version3129 matches LAST observed installed version15/11 only; installed bytes/live device16/11 not verified.",
+    "runtime_status": "device_unavailable",
+    "runtime_case_ids": [],
+    "current_apk_model_links": {
+      "feature": "TeamArena",
+      "models": [
+        {
+          "model": "TeamArenaConfigModel",
+          "current_default_file": "facts/review_20261116/public_current_config_3129/defaults/TeamArenaConfigModel.json",
+          "resource_path": "defaultconfigs/teamarenaconfigmodel",
+          "sha256": "ee9b06a341e582e9f887a967db43450600b264f00bc7314980fc8d4875a25b97",
+          "matching_basis": [
+            "gdd/TeamArena.json#/configs",
+            "gdd/TeamArena.json#/sources",
+            "gdd/TeamArena.json#/managers"
+          ],
+          "scope": "Packaged default3129, not effective server config.",
+          "site_data_path": "data/current_config_3129/defaults/TeamArenaConfigModel.json",
+          "original_source_sha256": "ee9b06a341e582e9f887a967db43450600b264f00bc7314980fc8d4875a25b97",
+          "public_artifact_sha256": "ee2a56ef26669340508bea1d87c1609c0a5904923b51606169092a61be32d048",
+          "sha256_scope": "sha256 is original raw model; public_artifact_sha256 is the sanitized download"
+        }
+      ],
+      "status": "exact_model_source_association",
+      "distribution": "sanitized_public",
+      "public_mapping_pending": false
+    },
+    "current_packaged_defaults": [
+      {
+        "model": "TeamArenaConfigModel",
+        "source": "facts/review_20261116/public_current_config_3129/defaults/TeamArenaConfigModel.json",
+        "site_data_path": "data/current_config_3129/defaults/TeamArenaConfigModel.json",
+        "public_artifact_sha256": "ee2a56ef26669340508bea1d87c1609c0a5904923b51606169092a61be32d048",
+        "original_source_sha256": "ee9b06a341e582e9f887a967db43450600b264f00bc7314980fc8d4875a25b97",
+        "source_class": "static_asset",
+        "build": "0.0.3129 host APK",
+        "scope": "Sanitized packaged default fullvalues only; not effective remote/selected config or runtime.",
+        "values": {
+          "IsEnabled": false,
+          "TournamentType": 1,
+          "FirstLevelToShow": 45,
+          "NormalScore": 1,
+          "HardScore": 3,
+          "SuperHardScore": 5,
+          "MinimumUserToJoinEvent": 10,
+          "StepsWithCollection": [
+            {
+              "RequiredProgress": 10,
+              "RewardModel": {
+                "CurrencyType": 2,
+                "TimeSpan": "00:15:00"
+              }
+            },
+            {
+              "RequiredProgress": 15,
+              "RewardModel": {
+                "CurrencyType": 14,
+                "Amount": 1,
+                "CollectionPackType": 2
+              }
+            },
+            {
+              "RequiredProgress": 20,
+              "RewardModel": {
+                "CurrencyType": 4,
+                "Amount": 1
+              }
+            },
+            {
+              "RequiredProgress": 25,
+              "RewardModel": {
+                "CurrencyType": 1,
+                "Amount": 100
+              }
+            },
+            {
+              "RequiredProgress": 30,
+              "RewardModel": {
+                "CurrencyType": 2,
+                "TimeSpan": "00:30:00"
+              }
+            },
+            {
+              "RequiredProgress": 35,
+              "RewardModel": {
+                "CurrencyType": 14,
+                "Amount": 1,
+                "CollectionPackType": 3
+              }
+            },
+            {
+              "RequiredProgress": 40,
+              "RewardModel": {
+                "CurrencyType": 5,
+                "Amount": 1
+              }
+            },
+            {
+              "RequiredProgress": 50,
+              "RewardModel": {
+                "CurrencyType": 1,
+                "Amount": 200
+              }
+            },
+            {
+              "RequiredProgress": 70,
+              "RewardModel": {
+                "CurrencyType": 6,
+                "Amount": 1
+              }
+            },
+            {
+              "RequiredProgress": 100,
+              "RewardModel": {
+                "CurrencyType": 14,
+                "Amount": 1,
+                "CollectionPackType": 4
+              }
+            }
+          ],
+          "Steps": [
+            {
+              "RequiredProgress": 10,
+              "RewardModel": {
+                "CurrencyType": 2,
+                "TimeSpan": "00:15:00"
+              }
+            },
+            {
+              "RequiredProgress": 15,
+              "RewardModel": {
+                "CurrencyType": 5,
+                "Amount": 1
+              }
+            },
+            {
+              "RequiredProgress": 20,
+              "RewardModel": {
+                "CurrencyType": 4,
+                "Amount": 1
+              }
+            },
+            {
+              "RequiredProgress": 25,
+              "RewardModel": {
+                "CurrencyType": 1,
+                "Amount": 100
+              }
+            },
+            {
+              "RequiredProgress": 30,
+              "RewardModel": {
+                "CurrencyType": 2,
+                "TimeSpan": "00:30:00"
+              }
+            },
+            {
+              "RequiredProgress": 35,
+              "RewardModel": {
+                "CurrencyType": 4,
+                "Amount": 1
+              }
+            },
+            {
+              "RequiredProgress": 40,
+              "RewardModel": {
+                "CurrencyType": 5,
+                "Amount": 1
+              }
+            },
+            {
+              "RequiredProgress": 50,
+              "RewardModel": {
+                "CurrencyType": 1,
+                "Amount": 200
+              }
+            },
+            {
+              "RequiredProgress": 70,
+              "RewardModel": {
+                "CurrencyType": 6,
+                "Amount": 1
+              }
+            },
+            {
+              "RequiredProgress": 100,
+              "RewardModel": {
+                "CurrencyType": 1,
+                "Amount": 250
+              }
+            }
+          ],
+          "LeaderboardRewards": [
+            {
+              "CurrencyType": 6,
+              "Amount": 1
+            },
+            {
+              "CurrencyType": 5,
+              "Amount": 1
+            },
+            {
+              "CurrencyType": 4,
+              "Amount": 1
+            }
+          ],
+          "LeaderboardRewardsWithCollection": [
+            {
+              "CurrencyType": 14,
+              "Amount": 1,
+              "CollectionPackType": 3
+            },
+            {
+              "CurrencyType": 14,
+              "Amount": 1,
+              "CollectionPackType": 2
+            },
+            {
+              "CurrencyType": 14,
+              "Amount": 1,
+              "CollectionPackType": 1
+            }
+          ],
+          "TeamLeaderboardRewards": [
+            {
+              "CurrencyType": 1,
+              "Amount": 2000
+            },
+            {
+              "CurrencyType": 1,
+              "Amount": 1000
+            },
+            {
+              "CurrencyType": 1,
+              "Amount": 500
+            }
+          ],
+          "TeamLeaderboardRewardsWithCollection": [
+            {
+              "CurrencyType": 1,
+              "Amount": 2000
+            },
+            {
+              "CurrencyType": 1,
+              "Amount": 1000
+            },
+            {
+              "CurrencyType": 1,
+              "Amount": 500
+            }
+          ]
+        }
+      }
+    ],
+    "native_finding_ids": [],
+    "documentation_source_coverage": {
+      "dossier_present": true,
+      "use_case_catalog_count": 15,
+      "config_catalog_rows": 289,
+      "current_apk_default_model_links": 1,
+      "current_native_findings": 0,
+      "scope": "Documentation/source coverage only; not complete runtime verification."
+    },
+    "runtime_completion": {
+      "date": "2026-11-16",
+      "status": "device_unavailable",
+      "executed_case_count": 0,
+      "full_feature_runtime_verified": false
+    },
+    "planned_branch": "Nếu chưa có đội kiểm tra gate và CTA; nếu có cache đội đọc tab team/contribution, info rồi đóng.",
+    "target_uc_ids": [
+      "UC-01",
+      "UC-06",
+      "UC-07",
+      "UC-14"
+    ],
+    "execution_phase": "noncore_first",
+    "core_or_levels_last": false,
+    "actionability_full_json": "facts/continuation_20261116/current/feature_actionability.json",
+    "actionability_site_data_path": "data/continuation_20261116/feature_actionability.json",
+    "source_classes": [
+      "static_asset"
+    ],
+    "full_feature_verified": false
+  }
+}

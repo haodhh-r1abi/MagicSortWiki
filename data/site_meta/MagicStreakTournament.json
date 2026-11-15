@@ -1,0 +1,700 @@
+{
+  "id": "MagicStreakTournament",
+  "title": "Magic Streak Tournament (Giải chuỗi thắng)",
+  "tagline": "Biến thể giải đấu của chuỗi thắng: điểm nhân theo hệ số được đẩy lên bảng xếp hạng có thời hạn.",
+  "infobox": [
+    [
+      "Loại",
+      "Sự kiện solo"
+    ],
+    [
+      "Mở khóa",
+      "Level 25 (MagicStreakTournamentConfigModel.FirstLevelToShow, mặc định client)"
+    ],
+    [
+      "Thời lượng",
+      "Theo startTime/finishTime của instance; asset legacy StreakTournamentConfigModel ghi24giờ, không dùng làm duration runtime hiện tại."
+    ],
+    [
+      "Chu kỳ / lịch",
+      "Nối tiếp nhau; hết giờ tự fetch giải mới (ScheduleLeaderboardFetchOnTimerEnd)"
+    ],
+    [
+      "Tham gia",
+      "Nhiều người trên một bảng xếp hạng (có cả bot)"
+    ],
+    [
+      "Vật phẩm thu thập",
+      "Điểm giải (tournament score) và điểm thanh tiến độ cá nhân"
+    ],
+    [
+      "Tiền tệ",
+      "Coin, Limitless Life, Shuffle, Undo, Extra Bottle"
+    ],
+    [
+      "Thưởng chính",
+      "Hạng 1 = 2000 coin, hạng 2 = 1000 coin, hạng 3 = 500 coin, hạng 4–10 = 100 coin"
+    ],
+    [
+      "Điều kiện / phụ thuộc",
+      "IsTournamentEnable = true; thanh tiến độ cần IsProgressBarEnable = true"
+    ],
+    [
+      "Manager",
+      "MagicStreakService (kèm MagicStreakDataService, MagicStreakStateService, MagicStreakRemoteService)"
+    ]
+  ],
+  "description": [
+    "Magic Streak Tournament là biến thể giải đấu của cơ chế chuỗi thắng: điểm được đẩy lên bảng xếp hạng có thời hạn thay vì chỉ tích cho bản thân.",
+    "Điểm cộng mỗi lần thắng bằng hệ số chuỗi hiện tại, dùng đúng 5 bậc như bản GAE: 1, 5, 10, 25, 100.",
+    "Người chơi đồng thời tranh hạng để lấy thưởng theo hạng và leo một thanh tiến độ cá nhân 10 mốc.",
+    "Thanh tiến độ trải từ 10 điểm / 20 coin ở mốc đầu tới 1000 điểm / 1000 coin ở mốc cuối.",
+    "Thua level làm mất hệ số nhân nhưng không trừ điểm giải hay điểm thanh tiến độ đã tích.",
+    "Popup có thể tự bật khi thăng hạng, với giãn cách tối thiểu 10 level để không spam người chơi.",
+    "Banner nhắc thứ hạng hiện ngay ở màn thắng (Win) và màn thua (Lose) của mỗi level.",
+    "Bảng xếp hạng có cả người thật và bot — analytics tách riêng real_user_count và bot_count.",
+    "Khi mất mạng, ChoosePlayerScore giữ điểm local trên UI cho tới khi đồng bộ được với server.",
+    "Đây là tính năng tách riêng khỏi Magic Streak (GAE) vì luồng, dữ liệu và endpoint hoàn toàn khác."
+  ],
+  "notes": [
+    "Lưu ý: mặc định client IsTournamentEnable = false, IsProgressBarEnable = false, IsBannerEnable = true — thanh tiến độ phải bật bằng remote config.",
+    "Lưu ý: mã0.0.3063 đọc MagicStreakTournamentConfigModel trực tiếp ở service. StreakTournamentConfigModel có duration24 là asset legacy riêng; app0.0.3129 cần đối chiếu consumer/current instance.",
+    "Lưu ý: ShowPopUpIntervalOnRankUp = 10 ở bản mới nhưng = 1 ở bản cấu hình cũ.",
+    "Lưu ý: Score của ProgressbarRewardStep là nhu cầu riêng từng mốc trong mã0.0.3063. Đạt mốc thì reset score của step, tăng index và mang phần dư sang step tiếp; cần cộng từng Score để tính tổng toàn đường.",
+    "Lưu ý: chuỗi Score500/300/800/400 là nhu cầu của từng step, không phải mốc tổng giảm; cơ chế reset/carry được đọc trong IncreaseProgressbarRewardScore0.0.3063.",
+    "Lưu ý: số người trong một bảng và tỉ lệ bot do server quyết định, client không có config (server).",
+    "Lưu ý: không tìm thấy analytics riêng cho việc claim thưởng giải, chỉ có hai event impression.",
+    "Lưu ý: MagicStreakStateService.IsFinishedBeforeIntroduction() xử lý trường hợp giải kết thúc trước khi người chơi kịp thấy."
+  ],
+  "how_it_works": [
+    "Initialize() nạp Multipliers = [1, 5, 10, 25, 100] và CreateProgressbarRewards() dựng 10 mốc từ ProgressbarRewardSteps.",
+    "InitializeData/IntervalUpdate kiểm tra ShouldSendGetRequest(), rồi SendGetRequest tới magicStreakTournamentGetUrl (/v1/get-magicstreak-leaderboard).",
+    "Response mang TournamentId, TournamentType, Players, startTime, finishTime, isClaimed, isFinished, userScore.",
+    "ChangeTournamentCache(response) ghi cache và UpdateLeaderboard() dựng _cachedLeaderboard; ProfileSpriteCacheService nạp avatar từng dòng.",
+    "Vào level: CacheMultiplierDataOnLevelStart() lưu hệ số đầu level để chạy hoạt ảnh đúng.",
+    "Thắng level: IncreaseAllScores() cộng đồng thời điểm giải và điểm thanh tiến độ, mỗi bên tăng bằng hệ số hiện tại, rồi IncreaseMultiplier() nâng bậc.",
+    "Thua level: ResetMultiplierOnLevelEnd() đưa MultiplierIndex về 0; điểm đã tích giữ nguyên.",
+    "SendSetScoreRequest() đẩy điểm tới magicStreakTournamentSetScoreUrl (/v1/set-magicstreak-tournament-points).",
+    "ChoosePlayerScore(isMe, isFinished, localScore, remoteScore) quyết định lấy điểm local hay remote cho từng dòng bảng để UI luôn mượt.",
+    "Thanh tiến độ cá nhân: GetCurrentProgressbarRewardIndex() và GetCurrentProgressbarRatio() vẽ tiến độ; vượt mốc thì thưởng vào GetEarnedProgressbarRewards().",
+    "Về lobby, ShouldPlayProgressbarRewardAnimationLobbyReturn() cho thưởng bung ra đúng một lần rồi ResetProgressbarLobbyRewardAnimationCache().",
+    "Thăng hạng: IsElapsedNLevelsSinceLastSeen() so số level đã chơi với ShowPopUpIntervalOnRankUp (10) trước khi tự mở popup với source RankUp (3).",
+    "Hết giờ: state chuyển LocalTimeIsUp(5) hoặc RemoteTimeIsUp(6); AssignTournamentRewardsAndSetRanks(sortedLeaderboard) sắp hạng và gán thưởng theo TournamentRewards.",
+    "Popup mở với source TournamentEnd (2) và layout TournamentResult (4); GetTournamentReward() và GetFinalRankText() hiển thị kết quả (fallback '-').",
+    "Bấm Claim: ClaimTournamentReward() gọi magicStreakTournamentClaimUrl (/v1/claim-magicstreak-tournament), IncreaseTournamentWinCount() khi vô địch, state chuyển ClaimedLocally(7)."
+  ],
+  "reward_tables": [
+    {
+      "title": "PHẦN THƯỞNG THEO HẠNG (TournamentRewards)",
+      "columns": [
+        "Hạng",
+        "Điều kiện",
+        "Phần thưởng"
+      ],
+      "rows": [
+        [
+          "Hạng 1",
+          "Đứng đầu bảng khi hết giờ",
+          "2000 coin"
+        ],
+        [
+          "Hạng 2",
+          "Vị trí thứ hai",
+          "1000 coin"
+        ],
+        [
+          "Hạng 3",
+          "Vị trí thứ ba",
+          "500 coin"
+        ],
+        [
+          "Hạng 4–10",
+          "Trong giới hạn OtherRanksLimit = 10",
+          "100 coin mỗi người"
+        ],
+        [
+          "Hạng 11 trở đi",
+          "Ngoài OtherRanksLimit",
+          "Không có thưởng"
+        ]
+      ]
+    },
+    {
+      "title": "THANH TIẾN ĐỘ CÁ NHÂN 10 MỐC (ProgressbarRewardSteps)",
+      "columns": [
+        "Mốc",
+        "Score",
+        "Phần thưởng"
+      ],
+      "rows": [
+        [
+          "Mốc 1",
+          "10",
+          "20 coin"
+        ],
+        [
+          "Mốc 2",
+          "50",
+          "15 phút Limitless Life"
+        ],
+        [
+          "Mốc 3",
+          "100",
+          "100 coin"
+        ],
+        [
+          "Mốc 4",
+          "200",
+          "1 Shuffle"
+        ],
+        [
+          "Mốc 5",
+          "200",
+          "1 Undo"
+        ],
+        [
+          "Mốc 6",
+          "500",
+          "300 coin"
+        ],
+        [
+          "Mốc 7",
+          "300",
+          "30 phút Limitless Life"
+        ],
+        [
+          "Mốc 8",
+          "800",
+          "500 coin"
+        ],
+        [
+          "Mốc 9",
+          "400",
+          "1 Extra Bottle"
+        ],
+        [
+          "Mốc 10",
+          "1000",
+          "1000 coin"
+        ]
+      ]
+    },
+    {
+      "title": "BẬC HỆ SỐ NHÂN (Multipliers)",
+      "columns": [
+        "Bậc (index)",
+        "Hệ số",
+        "Đạt khi"
+      ],
+      "rows": [
+        [
+          "0",
+          "×1",
+          "Khởi điểm hoặc sau khi thua"
+        ],
+        [
+          "1",
+          "×5",
+          "Sau 1 trận thắng"
+        ],
+        [
+          "2",
+          "×10",
+          "Sau 2 trận thắng liên tiếp"
+        ],
+        [
+          "3",
+          "×25",
+          "Sau 3 trận thắng liên tiếp"
+        ],
+        [
+          "4",
+          "×100",
+          "Sau 4 trận thắng liên tiếp (bậc cao nhất)"
+        ]
+      ]
+    },
+    {
+      "title": "CẤU HÌNH MẶC ĐỊNH (MagicStreakTournamentConfigModel.json)",
+      "columns": [
+        "Khoá",
+        "Giá trị mặc định",
+        "Ý nghĩa"
+      ],
+      "rows": [
+        [
+          "IsTournamentEnable",
+          "false",
+          "Bật/tắt giải Magic Streak"
+        ],
+        [
+          "IsProgressBarEnable",
+          "false",
+          "Bật thanh tiến độ cá nhân 10 mốc"
+        ],
+        [
+          "IsBannerEnable",
+          "true",
+          "Bật banner ở màn thắng/thua level"
+        ],
+        [
+          "FirstLevelToShow",
+          "25",
+          "Level tối thiểu"
+        ],
+        [
+          "EventType",
+          "1",
+          "TournamentType gửi backend"
+        ],
+        [
+          "ShouldOpenPopUpAutomaticallyOnRankUp",
+          "true",
+          "Tự mở popup khi thăng hạng"
+        ],
+        [
+          "ShowPopUpIntervalOnRankUp",
+          "10",
+          "Số level tối thiểu giữa hai lần tự mở popup"
+        ],
+        [
+          "Multipliers",
+          "[1, 5, 10, 25, 100]",
+          "5 bậc hệ số nhân điểm"
+        ],
+        [
+          "TournamentRewards.OtherRanksLimit",
+          "10",
+          "Hạng cuối cùng còn được thưởng"
+        ]
+      ]
+    },
+    {
+      "title": "CẤU HÌNH BẢN CŨ (StreakTournamentConfigModel.json)",
+      "columns": [
+        "Khoá",
+        "Giá trị",
+        "Ghi chú"
+      ],
+      "rows": [
+        [
+          "TournamentDurationInHours",
+          "24",
+          "Độ dài một giải"
+        ],
+        [
+          "Rewards.FirstRankCoinRewardAmount",
+          "2000 coin",
+          "Trùng bản mới"
+        ],
+        [
+          "Rewards.SecondRankCoinRewardAmount",
+          "1000 coin",
+          "Trùng bản mới"
+        ],
+        [
+          "Rewards.ThirdRankCoinRewardAmount",
+          "500 coin",
+          "Trùng bản mới"
+        ],
+        [
+          "Rewards.OtherRanksCoinRewardAmount",
+          "100 coin",
+          "Trùng bản mới"
+        ],
+        [
+          "Rewards.OtherRanksLimit",
+          "10",
+          "Trùng bản mới"
+        ],
+        [
+          "Multipliers.Multiplier1..5",
+          "1, 5, 10, 25, 100",
+          "Trùng bản mới"
+        ],
+        [
+          "ShowPopUpIntervalOnRankUp",
+          "1",
+          "Khác bản mới (10)"
+        ]
+      ]
+    },
+    {
+      "title": "MÁY TRẠNG THÁI (MagicStreakStateType)",
+      "columns": [
+        "Giá trị",
+        "Trạng thái",
+        "Ý nghĩa"
+      ],
+      "rows": [
+        [
+          "0",
+          "Disable",
+          "Server tắt giải"
+        ],
+        [
+          "1",
+          "ProgressNotEnough",
+          "Level dưới FirstLevelToShow"
+        ],
+        [
+          "2",
+          "NoCache",
+          "Chưa từng fetch được bảng"
+        ],
+        [
+          "3",
+          "NotIntroduced",
+          "Chưa xem giới thiệu"
+        ],
+        [
+          "4",
+          "InProgress",
+          "Giải đang chạy"
+        ],
+        [
+          "5",
+          "LocalTimeIsUp",
+          "Client tính là hết giờ"
+        ],
+        [
+          "6",
+          "RemoteTimeIsUp",
+          "Server báo isFinished"
+        ],
+        [
+          "7",
+          "ClaimedLocally",
+          "Đã nhận thưởng phía client"
+        ]
+      ]
+    },
+    {
+      "title": "TRẠNG THÁI POPUP VÀ NGUỒN MỞ",
+      "columns": [
+        "Enum",
+        "Giá trị",
+        "Ý nghĩa"
+      ],
+      "rows": [
+        [
+          "MagicStreakTournamentPopupStateType",
+          "Disable=0, NoInternetConnection=1, NotIntroduced=2, InProgress=3, TournamentResult=4",
+          "Layout popup"
+        ],
+        [
+          "MagicStreakTournamentPopupImpressionSource",
+          "LobbyIcon=0, TournamentStart=1, TournamentEnd=2, RankUp=3, None=4",
+          "Nguồn mở popup"
+        ],
+        [
+          "MagicStreakTournamentBannerPlaceType",
+          "Win=0, Lose=1",
+          "Vị trí banner ở màn kết thúc level"
+        ]
+      ]
+    },
+    {
+      "title": "ENDPOINT BACKEND",
+      "columns": [
+        "Tên",
+        "Đường dẫn",
+        "Mục đích"
+      ],
+      "rows": [
+        [
+          "magicStreakTournamentGetUrl",
+          "{base}/v1/get-magicstreak-leaderboard",
+          "Lấy bảng xếp hạng giải"
+        ],
+        [
+          "magicStreakTournamentSetScoreUrl",
+          "{base}/v1/set-magicstreak-tournament-points",
+          "Đẩy điểm"
+        ],
+        [
+          "magicStreakTournamentClaimUrl",
+          "{base}/v1/claim-magicstreak-tournament",
+          "Nhận thưởng hạng"
+        ],
+        [
+          "Sync block",
+          "\"MagicStreakModel\"",
+          "Đồng bộ điểm, hệ số, số lần vô địch"
+        ]
+      ]
+    }
+  ],
+  "key_numbers": [
+    {
+      "label": "Thưởng hạng 1",
+      "value": "2000 coin",
+      "source": "TournamentRewards.FirstRankRewardModel"
+    },
+    {
+      "label": "Thưởng hạng 2",
+      "value": "1000 coin",
+      "source": "TournamentRewards.SecondRankRewardModel"
+    },
+    {
+      "label": "Thưởng hạng 3",
+      "value": "500 coin",
+      "source": "TournamentRewards.ThirdRankRewardModel"
+    },
+    {
+      "label": "Thưởng hạng 4–10",
+      "value": "100 coin mỗi người",
+      "source": "TournamentRewards.OtherRanksRewardModel"
+    },
+    {
+      "label": "Giới hạn hạng còn thưởng",
+      "value": "10",
+      "source": "TournamentRewards.OtherRanksLimit"
+    },
+    {
+      "label": "Số mốc thanh tiến độ",
+      "value": "10",
+      "source": "MagicStreakTournamentConfigModel.json: ProgressbarRewardSteps"
+    },
+    {
+      "label": "Score mốc đầu / mốc cuối",
+      "value": "10 → 1000",
+      "source": "ProgressbarRewardSteps[0].Score / [9].Score"
+    },
+    {
+      "label": "Thưởng mốc đầu / mốc cuối",
+      "value": "20 coin → 1000 coin",
+      "source": "ProgressbarRewardSteps[0] / [9]"
+    },
+    {
+      "label": "Bậc hệ số nhân",
+      "value": "[1, 5, 10, 25, 100]",
+      "source": "MagicStreakTournamentConfigModel.json: Multipliers"
+    },
+    {
+      "label": "Level mở khoá",
+      "value": "25",
+      "source": "MagicStreakTournamentConfigModel.json: FirstLevelToShow"
+    },
+    {
+      "label": "Bật/tắt giải mặc định",
+      "value": "IsTournamentEnable = false",
+      "source": "MagicStreakTournamentConfigModel.json"
+    },
+    {
+      "label": "Bật thanh tiến độ mặc định",
+      "value": "IsProgressBarEnable = false",
+      "source": "MagicStreakTournamentConfigModel.json"
+    },
+    {
+      "label": "Bật banner mặc định",
+      "value": "IsBannerEnable = true",
+      "source": "MagicStreakTournamentConfigModel.json"
+    },
+    {
+      "label": "Giãn cách tự mở popup khi thăng hạng",
+      "value": "10 level (bản cũ: 1)",
+      "source": "ShowPopUpIntervalOnRankUp"
+    },
+    {
+      "label": "Thời lượng trong asset legacy",
+      "value": "24giờ (legacy asset; không xác nhận duration runtime)",
+      "source": "StreakTournamentConfigModel.TournamentDurationInHours"
+    },
+    {
+      "label": "Loại sự kiện",
+      "value": "EventType = 1",
+      "source": "MagicStreakTournamentConfigModel.json"
+    },
+    {
+      "label": "Số trạng thái giải",
+      "value": "8 (0–7)",
+      "source": "MagicStreakStateType"
+    },
+    {
+      "label": "Số layout popup",
+      "value": "5 (0–4)",
+      "source": "MagicStreakTournamentPopupStateType"
+    },
+    {
+      "label": "Số nguồn mở popup",
+      "value": "5 (LobbyIcon, TournamentStart, TournamentEnd, RankUp, None)",
+      "source": "MagicStreakTournamentPopupImpressionSource"
+    },
+    {
+      "label": "Endpoint lấy bảng",
+      "value": "{base}/v1/get-magicstreak-leaderboard",
+      "source": "magicStreakTournamentGetUrl"
+    },
+    {
+      "label": "Endpoint đẩy điểm",
+      "value": "{base}/v1/set-magicstreak-tournament-points",
+      "source": "magicStreakTournamentSetScoreUrl"
+    },
+    {
+      "label": "Endpoint nhận thưởng",
+      "value": "{base}/v1/claim-magicstreak-tournament",
+      "source": "magicStreakTournamentClaimUrl"
+    },
+    {
+      "label": "Số trường trong MagicStreakModel",
+      "value": "7",
+      "source": "MagicStreakDataService.SerializeModelForSync"
+    },
+    {
+      "label": "Số mốc lastSeen được cache",
+      "value": "6 (_lastSeenProgressbarRewardScore, _lastSeenProgressbarRewardIndex, _lastSeenTournamentScore, _lastSeenMultiplierIndex, _lastSeenRank, _lastSeenLevel)",
+      "source": "MagicStreakDataService"
+    }
+  ],
+  "config_highlights": [
+    {
+      "key": "IsTournamentEnable",
+      "value": "false",
+      "meaning": "Bật/tắt giải Magic Streak"
+    },
+    {
+      "key": "IsProgressBarEnable",
+      "value": "false",
+      "meaning": "Bật thanh tiến độ cá nhân 10 mốc"
+    },
+    {
+      "key": "IsBannerEnable",
+      "value": "true",
+      "meaning": "Bật banner ở màn thắng/thua level"
+    },
+    {
+      "key": "FirstLevelToShow",
+      "value": "25",
+      "meaning": "Level tối thiểu"
+    },
+    {
+      "key": "EventType",
+      "value": "1",
+      "meaning": "TournamentType gửi backend"
+    },
+    {
+      "key": "ShouldOpenPopUpAutomaticallyOnRankUp",
+      "value": "true",
+      "meaning": "Tự mở popup khi thăng hạng"
+    },
+    {
+      "key": "ShowPopUpIntervalOnRankUp",
+      "value": "10",
+      "meaning": "Số level tối thiểu giữa hai lần tự mở popup"
+    },
+    {
+      "key": "Multipliers",
+      "value": "[1, 5, 10, 25, 100]",
+      "meaning": "5 bậc hệ số nhân điểm theo chuỗi thắng"
+    },
+    {
+      "key": "TournamentRewards.FirstRankRewardModel",
+      "value": "2000 coin (CurrencyType 1)",
+      "meaning": "Thưởng hạng 1"
+    },
+    {
+      "key": "TournamentRewards.SecondRankRewardModel",
+      "value": "1000 coin",
+      "meaning": "Thưởng hạng 2"
+    },
+    {
+      "key": "TournamentRewards.ThirdRankRewardModel",
+      "value": "500 coin",
+      "meaning": "Thưởng hạng 3"
+    },
+    {
+      "key": "TournamentRewards.OtherRanksRewardModel / OtherRanksLimit",
+      "value": "100 coin / 10",
+      "meaning": "Hạng 4 đến 10 nhận 100 coin"
+    },
+    {
+      "key": "ProgressbarRewardSteps",
+      "value": "10 mốc: 20 coin, 15 phút Life, 100 coin, 1 Shuffle, 1 Undo, 300 coin, 30 phút Life, 500 coin, 1 Extra Bottle, 1000 coin",
+      "meaning": "Thanh tiến độ cá nhân"
+    },
+    {
+      "key": "StreakTournamentConfigModel.TournamentDurationInHours",
+      "value": "24",
+      "meaning": "Độ dài một giải (cấu hình bản cũ, vẫn có trong build)"
+    },
+    {
+      "key": "StreakTournamentConfigModel.ShowPopUpIntervalOnRankUp",
+      "value": "1",
+      "meaning": "Giá trị bản cũ, khác bản mới"
+    },
+    {
+      "key": "MagicStreakStateType",
+      "value": "Disable=0, ProgressNotEnough=1, NoCache=2, NotIntroduced=3, InProgress=4, LocalTimeIsUp=5, RemoteTimeIsUp=6, ClaimedLocally=7",
+      "meaning": "Trạng thái giải"
+    },
+    {
+      "key": "MagicStreakTournamentPopupStateType",
+      "value": "Disable=0, NoInternetConnection=1, NotIntroduced=2, InProgress=3, TournamentResult=4",
+      "meaning": "Layout popup"
+    },
+    {
+      "key": "MagicStreakTournamentPopupImpressionSource",
+      "value": "LobbyIcon=0, TournamentStart=1, TournamentEnd=2, RankUp=3, None=4",
+      "meaning": "Nguồn mở popup"
+    },
+    {
+      "key": "MagicStreakTournamentBannerPlaceType",
+      "value": "Win=0, Lose=1",
+      "meaning": "Vị trí banner ở màn kết thúc level"
+    },
+    {
+      "key": "MagicStreakTournamentResponse",
+      "value": "TournamentId, TournamentType, Players, startTime, finishTime, isClaimed, isFinished, userScore (server)",
+      "meaning": "Trạng thái giải và bảng xếp hạng"
+    },
+    {
+      "key": "MagicStreakTournamentModel (cache)",
+      "value": "TournamentId, FinishTime, StartTime, IsFinished, TournamentScore, Players",
+      "meaning": "Cache giải phía client"
+    },
+    {
+      "key": "FlatBuffer schema",
+      "value": "magicsort.schemas.v1.liveops.streak_leaderboard và magicsort.schemas.v1.liveops.magic_streak_leaderboard",
+      "meaning": "Hai schema nhị phân của bảng xếp hạng chuỗi"
+    },
+    {
+      "key": "MagicStreakModel",
+      "value": "MagicStreakTournamentCache, IsClaimedLocally, IsIntroduced, ProgressbarRewardScore, ProgressbarRewardIndex, MultiplierIndex, TournamentWinCount",
+      "meaning": "Dữ liệu lưu và đồng bộ"
+    },
+    {
+      "key": "MagicStreakDataService cache lastSeen",
+      "value": "_lastSeenProgressbarRewardScore, _lastSeenProgressbarRewardIndex, _lastSeenTournamentScore, _lastSeenMultiplierIndex, _lastSeenRank, _lastSeenLevel",
+      "meaning": "Mốc so sánh để chạy hoạt ảnh và quyết định mở popup"
+    },
+    {
+      "key": "MagicStreakTournamentSpriteConfig",
+      "value": "ScriptableObject",
+      "meaning": "Sprite của giải và banner"
+    },
+    {
+      "key": "streak_leaderboard_impression",
+      "value": "impression_source, current_rank, current_streak, current_multiplier, total_users, real_user_count, bot_count, tournament_id…",
+      "meaning": "Analytics mở popup bảng xếp hạng"
+    },
+    {
+      "key": "streak_info_impression",
+      "value": "tournament_id, current_rank, current_streak, progress",
+      "meaning": "Analytics mở popup thông tin giải"
+    }
+  ],
+  "tips": [
+    "Cùng một cơ chế chuỗi thắng được tái sử dụng cho hai sản phẩm khác nhau: tiến độ cá nhân (GAE) và tranh hạng (Tournament).",
+    "Thanh tiến độ cá nhân bên trong giải là lưới an toàn: người không đủ sức vào top 10 vẫn có thứ để leo.",
+    "Banner ở cả màn thắng lẫn màn thua giữ tính năng luôn hiện diện ở đúng khoảnh khắc cảm xúc mạnh nhất.",
+    "Giãn cách 10 level cho popup thăng hạng là cách cân bằng giữa khoe thành tích và tránh làm phiền.",
+    "Bot trên bảng xếp hạng giúp giải luôn có vẻ đông, nhưng cần tách khỏi số liệu khi phân tích."
+  ],
+  "categories": [
+    "Sự kiện",
+    "Có bảng xếp hạng",
+    "Live-ops",
+    "Xã hội"
+  ]
+}

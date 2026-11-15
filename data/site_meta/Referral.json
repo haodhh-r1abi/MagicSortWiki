@@ -1,0 +1,135 @@
+{
+  "id": "Referral",
+  "title": "Mời bạn (Referral)",
+  "tagline": "Chia sẻ link mời riêng; khi người mới đạt mốc level, người mời nhận thưởng, tối đa 3 lượt.",
+  "infobox": [
+    ["Loại", "Xã hội"],
+    ["Mở khóa", "Bật bằng remote config ReferralConfigModel.IsEnabled (mặc định false)"],
+    ["Chu kỳ / lịch", "Popup mời chỉ hiện một lần mỗi phiên (_showedInviteInSession)"],
+    ["Tham gia", "Người chơi đơn (mời người ngoài game)"],
+    ["Tiền tệ", "Không tốn tiền tệ; thưởng bằng coin, Extra Bottle, Unlimited Lives"],
+    ["Thưởng chính", "100 coin, 1 Extra Bottle, 30 phút Unlimited Lives mỗi lượt giới thiệu thành công"],
+    ["Điều kiện / phụ thuộc", "Người được mời phải đạt level Milestone (mặc định 5); liên quan Friends, Profile, Account, Inventory"],
+    ["Manager", "ReferralService, ReferralRemoteService, ReferralDataService"]
+  ],
+  "description": [
+    "Referral là vòng lặp mời người chơi mới: người chơi chia sẻ link mời riêng qua hộp thoại chia sẻ hệ điều hành.",
+    "Link có thể là invite_link cá nhân do backend cấp (UseBackendUrl = true) hoặc link store theo nền tảng.",
+    "Người được mời cài game, hệ thống attribution (Adjust) trả về referrer_public_id, client đăng ký quan hệ giới thiệu.",
+    "Khi người mới đạt mốc level Milestone (mặc định level 5), người mời nhận thưởng theo danh sách ReferralRewards.",
+    "Số lượt thưởng bị giới hạn bởi MaxRewardLimit (mặc định 3 lượt).",
+    "Mỗi lượt gắn với một ReferralRewardItem chứa hồ sơ người được mời (tên, avatar, tiến độ) nên popup hiển thị cụ thể ai đã giúp bạn.",
+    "Đây là kênh UA tự nhiên, gắn chặt với Friends (link mời cũng tự kết bạn) và Profile (public id).",
+    "Câu mời mặc định lấy từ khoá localize 'ShareMessageTemplate' — bản EN là \"Lets play Magic Sort together!\".",
+    "Popup mời chỉ hiện một lần mỗi phiên để tránh làm phiền người chơi."
+  ],
+  "notes": [
+    "Lưu ý: Mặc định client IsEnabled = false và UseBackendUrl = false — remote config phải bật mới chạy.",
+    "Lưu ý: Trên Android, chia sẻ dùng Intent ACTION_SEND kiểu text/plain qua createChooser.",
+    "Lưu ý: Client tự động kết bạn với người mời qua AutoAddFriend (FriendsService.TryAddFriendsFromDeeplink).",
+    "Lưu ý: Đã nhận thưởng thì AddToClaimedRewards(rewards) ghi lại để không nhận trùng; GetClaimedRewardsCount() so với MaxRewardLimit.",
+    "Lưu ý: Giá trị Milestone, ReferralRewards và MaxRewardLimit thực tế do Firebase Remote Config quyết định (server), các số dưới đây là client default.",
+    "Lưu ý: Ý nghĩa số cụ thể của ReferralRewardItem.status không có enum trong client (suy luận theo cặp earned_at/claimed_at)."
+  ],
+  "how_it_works": [
+    "Khi khởi tạo dữ liệu, ReferralService.InitializeData() gọi InitializeInviteData() → ReferralRemoteService.GetMyInviteData() (/v1/get-my-invite-data).",
+    "Server trả InviteDataResponse{invite_link, rewards}; _url = invite_link nếu ReferralConfigModel.UseBackendUrl = true.",
+    "Nếu không, GetStoreUrl(config) chọn PlayStoreUrl (https://play.google.com/store/apps/details?id=com.grandgames.magicsort) hoặc AppStoreUrl (https://apps.apple.com/us/app/magic-sort/id6499209744) theo nền tảng.",
+    "Danh sách _referralRewards gồm các ReferralRewardItem với status/created_at/earned_at/claimed_at cho biết từng người được mời đang ở giai đoạn nào.",
+    "Người chơi mở FriendsInvitePopup (hoặc nút Invite trong FindFriendPopup) và bấm mời; CanShowInvite() kiểm tra cờ _showedInviteInSession.",
+    "OpenShareDialogue(source) dựng payload bằng BuildPayload() = câu localize 'ShareMessageTemplate' + xuống dòng + _url.",
+    "AndroidShare(payload) mở Intent ACTION_SEND kiểu text/plain qua createChooser; kết quả về HandleShareCompleted(success), analytics bắn 'invite_send' kèm source.",
+    "Phía người được mời: CacheReferrerIdFromAttribution() đọc referrer id từ dữ liệu attribution sau khi cài game.",
+    "ReferralDataService.ReferralRegistered(referrerId) lưu ReferralDataModel.ReferrerId và client gửi RegisterReferralRequestModel{referrer_public_id}; analytics 'referral_registered' kèm referrer_id.",
+    "Song song, AutoAddFriend(AutoAddFriendRequestModel{target_user_public_id}) tự kết bạn với người mời.",
+    "Mỗi lần thắng level, LevelWin() → CheckMilestoneStatus() so tiến độ với GetMilestone() (= ReferralConfigModel.Milestone, mặc định 5).",
+    "Khi đạt mốc, ConfirmReferralMilestone(referrerPublicId) báo server (/v1/confirm-referral-milestone), ReachedMilestone() đánh dấu DidReachMilestone() = true, analytics 'referral_milestone_reached' kèm progress.",
+    "Người mời thấy HasReferralRewards = true; GetEarnedRewards() trả các RewardModel đã đủ điều kiện.",
+    "Nhận thưởng bằng ClaimInviteRewards() (/v1/claim-invite-rewards) trả ClaimInviteRewardsResponse{claimed_count}.",
+    "RewardsClaimed() và AddToClaimedRewards(rewards) ghi lại để không nhận trùng; khi GetClaimedRewardsCount() chạm MaxRewardLimit (mặc định 3) thì hết lượt.",
+    "Toàn bộ ReferralDataModel (ReferrerId, ReachedMilestone, ClaimedRefRewards) được lưu và đồng bộ qua SyncService."
+  ],
+  "reward_tables": [
+    {
+      "title": "PHẦN THƯỞNG MỖI LƯỢT GIỚI THIỆU (ReferralConfigModel.json, client default)",
+      "columns": ["Mốc", "Điều kiện", "Phần thưởng"],
+      "rows": [
+        ["Lượt 1", "Người được mời đạt level 5", "100 coin, 1 Extra Bottle, 30 phút Unlimited Lives"],
+        ["Lượt 2", "Người được mời thứ hai đạt level 5", "100 coin, 1 Extra Bottle, 30 phút Unlimited Lives"],
+        ["Lượt 3", "Người được mời thứ ba đạt level 5", "100 coin, 1 Extra Bottle, 30 phút Unlimited Lives"],
+        ["Sau lượt 3", "Đã đạt MaxRewardLimit = 3", "Không còn thưởng"]
+      ]
+    },
+    {
+      "title": "CHI TIẾT GÓI THƯỞNG (ReferralRewards)",
+      "columns": ["Mục", "CurrencyType", "Giá trị"],
+      "rows": [
+        ["ReferralRewards[0]", "1 (Coin)", "Amount = 100 → 100 coin"],
+        ["ReferralRewards[1]", "6 (ExtraBottle)", "Amount = 1 → 1 Extra Bottle"],
+        ["ReferralRewards[2]", "2 (Life)", "TimeSpan = 00:30:00 → 30 phút Unlimited Lives"]
+      ]
+    },
+    {
+      "title": "LINK MỜI THEO NỀN TẢNG (ReferralConfigModel.json, client default)",
+      "columns": ["Nền tảng", "Khoá", "Giá trị"],
+      "rows": [
+        ["Android", "PlayStoreUrl", "https://play.google.com/store/apps/details?id=com.grandgames.magicsort"],
+        ["iOS", "AppStoreUrl", "https://apps.apple.com/us/app/magic-sort/id6499209744"],
+        ["Link cá nhân", "invite_link (UseBackendUrl = true)", "(server) do backend cấp riêng cho từng người chơi"]
+      ]
+    }
+  ],
+  "key_numbers": [
+    {"label": "Bật mặc định (client)", "value": "false", "source": "ReferralConfigModel.json: IsEnabled"},
+    {"label": "Dùng link backend mặc định", "value": "false", "source": "ReferralConfigModel.json: UseBackendUrl"},
+    {"label": "Mốc level của người được mời", "value": "5", "source": "ReferralConfigModel.json: Milestone"},
+    {"label": "Số lượt thưởng tối đa", "value": "3", "source": "ReferralConfigModel.json: MaxRewardLimit"},
+    {"label": "Thưởng — coin", "value": "100 (CurrencyType 1)", "source": "ReferralRewards[0].Amount"},
+    {"label": "Thưởng — Extra Bottle", "value": "1 (CurrencyType 6)", "source": "ReferralRewards[1].Amount"},
+    {"label": "Thưởng — Unlimited Lives", "value": "TimeSpan 00:30:00 (CurrencyType 2)", "source": "ReferralRewards[2].TimeSpan"},
+    {"label": "Link Play Store", "value": "https://play.google.com/store/apps/details?id=com.grandgames.magicsort", "source": "ReferralConfigModel.json: PlayStoreUrl"},
+    {"label": "Link App Store", "value": "https://apps.apple.com/us/app/magic-sort/id6499209744", "source": "ReferralConfigModel.json: AppStoreUrl"},
+    {"label": "Số lần hiện popup mời trong một phiên", "value": "1", "source": "ReferralService._showedInviteInSession"},
+    {"label": "Câu mời mặc định", "value": "\"Lets play Magic Sort together!\"", "source": "ReferralService.DefaultShareText = \"ShareMessageTemplate\""},
+    {"label": "Số endpoint của Referral", "value": "4", "source": "BackendEnvironmentConfig.asset"},
+    {"label": "Endpoint lấy link mời", "value": "/v1/get-invite-link", "source": "BackendEnvironmentConfig.asset"},
+    {"label": "Endpoint lấy dữ liệu mời", "value": "/v1/get-my-invite-data", "source": "BackendEnvironmentConfig.asset"},
+    {"label": "Endpoint xác nhận mốc", "value": "/v1/confirm-referral-milestone", "source": "BackendEnvironmentConfig.asset"},
+    {"label": "Endpoint nhận thưởng", "value": "/v1/claim-invite-rewards", "source": "BackendEnvironmentConfig.asset"},
+    {"label": "Số trường của ReferralRewardItem", "value": "11 trường (referred_user_public_id … claimed_at)", "source": "ReferralRewardItem"},
+    {"label": "Tên khối đồng bộ", "value": "\"ReferralDataModel\"", "source": "ReferralDataService.GetSyncName"},
+    {"label": "Số sự kiện analytics", "value": "6 (invite_send, invite_popup_impression, referral_popup_invite_impression, referral_registered, referral_milestone_reached, friends_count)", "source": "Referral.analytics"},
+    {"label": "Kiểu chia sẻ Android", "value": "ACTION_SEND, text/plain, createChooser", "source": "ReferralService.AndroidShare"}
+  ],
+  "config_highlights": [
+    {"key": "ReferralConfigModel.json: IsEnabled", "value": "false", "meaning": "Bật/tắt tính năng mời bạn (client default, remote config ghi đè)"},
+    {"key": "ReferralConfigModel.json: UseBackendUrl", "value": "false", "meaning": "Dùng invite_link cá nhân từ backend hay chỉ link store"},
+    {"key": "ReferralConfigModel.json: PlayStoreUrl", "value": "https://play.google.com/store/apps/details?id=com.grandgames.magicsort", "meaning": "Link dự phòng cho Android"},
+    {"key": "ReferralConfigModel.json: AppStoreUrl", "value": "https://apps.apple.com/us/app/magic-sort/id6499209744", "meaning": "Link dự phòng cho iOS"},
+    {"key": "ReferralConfigModel.json: Milestone", "value": "5", "meaning": "Mốc level người được mời phải đạt để người mời có thưởng"},
+    {"key": "ReferralConfigModel.json: MaxRewardLimit", "value": "3", "meaning": "Số lượt thưởng tối đa nhận được"},
+    {"key": "ReferralConfigModel.json: ReferralRewards[0]", "value": "CurrencyType 1, Amount 100", "meaning": "100 coin mỗi lượt giới thiệu thành công"},
+    {"key": "ReferralConfigModel.json: ReferralRewards[1]", "value": "CurrencyType 6, Amount 1", "meaning": "1 Extra Bottle mỗi lượt"},
+    {"key": "ReferralConfigModel.json: ReferralRewards[2]", "value": "CurrencyType 2, TimeSpan 00:30:00", "meaning": "30 phút Unlimited Lives mỗi lượt"},
+    {"key": "ReferralService.DefaultShareText", "value": "\"ShareMessageTemplate\"", "meaning": "Khoá localize của câu mời; bản EN = \"Lets play Magic Sort together!\""},
+    {"key": "Android share intent", "value": "android.content.Intent, ACTION_SEND, EXTRA_TEXT, text/plain, createChooser", "meaning": "Chuỗi JNI dựng hộp thoại chia sẻ hệ thống"},
+    {"key": "ReferralDataModel", "value": "ReferrerId, ReachedMilestone, ClaimedRefRewards", "meaning": "Dữ liệu Referral lưu cục bộ và đồng bộ"},
+    {"key": "ReferralRewardItem", "value": "referred_user_public_id, referred_nick_name, referred_image_url, referred_image_id, referred_progress, referred_frame_id, referred_name_style, status, created_at, earned_at, claimed_at", "meaning": "Một lượt giới thiệu và trạng thái của nó"},
+    {"key": "ReferralDataService.GetSyncName", "value": "\"ReferralDataModel\"", "meaning": "Tên khối dữ liệu Referral trong SyncService"},
+    {"key": "ReferralService._showedInviteInSession", "value": "false mỗi phiên", "meaning": "Chỉ hiện popup mời một lần mỗi phiên"},
+    {"key": "BackendEnvironmentConfig – endpoint Referral", "value": "/v1/get-invite-link, /v1/get-my-invite-data, /v1/confirm-referral-milestone, /v1/claim-invite-rewards", "meaning": "Đường dẫn API của Referral"},
+    {"key": "GetMyInviteData → InviteDataResponse", "value": "{invite_link, rewards[]}", "meaning": "Lấy link mời riêng và danh sách lượt giới thiệu"},
+    {"key": "RegisterReferralRequestModel", "value": "{referrer_public_id}", "meaning": "Đăng ký quan hệ giới thiệu khi cài mới"},
+    {"key": "ConfirmReferralMilestone(referrerPublicId)", "value": "→ ReferralWebResponse", "meaning": "Báo người được mời đã đạt mốc"},
+    {"key": "ClaimInviteRewards → ClaimInviteRewardsResponse", "value": "{claimed_count}", "meaning": "Nhận thưởng giới thiệu"},
+    {"key": "AutoAddFriendRequestModel", "value": "{target_user_public_id}", "meaning": "Tự kết bạn với người mời qua FriendsService.TryAddFriendsFromDeeplink"},
+    {"key": "Localize 'FriendsInviteInfo2'", "value": "Nội dung mô tả mốc Milestone", "meaning": "Popup FriendsInviteInfoPopup giải thích điều kiện người chơi mới"}
+  ],
+  "tips": [
+    "Mốc level 5 đủ thấp để người được mời dễ đạt, giữ vòng lặp mời có tỉ lệ hoàn thành cao.",
+    "Trần 3 lượt giới hạn chi phí kinh tế mà vẫn khuyến khích mời nhóm bạn thân.",
+    "Gói thưởng trộn tiền, booster và Unlimited Lives để hữu ích với mọi kiểu người chơi.",
+    "Tự kết bạn khi cài qua link mời làm vòng lặp xã hội khép kín ngay lần mở game đầu tiên."
+  ],
+  "categories": ["Xã hội", "Live-ops", "Meta"]
+}

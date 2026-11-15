@@ -1,0 +1,831 @@
+{
+  "id": "Collection",
+  "title": "Collection (Bộ sưu tập thẻ)",
+  "tagline": "Hai bộ collection_4/5 có135thẻ/15theme; mở gói, đổi sao dư và vòng Gold. Bộ1/2/3 còn thiếu dữ liệu.",
+  "infobox": [
+    [
+      "Loại",
+      "Meta"
+    ],
+    [
+      "Mở khóa",
+      "Level 95 (FirstLevelToShow); bắt đầu tải bundle từ level 20"
+    ],
+    [
+      "Thời lượng",
+      "StartTime → FinishTime theo mùa (server)"
+    ],
+    [
+      "Chu kỳ / lịch",
+      "Theo mùa, EventType = 1 (mặc định client)"
+    ],
+    [
+      "Tham gia",
+      "Cá nhân, có tặng và xin thẻ trong team"
+    ],
+    [
+      "Vật phẩm thu thập",
+      "135 thẻ (15 theme × 9 thẻ), thẻ 1–5 sao và thẻ Gold"
+    ],
+    [
+      "Tiền tệ",
+      "Collection Pack (5 loại), sao dư từ thẻ trùng"
+    ],
+    [
+      "Thưởng chính",
+      "Thưởng mỗi theme, rương sao 100/250/500, hoàn thành bộ nhận 10000 coin và token hồ sơ"
+    ],
+    [
+      "Điều kiện / phụ thuộc",
+      "CollectionConfigModel.IsEnabled; asset bundle phải tải xong; tính năng tặng thẻ cần Teams"
+    ],
+    [
+      "Manager",
+      "CollectionService, CollectionDataService, CollectionStateService, CollectionRemoteService"
+    ]
+  ],
+  "description": [
+    "Hai bộ collection_4/5 có dữ liệu trong export gồm15theme×9thẻ=135; chưa xác minh cardinality bộ1/2/3. Trong hai bộ có nguồn, thẻ có từ 1 tới 5 sao và một số thẻ Gold ở các theme cuối.",
+    "Bản đóng gói có collection_4 'Summer Collection' và collection_5 'Wonderland Collection'.",
+    "Người chơi mở gói thẻ (Collection Pack, 5 loại chứa 2, 3, 4, 5 hoặc 6 thẻ) nhận từ level, sự kiện, rương và offer.",
+    "Thẻ trùng biến thành sao dư, dùng để mở Bonus Chest ở các mốc 100, 250 và 500 sao.",
+    "Hoàn thành đủ 9 thẻ của một theme được thưởng theme; độ khó tăng dần vì thẻ nhiều sao và thẻ Gold dồn về theme cuối.",
+    "Hoàn thành cả 15 theme nhận token hồ sơ (ví dụ 'Summer Badge') và mở vòng Gold Collection với thẻ vàng.",
+    "Vòng Gold trao token vàng ('Grand Summer Badge') và bộ thưởng lớn hơn hẳn vòng thường.",
+    "Gói thẻ loại 4 có cơ chế pity: liên tiếp không ra thẻ mới thì boost tăng, đạt 100 là chắc chắn ép một thẻ mới.",
+    "Gói thẻ loại 5 (cao cấp) đảm bảo có ít nhất một thẻ từ 3 sao trở lên hoặc thẻ Gold.",
+    "Trong team, người chơi tặng được thẻ trùng và xin thẻ thiếu, với giới hạn theo ngày; thẻ Gold không tặng và không xin được."
+  ],
+  "notes": [
+    "Lưu ý: sao dư tính bằng tổng (CardCount − 1) × StarCount trên toàn kho thẻ.",
+    "Lưu ý: mỗi Bonus Chest có hai biến thể — ChestReward khi bộ sưu tập đang chạy và ChestRewardWithoutCollection khi không.",
+    "Lưu ý: hoàn thành bộ sẽ xóa sạch kho thẻ (ResetInventory) rồi bật vòng Gold.",
+    "Lưu ý: trọng số rút thẻ giảm dần theo độ hiếm — thẻ 1 sao trọng số 32, còn thẻ 5 sao Gold chỉ 8.",
+    "Lưu ý: pity chỉ áp dụng cho gói loại 4; mở trúng thẻ mới thì boost reset về 0, không thì cộng thêm 50.",
+    "Lưu ý: ngưỡng '3 sao trở lên' của gói cao cấp là hằng số trong code, không phải config.",
+    "Lưu ý: giới hạn xin thẻ là 1 lần mỗi ngày (hằng số client), còn giới hạn tặng thẻ do Teams quyết định (server).",
+    "Lưu ý: thẻ đã gửi và nhận được đồng bộ hai chiều với server để tránh nhận trùng khi đổi thiết bị.",
+    "Lưu ý: chưa đủ level hiện 'Unlock Collection at Level {0}!'; chưa có bộ mới hiện 'New Collection will be coming soon!'."
+  ],
+  "how_it_works": [
+    "CollectionStateService.GetEventState() xét NoCachedEvent (0), NotIntroduced (1), InProgress (2), TimeIsUp (3), Claimed (4), ClaimedAndTimeIsUp (5), InsufficientLevel (6), Disable (7).",
+    "IsEligible() kiểm IsEnabled và level >= 95; IsPlayerLevelEnoughForBundleDownload() so với MinBundleDownloadLevel = 20 để bắt đầu tải asset sớm.",
+    "TryFetchCurrentEvent() gọi GetEventInfo(eventType) nhận CollectionResponseModel{EventId, EventType, StartTime, FinishTime, Segment, CollectionId}.",
+    "CollectionId trỏ tới file tĩnh trong Resources (collection_4.json hoặc collection_5.json); InitializeCollectionDataMaps() dựng _cardIdDataMap, _cardIdThemeMap, _packIdCardCountMap và _cardPoolMultiplierMap.",
+    "Song song tải bundle '<collectionId>_theme_icons' và các bundle '<collectionId>_<index>'; popup kích hoạt trao thưởng khởi động với CurrencyEarnReason.CollectionActivated (36).",
+    "Mở gói: OpenPack(packId, source) dispatch — packId 1, 2, 3 dùng OpenBasicPack; 4 dùng OpenMiddlePack; 5 dùng OpenPremiumPack.",
+    "OpenBasicPack dựng pool mọi thẻ, nhân số lần xuất hiện theo CardMultipliers (1 sao ×32, 2 sao ×24, 3 sao ×24, 4 sao ×16, 5 sao ×16, 5 sao Gold ×8) rồi rút ngẫu nhiên. Trong mã0.0.3063, GetRandomCardFromPool còn RemoveAll mọi bản sao của selected cardId trước lượt rút tiếp: không trùng cardId trong cùng pool draw; các pack khác vẫn có thể trùng kho đã sở hữu.",
+    "OpenMiddlePack đọc NewCardOpeningBoost: boost >= 100 thì chắc chắn ép một thẻ mới từ GetMissingCardsPool(); boost = 50 thì cần Random.value > 0,5.",
+    "UpdateNewCardOpeningBoost() reset boost về 0 nếu mở trúng thẻ mới, ngược lại cộng thêm 50.",
+    "OpenPremiumPack lọc pool bằng các điều kiện thẻ chưa có, StarCount > 2, IsGold hoặc StarCount tối đa, đảm bảo ít nhất một thẻ quý.",
+    "AddOpenedPackCardsToInventory() cộng thẻ vào CardInventory (CardId, CardCount, IsNewCard) và bắn card_received.",
+    "Sao dư đủ mốc thì OpenBonusChest(chestIndex) trao thưởng với CurrencyEarnReason.CollectionChest (33) và bắn star_chest_opened.",
+    "IsThemeCompleted(themeData) kiểm đủ 9 thẻ thì AddCompletedTheme() và trao ThemeReward với CurrencyEarnReason.CollectionThemeCompleted (34).",
+    "IsCollectionCompleted() kích OnCollectionCompleted(): trao CollectionReward hoặc GoldCollectionReward cộng token (CurrencyType.ProfileToken = 15) với CurrencyEarnReason.CollectionCompleted (35).",
+    "Sau đó ResetInventory() xóa kho thẻ và SetGoldCollectionActive(true) mở vòng Gold; readable event id đổi từ '<collectionId>_0' sang '<collectionId>_1'."
+  ],
+  "reward_tables": [
+    {
+      "title": "THƯỞNG HOÀN THÀNH TỪNG THEME (ThemeRewards)",
+      "columns": [
+        "Mốc",
+        "Điều kiện",
+        "Phần thưởng"
+      ],
+      "rows": [
+        [
+          "theme_1",
+          "Đủ 9 thẻ theme 1",
+          "2 giờ Unlimited Life"
+        ],
+        [
+          "theme_2",
+          "Đủ 9 thẻ theme 2",
+          "1 Shuffle"
+        ],
+        [
+          "theme_3",
+          "Đủ 9 thẻ theme 3",
+          "200 coin"
+        ],
+        [
+          "theme_4",
+          "Đủ 9 thẻ theme 4",
+          "2 Undo"
+        ],
+        [
+          "theme_5",
+          "Đủ 9 thẻ theme 5",
+          "2 Shuffle"
+        ],
+        [
+          "theme_6",
+          "Đủ 9 thẻ theme 6",
+          "400 coin"
+        ],
+        [
+          "theme_7",
+          "Đủ 9 thẻ theme 7",
+          "1 Extra Bottle"
+        ],
+        [
+          "theme_8",
+          "Đủ 9 thẻ theme 8",
+          "600 coin"
+        ],
+        [
+          "theme_9",
+          "Đủ 9 thẻ theme 9",
+          "4 Shuffle"
+        ],
+        [
+          "theme_10",
+          "Đủ 9 thẻ theme 10",
+          "2 Extra Bottle"
+        ],
+        [
+          "theme_11",
+          "Đủ 9 thẻ theme 11",
+          "800 coin"
+        ],
+        [
+          "theme_12",
+          "Đủ 9 thẻ theme 12",
+          "5 Shuffle"
+        ],
+        [
+          "theme_13",
+          "Đủ 9 thẻ theme 13",
+          "1000 coin"
+        ],
+        [
+          "theme_14",
+          "Đủ 9 thẻ theme 14",
+          "3 Extra Bottle"
+        ],
+        [
+          "theme_15",
+          "Đủ 9 thẻ theme 15",
+          "1500 coin"
+        ]
+      ]
+    },
+    {
+      "title": "RƯƠNG SAO DƯ (BonusChests)",
+      "columns": [
+        "Mốc",
+        "Điều kiện",
+        "Phần thưởng"
+      ],
+      "rows": [
+        [
+          "Rương 1 – khi Collection đang chạy",
+          "Đạt 100 sao dư",
+          "1 Undo, 1 Shuffle, 1 Collection Pack loại 1"
+        ],
+        [
+          "Rương 1 – khi không có Collection",
+          "Đạt 100 sao dư",
+          "1 Undo, 1 Shuffle"
+        ],
+        [
+          "Rương 2 – khi Collection đang chạy",
+          "Đạt 250 sao dư",
+          "1 Shuffle, 1 Collection Pack loại 1, 1 Collection Pack loại 2, 1 Collection Pack loại 3"
+        ],
+        [
+          "Rương 2 – khi không có Collection",
+          "Đạt 250 sao dư",
+          "2 Undo, 2 Shuffle"
+        ],
+        [
+          "Rương 3 – khi Collection đang chạy",
+          "Đạt 500 sao dư",
+          "1 Extra Bottle, 1 Collection Pack loại 3, 1 Collection Pack loại 4, 1 Collection Pack loại 5"
+        ],
+        [
+          "Rương 3 – khi không có Collection",
+          "Đạt 500 sao dư",
+          "2 Extra Bottle, 2 Shuffle"
+        ]
+      ]
+    },
+    {
+      "title": "THƯỞNG HOÀN THÀNH CẢ BỘ",
+      "columns": [
+        "Mốc",
+        "Điều kiện",
+        "Phần thưởng"
+      ],
+      "rows": [
+        [
+          "Collection thường",
+          "Hoàn thành đủ 15 theme (rương loại 8)",
+          "10000 coin, 5 Extra Bottle, 5 Shuffle, 5 Undo"
+        ],
+        [
+          "Token thường",
+          "Hoàn thành đủ 15 theme",
+          "1 token hồ sơ (collection_4_token 'Summer Badge')"
+        ],
+        [
+          "Gold Collection",
+          "Hoàn thành đủ 15 theme vòng Gold (rương loại 8)",
+          "15000 coin, 8 Extra Bottle, 8 Shuffle, 8 Undo"
+        ],
+        [
+          "Token vàng",
+          "Hoàn thành vòng Gold",
+          "1 token hồ sơ vàng (collection_4_token_gold 'Grand Summer Badge')"
+        ]
+      ]
+    },
+    {
+      "title": "TRỌNG SỐ RÚT THẺ (CardMultipliers)",
+      "columns": [
+        "Mốc",
+        "Điều kiện",
+        "Phần thưởng"
+      ],
+      "rows": [
+        [
+          "Thẻ 1 sao",
+          "IsGoldCard = false",
+          "Trọng số 32"
+        ],
+        [
+          "Thẻ 2 sao",
+          "IsGoldCard = false",
+          "Trọng số 24"
+        ],
+        [
+          "Thẻ 3 sao",
+          "IsGoldCard = false",
+          "Trọng số 24"
+        ],
+        [
+          "Thẻ 4 sao",
+          "IsGoldCard = false",
+          "Trọng số 16"
+        ],
+        [
+          "Thẻ 5 sao",
+          "IsGoldCard = false",
+          "Trọng số 16"
+        ],
+        [
+          "Thẻ 5 sao Gold",
+          "IsGoldCard = true",
+          "Trọng số 8"
+        ]
+      ]
+    },
+    {
+      "title": "NĂM LOẠI GÓI THẺ (Packs)",
+      "columns": [
+        "Mốc",
+        "Điều kiện",
+        "Phần thưởng"
+      ],
+      "rows": [
+        [
+          "Pack 1",
+          "OpenBasicPack, rút từ pool chung",
+          "2 thẻ"
+        ],
+        [
+          "Pack 2",
+          "OpenBasicPack, rút từ pool chung",
+          "3 thẻ"
+        ],
+        [
+          "Pack 3",
+          "OpenBasicPack, rút từ pool chung",
+          "4 thẻ"
+        ],
+        [
+          "Pack 4",
+          "OpenMiddlePack, có pity thẻ mới",
+          "5 thẻ"
+        ],
+        [
+          "Pack 5",
+          "OpenPremiumPack, đảm bảo thẻ 3+ sao hoặc Gold",
+          "6 thẻ"
+        ]
+      ]
+    },
+    {
+      "title": "CẤU TRÚC 15 THEME CỦA COLLECTION_4 (Summer Collection)",
+      "columns": [
+        "Mốc",
+        "Điều kiện",
+        "Phần thưởng"
+      ],
+      "rows": [
+        [
+          "theme_1 Camp",
+          "9 thẻ",
+          "Toàn thẻ 1 sao"
+        ],
+        [
+          "theme_2 Road Trip",
+          "9 thẻ",
+          "Thẻ 1–2 sao"
+        ],
+        [
+          "theme_3 Souvenir Shop",
+          "9 thẻ",
+          "Thẻ 1–2 sao"
+        ],
+        [
+          "theme_4 Travel",
+          "9 thẻ",
+          "Thẻ 1–2 sao"
+        ],
+        [
+          "theme_5 Gelato Delights",
+          "9 thẻ",
+          "Thẻ 1–3 sao"
+        ],
+        [
+          "theme_6 Festival",
+          "9 thẻ",
+          "Thẻ 1–3 sao"
+        ],
+        [
+          "theme_7 Fresh Food",
+          "9 thẻ",
+          "Thẻ 2–4 sao"
+        ],
+        [
+          "theme_8 Barbecue",
+          "9 thẻ",
+          "Thẻ 2–4 sao"
+        ],
+        [
+          "theme_9 Summer Spa",
+          "9 thẻ",
+          "Thẻ 2–5 sao"
+        ],
+        [
+          "theme_10 Starlit Cinema",
+          "9 thẻ",
+          "Thẻ 2–5 sao, 1 thẻ Gold"
+        ],
+        [
+          "theme_11 Deep Sea",
+          "9 thẻ",
+          "Thẻ 2–5 sao, 1 thẻ Gold"
+        ],
+        [
+          "theme_12 Cruise",
+          "9 thẻ",
+          "Thẻ 2–5 sao, 2 thẻ Gold"
+        ],
+        [
+          "theme_13 Ocean",
+          "9 thẻ",
+          "Thẻ 3–5 sao, 3 thẻ Gold"
+        ],
+        [
+          "theme_14 Pool",
+          "9 thẻ",
+          "Thẻ 4–5 sao, 4 thẻ Gold"
+        ],
+        [
+          "theme_15 Tropical",
+          "9 thẻ",
+          "Toàn thẻ 5 sao, 7 thẻ Gold"
+        ]
+      ]
+    },
+    {
+      "title": "CẤU TRÚC 15 THEME CỦA COLLECTION_5 (Wonderland Collection)",
+      "columns": [
+        "Mốc",
+        "Điều kiện",
+        "Phần thưởng"
+      ],
+      "rows": [
+        [
+          "theme_1 Snacks",
+          "9 thẻ",
+          "Toàn thẻ 1 sao"
+        ],
+        [
+          "theme_2 Cinema",
+          "9 thẻ",
+          "Thẻ sao thấp"
+        ],
+        [
+          "theme_3 Souvenir",
+          "9 thẻ",
+          "Thẻ sao thấp"
+        ],
+        [
+          "theme_4 Wonderland",
+          "9 thẻ",
+          "Thẻ sao thấp"
+        ],
+        [
+          "theme_5 Garden",
+          "9 thẻ",
+          "Thẻ sao trung bình"
+        ],
+        [
+          "theme_6 Water Play",
+          "9 thẻ",
+          "Thẻ sao trung bình"
+        ],
+        [
+          "theme_7 Playland",
+          "9 thẻ",
+          "Thẻ sao trung bình"
+        ],
+        [
+          "theme_8 Carnival",
+          "9 thẻ",
+          "Thẻ sao trung bình"
+        ],
+        [
+          "theme_9 Race Track",
+          "9 thẻ",
+          "Thẻ sao cao"
+        ],
+        [
+          "theme_10 Concert",
+          "9 thẻ",
+          "1 thẻ Gold"
+        ],
+        [
+          "theme_11 Parkour",
+          "9 thẻ",
+          "1 thẻ Gold"
+        ],
+        [
+          "theme_12 Amusement",
+          "9 thẻ",
+          "2 thẻ Gold"
+        ],
+        [
+          "theme_13 Haunted",
+          "9 thẻ",
+          "3 thẻ Gold"
+        ],
+        [
+          "theme_14 Magic Show",
+          "9 thẻ",
+          "4 thẻ Gold"
+        ],
+        [
+          "theme_15 Games",
+          "9 thẻ",
+          "Toàn thẻ 5 sao, 7 thẻ Gold"
+        ]
+      ]
+    },
+    {
+      "title": "TRẠNG THÁI NÚT GỬI/XIN THẺ (CardSendRequestState)",
+      "columns": [
+        "Mốc",
+        "Điều kiện",
+        "Phần thưởng"
+      ],
+      "rows": [
+        [
+          "SendActive = 0",
+          "Có thẻ trùng, còn lượt tặng trong ngày",
+          "Nút tặng thẻ bật"
+        ],
+        [
+          "SendNotActiveDailyLimit = 1",
+          "Hết lượt tặng trong ngày",
+          "Nút tặng tắt"
+        ],
+        [
+          "SendNotActiveNoDuplicate = 2",
+          "Không có thẻ trùng",
+          "Nút tặng tắt"
+        ],
+        [
+          "SendNotActiveGoldCard = 3",
+          "Thẻ Gold",
+          "'Gold cards can`t be sent!'"
+        ],
+        [
+          "RequestActive = 4",
+          "Thẻ còn thiếu, còn lượt xin",
+          "Nút xin thẻ bật"
+        ],
+        [
+          "RequestNotActiveDailyLimit = 5",
+          "Đã xin đủ 1 thẻ hôm nay",
+          "Nút xin tắt"
+        ],
+        [
+          "RequestNotActiveGoldCard = 6",
+          "Thẻ Gold",
+          "'Gold cards cannot be requested.'"
+        ],
+        [
+          "TeamsNotEnabled = 7",
+          "Chưa vào team hoặc Teams tắt",
+          "'CollectionNeedJoinTeam'"
+        ]
+      ]
+    }
+  ],
+  "key_numbers": [
+    {
+      "label": "Level mở khóa Collection",
+      "value": "95 (mặc định client)",
+      "source": "CollectionConfigModel.json FirstLevelToShow"
+    },
+    {
+      "label": "Level bắt đầu tải asset bundle",
+      "value": "20",
+      "source": "CollectionConfigModel.json MinBundleDownloadLevel"
+    },
+    {
+      "label": "Bật/tắt tính năng",
+      "value": "false (mặc định client)",
+      "source": "CollectionConfigModel.json IsEnabled"
+    },
+    {
+      "label": "EventType mặc định",
+      "value": "1",
+      "source": "CollectionConfigModel.json EventType"
+    },
+    {
+      "label": "Số theme mỗi bộ",
+      "value": "15",
+      "source": "collection_4.json / collection_5.json Themes"
+    },
+    {
+      "label": "Số thẻ mỗi theme",
+      "value": "9",
+      "source": "collection_4.json Themes"
+    },
+    {
+      "label": "Tổng số thẻ một bộ",
+      "value": "135 (15 × 9)",
+      "source": "collection_4.json"
+    },
+    {
+      "label": "Số loại gói thẻ",
+      "value": "5 (chứa 2, 3, 4, 5, 6 thẻ)",
+      "source": "collection_4.json Packs"
+    },
+    {
+      "label": "Mốc sao mở rương",
+      "value": "100, 250, 500 sao dư",
+      "source": "CollectionConfigModel.json BonusChests[*].StarCount"
+    },
+    {
+      "label": "Trọng số thẻ 1 sao",
+      "value": "32",
+      "source": "CardMultipliers[0].Multiplier"
+    },
+    {
+      "label": "Trọng số thẻ 2 và 3 sao",
+      "value": "24",
+      "source": "CardMultipliers[1] / [2].Multiplier"
+    },
+    {
+      "label": "Trọng số thẻ 4 và 5 sao",
+      "value": "16",
+      "source": "CardMultipliers[3] / [4].Multiplier"
+    },
+    {
+      "label": "Trọng số thẻ 5 sao Gold",
+      "value": "8",
+      "source": "CardMultipliers[5].Multiplier"
+    },
+    {
+      "label": "Bước tăng pity gói 4",
+      "value": "50",
+      "source": "CollectionService.UpdateNewCardOpeningBoost"
+    },
+    {
+      "label": "Ngưỡng pity chắc chắn ra thẻ mới",
+      "value": "100",
+      "source": "CollectionService.OpenMiddlePack"
+    },
+    {
+      "label": "Ngưỡng thẻ quý của gói 5",
+      "value": "StarCount > 2 (3 sao trở lên)",
+      "source": "CollectionService.Get3PlusStarCardsPool"
+    },
+    {
+      "label": "Giới hạn xin thẻ mỗi ngày",
+      "value": "1 (hằng số client)",
+      "source": "CollectionService.GetDailyCardRequestLimit"
+    },
+    {
+      "label": "Giới hạn tặng thẻ mỗi ngày",
+      "value": "TeamsService.GetCardNumberUserCansSendPerDay() (server)",
+      "source": "CollectionService.GetDailyCardSendLimit"
+    },
+    {
+      "label": "Thưởng hoàn thành bộ thường",
+      "value": "10000 coin, 5 Extra Bottle, 5 Shuffle, 5 Undo",
+      "source": "CollectionConfigModel.json CollectionReward"
+    },
+    {
+      "label": "Thưởng hoàn thành bộ Gold",
+      "value": "15000 coin, 8 Extra Bottle, 8 Shuffle, 8 Undo",
+      "source": "CollectionConfigModel.json GoldCollectionReward"
+    },
+    {
+      "label": "Tổng coin từ thưởng theme",
+      "value": "4500 coin (200 + 400 + 600 + 800 + 1000 + 1500)",
+      "source": "Tổng ThemeRewards coin"
+    },
+    {
+      "label": "Loại rương thưởng hoàn thành bộ",
+      "value": "ChestType 8",
+      "source": "CollectionReward.ChestType / GoldCollectionReward.ChestType"
+    },
+    {
+      "label": "Mã gói thẻ và token",
+      "value": "CurrencyType.CollectionPack = 14, ProfileToken = 15",
+      "source": "CurrencyType.cs"
+    },
+    {
+      "label": "Số trạng thái sự kiện",
+      "value": "8 (NoCachedEvent=0 … Disable=7)",
+      "source": "CollectionStateType"
+    },
+    {
+      "label": "Số trạng thái nút gửi/xin thẻ",
+      "value": "8 (SendActive=0 … TeamsNotEnabled=7)",
+      "source": "CardSendRequestState"
+    }
+  ],
+  "config_highlights": [
+    {
+      "key": "CollectionConfigModel.IsEnabled",
+      "value": "false (mặc định client)",
+      "meaning": "Bật/tắt tính năng Collection"
+    },
+    {
+      "key": "CollectionConfigModel.FirstLevelToShow",
+      "value": "95",
+      "meaning": "Level mở khóa Collection"
+    },
+    {
+      "key": "CollectionConfigModel.MinBundleDownloadLevel",
+      "value": "20",
+      "meaning": "Level bắt đầu tải asset bundle của bộ sưu tập"
+    },
+    {
+      "key": "CollectionConfigModel.EventType",
+      "value": "1",
+      "meaning": "Loại sự kiện gửi lên backend"
+    },
+    {
+      "key": "CollectionConfigModel.CardMultipliers",
+      "value": "1 sao ×32, 2 sao ×24, 3 sao ×24, 4 sao ×16, 5 sao ×16, 5 sao Gold ×8",
+      "meaning": "Trọng số xuất hiện của thẻ trong pool rút"
+    },
+    {
+      "key": "CollectionConfigModel.BonusChests",
+      "value": "3 mốc: 100, 250, 500 sao dư",
+      "meaning": "Mốc sao và thưởng rương, mỗi mốc có hai biến thể"
+    },
+    {
+      "key": "CollectionConfigModel.ThemeRewards",
+      "value": "15 mục, mỗi ThemeId một ThemeReward",
+      "meaning": "Thưởng khi hoàn thành từng theme"
+    },
+    {
+      "key": "CollectionConfigModel.CollectionReward",
+      "value": "Rương loại 8: 10000 coin, 5 Extra Bottle, 5 Shuffle, 5 Undo",
+      "meaning": "Thưởng hoàn thành bộ thường"
+    },
+    {
+      "key": "CollectionConfigModel.GoldCollectionReward",
+      "value": "Rương loại 8: 15000 coin, 8 Extra Bottle, 8 Shuffle, 8 Undo",
+      "meaning": "Thưởng hoàn thành bộ Gold"
+    },
+    {
+      "key": "collection_4.json",
+      "value": "Id 'collection_4', Name 'Summer Collection', GoldName 'Grand Summer Collection', TokenName 'Summer Badge', GoldTokenName 'Grand Summer Badge'",
+      "meaning": "Bộ sưu tập mùa hè"
+    },
+    {
+      "key": "collection_5.json",
+      "value": "Id 'collection_5', Name 'Wonderland Collection', GoldName 'Grand Wonderland Collection', TokenName 'Wonderland Badge', GoldTokenName 'Grand Wonderland Badge'",
+      "meaning": "Bộ sưu tập Wonderland"
+    },
+    {
+      "key": "Packs[]",
+      "value": "Id 1 → 2 thẻ; 2 → 3; 3 → 4; 4 → 5; 5 → 6",
+      "meaning": "Năm loại gói thẻ, ứng với analytics collection_pack_1..5"
+    },
+    {
+      "key": "OpenPack dispatch",
+      "value": "packId 1, 2, 3 → OpenBasicPack; 4 → OpenMiddlePack; 5 → OpenPremiumPack",
+      "meaning": "Ba thuật toán rút thẻ khác nhau"
+    },
+    {
+      "key": "NewCardOpeningBoost",
+      "value": "bước 50, ngưỡng 100; boost = 50 cần Random.value > 0,5",
+      "meaning": "Cơ chế bù may cho gói thẻ loại 4"
+    },
+    {
+      "key": "Get3PlusStarCardsPool",
+      "value": "StarCount > 2",
+      "meaning": "Bộ lọc thẻ quý dùng trong gói cao cấp"
+    },
+    {
+      "key": "CollectionResponseModel",
+      "value": "EventId, EventType, StartTime, FinishTime, Segment, CollectionId",
+      "meaning": "Phiên sự kiện và bộ sưu tập nào được dùng"
+    },
+    {
+      "key": "CollectionData",
+      "value": "Id, Name, GoldName, TokenId, GoldTokenId, TokenName, GoldTokenName, Themes[], Packs[]",
+      "meaning": "Dữ liệu tĩnh của một bộ sưu tập"
+    },
+    {
+      "key": "CollectionStateType",
+      "value": "NoCachedEvent=0, NotIntroduced=1, InProgress=2, TimeIsUp=3, Claimed=4, ClaimedAndTimeIsUp=5, InsufficientLevel=6, Disable=7",
+      "meaning": "Máy trạng thái sự kiện"
+    },
+    {
+      "key": "CardSendRequestState",
+      "value": "SendActive=0, SendNotActiveDailyLimit=1, SendNotActiveNoDuplicate=2, SendNotActiveGoldCard=3, RequestActive=4, RequestNotActiveDailyLimit=5, RequestNotActiveGoldCard=6, TeamsNotEnabled=7",
+      "meaning": "Trạng thái nút gửi và xin thẻ trong team"
+    },
+    {
+      "key": "CurrencyEarnReason nhóm Collection",
+      "value": "CollectionChest=33, CollectionThemeCompleted=34, CollectionCompleted=35, CollectionActivated=36, TeamCardHelp=37",
+      "meaning": "Phân loại nguồn thưởng trong analytics 'earned'"
+    },
+    {
+      "key": "CurrencyType.CollectionPack / ProfileToken",
+      "value": "14 / 15",
+      "meaning": "Gói thẻ và token hồ sơ"
+    },
+    {
+      "key": "Tên asset bundle",
+      "value": "'<collectionId>_theme_icons' cho icon theme; '<collectionId>_<index>' cho icon thẻ",
+      "meaning": "Đã giải mã 15 theme và icon của collection_5 trong cache: 135 card sprite và 15 theme icon sprite. Phạm vi là mùa 5 trong cache."
+    },
+    {
+      "key": "GetReadableEventId",
+      "value": "'<collectionId>_0' (thường) hoặc '<collectionId>_1' (Gold)",
+      "meaning": "Id dễ đọc cho analytics"
+    },
+    {
+      "key": "CollectionDataService.GetSyncName",
+      "value": "CollectionModel",
+      "meaning": "Tên bản ghi lưu và đồng bộ"
+    },
+    {
+      "key": "CollectionCacheModel (mùa)",
+      "value": "EventId, Segment, StartTime, FinishTime, CollectionId, IsClaimed, IsClaimedActivationReward, IsGoldCollectionActive",
+      "meaning": "Trạng thái mùa hiện tại"
+    },
+    {
+      "key": "CardInventoryDataModel",
+      "value": "CardId, CardCount, IsNewCard",
+      "meaning": "Một dòng trong kho thẻ"
+    },
+    {
+      "key": "CollectionCacheModel (tiến độ)",
+      "value": "NewCardOpeningBoost, CompletedThemeIds, SentCards, ReceivedCards",
+      "meaning": "Pity, theme đã xong và lịch sử gửi/nhận thẻ"
+    },
+    {
+      "key": "CardHelpDataModel",
+      "value": "CardId, MessageId, SenderImageId/Url/UserName/UserId/FrameId/NameStyleId, IsClaimed",
+      "meaning": "Một lượt tặng thẻ trong team"
+    },
+    {
+      "key": "CollectionAnimationConfig",
+      "value": "ScriptableObject 88 trường",
+      "meaning": "Tham số hoạt ảnh mở gói, lật thẻ và hoàn thành theme"
+    },
+    {
+      "key": "Localization chính",
+      "value": "CollectionUnlock 'Unlock Collection at Level {0}!', CollectionNewComingSoon, CollectionCompleted '{0}\\nCompleted!', CollectionYouGotToken 'You got\\n{0}!', CollectionCardReceived 'Card Received!'",
+      "meaning": "Text UI được tham chiếu trực tiếp trong code"
+    }
+  ],
+  "tips": [
+    "Dồn thẻ nhiều sao và thẻ Gold về các theme cuối tạo đường cong khó tăng dần mà không cần thay đổi luật.",
+    "Biến thẻ trùng thành sao dư loại bỏ cảm giác 'mở gói vô ích' — mọi lần mở đều tiến bộ theo một trục nào đó.",
+    "Pity trên gói loại 4 giữ cảm giác công bằng ở tầm giữa mà không làm gói cao cấp mất giá trị.",
+    "Vòng Gold cho phép tái sử dụng toàn bộ nội dung một mùa với đường cong khó hơn và thưởng lớn hơn.",
+    "Tặng và xin thẻ trong team biến bộ sưu tập cá nhân thành lý do để trò chuyện và gắn bó với đội."
+  ],
+  "categories": [
+    "Meta",
+    "Xã hội",
+    "Live-ops",
+    "Tiến trình"
+  ]
+}

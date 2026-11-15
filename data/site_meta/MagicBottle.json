@@ -1,0 +1,441 @@
+{
+  "id": "MagicBottle",
+  "title": "Magic Bottle (Chai phép)",
+  "tagline": "Thắng đủ số level để kích hoạt, mỗi ván sau được tặng thêm một chai trống cho tới khi thua.",
+  "infobox": [
+    [
+      "Loại",
+      "Cơ chế lõi"
+    ],
+    [
+      "Mở khóa",
+      "Level ≥ MagicBottleConfigModel.FirstLevelToShow (server)"
+    ],
+    [
+      "Thời lượng",
+      "Giữ trạng thái kích hoạt cho tới khi thua một ván"
+    ],
+    [
+      "Tham gia",
+      "Người chơi đơn"
+    ],
+    [
+      "Vật phẩm thu thập",
+      "Tiến độ thắng level (Progress / NeededProgress)"
+    ],
+    [
+      "Thưởng chính",
+      "1 chai trống thêm trên bàn ở mỗi level"
+    ],
+    [
+      "Điều kiện / phụ thuộc",
+      "MagicBottleConfigModel.IsEnable = true và đã xem popup giới thiệu (EventShownInLifeTime)"
+    ],
+    [
+      "Manager",
+      "MagicBottleService (kèm MagicBottleDataService, MagicBottleInGameManager)"
+    ]
+  ],
+  "description": [
+    "Magic Bottle là trợ thủ 'một chai thêm': thắng đủ số level ở Home để kích hoạt, sau đó mỗi ván được tặng thêm một chai trống trên bàn.",
+    "Chai trống là thứ quý nhất trong game sắp xếp nước vì mở ra rất nhiều nước đi mới.",
+    "Trạng thái đi qua ba mức: chưa đủ level → đủ level nhưng chưa xem giới thiệu → đang tích tiến độ → đã có Magic Bottle.",
+    "Tiến độ chỉ tăng khi đã xem popup giới thiệu (EventShownInLifeTime = true), mỗi lần thắng level cộng 1.",
+    "Trạng thái kích hoạt sống đến khi người chơi thua một ván; thua thì Progress về 0 và phải làm lại từ đầu.",
+    "Có popup Are You Sure cảnh báo 'You will lose your Magic Bottle!' trước khi bỏ ván.",
+    "Khi vừa chạm mốc, popup Congrats chạy hoạt ảnh hai phần: chai phóng to bay theo đường Bezier ra giữa màn hình, rồi bay về nút Play.",
+    "Trong level, chai thêm bay vào bằng hoạt ảnh riêng: một cái gối (PillowView) hạ xuống rồi chai đáp lên đúng vị trí theo bố cục bàn.",
+    "Tính năng do khoá remote config MagicBottleConfigModel điều khiển và không có file mặc định trong build, nên hoàn toàn phụ thuộc server.",
+    "Trên bàn còn có biến thể họ hàng ChargeableBottle — chai mini nạp lại được, thực chất là hiện thân của biến thể Super Charger ChargeableBottle."
+  ],
+  "notes": [
+    "Lưu ý: không có Resources/defaultconfigs/MagicBottleConfigModel.json nên IsEnable, FirstLevelToShow, NeededProgress đều là (server).",
+    "Lưu ý: TryIncreaseProgress chỉ chạy khi IsEligible và EventShownInLifeTime = true — popup giới thiệu là điều kiện tiên quyết để bắt đầu tích tiến độ.",
+    "Lưu ý: mở app cũng gọi TryResetProgress() — nếu server đã tắt tính năng hoặc người chơi tụt điều kiện thì tiến độ bị xoá.",
+    "Lưu ý: khi mất Magic Bottle, cả Progress lẫn LastSeenLobbyButtonProgress đều đặt về 0.",
+    "Lưu ý: MagicBottleAreYouSureContainer dùng chung lớp cơ sở với Snitch và SuperCharger — ba container có thể cùng hiện trong một popup Are You Sure.",
+    "Lưu ý: nút Magic Bottle chỉ hiện khi cột icon ở Home còn chỗ (ILobbyShownService / LobbyEventsService.CanShowService).",
+    "Lưu ý: ChargeableBottle được điều khiển bởi SuperChargerConfigModel.Type = 1, không phải MagicBottleConfigModel.",
+    "AddMagicBottleAndHide gọi AddBottleAsMagicBottle và hide sprite. AddBottleAsMagicBottle gọi AddBottle(x,0,1); tham số thứ3 có signature bottleHeight, AddBottle chọn config bằng height và gọi ItemFactory.GetBottleItem→BottleItem.Prepare. Không có bước add water trong AddMagicBottleAndHide. Vì vậy không được mặc định magic bottle cao4 như chai thường. Giữ partial: cần pool/reset trace và runtime để xác nhận trạng thái nước effective."
+  ],
+  "how_it_works": [
+    "Server bật khoá Firebase MagicBottleConfigModel; FirebaseRemoteConfigResolver đọc và MagicBottleConfigModel.IsValid() kiểm tra.",
+    "Vào Home, MagicBottleService.IsEligible() kiểm tra IsEnable = true và level người chơi ≥ FirstLevelToShow.",
+    "Nếu đủ điều kiện mà chưa xem giới thiệu, TryShowMagicBottlePopUpOnLobbyReturnCommand mở MagicBottlePopUp (impression source FirstOpen) và mở luôn MagicBottleInfoPopUp.",
+    "MagicBottleInfoPopUp trình bày 3 bước — thắng {0} level, kích hoạt, nhận thêm 1 chai mỗi ván — cộng cảnh báo MagicBottleInfoPopupWarning.",
+    "MarkEventShownInLifeTime() đánh dấu đã giới thiệu; từ lần thắng sau tiến độ mới bắt đầu tính.",
+    "Mỗi lần thắng level, TryIncreaseProgress() gọi MagicBottleDataService.IncreaseProgress() tăng Progress thêm 1 và đánh dấu dữ liệu bẩn.",
+    "Về Home, nếu Progress > LastSeenLobbyButtonProgress thì MagicBottleLobbyButton chạy hoạt ảnh thu thập rồi TrySetLastSeenLobbyButtonProgress() ghi mốc đã xem.",
+    "MagicBottleProgressView vẽ thanh ngang hai màu (xanh phần đã đạt, đỏ phần còn lại) và đổi chữ giữa MagicBottlePopupInfo và MagicBottlePopupInfoWin.",
+    "Khi lần thắng vừa đưa tiến độ chạm NeededProgress, HasGainedMagicBottle() = true và TryPlayMagicBottleCongratsCommand mở MagicBottleCongratsPopUp.",
+    "PlayCongratsFirstPart phóng to chai, cho bay theo Bezier tới giữa màn hình kèm particle, làm mờ nền, chạy chữ 'Congratulations!' rồi hiện 'tap to continue'; analytics magic_bottle_claim.",
+    "PlayCongratsSecondPart đưa chai về nút Play (PlayButtonContainer, CurrencyRewardTarget), thu nhỏ chữ và đóng popup.",
+    "Vào level khi HasMagicBottle = true: MagicBottleInGameManager.Initialize(bottleCollections) rồi AddMagicBottleAndHide() thêm một BottleItem phụ nhưng ẩn.",
+    "PlayMagicBottleAnimations(bottleRowCount, highestBottleCountInOneRow) chạy chuỗi: xoay vào → bay Bezier → nhảy → hạ xuống chỗ ngồi → particle → shine, với offset riêng cho bố cục 3 hàng.",
+    "Nếu người chơi bấm thoát, MagicBottleAreYouSureContainer hiện MagicBottleAYSWarning để cảnh báo mất chai.",
+    "Thua hoặc bỏ ván: TryResetProgress() đặt Progress = 0 và LastSeenLobbyButtonProgress = 0, bắn analytics magic_bottle_lost."
+  ],
+  "reward_tables": [
+    {
+      "title": "PHẦN THƯỞNG MAGIC BOTTLE",
+      "columns": [
+        "Mốc",
+        "Điều kiện",
+        "Phần thưởng"
+      ],
+      "rows": [
+        [
+          "Kích hoạt Magic Bottle",
+          "Progress đạt MagicBottleConfigModel.NeededProgress (server)",
+          "1 chai trống thêm trên bàn ở mỗi level, cho tới khi thua"
+        ],
+        [
+          "Dùng ChargeableBottle",
+          "Chai mini còn charge (_chargeCount > 0)",
+          "1 lần rót thêm qua chai mini, nạp lại bằng cách sắp màu"
+        ]
+      ]
+    },
+    {
+      "title": "CẤU HÌNH ĐIỀU KHIỂN (MagicBottleConfigModel — server)",
+      "columns": [
+        "Khoá",
+        "Giá trị",
+        "Ý nghĩa"
+      ],
+      "rows": [
+        [
+          "IsEnable",
+          "(server)",
+          "Bật/tắt Magic Bottle"
+        ],
+        [
+          "FirstLevelToShow",
+          "(server)",
+          "Level tối thiểu để thấy tính năng"
+        ],
+        [
+          "NeededProgress",
+          "(server)",
+          "Số level phải thắng để nhận chai thêm"
+        ]
+      ]
+    },
+    {
+      "title": "BA TRẠNG THÁI KIỂM TRA TRONG MagicBottleService",
+      "columns": [
+        "Hàm",
+        "Điều kiện",
+        "Ý nghĩa"
+      ],
+      "rows": [
+        [
+          "IsEligible()",
+          "IsEnable = true và level ≥ FirstLevelToShow",
+          "Đủ điều kiện thấy tính năng"
+        ],
+        [
+          "IsActive()",
+          "IsEligible && EventShownInLifeTime",
+          "Đã xem giới thiệu, đang tích tiến độ"
+        ],
+        [
+          "HasMagicBottle()",
+          "IsEligible && Progress ≥ NeededProgress",
+          "Đã kích hoạt, có chai thêm trong level"
+        ]
+      ]
+    },
+    {
+      "title": "VÒNG ĐỜI CHAI MINI ChargeableBottle",
+      "columns": [
+        "Giai đoạn",
+        "Clip / hàm",
+        "Ghi chú"
+      ],
+      "rows": [
+        [
+          "Chuẩn bị",
+          "Prepare(...) — clip \"ChargeableBottleReset\"",
+          "hasInitialCharge lấy từ ChargeableBottleItemModel.HasInitialCharge"
+        ],
+        [
+          "Nạp chai mới",
+          "PrepareNewBottle() — clip \"ChargeableBottleNewBottle 1\"",
+          "Nạp lại bằng cách sắp màu"
+        ],
+        [
+          "Được chọn",
+          "PlayBottleSelectedAnimation / PlayBottleDeSelectedAnimation",
+          "Đổi màu _initialColor → _selectedColor → _movedColor"
+        ],
+        [
+          "Biến mất sau khi dùng",
+          "OnOriginBottleReturnToInitialPosition — clip \"ChargeableBottleDisappear\"",
+          "Bắn analytics supercharger_used"
+        ]
+      ]
+    },
+    {
+      "title": "SỰ KIỆN ANALYTICS",
+      "columns": [
+        "Event",
+        "Tham số",
+        "Khi nào"
+      ],
+      "rows": [
+        [
+          "magic_bottle_popup_impression",
+          "impression_source, current_bottle_progress, magic_bottle_max_progress, progress",
+          "Mở MagicBottlePopUp"
+        ],
+        [
+          "magic_bottle_info_impression",
+          "impression_source, current_bottle_progress, magic_bottle_max_progress, progress",
+          "Mở MagicBottleInfoPopUp"
+        ],
+        [
+          "magic_bottle_claim",
+          "magic_bottle_max_progress, progress",
+          "Tiến độ đạt NeededProgress"
+        ],
+        [
+          "magic_bottle_lost",
+          "magic_bottle_max_progress, progress",
+          "Mất Magic Bottle do thua hoặc không còn đủ điều kiện"
+        ],
+        [
+          "supercharger_used",
+          "charger_type, color_filled, usage_count, moves_made, bottle_completed…",
+          "Chai mini ChargeableBottle được dùng"
+        ]
+      ]
+    }
+  ],
+  "key_numbers": [
+    {
+      "label": "Bật/tắt tính năng",
+      "value": "(server) — không có file mặc định trong build",
+      "source": "MagicBottleConfigModel.IsEnable"
+    },
+    {
+      "label": "Level mở khoá",
+      "value": "(server)",
+      "source": "MagicBottleConfigModel.FirstLevelToShow"
+    },
+    {
+      "label": "Số level phải thắng để kích hoạt",
+      "value": "(server)",
+      "source": "MagicBottleConfigModel.NeededProgress"
+    },
+    {
+      "label": "Tiến độ cộng mỗi lần thắng",
+      "value": "+1",
+      "source": "MagicBottleDataService.IncreaseProgress"
+    },
+    {
+      "label": "Chai thêm nhận được",
+      "value": "1 chai trống mỗi level",
+      "source": "MagicBottleInGameManager.AddMagicBottleAndHide"
+    },
+    {
+      "label": "Điều kiện mất chai",
+      "value": "Thua hoặc bỏ một ván → Progress = 0",
+      "source": "MagicBottleService.TryResetProgress"
+    },
+    {
+      "label": "Nguồn mở MagicBottlePopUp",
+      "value": "LobbyIcon = 0, FirstOpen = 1",
+      "source": "MagicBottlePopUpImpressionSource"
+    },
+    {
+      "label": "Nguồn mở MagicBottleInfoPopUp",
+      "value": "InfoButton = 0, FirstOpen = 1",
+      "source": "MagicBottleInfoPopUpImpressionSource"
+    },
+    {
+      "label": "Số bước trong popup hướng dẫn",
+      "value": "3 bước + 1 cảnh báo",
+      "source": "MagicBottleInfoPopupStep1/2/3, MagicBottleInfoPopupWarning"
+    },
+    {
+      "label": "Số phần của hoạt ảnh chúc mừng",
+      "value": "2 (PlayCongratsFirstPart, PlayCongratsSecondPart)",
+      "source": "MagicBottleCongratsPopUp"
+    },
+    {
+      "label": "Khoá lưu/đồng bộ dữ liệu",
+      "value": "\"MagicBottleModel\"",
+      "source": "MagicBottleDataService.GetSyncName"
+    },
+    {
+      "label": "Trường dữ liệu lưu",
+      "value": "Progress, LastSeenLobbyButtonProgress, IsIntroduced, EventShownInLifeTime",
+      "source": "MagicBottleModel"
+    },
+    {
+      "label": "Số popup của tính năng",
+      "value": "3 (\"MagicBottlePopUp\", \"MagicBottleInfoPopUp\", \"MagicBottleCongratsPopUp\")",
+      "source": "MagicBottlePopUpArguments và các Arguments khác"
+    },
+    {
+      "label": "Định dạng chữ số level",
+      "value": "\"{0} Levels\" và \"{0}/{1}\"",
+      "source": "MagicBottleInfoPopUp.Show, MagicBottleLobbyButton"
+    },
+    {
+      "label": "Số khoá localization của tính năng",
+      "value": "11 khoá (MagicBottle, MagicBottleTitle, MagicBottlePopupInfo, …)",
+      "source": "GameDesign/appendix/localization.tsv"
+    },
+    {
+      "label": "Ba clip hoạt ảnh chai mini",
+      "value": "\"ChargeableBottleReset\", \"ChargeableBottleNewBottle 1\", \"ChargeableBottleDisappear\"",
+      "source": "ChargeableBottleItem, ChargeableBottleView"
+    },
+    {
+      "label": "Biến thể Super Charger tương ứng",
+      "value": "SuperChargerConfigModel.Type = 1 (ChargeableBottle)",
+      "source": "gaps của GDD MagicBottle"
+    },
+    {
+      "label": "Bố cục bàn có tham số riêng",
+      "value": "2 hàng và 3 hàng (StartControlPointOffset vs StartControlPointOffset3Row)",
+      "source": "MagicBottleAnimationConfig"
+    },
+    {
+      "label": "Đầu vào tính vị trí đáp của chai",
+      "value": "bottleRowCount và highestBottleCountInOneRow",
+      "source": "PillowView.PlayEnterAnimation / PillowPositionValues"
+    },
+    {
+      "label": "Backend liên quan",
+      "value": "sync-data (đồng bộ MagicBottleModel)",
+      "source": "MagicBottleDataService.SerializeModelForSync"
+    }
+  ],
+  "config_highlights": [
+    {
+      "key": "MagicBottleConfigModel.IsEnable",
+      "value": "(server)",
+      "meaning": "Bật/tắt Magic Bottle; không có file mặc định trong build"
+    },
+    {
+      "key": "MagicBottleConfigModel.FirstLevelToShow",
+      "value": "(server)",
+      "meaning": "Level tối thiểu để thấy tính năng"
+    },
+    {
+      "key": "MagicBottleConfigModel.NeededProgress",
+      "value": "(server)",
+      "meaning": "Số level phải thắng để nhận chai thêm"
+    },
+    {
+      "key": "MagicBottlePopUpImpressionSource",
+      "value": "LobbyIcon=0, FirstOpen=1",
+      "meaning": "Nguồn mở popup chính, gửi trong analytics"
+    },
+    {
+      "key": "MagicBottleInfoPopUpImpressionSource",
+      "value": "InfoButton=0, FirstOpen=1",
+      "meaning": "Nguồn mở popup hướng dẫn"
+    },
+    {
+      "key": "Tên popup",
+      "value": "\"MagicBottlePopUp\", \"MagicBottleInfoPopUp\", \"MagicBottleCongratsPopUp\"",
+      "meaning": "Khoá mở popup qua IPopUpService"
+    },
+    {
+      "key": "MagicBottleCongratsPopUpArguments.MagicBottleSpawnPosition",
+      "value": "Vector3 (runtime)",
+      "meaning": "Vị trí chai xuất phát trong hoạt ảnh chúc mừng"
+    },
+    {
+      "key": "MagicBottleCongratsAnimationConfig.asset",
+      "value": "BottleEnlargeDuration, BezierAOffset/BOffset/EndPosition, BackgroundStartAlpha/EndAlpha, TapToContinueTextTime, EnableInputTime, ClosePopupTime, PlayButtonMagicBottlePlayTime…",
+      "meaning": "Toàn bộ nhịp popup chúc mừng"
+    },
+    {
+      "key": "MagicBottleAnimationConfig.asset",
+      "value": "EnterAnimationRotationDuration, StartControlPointOffset / StartControlPointOffset3Row, GoToTargetAnimationDuration, JumpDuration/JumpHeight/JumpCurve, BottleMoveDownToSitPositionDuration, SitParticleTime, ShineDuration…",
+      "meaning": "Hoạt ảnh chai thêm bay vào bàn, có tham số riêng cho bố cục 3 hàng"
+    },
+    {
+      "key": "PillowViewAnimationConfig / PillowPositionValues",
+      "value": "vị trí và nhịp của gối đỡ chai theo bottleRowCount và highestBottleCountInOneRow",
+      "meaning": "Đặt chai thêm đúng chỗ theo bố cục bàn"
+    },
+    {
+      "key": "ChargeableBottleAnimationConfig",
+      "value": "tham số hoạt ảnh chai mini (dùng chung với SuperChargerInGameManager._animationConfig)",
+      "meaning": "Nhịp xuất hiện/biến mất/trail của ChargeableBottle"
+    },
+    {
+      "key": "Clip hoạt ảnh ChargeableBottle",
+      "value": "\"ChargeableBottleReset\", \"ChargeableBottleNewBottle 1\", \"ChargeableBottleDisappear\"",
+      "meaning": "Ba clip vòng đời của chai mini"
+    },
+    {
+      "key": "ChargeableBottleItemModel.HasInitialCharge",
+      "value": "do dữ liệu level cấp",
+      "meaning": "Chai mini đã nạp sẵn ngay khi vào ván"
+    },
+    {
+      "key": "ChargeableBottleItem._chargeCount",
+      "value": "runtime",
+      "meaning": "Số lần dùng còn lại của chai mini"
+    },
+    {
+      "key": "MagicBottleModel (sync name)",
+      "value": "\"MagicBottleModel\"",
+      "meaning": "Khoá lưu/đồng bộ dữ liệu Magic Bottle"
+    },
+    {
+      "key": "MagicBottleModel (trường)",
+      "value": "Progress, LastSeenLobbyButtonProgress, IsIntroduced, EventShownInLifeTime",
+      "meaning": "Toàn bộ dữ liệu lưu của tính năng"
+    },
+    {
+      "key": "Khoá localization",
+      "value": "MagicBottle, MagicBottleTitle, MagicBottleTitle!, MagicBottlePopupInfo, MagicBottlePopupInfoWin, MagicBottleInfoPopupStep1/2/3, MagicBottleInfoPopupWarning, MagicBottleCongratsPopupInfo, MagicBottleAYSWarning",
+      "meaning": "Toàn bộ chữ hiển thị (11 ngôn ngữ)"
+    },
+    {
+      "key": "Định dạng chữ",
+      "value": "\"{0} Levels\" (info popup), \"{0}/{1}\" (nút lobby)",
+      "meaning": "Điền số level cần thắng và tiến độ"
+    },
+    {
+      "key": "MagicBottlePopupInfo",
+      "value": "\"Beat {0} levels to activate the Magic Bottle!\"",
+      "meaning": "Chữ trên thanh tiến độ khi chưa đạt mốc"
+    },
+    {
+      "key": "MagicBottlePopupInfoWin",
+      "value": "\"Congrats! You activated Magic Bottle!\"",
+      "meaning": "Chữ trên thanh tiến độ khi đã kích hoạt"
+    },
+    {
+      "key": "MagicBottleInfoPopupWarning",
+      "value": "\"Magic Bottle will be active until you fail!\"",
+      "meaning": "Cảnh báo mất chai khi thua"
+    },
+    {
+      "key": "MagicBottleService.TestMethodGainMagicBottle",
+      "value": "công cụ nội bộ",
+      "meaning": "Đẩy tiến độ lên mốc để kiểm thử hoạt ảnh và popup"
+    }
+  ],
+  "tips": [
+    "Vòng lặp thiết kế rất chặt: phần thưởng chỉ tồn tại khi còn thắng, nên người chơi có động lực dùng booster để không thua.",
+    "Popup Are You Sure dùng chung khung với Snitch và Super Charger, tăng sức nặng tâm lý khi cả ba cùng hiện.",
+    "Không có giá trị mặc định trong build nghĩa là vận hành có thể mở tính năng cho từng nhóm người chơi một cách rất linh hoạt.",
+    "Hoạt ảnh kết thúc bằng chai bay vào nút Play để nối liền cảm giác 'đã có thêm chai cho ván sau'.",
+    "ChargeableBottle chia sẻ hiện vật trên bàn với Magic Bottle nhưng thuộc hệ Super Charger, cần tách bạch khi phân tích số liệu."
+  ],
+  "categories": [
+    "Cơ chế lõi",
+    "Booster",
+    "Live-ops"
+  ]
+}

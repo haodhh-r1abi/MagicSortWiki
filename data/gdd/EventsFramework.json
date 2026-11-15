@@ -1,0 +1,2420 @@
+{
+  "id": "EventsFramework",
+  "name": "Khung sự kiện (Events)",
+  "category": "LiveOps",
+  "managers": [
+    "Modules.Contexts.Home.UI.Common.Scripts.LobbyEventController.LobbyEventsService",
+    "Modules.Contexts.Home.UI.Common.Scripts.LobbyEventController.LobbyEventMap",
+    "Modules.Contexts.Home.UI.Common.Scripts.LobbyEventController.ILobbyShownService",
+    "Modules.Contexts.Home.UI.Common.Scripts.LobbyEventsPositionManager",
+    "Modules.Contexts.Application.ServerCommunication.Scripts.SegmentService",
+    "Modules.Contexts.Application.ServerCommunication.Scripts.SegmentDataService",
+    "Modules.Contexts.Application.ServerCommunication.Scripts.SegmentRemoteService",
+    "Modules.Contexts.Application.ServerCommunication.Scripts.RemoteTimeService",
+    "Modules.Contexts.Application.ServerCommunication.Scripts.SyncService",
+    "Modules.Contexts.GamePlay.Loop.Scripts.ReturnToHomeSequenceService",
+    "Modules.Infrastructure.UI.Common.Scripts.PopUp.PopUpService",
+    "Modules.Contexts.Application.Events.Scripts.EventSender"
+  ],
+  "summary": "Magic Sort không viết mỗi sự kiện live-ops một kiểu riêng: toàn bộ sự kiện (BoatRush, WheelOfFortune, SkyJump, JetpackRace, MagicPass, TeamArena, DuckFestival, MagicLab, TreasureDrill, Collection, MiniGame, MergeMiniGame, TeamQuest, EndlessPortal, SuperCharger, Snitch, MagicBottle...) đều dựng trên cùng một khung: một bộ 3-4 class theo mẫu <X>Service (logic + view-model) / <X>DataService (dữ liệu cục bộ, đồng bộ qua ISyncable) / <X>RemoteService (HTTP tới backend) / <X>StateService (máy trạng thái bật-tắt-claim), cộng với một <X>ConfigModel do Firebase Remote Config bật/tắt. Vòng đời của chúng do container DI điều khiển qua các interface IService / IInitializable / IDataInitializable / IRestartableService / IIntervalUpdate / ISecondUpdate / ILateUpdate / ISyncable / IDeletable. Icon sự kiện ở Home được LobbyEventsService xếp chỗ vào 2 cột trái/phải với số ô giới hạn, và toàn bộ popup sau khi thắng/thua level được ReturnToHomeSequenceService phát theo một danh sách lệnh có thứ tự cố định. Thời gian sự kiện luôn tính theo giờ server (RemoteTimeService), còn đối tượng người chơi được chia bằng SegmentService (get-user-segment).",
+  "unlock": "Mỗi sự kiện có bộ điều kiện riêng nhưng theo cùng công thức: (1) cờ IsEnabled trong <X>ConfigModel lấy từ Firebase Remote Config (mặc định client trong Resources/defaultconfigs/<X>ConfigModel.json phần lớn là false → server phải bật); (2) FirstLevelToShow so với tiến độ người chơi (ví dụ BoatRushConfigModel.FirstLevelToShow = 90, WheelOfFortuneConfigModelV2.FirstLevelToShow = 130, SuperChargerConfigModel.FirstLevelToShow = 5, SnitchConfigModel.FirstLevelToShow = 290); (3) backend trả dữ liệu sự kiện qua endpoint get-* (nếu server trả HTTP 425 thì client hiểu là sự kiện chưa mở — BoatRushService.NotActiveStatusCode = 425); (4) segment người chơi (SegmentService.GetSegment) được gửi kèm mọi analytics và một số config server chọn theo segment.",
+  "entry_points": [
+    "Icon sự kiện ở Home (cột trái/phải do LobbyEventsService cấp chỗ, LobbyEventsPositionManager đặt toạ độ)",
+    "Popup tự bật khi quay về Home sau level (ReturnToHomeSequenceService.Execute chạy chuỗi Try*Command)",
+    "Banner/progress bar trên Home (ví dụ BoatRush banner, MagicStreakGae progress bar làm dịch icon trái/phải)",
+    "Nút info trong popup sự kiện (<X>InfoButton → <X>InfoPopUp)",
+    "Trong level: view/nút của sự kiện in-game (SuperCharger, Snitch, MagicBottle)",
+    "Deeplink bạn bè: FriendsService.TryAddFriendsFromDeeplink (chỉ luồng friends có deeplink; không thấy deeplink riêng cho từng event)"
+  ],
+  "flow": "Khởi động: RemoteConfigHandler.InitFirebaseAndEventSenderAndGetRemoteConfigs chạy trước tiên — khởi tạo Firebase, fetch remote config, tạo GrandEventSender, rồi trả về đối tượng RemoteConfigs (gồm FirebaseRemoteConfigs + GrandRemoteRegularLevelsConfigs + GrandRemoteDailyLevelsConfig). Mọi <X>Service nhận RemoteConfigs qua constructor. Container DI gọi Initialize() cho từng IService, sau đó InitializeData() cho các IDataInitializable (đây là bước đọc dữ liệu đã lưu và tự reset tiến độ nếu sự kiện đã kết thúc, ví dụ SuperChargerService.InitializeData → TryResetProgress(onAppLaunch: true)). Các service cần nhịp thời gian tự đăng ký vào CustomUpdater: IIntervalUpdate (BoatRushService.IntervalUpdate), ISecondUpdate (RemoteTimeService.SecondUpdate), ILateUpdate (các DataService gom thay đổi rồi ghi đĩa 1 lần/frame qua MarkDataForLateUpdate). Đồng bộ server: SyncService gom mọi ISyncable, mỗi DataService khai báo GetSyncName() (ví dụ \"SuperChargerModel\", \"SegmentDataModel\") và SerializeModelForSync(); CustomIntervalUpdater.CommunicateWithBackend chạy mỗi ServerCommunicationModel.CommunicationIntervalInSeconds (mặc định 60 giây) để đẩy dữ liệu bẩn lên sync-data. Trong phiên chơi, <X>Service.TryFetchCurrentEvent gọi <X>RemoteService.Get* để lấy trạng thái sự kiện; kết quả nạp vào <X>DataService cache (BoatRushEventCacheModel, BoatRushRaceModel, BoatRushTierModel...). <X>StateService.UpdateState quy trạng thái về một enum (IsInProgress / IsRemoteEnd / IsClaimed) và các hàm ShouldShowJoinPopUp / ShouldShowRacePopUp / IsLobbyIconVisible. Hiển thị: mỗi service muốn có icon ở Home phải implement ILobbyShownService (IsLobbyShown + IsLobbyGoingToBeShown); LobbyEventMap.InitializesEventServices xếp các service vào tập _leftServices/_rightServices, LobbyEventsService.CanShowService kiểm tra số ô còn trống của cột (Left/Right) trước khi cho phép hiện icon. Kết thúc level: ReturnToHomeSequenceService.LevelWin/LevelLoseOrQuit chọn 1 trong 4 danh sách lệnh (regularWin / regularLose / dailyWin / dailyLose) rồi ExecuteAsync chạy lần lượt; mỗi lệnh IReturnToHomeSequenceCommand tự quyết IsSkippable / ShouldTerminateTheFlow / ShouldShowForce, nên chỉ một vài popup được bật mỗi lần về Home. Kết thúc sự kiện: <X>Service phát hiện hết giờ (so với RemoteTimeService.RemoteTime), gửi analytics *_finished / *_lost, gọi endpoint claim-*, và <X>DataService.DeleteData/Reset dọn dữ liệu.",
+  "use_cases": [
+    {
+      "id": "UC-01",
+      "title": "Khởi động app: nạp remote config rồi mới dựng service sự kiện",
+      "actor": "System",
+      "trigger": "Mở app",
+      "precondition": "-",
+      "steps": [
+        "RemoteConfigHandler.InitFirebaseAndEventSenderAndGetRemoteConfigs: khởi tạo FirebaseInitializer, FirebaseRemoteConfigFetcher.InitializeAsync (timeout 2.5s)",
+        "FirebaseRemoteConfigResolver.ResolveAndGetConfigService đọc ~82 key config (AddRootLevelConfigService) và ValidateAndFallbackConfigs quay về bản cache/mặc định nếu key hỏng",
+        "GrandRemoteRegularLevelsConfigResolver.FetchAndResolveConfig lấy config level từ backend",
+        "Container gọi Initialize() cho mọi IService rồi InitializeData() cho IDataInitializable"
+      ],
+      "result": "Đối tượng RemoteConfigs sẵn sàng; mọi <X>Service biết sự kiện của mình bật hay tắt",
+      "rules": "FirebaseRemoteConfigFetcher._timeOut = 2.5 giây; nếu fetch fail thì dùng FirebaseConfigPersistenceService.GetRemoteConfigs (file cache Configs/CachedRemoteConfigs) hoặc LoadDefaultConfigs (Resources/DefaultConfigs)",
+      "evidence": "RemoteConfigHandler.InitFirebaseAndEventSenderAndGetRemoteConfigs; FirebaseRemoteConfigResolver.ResolveAndGetConfigService; FirebaseRemoteConfigFetcher.InitializeAsync"
+    },
+    {
+      "id": "UC-02",
+      "title": "Server bật/tắt một sự kiện",
+      "actor": "Server",
+      "trigger": "Đổi giá trị key <X>ConfigModel trên Firebase Remote Config",
+      "precondition": "Client fetch được config",
+      "steps": [
+        "FirebaseConfigValueParser.Deserialize<T>(key, defaultValue) đọc chuỗi JSON của key",
+        "<X>ConfigModel.IsValid() (IRemoteConfigValidatable) kiểm tra dữ liệu; nếu hỏng → EventSender.SendInvalidConfigEvent(configName) và fallback",
+        "<X>Service.IsActive()/IsEligible() đọc IsEnabled + FirstLevelToShow"
+      ],
+      "result": "Sự kiện hiện/ẩn icon, popup, và các luồng in-game tương ứng",
+      "rules": "Mặc định client trong Resources/defaultconfigs hầu hết IsEnabled=false → sự kiện chỉ sống khi server bật. Config hỏng phát analytics invalid_config_fetched (param config_name)",
+      "evidence": "FirebaseConfigValueParser.Deserialize; RemoteConfigValidation.IsNullOrHasNullElement; EventSender.SendInvalidConfigEvent; BoatRushStateService.GetConfig"
+    },
+    {
+      "id": "UC-03",
+      "title": "Lấy trạng thái sự kiện từ backend (ví dụ BoatRush)",
+      "actor": "System",
+      "trigger": "Vào Home / IntervalUpdate / sau khi thắng level",
+      "precondition": "Config bật, người chơi đủ level",
+      "steps": [
+        "BoatRushStateService.ShouldSendGetRequest kiểm tra có cần gọi không",
+        "BoatRushService.SendGetRequest → BoatRushRemoteService.GetLeaderboardRequest (endpoint get-boat-rush-leaderboard)",
+        "TryProcessEventData: HTTP 425 (NotActiveStatusCode) = sự kiện chưa mở, không lỗi",
+        "UpdateEventCache / UpdateRaceCache / UpdateTierCache ghi vào BoatRushDataService"
+      ],
+      "result": "View-model (BoatRushJoinViewModel, BoatRushRaceViewModel, BoatRushLobbyButtonViewModel) sẵn sàng cho UI",
+      "rules": "NotActiveStatusCode = 425. Tất cả request đi qua HttpProxy (timeout mặc định 5s, connection timeout 2s, retryCount tuỳ lời gọi)",
+      "evidence": "BoatRushService.TryFetchCurrentEvent; BoatRushService.SendGetRequest; BoatRushService.TryProcessEventData; BoatRushRemoteService.GetLeaderboardRequest"
+    },
+    {
+      "id": "UC-04",
+      "title": "Xếp chỗ icon sự kiện ở Home (trái/phải, giới hạn số ô)",
+      "actor": "System",
+      "trigger": "Vào Home hoặc trạng thái sự kiện đổi",
+      "precondition": "Service implement ILobbyShownService",
+      "steps": [
+        "LobbyEventMap.InitializesEventServices phân service vào _leftServices / _rightServices",
+        "LobbyEventsService.CanShowService(service) gọi GetActiveServices(position, service) đếm số service đang/ sắp hiện icon",
+        "So với _availablePositions của cột (Left=0, Right=1) rồi cho phép hoặc chặn",
+        "LobbyEventsPositionManager.OnEventStateChanged → RepositionButtons xếp lại nút vào các Transform vị trí"
+      ],
+      "result": "Home không bao giờ chồng quá số icon cho phép; icon bị đẩy xuống khi MagicStreakGae progress bar hiện (_iconsLeftPositionWithMagicStreakGae/_iconsRightPositionWithMagicStreakGae)",
+      "rules": "LobbyIconPositionType = {Left:0, Right:1}. Đối chiếu15/11: 8/12 là byte offset chọn HashSet trong object32bit, không phải hạn ngạch icon; registration/layout và runtime eligibility phải xét riêng.",
+      "evidence": "LobbyEventsService.CanShowService; LobbyEventsService.GetActiveServices; LobbyEventMap.GetPositionType; LobbyEventsPositionManager.RepositionButtons"
+    },
+    {
+      "id": "UC-05",
+      "title": "Chuỗi popup khi quay về Home sau level",
+      "actor": "System",
+      "trigger": "Thắng/thua/thoát level",
+      "precondition": "Về scene Home",
+      "steps": [
+        "ReturnToHomeSequenceService.LevelWin hoặc LevelLoseOrQuit lưu LevelAndLevelConfigModel",
+        "SelectReturnToHomeSequence chọn 1 trong 4 list: _regularWinSequenceCommands, _regularLoseSequenceCommands, _dailyWinSequenceCommands, _dailyLoseSequenceCommands",
+        "ExecuteAsync duyệt tuần tự; mỗi command Initialize(cancellationToken, lastWinLevel) rồi ExecuteAsync",
+        "AreRemainingCommandsSkippable cho phép cắt sớm phần đuôi nếu các lệnh còn lại đều IsSkippable"
+      ],
+      "result": "Chỉ 1-2 popup sự kiện bật mỗi lần về Home theo thứ tự ưu tiên cố định",
+      "rules": "Thứ tự lệnh đọc từ ReturnToHomeSequenceService.Initialize: WelcomeBack → SuperCharger → MagicStreakLeaderboard → JetpackRace → JetpackRaceWithStage → Teams → MagicPassFinished → NoAdsOffer → WatchAndWin → SkyJumpStepIncreased → SkyJumpWithStageStepIncreased → MagicStreakGaeTutorial → MagicStreakGaeProgressBar → ForceNameChange → CollectionActivation → SnitchActivation → MagicBottleCongrats → MagicStreakRewardAnimation → RateUs → MagicBottlePopUp → SnitchPopUp → BroomStreak → TreasureDrill → WheelOfFortune → TowerWinStreak → BoatRushJoin → BoatRushPopUp → SkyJumpJoin → SkyJumpWithStageJoin → DailyReward → DailyRewardBulkGive → ChampionsLeagueClaim → ChampionsLeagueLeaderboard → ChampionsLeagueJoin → DuckFestival → MagicLab → EndlessPortal → SpecialOffer → ChooseOneSpecialOffer → WeeklyTournament → Daily → MagicPassTutorial → MiniGame → TeamQuestJoin → TeamQuestPopup → TeamArenaJoin → TeamArenaEvent → MergeMiniGame → SoftUpdate. Có cờ giới hạn số popup: RootLevelConfigModel.IsSessionStartPopupShowLimitEnabled + SessionStartPopUpShowLimit, IsHomeReturnPopupShowLimitEnabled + HomeReturnPopupShowLimit, và ReturnToHomeSequenceService.IsPopupLimitAbEnabled",
+      "evidence": "ReturnToHomeSequenceService.Initialize; ReturnToHomeSequenceService.SelectReturnToHomeSequence; ReturnToHomeSequenceService.ExecuteAsync; ReturnToHomeSequenceService.AreRemainingCommandsSkippable"
+    },
+    {
+      "id": "UC-06",
+      "title": "Mở popup sự kiện (nạp prefab từ AssetManager)",
+      "actor": "Player / System",
+      "trigger": "Bấm icon sự kiện hoặc lệnh Try*Command",
+      "precondition": "Popup prefab có trong Resources hoặc bundle đã tải",
+      "steps": [
+        "Tạo <X>PopUpArguments (constructor gán tên popup, ví dụ \"SuperChargerJoinPopUp\", \"SuperChargerInfoPopUp\", \"SuperChargerActivationPopUp\")",
+        "IPopUpService.OpenPopupAsync(popUpArguments)",
+        "PopUpService.IsPopupReadyToShow kiểm tra prefab đã nạp; nếu chưa thì AssetManager.RequestLoad",
+        "Popup Show/ShowAsync, gửi analytics *_impression kèm impression_source"
+      ],
+      "result": "Popup hiện, task chờ đến khi người chơi đóng (TaskCompletionSource<bool> _popupDisplayFlow)",
+      "rules": "PopUpService.Initialize preload sẵn danh sách popup nóng: LevelWinPopUp, LevelCongratsPopUp, StuckPopup, StuckAreYouSurePopup, TryAgainPopup",
+      "evidence": "PopUpService.OpenPopupAsync; PopUpService.PreloadPopUps; PopUpService.IsPopupReadyToShow; SuperChargerJoinPopUpArguments..ctor"
+    },
+    {
+      "id": "UC-07",
+      "title": "Lấy giờ server và chống chỉnh giờ máy",
+      "actor": "System",
+      "trigger": "Mỗi giây (ISecondUpdate) khi hết cooldown",
+      "precondition": "-",
+      "steps": [
+        "RemoteTimeService.SecondUpdate đếm _elapsedCoolDown; đạt _coolDownDurationAsSeconds thì GetAndSetRemoteTime",
+        "GetRemoteTime gọi endpoint get-time qua HttpProxy, đọc RemoteTimeResponse",
+        "set_RemoteTime cập nhật; cooldown tăng dần đến _maxCoolDownDurationAsSeconds",
+        "IsRemoteDaySameWithLocalDay so ngày server với ngày máy (dùng cho daily/streak)"
+      ],
+      "result": "Mọi bộ đếm ngược của sự kiện dùng giờ server, không tin giờ máy",
+      "rules": "Có cờ ByPassRemoteTimeCheck (dev/cheat). Giá trị _coolDownDurationAsSeconds/_maxCoolDownDurationAsSeconds đặt trong RemoteTimeService..ctor",
+      "evidence": "RemoteTimeService.SecondUpdate; RemoteTimeService.GetAndSetRemoteTime; RemoteTimeService.IsRemoteDaySameWithLocalDay"
+    },
+    {
+      "id": "UC-08",
+      "title": "Phân khúc người chơi (segment)",
+      "actor": "Server",
+      "trigger": "Login / SyncService.TrySyncAllData(shouldFetchSegment: true)",
+      "precondition": "Đã có token",
+      "steps": [
+        "SegmentService.FetchSegment → SegmentRemoteService.SendGetSegmentResponse (endpoint get-user-segment)",
+        "SegmentResponse { Segment, IsAdsDisabled } → SegmentDataService.SetSegment(segmentId), MarkDataForLateUpdate",
+        "SegmentDataService.LateUpdate ghi SegmentDataModel xuống đĩa (sync name \"SegmentDataModel\")",
+        "SegmentService.GetSegment() được EventSender gắn vào tham số user_segment / segment của rất nhiều analytics"
+      ],
+      "result": "Server có thể trả nội dung sự kiện/offer khác nhau theo segment; segment cũng tắt quảng cáo (IsAdsDisabled)",
+      "rules": "Cheat/QA: SegmentService.ChangeUserSegment(userType, segment) → SegmentRemoteService.ChangeUserType (endpoint cheat-user-update). Segment đi kèm analytics ở các event *_impression, *_started, level_event (user_segment)",
+      "evidence": "SegmentService.FetchSegment; SegmentRemoteService.SendGetSegmentResponse; SegmentDataService.SetSegment; SegmentService.ChangeUserSegment"
+    },
+    {
+      "id": "UC-09",
+      "title": "Đồng bộ dữ liệu sự kiện lên server (ISyncable)",
+      "actor": "System",
+      "trigger": "Mỗi CommunicationIntervalInSeconds hoặc khi có dữ liệu bẩn",
+      "precondition": "Đã login",
+      "steps": [
+        "<X>DataService thay đổi model → MarkDataForLateUpdate → _isDataChangedSinceLastSave = true",
+        "SyncService.TrySyncAllData duyệt _syncables, gọi IsDataChangedSinceLastSave + SerializeModelForSync + GetSyncName",
+        "StartSyncFlow gửi dictionary lên endpoint sync-data",
+        "MarkDataAsSynced gọi DataSynced() cho từng service"
+      ],
+      "result": "Tiến độ sự kiện theo tài khoản, đổi máy vẫn giữ",
+      "rules": "ServerCommunicationModel.CommunicationIntervalInSeconds mặc định 60 (client default, server ghi đè qua Firebase key ServerCommunicationModel)",
+      "evidence": "SyncService.TrySyncAllData; SyncService.StartSyncFlow; SyncService.MarkDataAsSynced; SuperChargerDataService.GetSyncName; CustomIntervalUpdater.CommunicateWithBackend"
+    },
+    {
+      "id": "UC-10",
+      "title": "Ghi đè dữ liệu từ server (force fetch) khi đăng nhập lại",
+      "actor": "Server",
+      "trigger": "LoginResponse yêu cầu ghi đè",
+      "precondition": "Đăng nhập bằng Facebook/Apple hoặc server bật cờ force fetch",
+      "steps": [
+        "SyncService.TryLoadDataFromRemote(loginResponse) → OverwriteDataFromRemote gọi get-data",
+        "Mỗi ISyncable nhận OverwriteModelFromSync(data) theo GetSyncName",
+        "AckForceFetched gọi endpoint force-fetched báo server đã nhận"
+      ],
+      "result": "Toàn bộ tiến độ sự kiện thay bằng dữ liệu server",
+      "rules": "ShouldOverwriteDataFromRemote là cờ nội bộ; nếu ghi đè xong thì các <X>Service InitializeData lại",
+      "evidence": "SyncService.TryLoadDataFromRemote; SyncService.OverwriteDataFromRemote; SyncService.AckForceFetched"
+    },
+    {
+      "id": "UC-11",
+      "title": "Reset tiến độ sự kiện khi vòng sự kiện mới bắt đầu",
+      "actor": "System",
+      "trigger": "InitializeData lúc mở app hoặc khi state đổi",
+      "precondition": "Sự kiện cũ đã kết thúc",
+      "steps": [
+        "<X>Service.InitializeData()",
+        "TryResetProgress(onAppLaunch: true) kiểm tra IsActive()/IsEligible()",
+        "Nếu người chơi không còn đủ điều kiện (config tắt, hết vòng) → <X>DataService.ResetProgress()"
+      ],
+      "result": "Thanh tiến độ về 0, popup join có thể hiện lại",
+      "rules": "Với sự kiện lifetime-once có cờ EventShownInLifeTime (MarkEventShownInLifeTime) để không hiện popup giới thiệu lần hai",
+      "evidence": "SuperChargerService.InitializeData; SuperChargerService.TryResetProgress; SuperChargerDataService.ResetProgress; SuperChargerService.MarkEventShownInLifeTime"
+    },
+    {
+      "id": "UC-12",
+      "title": "Tải asset sự kiện từ xa trước khi hiện",
+      "actor": "System",
+      "trigger": "Sự kiện có bundle riêng (ví dụ BoatRush bundle \"boat-rush\")",
+      "precondition": "AssetManager đã Initialize",
+      "steps": [
+        "BoatRushStateService.ShouldDownloadAssets / BoatRushService.NeedToDownloadAssets",
+        "CheckAndResolveAssetDependency → AssetManager.RequestDownload(id) rồi RequestLoad(id)",
+        "AssetManager tải tối đa 3 bundle song song (ConcurrentDownloadLimit = 3), lưu tên file dạng {0}_v{1}, xoá bản version cũ"
+      ],
+      "result": "Icon/popup sự kiện chỉ hiện khi asset sẵn sàng, tránh vỡ hình",
+      "rules": "AssetManager.ConcurrentDownloadLimit = 3; thư mục AssetBundles; phiên bản bundle lấy từ AssetBundleVersions.asset (androidVersionInfo/iosVersionInfo)",
+      "evidence": "BoatRushService.NeedToDownloadAssets; BoatRushService.CheckAndResolveAssetDependency; AssetManager.RequestDownload; AssetManager.DeleteLowerVersionsOfBundle"
+    },
+    {
+      "id": "UC-13",
+      "title": "Mất mạng / request lỗi khi đang chạy sự kiện",
+      "actor": "System",
+      "trigger": "HTTP thất bại hoặc timeout",
+      "precondition": "-",
+      "steps": [
+        "BestHttpRequestService.SendRequest bọc bằng policy Polly (HttpRequestPolicyFactory.Get)",
+        "Lỗi client được quy về mã riêng: 900 RequestBlockedDueToUnauthorized, 901 RequestException, 902 UnexpectedRequestException, 903 RequestCreationException, 904 RequestCancelledException",
+        "<X>Service giữ nguyên cache cũ, StateService không đổi trạng thái; NoInternetConnectionTextManager/NoInternetConnectionPopUp hiện thông báo",
+        "Với config level: GrandRemoteConfigFetcher.RetryFetchingRegularLevels thử lại tối đa MaxAttemptCount = 10 lần"
+      ],
+      "result": "Sự kiện không bị hỏng dữ liệu; người chơi thấy thông báo mất mạng",
+      "rules": "ClientStatusCode 900-904; GrandRemoteConfigFetcher.FetchTimeoutMilliseconds = 2500, MaxAttemptCount = 10; cờ RootLevelConfigModel.IsNoInternetPopupEnable bật/tắt popup",
+      "evidence": "BestHttpRequestService.SendRequest; HttpRequestPolicyFactory.Get; GrandRemoteConfigFetcher.RetryFetchingRegularLevels; NoInternetConnectionPopUp"
+    },
+    {
+      "id": "UC-14",
+      "title": "Sự kiện thời gian thực qua WebSocket (chat/team)",
+      "actor": "System",
+      "trigger": "Vào Home khi Teams bật",
+      "precondition": "Có token",
+      "steps": [
+        "WebSocketManager.Start(uri) tới endpoint teamsChat (wss://.../ws)",
+        "WebSocketHearthBeat ping mỗi PingInterval = 10 giây, kiểm tra pong",
+        "Mất kết nối → TryReconnect với ReconnectAttemptDelay = 5 giây, tăng dần tối đa MaxReconnectDelay = 120 giây",
+        "Message định tuyến theo trường action/channel tới IWebSocketMessageHandler"
+      ],
+      "result": "Sự kiện đội (chat, xin mạng, quà) cập nhật realtime",
+      "rules": "PingInterval 10s; ReconnectAttemptDelay 5s; MaxReconnectDelay 120s",
+      "evidence": "WebSocketManager.Start; WebSocketManager.TryReconnect; WebSocketHearthBeat.Initialize; WebSocketManager.OnMessageReceived"
+    },
+    {
+      "id": "UC-15",
+      "title": "Xoá dữ liệu người chơi (GDPR) và khởi động lại service",
+      "actor": "Player",
+      "trigger": "Yêu cầu xoá tài khoản trong Settings",
+      "precondition": "RootLevelConfigModel.AccountDeleteEnabled = true",
+      "steps": [
+        "SyncService.DeleteAllDataAsync gọi endpoint delete-user",
+        "Mọi IDeletable.DeleteData() được gọi (SegmentDataService, các <X>DataService)",
+        "Các IRestartableService được dựng lại từ đầu"
+      ],
+      "result": "Toàn bộ tiến độ sự kiện bị xoá cục bộ và trên server",
+      "rules": "Endpoint delete-user, delete-request, cancel-delete-request, ack-fulfilled-deletion-request",
+      "evidence": "SyncService.DeleteAllDataAsync; SegmentDataService.DeleteData; SuperChargerDataService.DeleteData"
+    },
+    {
+      "id": "UC-16",
+      "title": "Debug bản đồ icon sự kiện (công cụ nội bộ)",
+      "actor": "System",
+      "trigger": "Gọi LobbyEventsService.Debug()",
+      "precondition": "-",
+      "steps": [
+        "GetDebug(LobbyIconPositionType.Left, map) và GetDebug(Right, map) dựng StringBuilder liệt kê tên type của từng service đang chiếm ô",
+        "In ra header \"LobbyEventsService - Debug\", \"LEFT\", \"RIGHT\""
+      ],
+      "result": "Log liệt kê service nào đang giữ ô icon trái/phải",
+      "rules": "Chỉ dùng để chẩn đoán, không ảnh hưởng người chơi",
+      "evidence": "LobbyEventsService.Debug; LobbyEventsService.GetDebug"
+    }
+  ],
+  "configs": [
+    {
+      "source": "code const",
+      "key": "LobbyIconPositionType",
+      "type": "enum",
+      "value": "Left=0, Right=1",
+      "meaning": "Hai cột đặt icon sự kiện ở Home",
+      "where": "Modules.Contexts.Home.UI.Common.Scripts.LobbyEventController.LobbyIconPositionType"
+    },
+    {
+      "source": "code field",
+      "key": "LobbyEventsService._availablePositions",
+      "type": "Dictionary<LobbyIconPositionType,int>",
+      "value": "gán trong Initialize()",
+      "meaning": "Số ô icon còn trống mỗi cột",
+      "where": "LobbyEventsService"
+    },
+    {
+      "source": "code const",
+      "key": "BoatRushService.NotActiveStatusCode",
+      "type": "int",
+      "value": "425",
+      "meaning": "HTTP code server báo sự kiện chưa mở (mẫu chung cho các event)",
+      "where": "BoatRushService"
+    },
+    {
+      "source": "code const",
+      "key": "FirebaseRemoteConfigFetcher._timeOut",
+      "type": "float",
+      "value": "2.5",
+      "meaning": "Giây chờ tối đa khi fetch remote config",
+      "where": "FirebaseRemoteConfigFetcher"
+    },
+    {
+      "source": "code const",
+      "key": "GrandRemoteConfigFetcher.FetchTimeoutMilliseconds",
+      "type": "int",
+      "value": "2500",
+      "meaning": "Timeout fetch config level",
+      "where": "GrandRemoteConfigFetcher"
+    },
+    {
+      "source": "code const",
+      "key": "GrandRemoteConfigFetcher.MaxAttemptCount",
+      "type": "int",
+      "value": "10",
+      "meaning": "Số lần thử lại fetch config level",
+      "where": "GrandRemoteConfigFetcher"
+    },
+    {
+      "source": "json default",
+      "key": "ServerCommunicationModel.CommunicationIntervalInSeconds",
+      "type": "int",
+      "value": "60",
+      "meaning": "Chu kỳ đồng bộ dữ liệu với backend (client default, server ghi đè)",
+      "where": "Resources/defaultconfigs/ServerCommunicationModel.json"
+    },
+    {
+      "source": "code const",
+      "key": "WebSocketHearthBeat.PingInterval",
+      "type": "float",
+      "value": "10",
+      "meaning": "Giây giữa 2 lần ping socket",
+      "where": "WebSocketHearthBeat"
+    },
+    {
+      "source": "code const",
+      "key": "WebSocketManager.ReconnectAttemptDelay",
+      "type": "float",
+      "value": "5",
+      "meaning": "Giây chờ trước lần reconnect đầu",
+      "where": "WebSocketManager"
+    },
+    {
+      "source": "code const",
+      "key": "WebSocketManager.MaxReconnectDelay",
+      "type": "float",
+      "value": "120",
+      "meaning": "Giây chờ reconnect tối đa",
+      "where": "WebSocketManager"
+    },
+    {
+      "source": "code const",
+      "key": "AssetManager.ConcurrentDownloadLimit",
+      "type": "int",
+      "value": "3",
+      "meaning": "Số bundle tải song song tối đa",
+      "where": "AssetManager"
+    },
+    {
+      "source": "code const",
+      "key": "ClientStatusCode",
+      "type": "int",
+      "value": "900/901/902/903/904",
+      "meaning": "Mã lỗi phía client: bị chặn do chưa đăng nhập / lỗi request / lỗi bất ngờ / lỗi tạo request / bị huỷ",
+      "where": "Modules.Infrastructure.Network.Http.ClientStatusCode"
+    },
+    {
+      "source": "server info",
+      "key": "SegmentResponse.Segment",
+      "type": "string",
+      "value": "server",
+      "meaning": "Mã phân khúc người chơi",
+      "where": "SegmentResponse (get-user-segment)"
+    },
+    {
+      "source": "server info",
+      "key": "SegmentResponse.IsAdsDisabled",
+      "type": "bool",
+      "value": "server",
+      "meaning": "Server tắt quảng cáo cho segment này",
+      "where": "SegmentResponse"
+    },
+    {
+      "source": "code const",
+      "key": "FirebaseConfigPersistenceService.CachedDirectoryName / CachedFileName / ResourcesDirectoryName",
+      "type": "string",
+      "value": "\"Configs\" / \"CachedRemoteConfigs\" / \"DefaultConfigs\"",
+      "meaning": "Nơi cache config Firebase và nơi lấy bản mặc định",
+      "where": "FirebaseConfigPersistenceService"
+    },
+    {
+      "source": "code const",
+      "key": "SyncService._profileNameChangeClickedKey / _profileNameChangeForceCountKey",
+      "type": "string",
+      "value": "\"ProfileNameChangeClicked\" / \"ProfileNameChangeForceCount\"",
+      "meaning": "PlayerPrefs điều khiển popup ép đổi tên trong chuỗi return-to-home",
+      "where": "SyncService"
+    },
+    {
+      "source": "json default",
+      "key": "RootLevelConfigModel.IsSessionStartPopupShowLimitEnabled / SessionStartPopUpShowLimit",
+      "type": "bool/int",
+      "value": "server",
+      "meaning": "Giới hạn số popup bật khi mở phiên",
+      "where": "Firebase key RootLevelConfigModel"
+    },
+    {
+      "source": "json default",
+      "key": "RootLevelConfigModel.IsHomeReturnPopupShowLimitEnabled / HomeReturnPopupShowLimit",
+      "type": "bool/int",
+      "value": "server",
+      "meaning": "Giới hạn số popup bật khi về Home",
+      "where": "Firebase key RootLevelConfigModel"
+    },
+    {
+      "source": "Default/code0.0.3063 and historical caches20260910/20261010; per-snapshot source/hash in snapshot_values; not effective-runtime proof",
+      "key": "RootLevelConfigModel.IsNewLobbyIconsEnabled",
+      "type": "bool",
+      "value": "cache_20260910: false; cache_20261010: false",
+      "meaning": "Bật bộ icon sự kiện kiểu mới ở lobby [15/11: giá trị theo snapshot cụ thể; thiếu field khác với false/0. Không xác nhận assignment hoặc effective runtime.]",
+      "where": "Firebase key RootLevelConfigModel",
+      "previous_unresolved_value": "server",
+      "snapshot_values": [
+        {
+          "snapshot": "cache_20260910",
+          "model": "rootLevelConfigModel",
+          "key": "isNewLobbyIconsEnabled",
+          "value": false,
+          "type": "bool",
+          "source": "facts/runtime/server_configs/rootLevelConfigModel.json",
+          "value_type": "bool",
+          "source_sha256": "d2727cef6e6dc5661af6926ffa600e1cf98cbe093515095f11b2c0551c8ffac8",
+          "field_present": true
+        },
+        {
+          "snapshot": "cache_20261010",
+          "model": "rootLevelConfigModel",
+          "key": "isNewLobbyIconsEnabled",
+          "value": false,
+          "type": "bool",
+          "source": "facts/runtime/test_20261010/before/CachedRemoteConfigs",
+          "value_type": "bool",
+          "source_sha256": "433164d4877b2dee55d2bbd79ef2fe83d3fe9519492fe15e3cb0926daf216050",
+          "field_present": true
+        }
+      ],
+      "snapshot_review_id": "MS-CFG-EventsFramework-0018"
+    },
+    {
+      "source": "json default",
+      "key": "BoatRushConfigModel",
+      "type": "json",
+      "value": "{\"IsEnabled\":false,\"EventType\":1,\"FirstLevelToShow\":90}",
+      "meaning": "Ví dụ config một sự kiện: tắt mặc định, mở từ level 90",
+      "where": "Resources/defaultconfigs/BoatRushConfigModel.json"
+    },
+    {
+      "source": "json default",
+      "key": "WheelOfFortuneConfigModelV2",
+      "type": "json",
+      "value": "IsEnabled=false, EventType=10, InitialChipCount=5, FirstLevelToShow=130, IsNotificationEnabled=false, StageProbabilities[stage0-3] Premium 0.25/Basic 0.25/Poor 0.5",
+      "meaning": "Ví dụ config sự kiện có bảng xác suất theo stage và theo việc người chơi có Collection hay không",
+      "where": "Resources/defaultconfigs/WheelOfFortuneConfigModelV2.json"
+    },
+    {
+      "source": "asset",
+      "key": "BackendEnvironmentConfig.testEnvironmentSettings / productionEnvironmentSettings",
+      "type": "EnvironmentSettings",
+      "value": "stage: grand-water-sort-stage.grandgamesbe.com; production: api.grandgamestech.com",
+      "meaning": "Hai bộ endpoint; CurrentSettings chọn theo build",
+      "where": "Assets/MonoBehaviour/BackendEnvironmentConfig.asset"
+    },
+    {
+      "source": "storage key",
+      "key": "SegmentDataModel",
+      "type": "sync name",
+      "value": "\"SegmentDataModel\"",
+      "meaning": "Khoá lưu/đồng bộ segment",
+      "where": "SegmentService..ctor / SegmentDataService"
+    },
+    {
+      "source": "server instance (historical)",
+      "key": "WeeklyTournament leaderboard: IsBot",
+      "type": "",
+      "value": "3/10 bot (swiftpiratequeen, electricliongal, SaltyWizardPro)",
+      "meaning": "Mỗi entry có field IsBot; server độn ~30% bot vào bảng 10 người, bot tự tăng điểm theo thời gian",
+      "where": "PlayerPrefs WeeklyTournamentModel (instance event đang chạy) — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server instance (historical)",
+      "key": "SkyJump ladder totalUserCount",
+      "type": "",
+      "value": "100 → 82 → 64 → 46 → 28 → 16",
+      "meaning": "'100 người' = ladder rớt dần server tính sẵn; mọi id dạng <tournamentId>-N = bot 100%",
+      "where": "PlayerPrefs SkyJumpWithStageModel (instance event đang chạy) — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server instance (historical)",
+      "key": "SkyJump playerImages",
+      "type": "",
+      "value": "60 id bot ↦ ảnh FB thật (static-grand-games.s3…/fb-images)",
+      "meaning": "Bot mặc ảnh người thật",
+      "where": "PlayerPrefs SkyJumpWithStageModel (instance event đang chạy) — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "storage key",
+      "key": "SaveData/leaderboard_model.data worldLeaderboard",
+      "type": "",
+      "value": "1000 mục, 159 ảnh FB thật, 670 có teamName, score 85856→23054",
+      "meaning": "Bảng world seed sẵn 1000 mục (pool fill)",
+      "where": "external files/SaveData — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "storage key",
+      "key": "SaveData/leaderboard_model.data countryLeaderboard",
+      "type": "",
+      "value": "1000 mục, 127 ảnh FB thật, 376 có teamName, score 53995→4565, country=vn",
+      "meaning": "Bảng quốc gia seed sẵn 1000 mục",
+      "where": "external files/SaveData — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    }
+  ],
+  "rewards": [],
+  "backend": [
+    {
+      "command": "get-time",
+      "direction": "client→server",
+      "purpose": "lấy giờ server cho mọi bộ đếm sự kiện (RemoteTimeService.GetRemoteTime)"
+    },
+    {
+      "command": "get-user-segment",
+      "direction": "client→server",
+      "purpose": "lấy segment người chơi (SegmentRemoteService.SendGetSegmentResponse)"
+    },
+    {
+      "command": "cheat-user-update",
+      "direction": "client→server",
+      "purpose": "đổi segment thủ công cho QA (SegmentRemoteService.ChangeUserType)"
+    },
+    {
+      "command": "sync-data",
+      "direction": "client→server",
+      "purpose": "đẩy dữ liệu ISyncable (SyncService.StartSyncFlow)"
+    },
+    {
+      "command": "get-data",
+      "direction": "client→server",
+      "purpose": "kéo toàn bộ dữ liệu về khi ghi đè (SyncService.OverwriteDataFromRemote)"
+    },
+    {
+      "command": "force-fetched",
+      "direction": "client→server",
+      "purpose": "báo đã nhận force fetch (SyncService.AckForceFetched)"
+    },
+    {
+      "command": "get-level-config-v2 / get-daily-level-config",
+      "direction": "client→server",
+      "purpose": "config level thường và daily (GrandRemoteConfigRemoteService)"
+    },
+    {
+      "command": "get-boat-rush-leaderboard / join-boat-rush-leaderboard / claim-boat-rush-leaderboard",
+      "direction": "client→server",
+      "purpose": "ví dụ bộ 3 endpoint của một sự kiện (BoatRushRemoteService)"
+    },
+    {
+      "command": "get-wheel-of-fortune-v2-event",
+      "direction": "client→server",
+      "purpose": "trạng thái Wheel of Fortune"
+    },
+    {
+      "command": "wss .../ws (teamsChat)",
+      "direction": "client↔server",
+      "purpose": "kênh realtime cho sự kiện đội (WebSocketManager)"
+    },
+    {
+      "command": "delete-user",
+      "direction": "client→server",
+      "purpose": "xoá tài khoản, kéo theo xoá dữ liệu mọi sự kiện"
+    }
+  ],
+  "ui": [
+    {
+      "element": "Cột icon sự kiện trái/phải ở Home",
+      "class": "Modules.Contexts.Home.UI.Common.Scripts.LobbyEventsPositionManager",
+      "purpose": "đặt và dịch chuyển các nút sự kiện, né progress bar MagicStreakGae"
+    },
+    {
+      "element": "Bộ chọn ô icon",
+      "class": "Modules.Contexts.Home.UI.Common.Scripts.LobbyEventController.LobbyEventsService",
+      "purpose": "giới hạn số sự kiện hiện icon cùng lúc"
+    },
+    {
+      "element": "Hàng đợi popup về Home",
+      "class": "Modules.Contexts.GamePlay.Loop.Scripts.ReturnToHomeSequenceService",
+      "purpose": "thứ tự ưu tiên popup sau level"
+    },
+    {
+      "element": "Dịch vụ popup dùng chung",
+      "class": "Modules.Infrastructure.UI.Common.Scripts.PopUp.PopUpService",
+      "purpose": "mở/đóng/preload mọi popup theo tên"
+    },
+    {
+      "element": "Chữ chạy khi mất mạng",
+      "class": "Modules.Contexts.Application.Loading.Scripts.NoInternetConnectionTextManager",
+      "purpose": "báo mất kết nối trong màn loading"
+    }
+  ],
+  "analytics": [
+    {
+      "event": "invalid_config_fetched",
+      "params": "config_name",
+      "when": "một <X>ConfigModel không hợp lệ (IsValid false)"
+    },
+    {
+      "event": "level_event",
+      "params": "state, user_segment, liveOps_stats, session_durations",
+      "when": "mỗi lần bắt đầu/kết thúc level; liveOps_stats gói tiến độ nhiều sự kiện: {\"MLS\",\"MLR\",\"MLT\",\"SjSc\",\"SjSs\",\"JrSc\",\"JrSs\",\"JrR\"}"
+    },
+    {
+      "event": "<event>_popup_impression / <event>_info_impression",
+      "params": "impression_source, progress, readable_event_id, remaining_duration, segment",
+      "when": "mọi popup sự kiện đều gửi impression theo mẫu chung"
+    },
+    {
+      "event": "<event>_joined / <event>_started / <event>_finished / <event>_lost / <event>_won",
+      "params": "tournament_id, readable_event_id, progress, remaining_duration, step_rewards...",
+      "when": "mốc vòng đời chuẩn của một sự kiện"
+    },
+    {
+      "event": "boat_rush_popup_impression / boat_rush_joined / boat_rush_race_won / boat_rush_race_lost",
+      "params": "race_id, tier, step, score, tournament_id, readable_event_id (\"br_{0}_{1:yyyyMMdd}\")",
+      "when": "ví dụ cụ thể cho BoatRush"
+    },
+    {
+      "event": "wof_started / wof_popup_impression / wof_wheel_spinned / wof_wheel_unlocked / wof_wheel_finished / wof_task_selected / wof_task_claimed / wof_task_finished",
+      "params": "stage, segment, readable_event_id, total_currency, task_type, task_goal",
+      "when": "ví dụ cụ thể cho Wheel of Fortune"
+    },
+    {
+      "event": "home_return / home_return_completed",
+      "params": "-",
+      "when": "bắt đầu/kết thúc chuỗi popup về Home"
+    }
+  ],
+  "storage_keys": [
+    "Configs/CachedRemoteConfigs (file cache config Firebase)",
+    "GrandConfigs/GrandCachedRemoteConfigs, GrandConfigs/GrandCachedDailyLevelsRemoteConfigs",
+    "SegmentDataModel (sync name)",
+    "SuperChargerModel, SnitchModel, MagicBottleModel... (sync name của từng <X>DataService)",
+    "ProfileNameChangeClicked, ProfileNameChangeForceCount (PlayerPrefs)",
+    "grand_session_counter, last_application_quit, last_session_duration (PlayerPrefs của SessionTracker)"
+  ],
+  "related_features": [
+    "LiveOps",
+    "Analytics",
+    "SuperCharger",
+    "Snitch",
+    "MagicBottle",
+    "Compensation"
+  ],
+  "gaps": [
+    "15/11 — partial_static_code_unresolved: GetServicesInPosition dùng iVar2=0xc, nếu position==1 thì8 rồi dereference HashSet theo byteoffset của LobbyEventMap. Đây là offsets right/left fields trong object32bit; không phải8/12slot như gap gốc gợi ý. Initialize và event map dùng tập service, chưa có hằng maxicon trong body này. Còn lại: Số icon đồng thời cần layout/prefab/controller clipping và eligible services; không lấy byteoffset làmcapacity.",
+    "15/11 — resolved_static_code_historical_build: InitializeEventServices dựng right HashSet11service: MagicPass,WheelOfFortune,MagicLab,MiniGame,Snitch,EndlessPortal,SpecialOffer,ChooseOneSpecialOffer,TreasureDrill,WatchAndWin,MergeMiniGame; left6service: DuckFestival,BroomStreak,JetpackRaceWithStage,TeamArena,TeamQuest,BoatRush. Đây là registration, không bảo đảm tất cảicon xuất hiện cùng lúc. HashSet không đảm bảo thứ tự hiển thị. Còn lại: Cần đối chiếu ARM64/current runtime và các nhánh caller còn chưa đủ bằng chứng.",
+    "15/11 — resolved_static_code_historical_build: ReturnToHomeSequenceService.Initialize gán từng field _regularLoseSequenceCommands/_regularWinSequenceCommands/_dailyLoseSequenceCommands/_dailyWinSequenceCommands và dựng command bằng allocationTypeInfo theo thứ tự Add. Bảng full order trong supporting_tables của JSON/report lấy trực tiếp từng đoạn field. Execution có thể skip/terminate theo từng command và context, không đồng nghĩa mọi popup luôn hiện. Còn lại: Cần đối chiếu ARM64/current runtime và các nhánh caller còn chưa đủ bằng chứng.",
+    "15/11 — resolved_static_code_historical_build: RemoteTimeService.Initialize (không phải constructor) gán ByPassRemoteTimeCheck=false, RemoteTime=DateTime.MinValue, cooldown10s, elapsed0 và maxcooldown300s. Đây là giá trị init; không được gọi là server time đã hợp lệ ngay khi khởi động. Còn lại: Cần đối chiếu method/consumer trên app0.0.3129 ARM64; chưa là runtime pass.",
+    "15/11 — partial_static_code_unresolved: FriendsService.TryAddFriendsFromDeeplink async đọc deeplink data và gửi AutoAddFriend, sau đó analytics FriendsInteraction. Body này là social attribution/add-friend, không có event-navigation dispatch. Chưa thể phủ định event deeplink ở SDK/manifest hoặc module khác chỉ vì một service. Còn lại: Cần route registry/Android intent và handlers ngoàiFriends; hiện chưa có nguồn chứng minh per-event routes hoặc không hỗ trợ.",
+    "[Runtime 2026-09-10] Cơ chế người chơi giả đã xác nhận từ runtime: IsBot trong leaderboard, ladder id tổng hợp Sky Jump, bảng world/country seed 1000 mục (facts/runtime/fake-players.md)."
+  ],
+  "sources": [
+    "GameDesign/facts/facts.json (consts/fields/strings của LobbyEventsService, SegmentService, RemoteTimeService, SyncService, ReturnToHomeSequenceService, PopUpService, BoatRushService)",
+    "RecoveredNative/PseudoC/Assembly-CSharp/Modules/Contexts/GamePlay/Loop/Scripts/ReturnToHomeSequenceService.c",
+    "RecoveredNative/PseudoC/Assembly-CSharp/Modules/Contexts/Home/UI/Common/Scripts/LobbyEventController/LobbyEventsService.c",
+    "UnityExport/ExportedProject/Assets/MonoBehaviour/BackendEnvironmentConfig.asset",
+    "UnityExport/ExportedProject/Assets/Resources/defaultconfigs/*.json"
+  ],
+  "audit_provenance": {
+    "review_date": "2026-11-15",
+    "mode": "offline_existing_files",
+    "code_build": "0.0.3063 ARMv7",
+    "runtime_build_observed_historically": "0.0.3129 ARM64 (audit 2026-10-18); not rechecked 2026-11-15",
+    "new_playtests": 0,
+    "uc_status": "See facts/audit_20261115/uc_registry.json; image reference is not pass",
+    "workbook_status": "Existing XLSX is historical; JSON and local web include 2026-11-15 corrections",
+    "static_review": "facts/local_code_gap_results_20261115.json; facts/local_asset_gap_results_20261115.json; facts/final_data_gap_decisions_20261115.json; facts/core_body_gap_decisions_20261115.json; facts/remaining_asset_gap_decisions_20261115.json"
+  },
+  "static_review_20261115": {
+    "date": "2026-11-15",
+    "scope": "Historical code/assets 0.0.3063, dated caches, device 0.0.3129 cached bundles and explicitly scoped runtime evidence. Not full runtime pass.",
+    "findings": [
+      {
+        "kind": "code",
+        "source_report": "facts/local_code_gap_results_20261115.json",
+        "id": "MS-CODE-08",
+        "gap_ids": [
+          "MS-EventsFramework-G004"
+        ],
+        "title": "RemoteTime cooldown gán ở Initialize",
+        "status": "resolved_static_code",
+        "conclusion": "RemoteTimeService.Initialize (không phải constructor) gán ByPassRemoteTimeCheck=false, RemoteTime=DateTime.MinValue, cooldown10s, elapsed0 và maxcooldown300s. Đây là giá trị init; không được gọi là server time đã hợp lệ ngay khi khởi động.",
+        "evidence": [
+          {
+            "file": "../com.grandgames.magicsort_Unity_20260909_112501/RecoveredNative/PseudoC/Assembly-CSharp/Modules/Contexts/Application/ServerCommunication/Scripts/RemoteTimeService.c",
+            "line": 594,
+            "end_line": 687,
+            "method": "// ===== RemoteTimeService :: public void Initialize()",
+            "sha256": "ce3e1b90b0199e4d1a310ad129ee7fe2a247f32a1ddee6408b10df9d74bcfaa8",
+            "body_checked": true,
+            "build": "0.0.3063 ARMv7",
+            "required_body_tokens": [
+              "_ByPassRemoteTimeCheck_k__BackingField = false",
+              "_coolDownDurationAsSeconds = 10",
+              "_maxCoolDownDurationAsSeconds = 300",
+              "_elapsedCoolDown = 0"
+            ]
+          }
+        ],
+        "remaining": "Cần đối chiếu method/consumer trên app0.0.3129 ARM64; chưa là runtime pass.",
+        "scope": "recovered_native_0.0.3063_only",
+        "runtime_verified": false
+      },
+      {
+        "kind": "code",
+        "source_report": "facts/local_code_gap_results_20261115.json",
+        "id": "MS-CODE-34",
+        "gap_ids": [
+          "MS-EventsFramework-G001"
+        ],
+        "title": "8/12 là field offset, không là số icon",
+        "status": "partial_static_code",
+        "conclusion": "GetServicesInPosition dùng iVar2=0xc, nếu position==1 thì8 rồi dereference HashSet theo byteoffset của LobbyEventMap. Đây là offsets right/left fields trong object32bit; không phải8/12slot như gap gốc gợi ý. Initialize và event map dùng tập service, chưa có hằng maxicon trong body này.",
+        "evidence": [
+          {
+            "file": "../com.grandgames.magicsort_Unity_20260909_112501/RecoveredNative/PseudoC/Assembly-CSharp/Modules/Contexts/Home/UI/Common/Scripts/LobbyEventController/LobbyEventsService.c",
+            "line": 596,
+            "end_line": 700,
+            "method": "iVar2 = 0xc;",
+            "sha256": "a7f04fd37c183d7a9af45e15510ff885385bb7a76262f4e31bb58d996c23d7c4",
+            "body_checked": true,
+            "build": "0.0.3063 ARMv7",
+            "required_body_tokens": [
+              "if (position == 1)",
+              "iVar2 = 8;"
+            ]
+          }
+        ],
+        "remaining": "Số icon đồng thời cần layout/prefab/controller clipping và eligible services; không lấy byteoffset làmcapacity.",
+        "scope": "recovered_native_0.0.3063_only",
+        "runtime_verified": false
+      },
+      {
+        "kind": "code",
+        "source_report": "facts/local_code_gap_results_20261115.json",
+        "id": "MS-CODE-35",
+        "gap_ids": [
+          "MS-EventsFramework-G002"
+        ],
+        "title": "Lobby map có đầy đủ tên service từ callsites",
+        "status": "resolved_static_code",
+        "conclusion": "InitializeEventServices dựng right HashSet11service: MagicPass,WheelOfFortune,MagicLab,MiniGame,Snitch,EndlessPortal,SpecialOffer,ChooseOneSpecialOffer,TreasureDrill,WatchAndWin,MergeMiniGame; left6service: DuckFestival,BroomStreak,JetpackRaceWithStage,TeamArena,TeamQuest,BoatRush. Đây là registration, không bảo đảm tất cảicon xuất hiện cùng lúc. HashSet không đảm bảo thứ tự hiển thị.",
+        "evidence": [
+          {
+            "file": "../com.grandgames.magicsort_Unity_20260909_112501/RecoveredNative/PseudoC/Assembly-CSharp/Modules/Contexts/Home/UI/Common/Scripts/LobbyEventController/LobbyEventMap.c",
+            "line": 361,
+            "end_line": 703,
+            "method": "// ===== LobbyEventMap :: private void InitializesEventServices()",
+            "sha256": "90e4a9f4f66d68f691b29e6f88bb9cab0a0b1b1aeea1ec6d404307df99e9ae92",
+            "body_checked": true,
+            "build": "0.0.3063 ARMv7",
+            "required_body_tokens": [
+              "_rightServices",
+              "_leftServices"
+            ]
+          }
+        ],
+        "remaining": "Cần đối chiếu ARM64/current runtime và các nhánh caller còn chưa đủ bằng chứng.",
+        "scope": "recovered_native_0.0.3063_only",
+        "runtime_verified": false
+      },
+      {
+        "kind": "code",
+        "source_report": "facts/local_code_gap_results_20261115.json",
+        "id": "MS-CODE-36",
+        "gap_ids": [
+          "MS-EventsFramework-G003",
+          "MS-HomeUI-G003"
+        ],
+        "title": "Bốn return-home lists đã tách theo field",
+        "status": "resolved_static_code",
+        "conclusion": "ReturnToHomeSequenceService.Initialize gán từng field _regularLoseSequenceCommands/_regularWinSequenceCommands/_dailyLoseSequenceCommands/_dailyWinSequenceCommands và dựng command bằng allocationTypeInfo theo thứ tự Add. Bảng full order trong supporting_tables của JSON/report lấy trực tiếp từng đoạn field. Execution có thể skip/terminate theo từng command và context, không đồng nghĩa mọi popup luôn hiện.",
+        "evidence": [
+          {
+            "file": "../com.grandgames.magicsort_Unity_20260909_112501/RecoveredNative/PseudoC/Assembly-CSharp/Modules/Contexts/GamePlay/Loop/Scripts/ReturnToHomeSequenceService.c",
+            "line": 1049,
+            "end_line": 3707,
+            "method": "// ===== ReturnToHomeSequenceService :: public void Initialize()",
+            "sha256": "7950940e30fbffce0b9d6a07d8f020bacb799f6cb7b8fb0bee4079aae370bd06",
+            "body_checked": true,
+            "build": "0.0.3063 ARMv7",
+            "required_body_tokens": [
+              "_regularLoseSequenceCommands",
+              "_regularWinSequenceCommands",
+              "_dailyLoseSequenceCommands",
+              "_dailyWinSequenceCommands"
+            ]
+          }
+        ],
+        "remaining": "Cần đối chiếu ARM64/current runtime và các nhánh caller còn chưa đủ bằng chứng.",
+        "scope": "recovered_native_0.0.3063_only",
+        "runtime_verified": false
+      },
+      {
+        "kind": "code",
+        "source_report": "facts/local_code_gap_results_20261115.json",
+        "id": "MS-CODE-52",
+        "gap_ids": [
+          "MS-EventsFramework-G005"
+        ],
+        "title": "Deeplink đã thấy là social add-friend",
+        "status": "partial_static_code",
+        "conclusion": "FriendsService.TryAddFriendsFromDeeplink async đọc deeplink data và gửi AutoAddFriend, sau đó analytics FriendsInteraction. Body này là social attribution/add-friend, không có event-navigation dispatch. Chưa thể phủ định event deeplink ở SDK/manifest hoặc module khác chỉ vì một service.",
+        "evidence": [
+          {
+            "file": "../com.grandgames.magicsort_Unity_20260909_112501/RecoveredNative/PseudoC/Assembly-CSharp/Modules/Contexts/Home/Friends/Scripts/FriendsService.c",
+            "line": 4260,
+            "end_line": 4540,
+            "method": "// ===== FriendsService.<TryAddFriendsFromDeeplink>d__74 :: private void MoveNext()",
+            "sha256": "55df8e84a14e12e5e4a08042a00e18ea270c38275b5f36bb664c46f6f46380de",
+            "body_checked": true,
+            "build": "0.0.3063 ARMv7",
+            "required_body_tokens": [
+              "\"deeplink\"",
+              "SendFriendsInteractionEvent"
+            ]
+          }
+        ],
+        "remaining": "Cần route registry/Android intent và handlers ngoàiFriends; hiện chưa có nguồn chứng minh per-event routes hoặc không hỗ trợ.",
+        "scope": "recovered_native_0.0.3063_only",
+        "runtime_verified": false
+      }
+    ]
+  },
+  "acceptance_review_20261115": {
+    "source": "facts/feature_acceptance_20261115.json",
+    "feature_id": "EventsFramework",
+    "scope": "All eleven dossier dimensions reviewed; full_feature_verified is not implied; read per-dimension gaps and actual runtime evidence."
+  },
+  "segment_ab_review_20261115": {
+    "status": "reviewed_rows_associated_assignment_not_proven",
+    "segment_ids": [
+      "MS-SEG-052",
+      "MS-SEG-053",
+      "MS-SEG-054",
+      "MS-SEG-055",
+      "MS-SEG-056",
+      "MS-SEG-057",
+      "MS-SEG-058",
+      "MS-SEG-059",
+      "MS-SEG-061",
+      "MS-SEG-113",
+      "MS-SEG-252",
+      "MS-SEG-253",
+      "MS-SEG-254",
+      "MS-SEG-255",
+      "MS-SEG-256",
+      "MS-SEG-257",
+      "MS-SEG-258",
+      "MS-SEG-259"
+    ],
+    "matching_basis": "explicit_gd_config_map_or_exact_model_token_in_gdd_configs_where_key_sources; rootfieldscoped",
+    "rows": [
+      {
+        "snapshot": "default_0.0.3063",
+        "model": "WheelOfFortuneConfigModelV2",
+        "key": "StageProbabilities[0].WithCollection.Poor",
+        "value": 0.5,
+        "type": "float",
+        "source": "../com.grandgames.magicsort_Unity_20260909_112501/UnityExport/ExportedProject/Assets/Resources/defaultconfigs/WheelOfFortuneConfigModelV2.json",
+        "classification": "config_candidate_not_backend_assignment_proof",
+        "review_id": "MS-SEG-052",
+        "review_classification": "reward_bucket_false_positive",
+        "review_status": "excluded_from_commercial_segment_and_ab_inventory",
+        "consumer": {
+          "source": "com.grandgames.magicsort_Unity_20260909_112501/RecoveredNative/PseudoC/Assembly-CSharp/Modules/Contexts/Home/WheelOfFortune/WheelOfFortuneService.c",
+          "line": 3194,
+          "marker": "// ===== WheelOfFortuneService :: private Dictionary<WheelOfFortuneRewardSegment, float> GetRewardProbabilitiesFromConfig",
+          "build": "0.0.3063 ARMv7",
+          "evidence": "recovered_native_historical_version"
+        },
+        "interpretation": "Poor và reward.segment số là bucket WheelOfFortuneRewardSegment (None0/Basic1/Poor2/Premium3/Elite4/Epic5 ở mã0.0.3063), không phải nhãn thương mại.",
+        "next_action": "Đối chiếu stageId, Collection enabled và outcome; giữ rawint và cảnh báo lệch build, không ghép với SegmentDataModel.",
+        "assignment_proof": false,
+        "uplift_proof": false,
+        "matching_basis": [
+          {
+            "kind": "exact_model_token_in_dossier_source_or_config",
+            "source": "gdd/EventsFramework.json#/configs/20/key_where"
+          }
+        ]
+      },
+      {
+        "snapshot": "default_0.0.3063",
+        "model": "WheelOfFortuneConfigModelV2",
+        "key": "StageProbabilities[0].WithoutCollection.Poor",
+        "value": 0.5,
+        "type": "float",
+        "source": "../com.grandgames.magicsort_Unity_20260909_112501/UnityExport/ExportedProject/Assets/Resources/defaultconfigs/WheelOfFortuneConfigModelV2.json",
+        "classification": "config_candidate_not_backend_assignment_proof",
+        "review_id": "MS-SEG-053",
+        "review_classification": "reward_bucket_false_positive",
+        "review_status": "excluded_from_commercial_segment_and_ab_inventory",
+        "consumer": {
+          "source": "com.grandgames.magicsort_Unity_20260909_112501/RecoveredNative/PseudoC/Assembly-CSharp/Modules/Contexts/Home/WheelOfFortune/WheelOfFortuneService.c",
+          "line": 3194,
+          "marker": "// ===== WheelOfFortuneService :: private Dictionary<WheelOfFortuneRewardSegment, float> GetRewardProbabilitiesFromConfig",
+          "build": "0.0.3063 ARMv7",
+          "evidence": "recovered_native_historical_version"
+        },
+        "interpretation": "Poor và reward.segment số là bucket WheelOfFortuneRewardSegment (None0/Basic1/Poor2/Premium3/Elite4/Epic5 ở mã0.0.3063), không phải nhãn thương mại.",
+        "next_action": "Đối chiếu stageId, Collection enabled và outcome; giữ rawint và cảnh báo lệch build, không ghép với SegmentDataModel.",
+        "assignment_proof": false,
+        "uplift_proof": false,
+        "matching_basis": [
+          {
+            "kind": "exact_model_token_in_dossier_source_or_config",
+            "source": "gdd/EventsFramework.json#/configs/20/key_where"
+          }
+        ]
+      },
+      {
+        "snapshot": "default_0.0.3063",
+        "model": "WheelOfFortuneConfigModelV2",
+        "key": "StageProbabilities[1].WithCollection.Poor",
+        "value": 0.5,
+        "type": "float",
+        "source": "../com.grandgames.magicsort_Unity_20260909_112501/UnityExport/ExportedProject/Assets/Resources/defaultconfigs/WheelOfFortuneConfigModelV2.json",
+        "classification": "config_candidate_not_backend_assignment_proof",
+        "review_id": "MS-SEG-054",
+        "review_classification": "reward_bucket_false_positive",
+        "review_status": "excluded_from_commercial_segment_and_ab_inventory",
+        "consumer": {
+          "source": "com.grandgames.magicsort_Unity_20260909_112501/RecoveredNative/PseudoC/Assembly-CSharp/Modules/Contexts/Home/WheelOfFortune/WheelOfFortuneService.c",
+          "line": 3194,
+          "marker": "// ===== WheelOfFortuneService :: private Dictionary<WheelOfFortuneRewardSegment, float> GetRewardProbabilitiesFromConfig",
+          "build": "0.0.3063 ARMv7",
+          "evidence": "recovered_native_historical_version"
+        },
+        "interpretation": "Poor và reward.segment số là bucket WheelOfFortuneRewardSegment (None0/Basic1/Poor2/Premium3/Elite4/Epic5 ở mã0.0.3063), không phải nhãn thương mại.",
+        "next_action": "Đối chiếu stageId, Collection enabled và outcome; giữ rawint và cảnh báo lệch build, không ghép với SegmentDataModel.",
+        "assignment_proof": false,
+        "uplift_proof": false,
+        "matching_basis": [
+          {
+            "kind": "exact_model_token_in_dossier_source_or_config",
+            "source": "gdd/EventsFramework.json#/configs/20/key_where"
+          }
+        ]
+      },
+      {
+        "snapshot": "default_0.0.3063",
+        "model": "WheelOfFortuneConfigModelV2",
+        "key": "StageProbabilities[1].WithoutCollection.Poor",
+        "value": 0.5,
+        "type": "float",
+        "source": "../com.grandgames.magicsort_Unity_20260909_112501/UnityExport/ExportedProject/Assets/Resources/defaultconfigs/WheelOfFortuneConfigModelV2.json",
+        "classification": "config_candidate_not_backend_assignment_proof",
+        "review_id": "MS-SEG-055",
+        "review_classification": "reward_bucket_false_positive",
+        "review_status": "excluded_from_commercial_segment_and_ab_inventory",
+        "consumer": {
+          "source": "com.grandgames.magicsort_Unity_20260909_112501/RecoveredNative/PseudoC/Assembly-CSharp/Modules/Contexts/Home/WheelOfFortune/WheelOfFortuneService.c",
+          "line": 3194,
+          "marker": "// ===== WheelOfFortuneService :: private Dictionary<WheelOfFortuneRewardSegment, float> GetRewardProbabilitiesFromConfig",
+          "build": "0.0.3063 ARMv7",
+          "evidence": "recovered_native_historical_version"
+        },
+        "interpretation": "Poor và reward.segment số là bucket WheelOfFortuneRewardSegment (None0/Basic1/Poor2/Premium3/Elite4/Epic5 ở mã0.0.3063), không phải nhãn thương mại.",
+        "next_action": "Đối chiếu stageId, Collection enabled và outcome; giữ rawint và cảnh báo lệch build, không ghép với SegmentDataModel.",
+        "assignment_proof": false,
+        "uplift_proof": false,
+        "matching_basis": [
+          {
+            "kind": "exact_model_token_in_dossier_source_or_config",
+            "source": "gdd/EventsFramework.json#/configs/20/key_where"
+          }
+        ]
+      },
+      {
+        "snapshot": "default_0.0.3063",
+        "model": "WheelOfFortuneConfigModelV2",
+        "key": "StageProbabilities[2].WithCollection.Poor",
+        "value": 0.5,
+        "type": "float",
+        "source": "../com.grandgames.magicsort_Unity_20260909_112501/UnityExport/ExportedProject/Assets/Resources/defaultconfigs/WheelOfFortuneConfigModelV2.json",
+        "classification": "config_candidate_not_backend_assignment_proof",
+        "review_id": "MS-SEG-056",
+        "review_classification": "reward_bucket_false_positive",
+        "review_status": "excluded_from_commercial_segment_and_ab_inventory",
+        "consumer": {
+          "source": "com.grandgames.magicsort_Unity_20260909_112501/RecoveredNative/PseudoC/Assembly-CSharp/Modules/Contexts/Home/WheelOfFortune/WheelOfFortuneService.c",
+          "line": 3194,
+          "marker": "// ===== WheelOfFortuneService :: private Dictionary<WheelOfFortuneRewardSegment, float> GetRewardProbabilitiesFromConfig",
+          "build": "0.0.3063 ARMv7",
+          "evidence": "recovered_native_historical_version"
+        },
+        "interpretation": "Poor và reward.segment số là bucket WheelOfFortuneRewardSegment (None0/Basic1/Poor2/Premium3/Elite4/Epic5 ở mã0.0.3063), không phải nhãn thương mại.",
+        "next_action": "Đối chiếu stageId, Collection enabled và outcome; giữ rawint và cảnh báo lệch build, không ghép với SegmentDataModel.",
+        "assignment_proof": false,
+        "uplift_proof": false,
+        "matching_basis": [
+          {
+            "kind": "exact_model_token_in_dossier_source_or_config",
+            "source": "gdd/EventsFramework.json#/configs/20/key_where"
+          }
+        ]
+      },
+      {
+        "snapshot": "default_0.0.3063",
+        "model": "WheelOfFortuneConfigModelV2",
+        "key": "StageProbabilities[2].WithoutCollection.Poor",
+        "value": 0.5,
+        "type": "float",
+        "source": "../com.grandgames.magicsort_Unity_20260909_112501/UnityExport/ExportedProject/Assets/Resources/defaultconfigs/WheelOfFortuneConfigModelV2.json",
+        "classification": "config_candidate_not_backend_assignment_proof",
+        "review_id": "MS-SEG-057",
+        "review_classification": "reward_bucket_false_positive",
+        "review_status": "excluded_from_commercial_segment_and_ab_inventory",
+        "consumer": {
+          "source": "com.grandgames.magicsort_Unity_20260909_112501/RecoveredNative/PseudoC/Assembly-CSharp/Modules/Contexts/Home/WheelOfFortune/WheelOfFortuneService.c",
+          "line": 3194,
+          "marker": "// ===== WheelOfFortuneService :: private Dictionary<WheelOfFortuneRewardSegment, float> GetRewardProbabilitiesFromConfig",
+          "build": "0.0.3063 ARMv7",
+          "evidence": "recovered_native_historical_version"
+        },
+        "interpretation": "Poor và reward.segment số là bucket WheelOfFortuneRewardSegment (None0/Basic1/Poor2/Premium3/Elite4/Epic5 ở mã0.0.3063), không phải nhãn thương mại.",
+        "next_action": "Đối chiếu stageId, Collection enabled và outcome; giữ rawint và cảnh báo lệch build, không ghép với SegmentDataModel.",
+        "assignment_proof": false,
+        "uplift_proof": false,
+        "matching_basis": [
+          {
+            "kind": "exact_model_token_in_dossier_source_or_config",
+            "source": "gdd/EventsFramework.json#/configs/20/key_where"
+          }
+        ]
+      },
+      {
+        "snapshot": "default_0.0.3063",
+        "model": "WheelOfFortuneConfigModelV2",
+        "key": "StageProbabilities[3].WithCollection.Poor",
+        "value": 0.5,
+        "type": "float",
+        "source": "../com.grandgames.magicsort_Unity_20260909_112501/UnityExport/ExportedProject/Assets/Resources/defaultconfigs/WheelOfFortuneConfigModelV2.json",
+        "classification": "config_candidate_not_backend_assignment_proof",
+        "review_id": "MS-SEG-058",
+        "review_classification": "reward_bucket_false_positive",
+        "review_status": "excluded_from_commercial_segment_and_ab_inventory",
+        "consumer": {
+          "source": "com.grandgames.magicsort_Unity_20260909_112501/RecoveredNative/PseudoC/Assembly-CSharp/Modules/Contexts/Home/WheelOfFortune/WheelOfFortuneService.c",
+          "line": 3194,
+          "marker": "// ===== WheelOfFortuneService :: private Dictionary<WheelOfFortuneRewardSegment, float> GetRewardProbabilitiesFromConfig",
+          "build": "0.0.3063 ARMv7",
+          "evidence": "recovered_native_historical_version"
+        },
+        "interpretation": "Poor và reward.segment số là bucket WheelOfFortuneRewardSegment (None0/Basic1/Poor2/Premium3/Elite4/Epic5 ở mã0.0.3063), không phải nhãn thương mại.",
+        "next_action": "Đối chiếu stageId, Collection enabled và outcome; giữ rawint và cảnh báo lệch build, không ghép với SegmentDataModel.",
+        "assignment_proof": false,
+        "uplift_proof": false,
+        "matching_basis": [
+          {
+            "kind": "exact_model_token_in_dossier_source_or_config",
+            "source": "gdd/EventsFramework.json#/configs/20/key_where"
+          }
+        ]
+      },
+      {
+        "snapshot": "default_0.0.3063",
+        "model": "WheelOfFortuneConfigModelV2",
+        "key": "StageProbabilities[3].WithoutCollection.Poor",
+        "value": 0.5,
+        "type": "float",
+        "source": "../com.grandgames.magicsort_Unity_20260909_112501/UnityExport/ExportedProject/Assets/Resources/defaultconfigs/WheelOfFortuneConfigModelV2.json",
+        "classification": "config_candidate_not_backend_assignment_proof",
+        "review_id": "MS-SEG-059",
+        "review_classification": "reward_bucket_false_positive",
+        "review_status": "excluded_from_commercial_segment_and_ab_inventory",
+        "consumer": {
+          "source": "com.grandgames.magicsort_Unity_20260909_112501/RecoveredNative/PseudoC/Assembly-CSharp/Modules/Contexts/Home/WheelOfFortune/WheelOfFortuneService.c",
+          "line": 3194,
+          "marker": "// ===== WheelOfFortuneService :: private Dictionary<WheelOfFortuneRewardSegment, float> GetRewardProbabilitiesFromConfig",
+          "build": "0.0.3063 ARMv7",
+          "evidence": "recovered_native_historical_version"
+        },
+        "interpretation": "Poor và reward.segment số là bucket WheelOfFortuneRewardSegment (None0/Basic1/Poor2/Premium3/Elite4/Epic5 ở mã0.0.3063), không phải nhãn thương mại.",
+        "next_action": "Đối chiếu stageId, Collection enabled và outcome; giữ rawint và cảnh báo lệch build, không ghép với SegmentDataModel.",
+        "assignment_proof": false,
+        "uplift_proof": false,
+        "matching_basis": [
+          {
+            "kind": "exact_model_token_in_dossier_source_or_config",
+            "source": "gdd/EventsFramework.json#/configs/20/key_where"
+          }
+        ]
+      },
+      {
+        "snapshot": "cache_20260910",
+        "model": "boatRushConfigModel",
+        "key": "pathVariantIndex",
+        "value": 0,
+        "type": "int",
+        "source": "facts/runtime/server_configs/boatRushConfigModel.json",
+        "classification": "config_candidate_not_backend_assignment_proof",
+        "review_id": "MS-SEG-061",
+        "review_classification": "variant_config",
+        "review_status": "missing_experiment_assignment_and_outcome",
+        "consumer": {
+          "source": "com.grandgames.magicsort_Unity_20260909_112501/RecoveredNative/PseudoC/Assembly-CSharp/Modules/Contexts/Home/BoatRush/Scripts/BoatRushDataService.c",
+          "line": 1088,
+          "marker": "// ===== BoatRushDataService :: public int GetPathVariantIndex()",
+          "build": "0.0.3063 ARMv7",
+          "evidence": "recovered_native_historical_version"
+        },
+        "interpretation": "Giá trị variant được cache/default/Firebase; chưa có experimentID hoặc traffic split.",
+        "next_action": "Cần experimentID, variant, allocation, activation timestamp, consumer effect và đối chứng cùng điều kiện.",
+        "assignment_proof": false,
+        "uplift_proof": false,
+        "matching_basis": [
+          {
+            "kind": "exact_model_token_in_dossier_source_or_config",
+            "source": "gdd/EventsFramework.json#/configs/19/key_where"
+          }
+        ]
+      },
+      {
+        "snapshot": "cache_20261010",
+        "model": "boatRushConfigModel",
+        "key": "pathVariantIndex",
+        "value": 0,
+        "type": "int",
+        "source": "facts/runtime/test_20261010/before/CachedRemoteConfigs",
+        "classification": "config_candidate_not_backend_assignment_proof",
+        "review_id": "MS-SEG-113",
+        "review_classification": "variant_config",
+        "review_status": "missing_experiment_assignment_and_outcome",
+        "consumer": {
+          "source": "com.grandgames.magicsort_Unity_20260909_112501/RecoveredNative/PseudoC/Assembly-CSharp/Modules/Contexts/Home/BoatRush/Scripts/BoatRushDataService.c",
+          "line": 1088,
+          "marker": "// ===== BoatRushDataService :: public int GetPathVariantIndex()",
+          "build": "0.0.3063 ARMv7",
+          "evidence": "recovered_native_historical_version"
+        },
+        "interpretation": "Giá trị variant được cache/default/Firebase; chưa có experimentID hoặc traffic split.",
+        "next_action": "Cần experimentID, variant, allocation, activation timestamp, consumer effect và đối chứng cùng điều kiện.",
+        "assignment_proof": false,
+        "uplift_proof": false,
+        "matching_basis": [
+          {
+            "kind": "exact_model_token_in_dossier_source_or_config",
+            "source": "gdd/EventsFramework.json#/configs/19/key_where"
+          }
+        ]
+      },
+      {
+        "snapshot": "firebase_20260910",
+        "model": "WheelOfFortuneConfigModelV2",
+        "key": "StageProbabilities[0].WithCollection.Poor",
+        "value": 0,
+        "type": "int",
+        "source": "facts/runtime/decoded/firebase_rc.json",
+        "classification": "config_candidate_not_backend_assignment_proof",
+        "review_id": "MS-SEG-252",
+        "review_classification": "reward_bucket_false_positive",
+        "review_status": "excluded_from_commercial_segment_and_ab_inventory",
+        "consumer": {
+          "source": "com.grandgames.magicsort_Unity_20260909_112501/RecoveredNative/PseudoC/Assembly-CSharp/Modules/Contexts/Home/WheelOfFortune/WheelOfFortuneService.c",
+          "line": 3194,
+          "marker": "// ===== WheelOfFortuneService :: private Dictionary<WheelOfFortuneRewardSegment, float> GetRewardProbabilitiesFromConfig",
+          "build": "0.0.3063 ARMv7",
+          "evidence": "recovered_native_historical_version"
+        },
+        "interpretation": "Poor và reward.segment số là bucket WheelOfFortuneRewardSegment (None0/Basic1/Poor2/Premium3/Elite4/Epic5 ở mã0.0.3063), không phải nhãn thương mại.",
+        "next_action": "Đối chiếu stageId, Collection enabled và outcome; giữ rawint và cảnh báo lệch build, không ghép với SegmentDataModel.",
+        "assignment_proof": false,
+        "uplift_proof": false,
+        "matching_basis": [
+          {
+            "kind": "exact_model_token_in_dossier_source_or_config",
+            "source": "gdd/EventsFramework.json#/configs/20/key_where"
+          }
+        ]
+      },
+      {
+        "snapshot": "firebase_20260910",
+        "model": "WheelOfFortuneConfigModelV2",
+        "key": "StageProbabilities[0].WithoutCollection.Poor",
+        "value": 0,
+        "type": "int",
+        "source": "facts/runtime/decoded/firebase_rc.json",
+        "classification": "config_candidate_not_backend_assignment_proof",
+        "review_id": "MS-SEG-253",
+        "review_classification": "reward_bucket_false_positive",
+        "review_status": "excluded_from_commercial_segment_and_ab_inventory",
+        "consumer": {
+          "source": "com.grandgames.magicsort_Unity_20260909_112501/RecoveredNative/PseudoC/Assembly-CSharp/Modules/Contexts/Home/WheelOfFortune/WheelOfFortuneService.c",
+          "line": 3194,
+          "marker": "// ===== WheelOfFortuneService :: private Dictionary<WheelOfFortuneRewardSegment, float> GetRewardProbabilitiesFromConfig",
+          "build": "0.0.3063 ARMv7",
+          "evidence": "recovered_native_historical_version"
+        },
+        "interpretation": "Poor và reward.segment số là bucket WheelOfFortuneRewardSegment (None0/Basic1/Poor2/Premium3/Elite4/Epic5 ở mã0.0.3063), không phải nhãn thương mại.",
+        "next_action": "Đối chiếu stageId, Collection enabled và outcome; giữ rawint và cảnh báo lệch build, không ghép với SegmentDataModel.",
+        "assignment_proof": false,
+        "uplift_proof": false,
+        "matching_basis": [
+          {
+            "kind": "exact_model_token_in_dossier_source_or_config",
+            "source": "gdd/EventsFramework.json#/configs/20/key_where"
+          }
+        ]
+      },
+      {
+        "snapshot": "firebase_20260910",
+        "model": "WheelOfFortuneConfigModelV2",
+        "key": "StageProbabilities[1].WithCollection.Poor",
+        "value": 0,
+        "type": "int",
+        "source": "facts/runtime/decoded/firebase_rc.json",
+        "classification": "config_candidate_not_backend_assignment_proof",
+        "review_id": "MS-SEG-254",
+        "review_classification": "reward_bucket_false_positive",
+        "review_status": "excluded_from_commercial_segment_and_ab_inventory",
+        "consumer": {
+          "source": "com.grandgames.magicsort_Unity_20260909_112501/RecoveredNative/PseudoC/Assembly-CSharp/Modules/Contexts/Home/WheelOfFortune/WheelOfFortuneService.c",
+          "line": 3194,
+          "marker": "// ===== WheelOfFortuneService :: private Dictionary<WheelOfFortuneRewardSegment, float> GetRewardProbabilitiesFromConfig",
+          "build": "0.0.3063 ARMv7",
+          "evidence": "recovered_native_historical_version"
+        },
+        "interpretation": "Poor và reward.segment số là bucket WheelOfFortuneRewardSegment (None0/Basic1/Poor2/Premium3/Elite4/Epic5 ở mã0.0.3063), không phải nhãn thương mại.",
+        "next_action": "Đối chiếu stageId, Collection enabled và outcome; giữ rawint và cảnh báo lệch build, không ghép với SegmentDataModel.",
+        "assignment_proof": false,
+        "uplift_proof": false,
+        "matching_basis": [
+          {
+            "kind": "exact_model_token_in_dossier_source_or_config",
+            "source": "gdd/EventsFramework.json#/configs/20/key_where"
+          }
+        ]
+      },
+      {
+        "snapshot": "firebase_20260910",
+        "model": "WheelOfFortuneConfigModelV2",
+        "key": "StageProbabilities[1].WithoutCollection.Poor",
+        "value": 0,
+        "type": "int",
+        "source": "facts/runtime/decoded/firebase_rc.json",
+        "classification": "config_candidate_not_backend_assignment_proof",
+        "review_id": "MS-SEG-255",
+        "review_classification": "reward_bucket_false_positive",
+        "review_status": "excluded_from_commercial_segment_and_ab_inventory",
+        "consumer": {
+          "source": "com.grandgames.magicsort_Unity_20260909_112501/RecoveredNative/PseudoC/Assembly-CSharp/Modules/Contexts/Home/WheelOfFortune/WheelOfFortuneService.c",
+          "line": 3194,
+          "marker": "// ===== WheelOfFortuneService :: private Dictionary<WheelOfFortuneRewardSegment, float> GetRewardProbabilitiesFromConfig",
+          "build": "0.0.3063 ARMv7",
+          "evidence": "recovered_native_historical_version"
+        },
+        "interpretation": "Poor và reward.segment số là bucket WheelOfFortuneRewardSegment (None0/Basic1/Poor2/Premium3/Elite4/Epic5 ở mã0.0.3063), không phải nhãn thương mại.",
+        "next_action": "Đối chiếu stageId, Collection enabled và outcome; giữ rawint và cảnh báo lệch build, không ghép với SegmentDataModel.",
+        "assignment_proof": false,
+        "uplift_proof": false,
+        "matching_basis": [
+          {
+            "kind": "exact_model_token_in_dossier_source_or_config",
+            "source": "gdd/EventsFramework.json#/configs/20/key_where"
+          }
+        ]
+      },
+      {
+        "snapshot": "firebase_20260910",
+        "model": "WheelOfFortuneConfigModelV2",
+        "key": "StageProbabilities[2].WithCollection.Poor",
+        "value": 0,
+        "type": "int",
+        "source": "facts/runtime/decoded/firebase_rc.json",
+        "classification": "config_candidate_not_backend_assignment_proof",
+        "review_id": "MS-SEG-256",
+        "review_classification": "reward_bucket_false_positive",
+        "review_status": "excluded_from_commercial_segment_and_ab_inventory",
+        "consumer": {
+          "source": "com.grandgames.magicsort_Unity_20260909_112501/RecoveredNative/PseudoC/Assembly-CSharp/Modules/Contexts/Home/WheelOfFortune/WheelOfFortuneService.c",
+          "line": 3194,
+          "marker": "// ===== WheelOfFortuneService :: private Dictionary<WheelOfFortuneRewardSegment, float> GetRewardProbabilitiesFromConfig",
+          "build": "0.0.3063 ARMv7",
+          "evidence": "recovered_native_historical_version"
+        },
+        "interpretation": "Poor và reward.segment số là bucket WheelOfFortuneRewardSegment (None0/Basic1/Poor2/Premium3/Elite4/Epic5 ở mã0.0.3063), không phải nhãn thương mại.",
+        "next_action": "Đối chiếu stageId, Collection enabled và outcome; giữ rawint và cảnh báo lệch build, không ghép với SegmentDataModel.",
+        "assignment_proof": false,
+        "uplift_proof": false,
+        "matching_basis": [
+          {
+            "kind": "exact_model_token_in_dossier_source_or_config",
+            "source": "gdd/EventsFramework.json#/configs/20/key_where"
+          }
+        ]
+      },
+      {
+        "snapshot": "firebase_20260910",
+        "model": "WheelOfFortuneConfigModelV2",
+        "key": "StageProbabilities[2].WithoutCollection.Poor",
+        "value": 0,
+        "type": "int",
+        "source": "facts/runtime/decoded/firebase_rc.json",
+        "classification": "config_candidate_not_backend_assignment_proof",
+        "review_id": "MS-SEG-257",
+        "review_classification": "reward_bucket_false_positive",
+        "review_status": "excluded_from_commercial_segment_and_ab_inventory",
+        "consumer": {
+          "source": "com.grandgames.magicsort_Unity_20260909_112501/RecoveredNative/PseudoC/Assembly-CSharp/Modules/Contexts/Home/WheelOfFortune/WheelOfFortuneService.c",
+          "line": 3194,
+          "marker": "// ===== WheelOfFortuneService :: private Dictionary<WheelOfFortuneRewardSegment, float> GetRewardProbabilitiesFromConfig",
+          "build": "0.0.3063 ARMv7",
+          "evidence": "recovered_native_historical_version"
+        },
+        "interpretation": "Poor và reward.segment số là bucket WheelOfFortuneRewardSegment (None0/Basic1/Poor2/Premium3/Elite4/Epic5 ở mã0.0.3063), không phải nhãn thương mại.",
+        "next_action": "Đối chiếu stageId, Collection enabled và outcome; giữ rawint và cảnh báo lệch build, không ghép với SegmentDataModel.",
+        "assignment_proof": false,
+        "uplift_proof": false,
+        "matching_basis": [
+          {
+            "kind": "exact_model_token_in_dossier_source_or_config",
+            "source": "gdd/EventsFramework.json#/configs/20/key_where"
+          }
+        ]
+      },
+      {
+        "snapshot": "firebase_20260910",
+        "model": "WheelOfFortuneConfigModelV2",
+        "key": "StageProbabilities[3].WithCollection.Poor",
+        "value": 0,
+        "type": "int",
+        "source": "facts/runtime/decoded/firebase_rc.json",
+        "classification": "config_candidate_not_backend_assignment_proof",
+        "review_id": "MS-SEG-258",
+        "review_classification": "reward_bucket_false_positive",
+        "review_status": "excluded_from_commercial_segment_and_ab_inventory",
+        "consumer": {
+          "source": "com.grandgames.magicsort_Unity_20260909_112501/RecoveredNative/PseudoC/Assembly-CSharp/Modules/Contexts/Home/WheelOfFortune/WheelOfFortuneService.c",
+          "line": 3194,
+          "marker": "// ===== WheelOfFortuneService :: private Dictionary<WheelOfFortuneRewardSegment, float> GetRewardProbabilitiesFromConfig",
+          "build": "0.0.3063 ARMv7",
+          "evidence": "recovered_native_historical_version"
+        },
+        "interpretation": "Poor và reward.segment số là bucket WheelOfFortuneRewardSegment (None0/Basic1/Poor2/Premium3/Elite4/Epic5 ở mã0.0.3063), không phải nhãn thương mại.",
+        "next_action": "Đối chiếu stageId, Collection enabled và outcome; giữ rawint và cảnh báo lệch build, không ghép với SegmentDataModel.",
+        "assignment_proof": false,
+        "uplift_proof": false,
+        "matching_basis": [
+          {
+            "kind": "exact_model_token_in_dossier_source_or_config",
+            "source": "gdd/EventsFramework.json#/configs/20/key_where"
+          }
+        ]
+      },
+      {
+        "snapshot": "firebase_20260910",
+        "model": "WheelOfFortuneConfigModelV2",
+        "key": "StageProbabilities[3].WithoutCollection.Poor",
+        "value": 0,
+        "type": "int",
+        "source": "facts/runtime/decoded/firebase_rc.json",
+        "classification": "config_candidate_not_backend_assignment_proof",
+        "review_id": "MS-SEG-259",
+        "review_classification": "reward_bucket_false_positive",
+        "review_status": "excluded_from_commercial_segment_and_ab_inventory",
+        "consumer": {
+          "source": "com.grandgames.magicsort_Unity_20260909_112501/RecoveredNative/PseudoC/Assembly-CSharp/Modules/Contexts/Home/WheelOfFortune/WheelOfFortuneService.c",
+          "line": 3194,
+          "marker": "// ===== WheelOfFortuneService :: private Dictionary<WheelOfFortuneRewardSegment, float> GetRewardProbabilitiesFromConfig",
+          "build": "0.0.3063 ARMv7",
+          "evidence": "recovered_native_historical_version"
+        },
+        "interpretation": "Poor và reward.segment số là bucket WheelOfFortuneRewardSegment (None0/Basic1/Poor2/Premium3/Elite4/Epic5 ở mã0.0.3063), không phải nhãn thương mại.",
+        "next_action": "Đối chiếu stageId, Collection enabled và outcome; giữ rawint và cảnh báo lệch build, không ghép với SegmentDataModel.",
+        "assignment_proof": false,
+        "uplift_proof": false,
+        "matching_basis": [
+          {
+            "kind": "exact_model_token_in_dossier_source_or_config",
+            "source": "gdd/EventsFramework.json#/configs/20/key_where"
+          }
+        ]
+      }
+    ],
+    "classifications": {
+      "reward_bucket_false_positive": 16,
+      "variant_config": 2
+    },
+    "assignment_verified": false,
+    "uplift_verified": false,
+    "note": "No matchingrow does not prove no segmentation/AB. Rewardbucketfalsepositives remain explicitly classified."
+  },
+  "continuation_review_20261116": {
+    "date": "2026-11-16",
+    "build": "0.0.3129 ARM64 host APK",
+    "build_scope": "Host APK version3129 matches LAST observed installed version15/11 only; installed bytes/live device16/11 not verified.",
+    "runtime_status": "device_unavailable",
+    "runtime_case_ids": [],
+    "current_apk_model_links": {
+      "feature": "EventsFramework",
+      "models": [
+        {
+          "model": "BoatRushConfigModel",
+          "current_default_file": "facts/review_20261116/public_current_config_3129/defaults/BoatRushConfigModel.json",
+          "resource_path": "defaultconfigs/boatrushconfigmodel",
+          "sha256": "ac5c66fe5d5edf4d944292347ade3c21ab7300dcbf45266252db22d3160cbbac",
+          "matching_basis": [
+            "gdd/EventsFramework.json#/configs"
+          ],
+          "scope": "Packaged default3129, not effective server config.",
+          "site_data_path": "data/current_config_3129/defaults/BoatRushConfigModel.json",
+          "original_source_sha256": "ac5c66fe5d5edf4d944292347ade3c21ab7300dcbf45266252db22d3160cbbac",
+          "public_artifact_sha256": "4f5df6da40e6342e0c11008dda53f2693fcb5a3f74ce9bd91e29d4cf90daa11d",
+          "sha256_scope": "sha256 is original raw model; public_artifact_sha256 is the sanitized download"
+        },
+        {
+          "model": "GrandRemoteDailyLevelsConfig",
+          "current_default_file": "facts/review_20261116/public_current_config_3129/defaults/GrandRemoteDailyLevelsConfig.json",
+          "resource_path": "defaultconfigs/grandremotedailylevelsconfig",
+          "sha256": "9fe8be454106d0079c6ca5f371a586efb52196d6af822e2eb0dbf7909c912fc8",
+          "matching_basis": [
+            "gdd/EventsFramework.json#/flow"
+          ],
+          "scope": "Packaged default3129, not effective server config.",
+          "site_data_path": "data/current_config_3129/defaults/GrandRemoteDailyLevelsConfig.json",
+          "original_source_sha256": "9fe8be454106d0079c6ca5f371a586efb52196d6af822e2eb0dbf7909c912fc8",
+          "public_artifact_sha256": "3c164643f4ce6d26bb87dc1ce04db128386e12d06a882eeeed365f9c719191d5",
+          "sha256_scope": "sha256 is original raw model; public_artifact_sha256 is the sanitized download"
+        },
+        {
+          "model": "ServerCommunicationModel",
+          "current_default_file": "facts/review_20261116/public_current_config_3129/defaults/ServerCommunicationModel.json",
+          "resource_path": "defaultconfigs/servercommunicationmodel",
+          "sha256": "6088d8106ab836b789d82bd4e4ff5f26eca55e002afaf328ed310518e002e3e1",
+          "matching_basis": [
+            "gdd/EventsFramework.json#/configs",
+            "gdd/EventsFramework.json#/flow"
+          ],
+          "scope": "Packaged default3129, not effective server config.",
+          "site_data_path": "data/current_config_3129/defaults/ServerCommunicationModel.json",
+          "original_source_sha256": "6088d8106ab836b789d82bd4e4ff5f26eca55e002afaf328ed310518e002e3e1",
+          "public_artifact_sha256": "268067054515b3e280cf105e2da48dab5d3862b47938848d8bde34f633c39528",
+          "sha256_scope": "sha256 is original raw model; public_artifact_sha256 is the sanitized download"
+        },
+        {
+          "model": "WheelOfFortuneConfigModelV2",
+          "current_default_file": "facts/review_20261116/public_current_config_3129/defaults/WheelOfFortuneConfigModelV2.json",
+          "resource_path": "defaultconfigs/wheeloffortuneconfigmodelv2",
+          "sha256": "16de3639db1116d2d98bed88d652e6eb8b151ddbda87e86653d2da950fdbbccb",
+          "matching_basis": [
+            "gdd/EventsFramework.json#/configs"
+          ],
+          "scope": "Packaged default3129, not effective server config.",
+          "site_data_path": "data/current_config_3129/defaults/WheelOfFortuneConfigModelV2.json",
+          "original_source_sha256": "16de3639db1116d2d98bed88d652e6eb8b151ddbda87e86653d2da950fdbbccb",
+          "public_artifact_sha256": "acf187c9753200df8b5aa46bc8778026edd19b3241f9623843fc62dba880ce63",
+          "sha256_scope": "sha256 is original raw model; public_artifact_sha256 is the sanitized download"
+        }
+      ],
+      "status": "exact_model_source_association",
+      "distribution": "sanitized_public",
+      "public_mapping_pending": false
+    },
+    "current_packaged_defaults": [
+      {
+        "model": "BoatRushConfigModel",
+        "source": "facts/review_20261116/public_current_config_3129/defaults/BoatRushConfigModel.json",
+        "site_data_path": "data/current_config_3129/defaults/BoatRushConfigModel.json",
+        "public_artifact_sha256": "4f5df6da40e6342e0c11008dda53f2693fcb5a3f74ce9bd91e29d4cf90daa11d",
+        "original_source_sha256": "ac5c66fe5d5edf4d944292347ade3c21ab7300dcbf45266252db22d3160cbbac",
+        "source_class": "static_asset",
+        "build": "0.0.3129 host APK",
+        "scope": "Sanitized packaged default fullvalues only; not effective remote/selected config or runtime.",
+        "values": {
+          "IsEnabled": false,
+          "EventType": 1,
+          "FirstLevelToShow": 90
+        }
+      },
+      {
+        "model": "GrandRemoteDailyLevelsConfig",
+        "source": "facts/review_20261116/public_current_config_3129/defaults/GrandRemoteDailyLevelsConfig.json",
+        "site_data_path": "data/current_config_3129/defaults/GrandRemoteDailyLevelsConfig.json",
+        "public_artifact_sha256": "3c164643f4ce6d26bb87dc1ce04db128386e12d06a882eeeed365f9c719191d5",
+        "original_source_sha256": "9fe8be454106d0079c6ca5f371a586efb52196d6af822e2eb0dbf7909c912fc8",
+        "source_class": "static_asset",
+        "build": "0.0.3129 host APK",
+        "scope": "Sanitized packaged default fullvalues only; not effective remote/selected config or runtime.",
+        "values": {
+          "playOnDurationInSeconds": 60,
+          "tutorial_level": {
+            "levelDuration": 180,
+            "seeds": [
+              "daily_daily16_difficulty1-10"
+            ],
+            "emptyBottleCount": 3,
+            "filledBottleCount": 4
+          },
+          "currentMonthDailyLevels": [
+            {
+              "dayIndex": 1,
+              "levelDuration": 130,
+              "seeds": [
+                "daily_daily34_difficulty4-5",
+                "daily_daily34_difficulty4-4",
+                "daily_daily34_difficulty4-3",
+                "daily_daily34_difficulty4-2",
+                "daily_daily34_difficulty4-1"
+              ],
+              "emptyBottleCount": 2,
+              "filledBottleCount": 5
+            },
+            {
+              "dayIndex": 2,
+              "levelDuration": 120,
+              "seeds": [
+                "daily_daily81_difficulty1-5",
+                "daily_daily81_difficulty1-4",
+                "daily_daily81_difficulty1-3",
+                "daily_daily81_difficulty1-2",
+                "daily_daily81_difficulty1-1"
+              ],
+              "emptyBottleCount": 2,
+              "filledBottleCount": 4
+            },
+            {
+              "dayIndex": 3,
+              "levelDuration": 105,
+              "seeds": [
+                "daily_daily105_difficulty4-5",
+                "daily_daily105_difficulty4-4",
+                "daily_daily105_difficulty4-3",
+                "daily_daily105_difficulty4-2",
+                "daily_daily105_difficulty4-1"
+              ],
+              "emptyBottleCount": 1,
+              "filledBottleCount": 3
+            },
+            {
+              "dayIndex": 4,
+              "levelDuration": 120,
+              "seeds": [
+                "daily_daily75_difficulty1-5",
+                "daily_daily75_difficulty1-4",
+                "daily_daily75_difficulty1-3",
+                "daily_daily75_difficulty1-2",
+                "daily_daily75_difficulty1-1"
+              ],
+              "emptyBottleCount": 2,
+              "filledBottleCount": 4
+            },
+            {
+              "dayIndex": 5,
+              "levelDuration": 130,
+              "seeds": [
+                "daily_daily27_difficulty2-5",
+                "daily_daily27_difficulty2-4",
+                "daily_daily27_difficulty2-3",
+                "daily_daily27_difficulty2-2",
+                "daily_daily27_difficulty1-1"
+              ],
+              "emptyBottleCount": 2,
+              "filledBottleCount": 5
+            },
+            {
+              "dayIndex": 6,
+              "levelDuration": 130,
+              "seeds": [
+                "daily_daily36_difficulty4-5",
+                "daily_daily36_difficulty5-4",
+                "daily_daily36_difficulty5-3",
+                "daily_daily36_difficulty5-2",
+                "daily_daily36_difficulty4-1"
+              ],
+              "emptyBottleCount": 2,
+              "filledBottleCount": 5
+            },
+            {
+              "dayIndex": 7,
+              "levelDuration": 105,
+              "seeds": [
+                "daily_daily110_difficulty4-5",
+                "daily_daily110_difficulty4-4",
+                "daily_daily110_difficulty4-3",
+                "daily_daily110_difficulty4-2",
+                "daily_daily110_difficulty4-1"
+              ],
+              "emptyBottleCount": 1,
+              "filledBottleCount": 3
+            },
+            {
+              "dayIndex": 8,
+              "levelDuration": 130,
+              "seeds": [
+                "daily_daily3_difficulty2-15",
+                "daily_daily3_difficulty2-14",
+                "daily_daily3_difficulty1-13",
+                "daily_daily3_difficulty3-12",
+                "daily_daily3_difficulty3-11"
+              ],
+              "emptyBottleCount": 2,
+              "filledBottleCount": 5
+            },
+            {
+              "dayIndex": 9,
+              "levelDuration": 120,
+              "seeds": [
+                "daily_daily15_difficulty1-10",
+                "daily_daily15_difficulty1-9",
+                "daily_daily15_difficulty1-8",
+                "daily_daily15_difficulty1-7",
+                "daily_daily15_difficulty1-6"
+              ],
+              "emptyBottleCount": 2,
+              "filledBottleCount": 4
+            },
+            {
+              "dayIndex": 10,
+              "levelDuration": 120,
+              "seeds": [
+                "daily_daily86_difficulty5-5",
+                "daily_daily86_difficulty5-4",
+                "daily_daily86_difficulty5-3",
+                "daily_daily86_difficulty5-2",
+                "daily_daily86_difficulty5-1"
+              ],
+              "emptyBottleCount": 1,
+              "filledBottleCount": 4
+            },
+            {
+              "dayIndex": 11,
+              "levelDuration": 105,
+              "seeds": [
+                "daily_daily113_difficulty4-5",
+                "daily_daily113_difficulty4-4",
+                "daily_daily113_difficulty4-3",
+                "daily_daily113_difficulty4-2",
+                "daily_daily113_difficulty4-1"
+              ],
+              "emptyBottleCount": 1,
+              "filledBottleCount": 3
+            },
+            {
+              "dayIndex": 12,
+              "levelDuration": 120,
+              "seeds": [
+                "daily_daily73_difficulty1-5",
+                "daily_daily73_difficulty1-4",
+                "daily_daily73_difficulty1-3",
+                "daily_daily73_difficulty1-2",
+                "daily_daily73_difficulty1-1"
+              ],
+              "emptyBottleCount": 2,
+              "filledBottleCount": 4
+            },
+            {
+              "dayIndex": 13,
+              "levelDuration": 105,
+              "seeds": [
+                "daily_daily107_difficulty4-5",
+                "daily_daily107_difficulty4-4",
+                "daily_daily107_difficulty4-3",
+                "daily_daily107_difficulty4-2",
+                "daily_daily107_difficulty4-1"
+              ],
+              "emptyBottleCount": 1,
+              "filledBottleCount": 3
+            },
+            {
+              "dayIndex": 14,
+              "levelDuration": 130,
+              "seeds": [
+                "daily_daily19_difficulty1-10",
+                "daily_daily19_difficulty1-9",
+                "daily_daily19_difficulty1-8",
+                "daily_daily19_difficulty1-7",
+                "daily_daily19_difficulty1-6"
+              ],
+              "emptyBottleCount": 2,
+              "filledBottleCount": 5
+            },
+            {
+              "dayIndex": 15,
+              "levelDuration": 130,
+              "seeds": [
+                "daily_daily41_difficulty3-5",
+                "daily_daily41_difficulty1-4",
+                "daily_daily41_difficulty1-3",
+                "daily_daily41_difficulty1-2",
+                "daily_daily41_difficulty2-1"
+              ],
+              "emptyBottleCount": 2,
+              "filledBottleCount": 5
+            },
+            {
+              "dayIndex": 16,
+              "levelDuration": 130,
+              "seeds": [
+                "daily_daily39_difficulty2-5",
+                "daily_daily39_difficulty2-4",
+                "daily_daily39_difficulty2-3",
+                "daily_daily39_difficulty1-2",
+                "daily_daily39_difficulty2-1"
+              ],
+              "emptyBottleCount": 2,
+              "filledBottleCount": 5
+            },
+            {
+              "dayIndex": 17,
+              "levelDuration": 120,
+              "seeds": [
+                "daily_daily79_difficulty1-5",
+                "daily_daily79_difficulty1-4",
+                "daily_daily79_difficulty1-3",
+                "daily_daily79_difficulty1-2",
+                "daily_daily79_difficulty1-1"
+              ],
+              "emptyBottleCount": 2,
+              "filledBottleCount": 4
+            },
+            {
+              "dayIndex": 18,
+              "levelDuration": 120,
+              "seeds": [
+                "daily_daily70_difficulty1-5",
+                "daily_daily70_difficulty1-4",
+                "daily_daily70_difficulty1-3",
+                "daily_daily70_difficulty1-2",
+                "daily_daily70_difficulty1-1"
+              ],
+              "emptyBottleCount": 2,
+              "filledBottleCount": 4
+            },
+            {
+              "dayIndex": 19,
+              "levelDuration": 120,
+              "seeds": [
+                "daily_daily60_difficulty1-5",
+                "daily_daily60_difficulty1-4",
+                "daily_daily60_difficulty1-3",
+                "daily_daily60_difficulty1-2",
+                "daily_daily60_difficulty1-1"
+              ],
+              "emptyBottleCount": 3,
+              "filledBottleCount": 4
+            },
+            {
+              "dayIndex": 20,
+              "levelDuration": 120,
+              "seeds": [
+                "daily_daily91_difficulty5-5",
+                "daily_daily91_difficulty5-4",
+                "daily_daily91_difficulty5-3",
+                "daily_daily91_difficulty5-2",
+                "daily_daily91_difficulty5-1"
+              ],
+              "emptyBottleCount": 1,
+              "filledBottleCount": 4
+            },
+            {
+              "dayIndex": 21,
+              "levelDuration": 120,
+              "seeds": [
+                "daily_daily54_difficulty1-5",
+                "daily_daily54_difficulty1-4",
+                "daily_daily54_difficulty1-3",
+                "daily_daily54_difficulty1-2",
+                "daily_daily54_difficulty1-1"
+              ],
+              "emptyBottleCount": 3,
+              "filledBottleCount": 4
+            },
+            {
+              "dayIndex": 22,
+              "levelDuration": 120,
+              "seeds": [
+                "daily_daily12_difficulty5-10",
+                "daily_daily12_difficulty5-9",
+                "daily_daily12_difficulty5-8",
+                "daily_daily12_difficulty5-7",
+                "daily_daily12_difficulty5-6"
+              ],
+              "emptyBottleCount": 1,
+              "filledBottleCount": 4
+            },
+            {
+              "dayIndex": 23,
+              "levelDuration": 120,
+              "seeds": [
+                "daily_daily10_difficulty5-10",
+                "daily_daily10_difficulty5-9",
+                "daily_daily10_difficulty5-8",
+                "daily_daily10_difficulty5-7",
+                "daily_daily10_difficulty5-6"
+              ],
+              "emptyBottleCount": 1,
+              "filledBottleCount": 4
+            },
+            {
+              "dayIndex": 24,
+              "levelDuration": 120,
+              "seeds": [
+                "daily_daily64_difficulty1-5",
+                "daily_daily64_difficulty1-4",
+                "daily_daily64_difficulty1-3",
+                "daily_daily64_difficulty1-2",
+                "daily_daily64_difficulty1-1"
+              ],
+              "emptyBottleCount": 3,
+              "filledBottleCount": 4
+            },
+            {
+              "dayIndex": 25,
+              "levelDuration": 130,
+              "seeds": [
+                "daily_daily38_difficulty4-5",
+                "daily_daily38_difficulty5-4",
+                "daily_daily38_difficulty5-3",
+                "daily_daily38_difficulty5-2",
+                "daily_daily38_difficulty4-1"
+              ],
+              "emptyBottleCount": 2,
+              "filledBottleCount": 5
+            },
+            {
+              "dayIndex": 26,
+              "levelDuration": 130,
+              "seeds": [
+                "daily_daily37_difficulty2-5",
+                "daily_daily37_difficulty2-4",
+                "daily_daily37_difficulty2-3",
+                "daily_daily37_difficulty2-2",
+                "daily_daily37_difficulty2-1"
+              ],
+              "emptyBottleCount": 2,
+              "filledBottleCount": 5
+            },
+            {
+              "dayIndex": 27,
+              "levelDuration": 105,
+              "seeds": [
+                "daily_daily9_difficulty4-10",
+                "daily_daily9_difficulty4-9",
+                "daily_daily9_difficulty4-8",
+                "daily_daily9_difficulty4-7",
+                "daily_daily9_difficulty4-6"
+              ],
+              "emptyBottleCount": 1,
+              "filledBottleCount": 3
+            },
+            {
+              "dayIndex": 28,
+              "levelDuration": 120,
+              "seeds": [
+                "daily_daily82_difficulty1-5",
+                "daily_daily82_difficulty1-4",
+                "daily_daily82_difficulty1-3",
+                "daily_daily82_difficulty1-2",
+                "daily_daily82_difficulty1-1"
+              ],
+              "emptyBottleCount": 2,
+              "filledBottleCount": 4
+            },
+            {
+              "dayIndex": 29,
+              "levelDuration": 105,
+              "seeds": [
+                "daily_daily112_difficulty4-5",
+                "daily_daily112_difficulty4-4",
+                "daily_daily112_difficulty4-3",
+                "daily_daily112_difficulty4-2",
+                "daily_daily112_difficulty4-1"
+              ],
+              "emptyBottleCount": 1,
+              "filledBottleCount": 3
+            },
+            {
+              "dayIndex": 30,
+              "levelDuration": 130,
+              "seeds": [
+                "daily_daily26_difficulty4-5",
+                "daily_daily26_difficulty4-4",
+                "daily_daily26_difficulty4-3",
+                "daily_daily26_difficulty5-2",
+                "daily_daily26_difficulty4-1"
+              ],
+              "emptyBottleCount": 2,
+              "filledBottleCount": 5
+            },
+            {
+              "dayIndex": 31,
+              "levelDuration": 130,
+              "seeds": [
+                "daily_daily46_difficulty4-5",
+                "daily_daily46_difficulty4-4",
+                "daily_daily46_difficulty4-3",
+                "daily_daily46_difficulty5-2",
+                "daily_daily46_difficulty5-1"
+              ],
+              "emptyBottleCount": 2,
+              "filledBottleCount": 5
+            }
+          ],
+          "previousMonthDailyLevels": [
+            {
+              "dayIndex": 1,
+              "levelDuration": 105,
+              "seeds": [
+                "daily_daily108_difficulty4-5",
+                "daily_daily108_difficulty4-4",
+                "daily_daily108_difficulty4-3",
+                "daily_daily108_difficulty4-2",
+                "daily_daily108_difficulty4-1"
+              ],
+              "emptyBottleCount": 1,
+              "filledBottleCount": 3
+            },
+            {
+              "dayIndex": 2,
+              "levelDuration": 130,
+              "seeds": [
+                "daily_daily44_difficulty4-5",
+                "daily_daily44_difficulty5-4",
+                "daily_daily44_difficulty4-3",
+                "daily_daily44_difficulty5-2",
+                "daily_daily44_difficulty5-1"
+              ],
+              "emptyBottleCount": 2,
+              "filledBottleCount": 5
+            },
+            {
+              "dayIndex": 3,
+              "levelDuration": 120,
+              "seeds": [
+                "daily_daily95_difficulty5-5",
+                "daily_daily95_difficulty5-4",
+                "daily_daily95_difficulty5-3",
+                "daily_daily95_difficulty5-2",
+                "daily_daily95_difficulty5-1"
+              ],
+              "emptyBottleCount": 1,
+              "filledBottleCount": 4
+            },
+            {
+              "dayIndex": 4,
+              "levelDuration": 130,
+              "seeds": [
+                "daily_daily50_difficulty5-5",
+                "daily_daily50_difficulty4-4",
+                "daily_daily50_difficulty4-3",
+                "daily_daily50_difficulty4-2",
+                "daily_daily50_difficulty5-1"
+              ],
+              "emptyBottleCount": 2,
+              "filledBottleCount": 5
+            },
+            {
+              "dayIndex": 5,
+              "levelDuration": 120,
+              "seeds": [
+                "daily_daily93_difficulty5-5",
+                "daily_daily93_difficulty5-4",
+                "daily_daily93_difficulty5-3",
+                "daily_daily93_difficulty5-2",
+                "daily_daily93_difficulty5-1"
+              ],
+              "emptyBottleCount": 1,
+              "filledBottleCount": 4
+            },
+            {
+              "dayIndex": 6,
+              "levelDuration": 120,
+              "seeds": [
+                "daily_daily13_difficulty1-15",
+                "daily_daily13_difficulty1-14",
+                "daily_daily13_difficulty1-13",
+                "daily_daily13_difficulty1-12",
+                "daily_daily13_difficulty1-11"
+              ],
+              "emptyBottleCount": 2,
+              "filledBottleCount": 4
+            },
+            {
+              "dayIndex": 7,
+              "levelDuration": 130,
+              "seeds": [
+                "daily_daily21_difficulty2-10",
+                "daily_daily21_difficulty1-9",
+                "daily_daily21_difficulty1-8",
+                "daily_daily21_difficulty3-7",
+                "daily_daily21_difficulty2-6"
+              ],
+              "emptyBottleCount": 2,
+              "filledBottleCount": 5
+            },
+            {
+              "dayIndex": 8,
+              "levelDuration": 130,
+              "seeds": [
+                "daily_daily42_difficulty5-5",
+                "daily_daily42_difficulty4-4",
+                "daily_daily42_difficulty5-3",
+                "daily_daily42_difficulty4-2",
+                "daily_daily42_difficulty5-1"
+              ],
+              "emptyBottleCount": 2,
+              "filledBottleCount": 5
+            },
+            {
+              "dayIndex": 9,
+              "levelDuration": 120,
+              "seeds": [
+                "daily_daily94_difficulty5-5",
+                "daily_daily94_difficulty5-4",
+                "daily_daily94_difficulty5-3",
+                "daily_daily94_difficulty5-2",
+                "daily_daily94_difficulty5-1"
+              ],
+              "emptyBottleCount": 1,
+              "filledBottleCount": 4
+            },
+            {
+              "dayIndex": 10,
+              "levelDuration": 130,
+              "seeds": [
+                "daily_daily32_difficulty5-5",
+                "daily_daily32_difficulty4-4",
+                "daily_daily32_difficulty4-3",
+                "daily_daily32_difficulty4-2",
+                "daily_daily32_difficulty5-1"
+              ],
+              "emptyBottleCount": 2,
+              "filledBottleCount": 5
+            },
+            {
+              "dayIndex": 11,
+              "levelDuration": 105,
+              "seeds": [
+                "daily_daily111_difficulty4-5",
+                "daily_daily111_difficulty4-4",
+                "daily_daily111_difficulty4-3",
+                "daily_daily111_difficulty4-2",
+                "daily_daily111_difficulty4-1"
+              ],
+              "emptyBottleCount": 1,
+              "filledBottleCount": 3
+            },
+            {
+              "dayIndex": 12,
+              "levelDuration": 130,
+              "seeds": [
+                "daily_daily22_difficulty5-5",
+                "daily_daily22_difficulty4-4",
+                "daily_daily22_difficulty4-3",
+                "daily_daily22_difficulty5-2",
+                "daily_daily22_difficulty5-1"
+              ],
+              "emptyBottleCount": 2,
+              "filledBottleCount": 5
+            },
+            {
+              "dayIndex": 13,
+              "levelDuration": 130,
+              "seeds": [
+                "daily_daily6_difficulty5-10",
+                "daily_daily6_difficulty5-9",
+                "daily_daily6_difficulty5-8",
+                "daily_daily6_difficulty5-7",
+                "daily_daily6_difficulty5-6"
+              ],
+              "emptyBottleCount": 2,
+              "filledBottleCount": 5
+            },
+            {
+              "dayIndex": 14,
+              "levelDuration": 130,
+              "seeds": [
+                "daily_daily23_difficulty3-5",
+                "daily_daily23_difficulty2-4",
+                "daily_daily23_difficulty2-3",
+                "daily_daily23_difficulty2-2",
+                "daily_daily23_difficulty2-1"
+              ],
+              "emptyBottleCount": 2,
+              "filledBottleCount": 5
+            },
+            {
+              "dayIndex": 15,
+              "levelDuration": 105,
+              "seeds": [
+                "daily_daily102_difficulty4-5",
+                "daily_daily102_difficulty4-4",
+                "daily_daily102_difficulty4-3",
+                "daily_daily102_difficulty4-2",
+                "daily_daily102_difficulty4-1"
+              ],
+              "emptyBottleCount": 1,
+              "filledBottleCount": 3
+            },
+            {
+              "dayIndex": 16,
+              "levelDuration": 130,
+              "seeds": [
+                "daily_daily29_difficulty2-5",
+                "daily_daily29_difficulty2-4",
+                "daily_daily29_difficulty2-3",
+                "daily_daily29_difficulty1-2",
+                "daily_daily29_difficulty1-1"
+              ],
+              "emptyBottleCount": 2,
+              "filledBottleCount": 5
+            },
+            {
+              "dayIndex": 17,
+              "levelDuration": 130,
+              "seeds": [
+                "daily_daily4_difficulty5-10",
+                "daily_daily4_difficulty5-9",
+                "daily_daily4_difficulty5-8",
+                "daily_daily4_difficulty5-7",
+                "daily_daily4_difficulty5-6"
+              ],
+              "emptyBottleCount": 2,
+              "filledBottleCount": 5
+            },
+            {
+              "dayIndex": 18,
+              "levelDuration": 130,
+              "seeds": [
+                "daily_daily40_difficulty4-5",
+                "daily_daily40_difficulty4-4",
+                "daily_daily40_difficulty4-3",
+                "daily_daily40_difficulty4-2",
+                "daily_daily40_difficulty4-1"
+              ],
+              "emptyBottleCount": 2,
+              "filledBottleCount": 5
+            },
+            {
+              "dayIndex": 19,
+              "levelDuration": 130,
+              "seeds": [
+                "daily_daily24_difficulty4-5",
+                "daily_daily24_difficulty4-4",
+                "daily_daily24_difficulty5-3",
+                "daily_daily24_difficulty4-2",
+                "daily_daily24_difficulty4-1"
+              ],
+              "emptyBottleCount": 2,
+              "filledBottleCount": 5
+            },
+            {
+              "dayIndex": 20,
+              "levelDuration": 130,
+              "seeds": [
+                "daily_daily49_difficulty2-5",
+                "daily_daily49_difficulty1-4",
+                "daily_daily49_difficulty2-3",
+                "daily_daily49_difficulty2-2",
+                "daily_daily49_difficulty1-1"
+              ],
+              "emptyBottleCount": 2,
+              "filledBottleCount": 5
+            },
+            {
+              "dayIndex": 21,
+              "levelDuration": 120,
+              "seeds": [
+                "daily_daily78_difficulty1-5",
+                "daily_daily78_difficulty1-4",
+                "daily_daily78_difficulty1-3",
+                "daily_daily78_difficulty1-2",
+                "daily_daily78_difficulty1-1"
+              ],
+              "emptyBottleCount": 2,
+              "filledBottleCount": 4
+            },
+            {
+              "dayIndex": 22,
+              "levelDuration": 120,
+              "seeds": [
+                "daily_daily77_difficulty1-5",
+                "daily_daily77_difficulty1-4",
+                "daily_daily77_difficulty1-3",
+                "daily_daily77_difficulty1-2",
+                "daily_daily77_difficulty1-1"
+              ],
+              "emptyBottleCount": 2,
+              "filledBottleCount": 4
+            },
+            {
+              "dayIndex": 23,
+              "levelDuration": 130,
+              "seeds": [
+                "daily_daily31_difficulty2-5",
+                "daily_daily31_difficulty2-4",
+                "daily_daily31_difficulty2-3",
+                "daily_daily31_difficulty1-2",
+                "daily_daily31_difficulty3-1"
+              ],
+              "emptyBottleCount": 2,
+              "filledBottleCount": 5
+            },
+            {
+              "dayIndex": 24,
+              "levelDuration": 130,
+              "seeds": [
+                "daily_daily20_difficulty5-10",
+                "daily_daily20_difficulty4-9",
+                "daily_daily20_difficulty4-8",
+                "daily_daily20_difficulty4-7",
+                "daily_daily20_difficulty4-6"
+              ],
+              "emptyBottleCount": 2,
+              "filledBottleCount": 5
+            },
+            {
+              "dayIndex": 25,
+              "levelDuration": 120,
+              "seeds": [
+                "daily_daily17_difficulty1-10",
+                "daily_daily17_difficulty1-9",
+                "daily_daily17_difficulty1-8",
+                "daily_daily17_difficulty1-7",
+                "daily_daily17_difficulty1-6"
+              ],
+              "emptyBottleCount": 3,
+              "filledBottleCount": 4
+            },
+            {
+              "dayIndex": 26,
+              "levelDuration": 105,
+              "seeds": [
+                "daily_daily114_difficulty4-5",
+                "daily_daily114_difficulty4-4",
+                "daily_daily114_difficulty4-3",
+                "daily_daily114_difficulty4-2",
+                "daily_daily114_difficulty4-1"
+              ],
+              "emptyBottleCount": 1,
+              "filledBottleCount": 3
+            },
+            {
+              "dayIndex": 27,
+              "levelDuration": 105,
+              "seeds": [
+                "daily_daily109_difficulty4-5",
+                "daily_daily109_difficulty4-4",
+                "daily_daily109_difficulty4-3",
+                "daily_daily109_difficulty4-2",
+                "daily_daily109_difficulty4-1"
+              ],
+              "emptyBottleCount": 1,
+              "filledBottleCount": 3
+            },
+            {
+              "dayIndex": 28,
+              "levelDuration": 120,
+              "seeds": [
+                "daily_daily63_difficulty1-5",
+                "daily_daily63_difficulty1-4",
+                "daily_daily63_difficulty1-3",
+                "daily_daily63_difficulty1-2",
+                "daily_daily63_difficulty1-1"
+              ],
+              "emptyBottleCount": 3,
+              "filledBottleCount": 4
+            }
+          ]
+        }
+      },
+      {
+        "model": "ServerCommunicationModel",
+        "source": "facts/review_20261116/public_current_config_3129/defaults/ServerCommunicationModel.json",
+        "site_data_path": "data/current_config_3129/defaults/ServerCommunicationModel.json",
+        "public_artifact_sha256": "268067054515b3e280cf105e2da48dab5d3862b47938848d8bde34f633c39528",
+        "original_source_sha256": "6088d8106ab836b789d82bd4e4ff5f26eca55e002afaf328ed310518e002e3e1",
+        "source_class": "static_asset",
+        "build": "0.0.3129 host APK",
+        "scope": "Sanitized packaged default fullvalues only; not effective remote/selected config or runtime.",
+        "values": {
+          "CommunicationIntervalInSeconds": 60
+        }
+      },
+      {
+        "model": "WheelOfFortuneConfigModelV2",
+        "source": "facts/review_20261116/public_current_config_3129/defaults/WheelOfFortuneConfigModelV2.json",
+        "site_data_path": "data/current_config_3129/defaults/WheelOfFortuneConfigModelV2.json",
+        "public_artifact_sha256": "acf187c9753200df8b5aa46bc8778026edd19b3241f9623843fc62dba880ce63",
+        "original_source_sha256": "16de3639db1116d2d98bed88d652e6eb8b151ddbda87e86653d2da950fdbbccb",
+        "source_class": "static_asset",
+        "build": "0.0.3129 host APK",
+        "scope": "Sanitized packaged default fullvalues only; not effective remote/selected config or runtime.",
+        "values": {
+          "IsEnabled": false,
+          "EventType": 10,
+          "InitialChipCount": 5,
+          "FirstLevelToShow": 130,
+          "IsNotificationEnabled": false,
+          "StageProbabilities": [
+            {
+              "StageId": 0,
+              "WithCollection": {
+                "Premium": 0.25,
+                "Basic": 0.25,
+                "Poor": 0.5
+              },
+              "WithoutCollection": {
+                "Premium": 0.25,
+                "Basic": 0.25,
+                "Poor": 0.5
+              }
+            },
+            {
+              "StageId": 1,
+              "WithCollection": {
+                "Premium": 0.25,
+                "Basic": 0.25,
+                "Poor": 0.5
+              },
+              "WithoutCollection": {
+                "Premium": 0.25,
+                "Basic": 0.25,
+                "Poor": 0.5
+              }
+            },
+            {
+              "StageId": 2,
+              "WithCollection": {
+                "Premium": 0.25,
+                "Basic": 0.25,
+                "Poor": 0.5
+              },
+              "WithoutCollection": {
+                "Premium": 0.25,
+                "Basic": 0.25,
+                "Poor": 0.5
+              }
+            },
+            {
+              "StageId": 3,
+              "WithCollection": {
+                "Premium": 0.25,
+                "Basic": 0.25,
+                "Poor": 0.5
+              },
+              "WithoutCollection": {
+                "Premium": 0.25,
+                "Basic": 0.25,
+                "Poor": 0.5
+              }
+            },
+            {
+              "StageId": 4,
+              "WithCollection": {
+                "Epic": 0.5,
+                "Elite": 0.5
+              },
+              "WithoutCollection": {
+                "Epic": 0.5,
+                "Elite": 0.5
+              }
+            }
+          ]
+        }
+      }
+    ],
+    "native_finding_ids": [
+      "MS-CURRENT-20261116-10"
+    ],
+    "documentation_source_coverage": {
+      "dossier_present": true,
+      "use_case_catalog_count": 16,
+      "config_catalog_rows": 28,
+      "current_apk_default_model_links": 4,
+      "current_native_findings": 1,
+      "scope": "Documentation/source coverage only; not complete runtime verification."
+    },
+    "runtime_completion": {
+      "date": "2026-11-16",
+      "status": "device_unavailable",
+      "executed_case_count": 0,
+      "full_feature_runtime_verified": false
+    },
+    "planned_branch": "Lập bản đồ từng icon Home hiện có, mở/đóng từng popup, ghi thứ tự và lỗi offline; so icon trước/sau restart.",
+    "target_uc_ids": [
+      "UC-04",
+      "UC-06",
+      "UC-13"
+    ],
+    "execution_phase": "noncore_first",
+    "core_or_levels_last": false,
+    "actionability_full_json": "facts/continuation_20261116/current/feature_actionability.json",
+    "actionability_site_data_path": "data/continuation_20261116/feature_actionability.json",
+    "source_classes": [
+      "recovered_code",
+      "static_asset"
+    ],
+    "full_feature_verified": false
+  }
+}

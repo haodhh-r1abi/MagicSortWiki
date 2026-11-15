@@ -1,0 +1,2534 @@
+{
+  "id": "SpecialOffer",
+  "name": "Special Offer",
+  "category": "Economy",
+  "managers": [
+    "Modules.Contexts.Home.Monetization.SpecialOffer.Scripts.SpecialOfferService",
+    "Modules.Contexts.Home.Monetization.SpecialOffer.Scripts.SpecialOfferDataService",
+    "Modules.Contexts.Home.Monetization.SpecialOffer.Scripts.SpecialOfferStateService",
+    "Modules.Contexts.Home.Monetization.SpecialOffer.Scripts.SpecialOfferRemoteService",
+    "Modules.Contexts.Home.Monetization.SpecialOffer.Scripts.SpecialOfferConfigModel"
+  ],
+  "summary": "Special Offer là gói ưu đãi giới hạn thời gian, một lần mua, có bộ mặt thay đổi theo chủ đề mùa (Ancient Deal, Coastline Deal, Coinfall Deal, Heavenly Deal, Splashing Deal, Sorcerer's Deal, St Patrick's, Fourth of July, World Cup, Pool Party…). Server chọn chủ đề (SpecialOfferThemeTpye), kiểu popup (PopupType) và gói theo phân khúc người chơi (SegmentedOfferPackage: IAPProductId, RewardModels, IAPProductDiscountAmount); client tải asset bundle tương ứng chủ đề rồi hiển thị. Offer xuất hiện ở icon lobby, tự bật theo tần suất (ShowFrequency / MaxShowCount), chèn vào popup Refill/Booster/Play On và có biến thể riêng khi người chơi hết nước ở cuối level (Ego offer + tặng thêm một lượt Play On).",
+  "unlock": "SpecialOfferStateService.CanShowSpecialOffer() kết hợp: SpecialOfferConfigModel.IsEnable, level >= SpecialOfferConfigModel.FirstLevelToShow (IPlayerService), có SpecialOfferResponse trong cache, chưa mua (SpecialOfferSyncableDataModel.IsPurchased == false), còn hạn, dữ liệu hợp lệ (IsDataWrong() == false) và asset bundle của chủ đề đã tải xong (ShouldDownloadAssets / NeedToDownloadAssets). Các trạng thái thiếu điều kiện tương ứng với SpecialOfferState.",
+  "entry_points": [
+    "SpecialOfferLobbyButton (+SpecialOfferLobbyButtonAnimationView, SpecialOfferCoinFallLobbyButtonAnimationView) — icon ở Home",
+    "SpecialOfferPopup (+SpecialOfferPopupArguments) / FourthOfJulyOfferPopup — popup bán gói",
+    "ShowSpecialOfferPopupCommand / SpecialOfferHomeWelcomingCommand / TryToShowSpecialOfferLobbyReturnCommand",
+    "SpecialOfferEgoView / SpecialOfferEgoUIVariantView — biến thể khi hết nước cuối level",
+    "Chèn trước Store (ShouldDisplayBeforeStore — OpenStorePopupCommand.OfferBeforeStore)",
+    "Banner trong Refill / Booster / Play On (SpecialOfferPopupImpressionSource)"
+  ],
+  "flow": "SpecialOfferStateService.GetState() cho ra SpecialOfferState: Disable(0) → ProgressNotEnough(1) → NoCache(2) → Enable(3) → LocalTimeIsUp(4) → RemoteTimeIsUp(5) → Purchased(6) → WrongData(7) → AssetsNotReady(8). Khi ShouldSendGetRequest() (và popup 'SpecialOfferPopup' không mở), SpecialOfferService.TryFetchCurrentEvent() dựng SpecialOfferRequestModel{EventId, EventType, HasPurchased} rồi SpecialOfferRemoteService.SendGetRequest(); HandleSpecialOfferResponse(response) → UpdateAndCacheBackendOfferResponse() kiểm tra tính hợp lệ (dữ liệu sai thì bắn wrong_special_offer_data) và SpecialOfferDataService.CacheBackendResponse(SpecialOfferResponse{EventId, StartTime, FinishTime, IsFinished, IsClaimed, SegmentedOfferPackage, PopupType, Segment, ThemeType}). Tải asset: GetThemeType() và GetBundleId() tra hai bảng _themeBundle (theo SpecialOfferThemeTpye) và _popupBundle (theo PopupType) với các id 'ancient_deal_bundle', 'coastline_deal_bundle', 'coin_fall_bundle', 'fourth_of_july_bundle', 'heavenly_deal_bundle', 'splashing_deal_bundle', 'st_patricks_bundle', 'world_cup_bundle'; CheckAndResolveAssetDependencies() tải qua AssetManager. Hiển thị: SpecialOfferThemeController chọn UI variant theo chủ đề, SpecialOfferLobbyIconThemeVariants đổi icon. Mua: GetSpecialOfferUniqueIAPs() / GetIAPConfigModel(iapProductId) lấy sản phẩm từ SpecialOfferConfigModel.IAPConfigModels; IAPService mua với IAPOrigin.SpecialOffer (4), IAPReason.SpecialOffer (6); thành công thì ClaimPurchasedSpecialOfferRewards(productId, giveRewardsWithoutAnimation) → GetRewardsForProductId(productId) lấy SegmentedOfferPackage.RewardModels và trao với CurrencyEarnReason.SpecialOffer (17); nếu không tra được thì dùng SpecialOfferConfigModel.FallBackRewardModels và bắn special_offer_fallback_rewards. SpecialOfferDataService.SetIsPurchased(true) và SpecialOfferRemoteService.SendClaimRequest() báo server. Tần suất: IncrementPopupTrigger() / GetPopupTriggerCount() so với ShowFrequency, MaxShowCount giới hạn tổng số lần hiện; ClearPopupTriggerCount() reset sau khi mở. Ego offer: ShouldShowEgoOffer() theo cờ SpecialOfferConfigModel.ShouldShowEgoOffer; ShouldShowPlayOnAtEgo(isFirstPlayOn) theo ShouldGivePlayOnAtEgo, và IsAllowedByFirstStuckRule(isFirstPlayOn) áp dụng ShouldLimitEgoPlayOnToFirstStuck để chỉ tặng ở lần kẹt đầu tiên.",
+  "use_cases": [
+    {
+      "id": "UC-01",
+      "title": "Kiểm tra điều kiện hiện offer",
+      "actor": "System",
+      "trigger": "Vào Home / IntervalUpdate",
+      "precondition": "Có remote config",
+      "steps": [
+        "SpecialOfferStateService.GetConfig() lấy SpecialOfferConfigModel",
+        "GetState() lần lượt kiểm tra IsEnable → level vs FirstLevelToShow → có cache SpecialOfferResponse → đã mua chưa (IsPurchased) → hết giờ chưa → IsDataWrong() → asset đã tải chưa",
+        "CanShowSpecialOffer() tổng hợp; UpdateState() phát Signal khi đổi",
+        "SpecialOfferService.NeedToDownloadAssets() / SpecialOfferStateService.ShouldDownloadAssets() cho biết còn phải tải bundle không"
+      ],
+      "result": "Icon và popup chỉ hiện khi mọi điều kiện thoả",
+      "rules": "SpecialOfferState: Disable=0, ProgressNotEnough=1, NoCache=2, Enable=3, LocalTimeIsUp=4, RemoteTimeIsUp=5, Purchased=6, WrongData=7, AssetsNotReady=8",
+      "evidence": "SpecialOfferStateService.CanShowSpecialOffer; SpecialOfferStateService.GetState; SpecialOfferStateService.IsDataWrong; SpecialOfferService.NeedToDownloadAssets"
+    },
+    {
+      "id": "UC-02",
+      "title": "Lấy gói ưu đãi theo phân khúc từ server",
+      "actor": "System",
+      "trigger": "SpecialOfferStateService.ShouldSendGetRequest() == true",
+      "precondition": "Popup 'SpecialOfferPopup' không đang mở",
+      "steps": [
+        "SpecialOfferService.TryFetchCurrentEvent() → GetRequestModel() dựng SpecialOfferRequestModel{EventId, EventType, HasPurchased}",
+        "SpecialOfferRemoteService.SendGetRequest(requestModel) → SendRequest(url, requestModel)",
+        "HandleSpecialOfferResponse(ApiResponse<SpecialOfferResponse>) → UpdateAndCacheBackendOfferResponse()",
+        "Response gồm EventId, StartTime, FinishTime, IsFinished, IsClaimed, SegmentedOfferPackage{IAPProductId, RewardModels, IAPProductDiscountAmount}, PopupType, Segment, ThemeType",
+        "SpecialOfferDataService.CacheBackendResponse(responseData); Invoke Signal",
+        "ScheduleSpecialOfferFetch() đặt SecondTimer lấy lại khi hết hạn (callback b__28_0)"
+      ],
+      "result": "Mỗi phân khúc người chơi thấy giá và nội dung gói khác nhau",
+      "rules": "HasPurchased trong request cho server biết người chơi đã mua offer trước đó chưa để chọn gói phù hợp",
+      "evidence": "SpecialOfferService.TryFetchCurrentEvent; SpecialOfferService.GetRequestModel; SpecialOfferService.HandleSpecialOfferResponse; SpecialOfferService.UpdateAndCacheBackendOfferResponse; SpecialOfferService.ScheduleSpecialOfferFetch"
+    },
+    {
+      "id": "UC-03",
+      "title": "Tải asset bundle theo chủ đề",
+      "actor": "System",
+      "trigger": "Nhận được ThemeType / PopupType mới",
+      "precondition": "-",
+      "steps": [
+        "SpecialOfferService.Initialize() dựng _themeBundle (theo SpecialOfferThemeTpye) và _popupBundle (theo PopupType) với các id: ancient_deal_bundle, coastline_deal_bundle, coin_fall_bundle, fourth_of_july_bundle, heavenly_deal_bundle, splashing_deal_bundle, st_patricks_bundle, world_cup_bundle",
+        "GetThemeType() và GetPopupId() / GetSpecialOfferPopupType() chọn bundle",
+        "GetBundleId() trả id cần tải",
+        "CheckAndResolveAssetDependencies() tải qua AssetManager",
+        "Chưa xong → SpecialOfferState.AssetsNotReady (8)"
+      ],
+      "result": "Popup và icon đổi hoàn toàn bộ mặt theo mùa mà không cần cập nhật app",
+      "rules": "SpecialOfferThemeTpye: Default=0, StPatricks=1, FourthOfJuly=2, WorldCup=3 (các chủ đề khác dùng PopupType)",
+      "evidence": "SpecialOfferService.Initialize; SpecialOfferService.GetBundleId; SpecialOfferService.GetThemeType; SpecialOfferService.CheckAndResolveAssetDependencies; SpecialOfferService.GetSpecialOfferPopupType"
+    },
+    {
+      "id": "UC-04",
+      "title": "Tự bật popup theo tần suất",
+      "actor": "System",
+      "trigger": "Vào Home hoặc quay lại Home",
+      "precondition": "SpecialOfferService.ShouldForceShowPopup() == true",
+      "steps": [
+        "SpecialOfferService.IncrementPopupTrigger() → SpecialOfferDataService.IncrementPopupTriggerCount()",
+        "So GetPopupTriggerCount() với SpecialOfferConfigModel.ShowFrequency",
+        "SpecialOfferConfigModel.MaxShowCount giới hạn tổng số lần hiện",
+        "SpecialOfferHomeWelcomingCommand / TryToShowSpecialOfferLobbyReturnCommand mở SpecialOfferPopup",
+        "SpecialOfferService.OnPopupOpened(); SpecialOfferDataService.SetIsPopupShown(true); ClearPopupTriggerCount()",
+        "EventSender.SendSpecialOfferPopupImpressionStat(source) → special_offer_impression với source, offer_name, event_ui_id, product_id, price, user_segment"
+      ],
+      "result": "Offer xuất hiện đều đặn nhưng có trần, tránh gây phiền",
+      "rules": "SpecialOfferPopupImpressionSource: None=0, Booster=1, LobbyIcon=2, PlayOn=3, Refill=4, FirstShow=5",
+      "evidence": "SpecialOfferService.ShouldForceShowPopup; SpecialOfferService.IncrementPopupTrigger; SpecialOfferDataService.ClearPopupTriggerCount; SpecialOfferService.OnPopupOpened; EventSender.SendSpecialOfferPopupImpressionStat"
+    },
+    {
+      "id": "UC-05",
+      "title": "Mua gói Special Offer",
+      "actor": "Player",
+      "trigger": "Bấm nút mua trong popup",
+      "precondition": "State = Enable",
+      "steps": [
+        "SpecialOfferService.GetSpecialOfferUniqueIAPs() / GetIAPConfigModel(iapProductId) lấy sản phẩm (SegmentedOfferPackage.IAPProductId, giảm giá IAPProductDiscountAmount)",
+        "IAPService mua với IAPOrigin.SpecialOffer (4), IAPReason.SpecialOffer (6)",
+        "IAPPurchaseVerificationService xác thực receipt",
+        "SpecialOfferService.ClaimPurchasedSpecialOfferRewards(productId, giveRewardsWithoutAnimation) → GetRewardsForProductId(productId)",
+        "RewardService trao với CurrencyEarnReason.SpecialOffer (17); analytics 'earned' với coin/life/undo/shuffle/extra_bottle/collection_pack_1..5/duck_x2_in_seconds/merge_energy/additional_life_inventory/life_in_seconds",
+        "SpecialOfferDataService.SetIsPurchased(true); SpecialOfferStateService.ShouldSendClaimRequest() → SpecialOfferRemoteService.SendClaimRequest(requestModel)",
+        "EventSender.SendSpecialOfferPurchasedStat(iapModel) → special_offer_purchased với source='SpecialOfferPopup', product_id, price, dollar_equivalent, currency, offer_name, user_segment, event_ui_id"
+      ],
+      "result": "Nhận thưởng, offer chuyển sang SpecialOfferState.Purchased (6) và biến mất",
+      "rules": "Mỗi sự kiện chỉ mua được một lần (IsPurchased nằm trong SpecialOfferSyncableDataModel)",
+      "evidence": "SpecialOfferService.GetIAPConfigModel; SpecialOfferService.ClaimPurchasedSpecialOfferRewards; SpecialOfferService.GetRewardsForProductId; SpecialOfferDataService.SetIsPurchased; SpecialOfferStateService.ShouldSendClaimRequest; EventSender.SendSpecialOfferPurchasedStat"
+    },
+    {
+      "id": "UC-06",
+      "title": "Thưởng dự phòng khi không tra được productId",
+      "actor": "System",
+      "trigger": "Mua thành công nhưng GetRewardsForProductId trả rỗng",
+      "precondition": "-",
+      "steps": [
+        "SpecialOfferService.ClaimPurchasedSpecialOfferRewards không tìm thấy gói tương ứng",
+        "Dùng SpecialOfferConfigModel.FallBackRewardModels",
+        "EventSender.SendSpecialOfferFallBackRewardsStat() → special_offer_fallback_rewards"
+      ],
+      "result": "Người chơi luôn nhận được gì đó sau khi trả tiền",
+      "rules": "Kết hợp với SendNotRequestedIAPStat khi giao dịch tới trễ (not_requested_iap)",
+      "evidence": "SpecialOfferService.ClaimPurchasedSpecialOfferRewards; SpecialOfferConfigModel.FallBackRewardModels; EventSender.SendSpecialOfferFallBackRewardsStat; EventSender.SendNotRequestedIAPStat"
+    },
+    {
+      "id": "UC-07",
+      "title": "Dữ liệu offer sai",
+      "actor": "System",
+      "trigger": "Response thiếu SegmentedOfferPackage hoặc productId không hợp lệ",
+      "precondition": "-",
+      "steps": [
+        "SpecialOfferService.UpdateAndCacheBackendOfferResponse phát hiện dữ liệu sai",
+        "EventSender.SendWrongSpecialOfferDataStat() → wrong_special_offer_data",
+        "SpecialOfferStateService.IsDataWrong() trả true → SpecialOfferState.WrongData (7)",
+        "Icon và popup bị ẩn"
+      ],
+      "result": "Không hiển thị offer hỏng, có cảnh báo cho vận hành",
+      "rules": "Đây là cổng an toàn để tránh bán gói không có thưởng",
+      "evidence": "SpecialOfferService.UpdateAndCacheBackendOfferResponse; SpecialOfferStateService.IsDataWrong; EventSender.SendWrongSpecialOfferDataStat"
+    },
+    {
+      "id": "UC-08",
+      "title": "Ego offer khi hết nước cuối level",
+      "actor": "Player",
+      "trigger": "Thua/hết nước ở cuối level (Ego)",
+      "precondition": "SpecialOfferService.ShouldShowEgoOffer() == true",
+      "steps": [
+        "ShouldShowEgoOffer() đọc SpecialOfferConfigModel.ShouldShowEgoOffer",
+        "SpecialOfferEgoView / SpecialOfferEgoUIVariantView hiển thị offer ngay trong màn thua",
+        "Impression source = PlayOn (3) hoặc Booster (1) tuỳ vị trí",
+        "IAPContext tương ứng (PlayOn = 7, Booster = 6, Refill = 4/5)"
+      ],
+      "result": "Đánh vào đúng lúc người chơi có nhu cầu cao nhất",
+      "rules": "Ego là thời điểm người chơi sắp thua và được mời tiếp tục",
+      "evidence": "SpecialOfferService.ShouldShowEgoOffer; SpecialOfferEgoView; SpecialOfferEgoUIVariantView; Modules.Contexts.Application.IAP.Scripts.IAPContext"
+    },
+    {
+      "id": "UC-09",
+      "title": "Tặng thêm một lượt Play On ở Ego",
+      "actor": "System",
+      "trigger": "Người chơi kẹt ở Ego",
+      "precondition": "SpecialOfferConfigModel.ShouldGivePlayOnAtEgo == true",
+      "steps": [
+        "SpecialOfferService.ShouldShowPlayOnAtEgo(bool isFirstPlayOn)",
+        "IsAllowedByFirstStuckRule(isFirstPlayOn): nếu SpecialOfferConfigModel.ShouldLimitEgoPlayOnToFirstStuck == true thì chỉ cho phép ở lần kẹt đầu tiên",
+        "Tặng một lượt Play On miễn phí kèm offer"
+      ],
+      "result": "Giữ người chơi ở lại level thay vì thoát, đồng thời tăng cơ hội chuyển đổi mua",
+      "rules": "Ba cờ điều khiển riêng: ShouldShowEgoOffer, ShouldGivePlayOnAtEgo, ShouldLimitEgoPlayOnToFirstStuck",
+      "evidence": "SpecialOfferService.ShouldShowPlayOnAtEgo; SpecialOfferService.IsAllowedByFirstStuckRule; SpecialOfferConfigModel.ShouldGivePlayOnAtEgo"
+    },
+    {
+      "id": "UC-10",
+      "title": "Hiện offer trước khi mở Store",
+      "actor": "System",
+      "trigger": "Người chơi bấm mở cửa hàng",
+      "precondition": "SpecialOfferService.ShouldDisplayBeforeStore() == true",
+      "steps": [
+        "OpenStorePopupCommand kiểm tra ShouldShowStorePopUp() và enum lồng OfferBeforeStore",
+        "Mở SpecialOfferPopup trước, đóng xong mới mở Store"
+      ],
+      "result": "Offer được ưu tiên hiển thị trước danh mục cửa hàng thông thường",
+      "rules": "Cơ chế chung cho các offer monetization (cũng dùng cho ChooseOneSpecialOffer, NoAdsOffer)",
+      "evidence": "SpecialOfferService.ShouldDisplayBeforeStore; OpenStorePopupCommand.OfferBeforeStore; OpenStorePopupCommand.ShouldShowStorePopUp"
+    },
+    {
+      "id": "UC-11",
+      "title": "Hết hạn offer",
+      "actor": "System",
+      "trigger": "Quá FinishTime hoặc response.IsFinished",
+      "precondition": "-",
+      "steps": [
+        "GetRemainingSeconds() / GetEndDate() về 0 → SpecialOfferState.LocalTimeIsUp (4); server báo IsFinished → RemoteTimeIsUp (5)",
+        "ClearSpecialOfferData() dọn cache",
+        "ScheduleSpecialOfferFetch() lấy offer mới",
+        "Đồng hồ UI dùng localization SpecialOfferPopupTimer 'Ends in:'"
+      ],
+      "result": "Offer biến mất, chờ đợt mới",
+      "rules": "Hai trạng thái hết giờ tách riêng để phân biệt lỗi lệch giờ client",
+      "evidence": "SpecialOfferService.GetRemainingSeconds; SpecialOfferService.ClearSpecialOfferData; SpecialOfferService.ScheduleSpecialOfferFetch; SpecialOfferStateService.GetState"
+    },
+    {
+      "id": "UC-12",
+      "title": "Đồng bộ trạng thái đã mua",
+      "actor": "System",
+      "trigger": "SyncService",
+      "precondition": "-",
+      "steps": [
+        "SpecialOfferDataService.GetSyncName() = 'SpecialOfferSyncableDataModel'",
+        "SerializeModelForSync() chỉ xuất SpecialOfferSyncableDataModel.IsPurchased",
+        "OverwriteModelFromSync(data); MarkDataForLateUpdate(shouldSyncWithBackend)",
+        "LateUpdate() lưu khi IsDataChangedSinceLastSave(); DeleteData() xoá khi reset"
+      ],
+      "result": "Người chơi đổi máy không mua lại được cùng một offer",
+      "rules": "Cache response, PopupTriggerCount, IsPopupShown, PopupTypeForOldSpecialOffer là dữ liệu cục bộ",
+      "evidence": "SpecialOfferDataService.GetSyncName; SpecialOfferDataService.SerializeModelForSync; SpecialOfferDataService.IsPurchased; SpecialOfferDataService.DeleteData"
+    },
+    {
+      "id": "UC-13",
+      "title": "Tương thích popup kiểu cũ",
+      "actor": "System",
+      "trigger": "Response không có PopupType mới",
+      "precondition": "-",
+      "steps": [
+        "SpecialOfferDataService.SetPopupTypeForOldSpecialOffer(popupType) lưu kiểu popup cũ",
+        "GetPopupTypeForOldSpecialOffer() dùng khi dựng UI",
+        "SpecialOfferService.GetSpecialOfferPopupType() chọn giữa kiểu mới và cũ"
+      ],
+      "result": "Người chơi ở phiên bản dữ liệu cũ vẫn thấy popup đúng",
+      "rules": "Trường PopupTypeForOldSpecialOffer nằm trong SpecialOfferDataModel",
+      "evidence": "SpecialOfferDataService.SetPopupTypeForOldSpecialOffer; SpecialOfferDataService.GetPopupTypeForOldSpecialOffer; SpecialOfferService.GetSpecialOfferPopupType"
+    }
+  ],
+  "configs": [
+    {
+      "source": "server info",
+      "key": "SpecialOfferConfigModel.IsEnable / FirstLevelToShow / EventType",
+      "type": "bool/int",
+      "value": "server",
+      "meaning": "Bật tắt, level mở khoá, loại sự kiện",
+      "where": "RemoteConfigs → SpecialOfferConfigModel (IRemoteConfigValidatable)"
+    },
+    {
+      "source": "Default/code0.0.3063 and historical caches20260910/20261010; per-snapshot source/hash in snapshot_values; not effective-runtime proof",
+      "key": "SpecialOfferConfigModel.ShowFrequency",
+      "type": "int",
+      "value": "default_0.0.3063: 2; cache_20260910: 2; cache_20261010: 2; firebase_20260910: 2",
+      "meaning": "Số lần đủ điều kiện trước khi tự bật popup [15/11: giá trị theo snapshot cụ thể; thiếu field khác với false/0. Không xác nhận assignment hoặc effective runtime.]",
+      "where": "SpecialOfferService.ShouldForceShowPopup",
+      "previous_unresolved_value": "server",
+      "snapshot_values": [
+        {
+          "snapshot": "default_0.0.3063",
+          "model": "SpecialOfferConfigModel",
+          "key": "ShowFrequency",
+          "value": 2,
+          "type": "int",
+          "source": "../com.grandgames.magicsort_Unity_20260909_112501/UnityExport/ExportedProject/Assets/Resources/defaultconfigs/SpecialOfferConfigModel.json",
+          "value_type": "int",
+          "source_sha256": "65a193e93a4b6ba645acbe16bde3ec4b2034a7d56884d096779095c83f984a61",
+          "field_present": true
+        },
+        {
+          "snapshot": "cache_20260910",
+          "model": "specialOfferConfigModel",
+          "key": "showFrequency",
+          "value": 2,
+          "type": "int",
+          "source": "facts/runtime/server_configs/specialOfferConfigModel.json",
+          "value_type": "int",
+          "source_sha256": "960f91664cdba5f92d8c9158c572af854c60443db84606994cadefddb5c4fe28",
+          "field_present": true
+        },
+        {
+          "snapshot": "cache_20261010",
+          "model": "specialOfferConfigModel",
+          "key": "showFrequency",
+          "value": 2,
+          "type": "int",
+          "source": "facts/runtime/test_20261010/before/CachedRemoteConfigs",
+          "value_type": "int",
+          "source_sha256": "433164d4877b2dee55d2bbd79ef2fe83d3fe9519492fe15e3cb0926daf216050",
+          "field_present": true
+        },
+        {
+          "snapshot": "firebase_20260910",
+          "model": "SpecialOfferConfigModel",
+          "key": "ShowFrequency",
+          "value": 2,
+          "type": "int",
+          "source": "facts/runtime/decoded/firebase_rc.json",
+          "value_type": "int",
+          "source_sha256": "e49f73c0e3854a98c0c27ffae86e6abc7897c767b5f3e82991004c48c4eb45d5",
+          "field_present": true
+        }
+      ],
+      "snapshot_review_id": "MS-CFG-SpecialOffer-0001"
+    },
+    {
+      "source": "Default/code0.0.3063 and historical caches20260910/20261010; per-snapshot source/hash in snapshot_values; not effective-runtime proof",
+      "key": "SpecialOfferConfigModel.MaxShowCount",
+      "type": "int",
+      "value": "default_0.0.3063: 10; cache_20260910: 10; cache_20261010: 10; firebase_20260910: 10",
+      "meaning": "Số lần tối đa được hiện popup [15/11: giá trị theo snapshot cụ thể; thiếu field khác với false/0. Không xác nhận assignment hoặc effective runtime.]",
+      "where": "SpecialOfferService.ShouldForceShowPopup",
+      "previous_unresolved_value": "server",
+      "snapshot_values": [
+        {
+          "snapshot": "default_0.0.3063",
+          "model": "SpecialOfferConfigModel",
+          "key": "MaxShowCount",
+          "value": 10,
+          "type": "int",
+          "source": "../com.grandgames.magicsort_Unity_20260909_112501/UnityExport/ExportedProject/Assets/Resources/defaultconfigs/SpecialOfferConfigModel.json",
+          "value_type": "int",
+          "source_sha256": "65a193e93a4b6ba645acbe16bde3ec4b2034a7d56884d096779095c83f984a61",
+          "field_present": true
+        },
+        {
+          "snapshot": "cache_20260910",
+          "model": "specialOfferConfigModel",
+          "key": "maxShowCount",
+          "value": 10,
+          "type": "int",
+          "source": "facts/runtime/server_configs/specialOfferConfigModel.json",
+          "value_type": "int",
+          "source_sha256": "960f91664cdba5f92d8c9158c572af854c60443db84606994cadefddb5c4fe28",
+          "field_present": true
+        },
+        {
+          "snapshot": "cache_20261010",
+          "model": "specialOfferConfigModel",
+          "key": "maxShowCount",
+          "value": 10,
+          "type": "int",
+          "source": "facts/runtime/test_20261010/before/CachedRemoteConfigs",
+          "value_type": "int",
+          "source_sha256": "433164d4877b2dee55d2bbd79ef2fe83d3fe9519492fe15e3cb0926daf216050",
+          "field_present": true
+        },
+        {
+          "snapshot": "firebase_20260910",
+          "model": "SpecialOfferConfigModel",
+          "key": "MaxShowCount",
+          "value": 10,
+          "type": "int",
+          "source": "facts/runtime/decoded/firebase_rc.json",
+          "value_type": "int",
+          "source_sha256": "e49f73c0e3854a98c0c27ffae86e6abc7897c767b5f3e82991004c48c4eb45d5",
+          "field_present": true
+        }
+      ],
+      "snapshot_review_id": "MS-CFG-SpecialOffer-0002"
+    },
+    {
+      "source": "Default/code0.0.3063 and historical caches20260910/20261010; per-snapshot source/hash in snapshot_values; not effective-runtime proof",
+      "key": "SpecialOfferConfigModel.ShouldShowEgoOffer",
+      "type": "bool",
+      "value": "cache_20260910: false; cache_20261010: false",
+      "meaning": "Có hiện offer ở màn Ego (hết nước) không [15/11: giá trị theo snapshot cụ thể; thiếu field khác với false/0. Không xác nhận assignment hoặc effective runtime.]",
+      "where": "SpecialOfferService.ShouldShowEgoOffer",
+      "previous_unresolved_value": "server",
+      "snapshot_values": [
+        {
+          "snapshot": "cache_20260910",
+          "model": "specialOfferConfigModel",
+          "key": "shouldShowEgoOffer",
+          "value": false,
+          "type": "bool",
+          "source": "facts/runtime/server_configs/specialOfferConfigModel.json",
+          "value_type": "bool",
+          "source_sha256": "960f91664cdba5f92d8c9158c572af854c60443db84606994cadefddb5c4fe28",
+          "field_present": true
+        },
+        {
+          "snapshot": "cache_20261010",
+          "model": "specialOfferConfigModel",
+          "key": "shouldShowEgoOffer",
+          "value": false,
+          "type": "bool",
+          "source": "facts/runtime/test_20261010/before/CachedRemoteConfigs",
+          "value_type": "bool",
+          "source_sha256": "433164d4877b2dee55d2bbd79ef2fe83d3fe9519492fe15e3cb0926daf216050",
+          "field_present": true
+        }
+      ],
+      "snapshot_review_id": "MS-CFG-SpecialOffer-0003"
+    },
+    {
+      "source": "Default/code0.0.3063 and historical caches20260910/20261010; per-snapshot source/hash in snapshot_values; not effective-runtime proof",
+      "key": "SpecialOfferConfigModel.ShouldGivePlayOnAtEgo",
+      "type": "bool",
+      "value": "cache_20260910: false; cache_20261010: false",
+      "meaning": "Có tặng thêm lượt Play On ở Ego không [15/11: giá trị theo snapshot cụ thể; thiếu field khác với false/0. Không xác nhận assignment hoặc effective runtime.]",
+      "where": "SpecialOfferService.ShouldShowPlayOnAtEgo",
+      "previous_unresolved_value": "server",
+      "snapshot_values": [
+        {
+          "snapshot": "cache_20260910",
+          "model": "specialOfferConfigModel",
+          "key": "shouldGivePlayOnAtEgo",
+          "value": false,
+          "type": "bool",
+          "source": "facts/runtime/server_configs/specialOfferConfigModel.json",
+          "value_type": "bool",
+          "source_sha256": "960f91664cdba5f92d8c9158c572af854c60443db84606994cadefddb5c4fe28",
+          "field_present": true
+        },
+        {
+          "snapshot": "cache_20261010",
+          "model": "specialOfferConfigModel",
+          "key": "shouldGivePlayOnAtEgo",
+          "value": false,
+          "type": "bool",
+          "source": "facts/runtime/test_20261010/before/CachedRemoteConfigs",
+          "value_type": "bool",
+          "source_sha256": "433164d4877b2dee55d2bbd79ef2fe83d3fe9519492fe15e3cb0926daf216050",
+          "field_present": true
+        }
+      ],
+      "snapshot_review_id": "MS-CFG-SpecialOffer-0004"
+    },
+    {
+      "source": "Default/code0.0.3063 and historical caches20260910/20261010; per-snapshot source/hash in snapshot_values; not effective-runtime proof",
+      "key": "SpecialOfferConfigModel.ShouldLimitEgoPlayOnToFirstStuck",
+      "type": "bool",
+      "value": "cache_20260910: false; cache_20261010: false",
+      "meaning": "Chỉ tặng Play On ở lần kẹt đầu tiên [15/11: giá trị theo snapshot cụ thể; thiếu field khác với false/0. Không xác nhận assignment hoặc effective runtime.]",
+      "where": "SpecialOfferService.IsAllowedByFirstStuckRule",
+      "previous_unresolved_value": "server",
+      "snapshot_values": [
+        {
+          "snapshot": "cache_20260910",
+          "model": "specialOfferConfigModel",
+          "key": "shouldLimitEgoPlayOnToFirstStuck",
+          "value": false,
+          "type": "bool",
+          "source": "facts/runtime/server_configs/specialOfferConfigModel.json",
+          "value_type": "bool",
+          "source_sha256": "960f91664cdba5f92d8c9158c572af854c60443db84606994cadefddb5c4fe28",
+          "field_present": true
+        },
+        {
+          "snapshot": "cache_20261010",
+          "model": "specialOfferConfigModel",
+          "key": "shouldLimitEgoPlayOnToFirstStuck",
+          "value": false,
+          "type": "bool",
+          "source": "facts/runtime/test_20261010/before/CachedRemoteConfigs",
+          "value_type": "bool",
+          "source_sha256": "433164d4877b2dee55d2bbd79ef2fe83d3fe9519492fe15e3cb0926daf216050",
+          "field_present": true
+        }
+      ],
+      "snapshot_review_id": "MS-CFG-SpecialOffer-0005"
+    },
+    {
+      "source": "server info",
+      "key": "SpecialOfferConfigModel.IAPConfigModels",
+      "type": "List<IAPConfigModel>",
+      "value": "server",
+      "meaning": "Danh sách sản phẩm IAP có thể dùng cho offer",
+      "where": "SpecialOfferService.GetSpecialOfferUniqueIAPs"
+    },
+    {
+      "source": "server info",
+      "key": "SpecialOfferConfigModel.FallBackRewardModels",
+      "type": "List<RewardModel>",
+      "value": "server",
+      "meaning": "Thưởng dự phòng khi không tra được productId",
+      "where": "SpecialOfferService.ClaimPurchasedSpecialOfferRewards"
+    },
+    {
+      "source": "server info",
+      "key": "SpecialOfferResponse.EventId / StartTime / FinishTime / IsFinished / IsClaimed / PopupType / Segment / ThemeType",
+      "type": "response",
+      "value": "server",
+      "meaning": "Phiên offer, chủ đề và kiểu popup",
+      "where": "SpecialOfferRemoteService.SendGetRequest"
+    },
+    {
+      "source": "server info",
+      "key": "SegmentedOfferPackage",
+      "type": "object",
+      "value": "{IAPProductId, RewardModels, IAPProductDiscountAmount}",
+      "meaning": "Gói theo phân khúc: sản phẩm, thưởng và % giảm giá hiển thị",
+      "where": "SpecialOfferResponse.SegmentedOfferPackage"
+    },
+    {
+      "source": "code const",
+      "key": "Asset bundle theo chủ đề",
+      "type": "string",
+      "value": "\"ancient_deal_bundle\", \"coastline_deal_bundle\", \"coin_fall_bundle\", \"fourth_of_july_bundle\", \"heavenly_deal_bundle\", \"splashing_deal_bundle\", \"st_patricks_bundle\", \"world_cup_bundle\"",
+      "meaning": "8 bundle giao diện theo mùa",
+      "where": "SpecialOfferService.Initialize (_themeBundle / _popupBundle)"
+    },
+    {
+      "source": "code const",
+      "key": "Tên offer dùng cho analytics",
+      "type": "string",
+      "value": "\"Ancient\", \"Coastline\", \"CoinFall\", \"FourthOfJuly\", \"Heavenly\", \"Nan-Poolside\", \"PoolParty\", \"StPatricks\", \"WorldCup\"",
+      "meaning": "offer_name gửi kèm sự kiện analytics",
+      "where": "SpecialOfferService.GetOfferName"
+    },
+    {
+      "source": "code const",
+      "key": "SpecialOfferState",
+      "type": "enum",
+      "value": "Disable=0, ProgressNotEnough=1, NoCache=2, Enable=3, LocalTimeIsUp=4, RemoteTimeIsUp=5, Purchased=6, WrongData=7, AssetsNotReady=8",
+      "meaning": "Máy trạng thái",
+      "where": "SpecialOfferStateService.GetState"
+    },
+    {
+      "source": "code const",
+      "key": "SpecialOfferThemeTpye",
+      "type": "enum",
+      "value": "Default=0, StPatricks=1, FourthOfJuly=2, WorldCup=3",
+      "meaning": "Chủ đề giao diện (tên enum viết sai chính tả trong code)",
+      "where": "Modules.Contexts.Home.Monetization.SpecialOffer.Scripts.SpecialOfferThemeTpye"
+    },
+    {
+      "source": "code const",
+      "key": "SpecialOfferPopupImpressionSource",
+      "type": "enum",
+      "value": "None=0, Booster=1, LobbyIcon=2, PlayOn=3, Refill=4, FirstShow=5",
+      "meaning": "Nguồn mở popup cho analytics",
+      "where": "Modules.Contexts.Home.Monetization.SpecialOffer.Scripts.UI"
+    },
+    {
+      "source": "code const",
+      "key": "IAPOrigin.SpecialOffer / IAPReason.SpecialOffer",
+      "type": "enum",
+      "value": "4 / 6",
+      "meaning": "Phân loại giao dịch",
+      "where": "Modules.Contexts.Application.IAP.Scripts"
+    },
+    {
+      "source": "code const",
+      "key": "CurrencyEarnReason.SpecialOffer",
+      "type": "enum",
+      "value": "17",
+      "meaning": "Lý do nhận thưởng",
+      "where": "Modules.Contexts.Application.Inventory.Scripts.CurrencyEarnReason"
+    },
+    {
+      "source": "code const",
+      "key": "Popup key",
+      "type": "string",
+      "value": "\"SpecialOfferPopup\"",
+      "meaning": "Tên popup kiểm tra trong IPopUpService trước khi fetch/claim",
+      "where": "SpecialOfferStateService.ShouldSendGetRequest / ShouldSendClaimRequest"
+    },
+    {
+      "source": "storage key",
+      "key": "SpecialOfferSyncableDataModel",
+      "type": "sync name",
+      "value": "\"SpecialOfferSyncableDataModel\"",
+      "meaning": "Tên bản ghi đồng bộ",
+      "where": "SpecialOfferDataService.GetSyncName"
+    },
+    {
+      "source": "storage key",
+      "key": "SpecialOfferSyncableDataModel.IsPurchased",
+      "type": "bool",
+      "value": "client + server",
+      "meaning": "Đã mua offer chưa",
+      "where": "SpecialOfferDataService.SetIsPurchased"
+    },
+    {
+      "source": "storage key",
+      "key": "SpecialOfferDataModel.SpecialOfferResponse / PopupTriggerCount / IsPopupShown / PopupTypeForOldSpecialOffer",
+      "type": "object",
+      "value": "client (không đồng bộ)",
+      "meaning": "Cache response và trạng thái hiển thị popup",
+      "where": "SpecialOfferDataModel"
+    },
+    {
+      "source": "asset",
+      "key": "SpecialOfferBannerAnimationConfig (16 field) / SpecialOfferLobbyButtonAnimationConfig (13 field) / SpecialOfferLobbyIconThemeVariants",
+      "type": "ScriptableObject",
+      "value": "asset",
+      "meaning": "Hoạt ảnh banner, icon và biến thể icon theo chủ đề",
+      "where": "Modules.Contexts.Home.Monetization.SpecialOffer.Scripts.UI"
+    },
+    {
+      "source": "code const",
+      "key": "Localization",
+      "type": "string",
+      "value": "SpecialOfferAncientDeal 'Ancient Deal!'; SpecialOfferCoastline 'Coastline Deal!'; SpecialOfferCoinFallDeal 'Coinfall Deal'; SpecialOfferHeavenly 'Heavenly Deal'; SpecialOfferSorcerer \"Sorcerer's Deal!\"; SpecialOfferSplashing 'Splashing Deal!'; SpecialOfferPopupTimer 'Ends in:'",
+      "meaning": "Tên các gói theo chủ đề và nhãn đồng hồ",
+      "where": "appendix/localization.tsv"
+    },
+    {
+      "source": "json default",
+      "key": "SpecialOfferConfigModel.json: IsEnable",
+      "type": "",
+      "value": "false",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/SpecialOfferConfigModel.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "SpecialOfferConfigModel.json: FirstLevelToShow",
+      "type": "",
+      "value": "55",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/SpecialOfferConfigModel.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "SpecialOfferConfigModel.json: EventType",
+      "type": "",
+      "value": "2",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/SpecialOfferConfigModel.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "SpecialOfferConfigModel.json: ShowFrequency",
+      "type": "",
+      "value": "2",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/SpecialOfferConfigModel.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "SpecialOfferConfigModel.json: MaxShowCount",
+      "type": "",
+      "value": "10",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/SpecialOfferConfigModel.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "SpecialOfferConfigModel.json: IAPConfigModels[0].ProductId",
+      "type": "",
+      "value": "sort.special1",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/SpecialOfferConfigModel.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "SpecialOfferConfigModel.json: IAPConfigModels[0].ProductType",
+      "type": "",
+      "value": "0",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/SpecialOfferConfigModel.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "SpecialOfferConfigModel.json: IAPConfigModels[0].DollarEquivalent",
+      "type": "",
+      "value": "0.99",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/SpecialOfferConfigModel.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "SpecialOfferConfigModel.json: IAPConfigModels[1].ProductId",
+      "type": "",
+      "value": "sort.special3",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/SpecialOfferConfigModel.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "SpecialOfferConfigModel.json: IAPConfigModels[1].ProductType",
+      "type": "",
+      "value": "0",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/SpecialOfferConfigModel.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "SpecialOfferConfigModel.json: IAPConfigModels[1].DollarEquivalent",
+      "type": "",
+      "value": "2.99",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/SpecialOfferConfigModel.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "SpecialOfferConfigModel.json: IAPConfigModels[2].ProductId",
+      "type": "",
+      "value": "sort.special5",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/SpecialOfferConfigModel.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "SpecialOfferConfigModel.json: IAPConfigModels[2].ProductType",
+      "type": "",
+      "value": "0",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/SpecialOfferConfigModel.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "SpecialOfferConfigModel.json: IAPConfigModels[2].DollarEquivalent",
+      "type": "",
+      "value": "4.99",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/SpecialOfferConfigModel.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "SpecialOfferConfigModel.json: IAPConfigModels[3].ProductId",
+      "type": "",
+      "value": "sort.special10",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/SpecialOfferConfigModel.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "SpecialOfferConfigModel.json: IAPConfigModels[3].ProductType",
+      "type": "",
+      "value": "0",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/SpecialOfferConfigModel.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "SpecialOfferConfigModel.json: IAPConfigModels[3].DollarEquivalent",
+      "type": "",
+      "value": "9.99",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/SpecialOfferConfigModel.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "SpecialOfferConfigModel.json: IAPConfigModels[4].ProductId",
+      "type": "",
+      "value": "sort.special20",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/SpecialOfferConfigModel.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "SpecialOfferConfigModel.json: IAPConfigModels[4].ProductType",
+      "type": "",
+      "value": "0",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/SpecialOfferConfigModel.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "SpecialOfferConfigModel.json: IAPConfigModels[4].DollarEquivalent",
+      "type": "",
+      "value": "19.99",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/SpecialOfferConfigModel.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "SpecialOfferConfigModel.json: IAPConfigModels[5].ProductId",
+      "type": "",
+      "value": "sort.special40",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/SpecialOfferConfigModel.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "SpecialOfferConfigModel.json: IAPConfigModels[5].ProductType",
+      "type": "",
+      "value": "0",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/SpecialOfferConfigModel.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "SpecialOfferConfigModel.json: IAPConfigModels[5].DollarEquivalent",
+      "type": "",
+      "value": "39.99",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/SpecialOfferConfigModel.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "SpecialOfferConfigModel.json: IAPConfigModels[6].ProductId",
+      "type": "",
+      "value": "sort.special50",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/SpecialOfferConfigModel.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "SpecialOfferConfigModel.json: IAPConfigModels[6].ProductType",
+      "type": "",
+      "value": "0",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/SpecialOfferConfigModel.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "SpecialOfferConfigModel.json: IAPConfigModels[6].DollarEquivalent",
+      "type": "",
+      "value": "49.99",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/SpecialOfferConfigModel.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "SpecialOfferConfigModel.json: IAPConfigModels[7].ProductId",
+      "type": "",
+      "value": "sort.special80",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/SpecialOfferConfigModel.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "SpecialOfferConfigModel.json: IAPConfigModels[7].ProductType",
+      "type": "",
+      "value": "0",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/SpecialOfferConfigModel.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "SpecialOfferConfigModel.json: IAPConfigModels[7].DollarEquivalent",
+      "type": "",
+      "value": "79.99",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/SpecialOfferConfigModel.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "SpecialOfferConfigModel.json: IAPConfigModels[8].ProductId",
+      "type": "",
+      "value": "sort.special100",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/SpecialOfferConfigModel.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "SpecialOfferConfigModel.json: IAPConfigModels[8].ProductType",
+      "type": "",
+      "value": "0",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/SpecialOfferConfigModel.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "SpecialOfferConfigModel.json: IAPConfigModels[8].DollarEquivalent",
+      "type": "",
+      "value": "99.99",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/SpecialOfferConfigModel.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "SpecialOfferConfigModel.json: FallBackRewardModels[0].CurrencyType",
+      "type": "",
+      "value": "1",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/SpecialOfferConfigModel.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "SpecialOfferConfigModel.json: FallBackRewardModels[0].Amount",
+      "type": "",
+      "value": "100",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/SpecialOfferConfigModel.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "SpecialOfferConfigModel.json: FallBackRewardModels[1].CurrencyType",
+      "type": "",
+      "value": "2",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/SpecialOfferConfigModel.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "SpecialOfferConfigModel.json: FallBackRewardModels[1].TimeSpan",
+      "type": "",
+      "value": "00:15:00",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/SpecialOfferConfigModel.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "SpecialOfferConfigModel.json: FallBackRewardModels[2].CurrencyType",
+      "type": "",
+      "value": "4",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/SpecialOfferConfigModel.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "SpecialOfferConfigModel.json: FallBackRewardModels[2].Amount",
+      "type": "",
+      "value": "1",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/SpecialOfferConfigModel.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "SpecialOfferConfigModel.json: FallBackRewardModels[3].CurrencyType",
+      "type": "",
+      "value": "5",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/SpecialOfferConfigModel.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "SpecialOfferConfigModel.json: FallBackRewardModels[3].Amount",
+      "type": "",
+      "value": "1",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/SpecialOfferConfigModel.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "SpecialOfferConfigModel.json: FallBackRewardModels[4].CurrencyType",
+      "type": "",
+      "value": "6",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/SpecialOfferConfigModel.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "SpecialOfferConfigModel.json: FallBackRewardModels[4].Amount",
+      "type": "",
+      "value": "1",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/SpecialOfferConfigModel.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "AdaptiveSpecialOfferConfigModel.json: IsEnable",
+      "type": "",
+      "value": "false",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/AdaptiveSpecialOfferConfigModel.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "AdaptiveSpecialOfferConfigModel.json: FirstLevelToShow",
+      "type": "",
+      "value": "55",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/AdaptiveSpecialOfferConfigModel.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "AdaptiveSpecialOfferConfigModel.json: EventType",
+      "type": "",
+      "value": "1",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/AdaptiveSpecialOfferConfigModel.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "AdaptiveSpecialOfferConfigModel.json: ShowFrequency",
+      "type": "",
+      "value": "2",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/AdaptiveSpecialOfferConfigModel.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "AdaptiveSpecialOfferConfigModel.json: MaxShowCount",
+      "type": "",
+      "value": "10",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/AdaptiveSpecialOfferConfigModel.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "AdaptiveSpecialOfferConfigModel.json: IAPConfigModels[0].ProductId",
+      "type": "",
+      "value": "sort.special1",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/AdaptiveSpecialOfferConfigModel.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "AdaptiveSpecialOfferConfigModel.json: IAPConfigModels[0].ProductType",
+      "type": "",
+      "value": "0",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/AdaptiveSpecialOfferConfigModel.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "AdaptiveSpecialOfferConfigModel.json: IAPConfigModels[0].DollarEquivalent",
+      "type": "",
+      "value": "0.99",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/AdaptiveSpecialOfferConfigModel.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "AdaptiveSpecialOfferConfigModel.json: IAPConfigModels[1].ProductId",
+      "type": "",
+      "value": "sort.special3",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/AdaptiveSpecialOfferConfigModel.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "AdaptiveSpecialOfferConfigModel.json: IAPConfigModels[1].ProductType",
+      "type": "",
+      "value": "0",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/AdaptiveSpecialOfferConfigModel.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "AdaptiveSpecialOfferConfigModel.json: IAPConfigModels[1].DollarEquivalent",
+      "type": "",
+      "value": "2.99",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/AdaptiveSpecialOfferConfigModel.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "AdaptiveSpecialOfferConfigModel.json: IAPConfigModels[2].ProductId",
+      "type": "",
+      "value": "sort.special4.99",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/AdaptiveSpecialOfferConfigModel.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "AdaptiveSpecialOfferConfigModel.json: IAPConfigModels[2].ProductType",
+      "type": "",
+      "value": "0",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/AdaptiveSpecialOfferConfigModel.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "AdaptiveSpecialOfferConfigModel.json: IAPConfigModels[2].DollarEquivalent",
+      "type": "",
+      "value": "4.99",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/AdaptiveSpecialOfferConfigModel.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "AdaptiveSpecialOfferConfigModel.json: IAPConfigModels[3].ProductId",
+      "type": "",
+      "value": "sort.special5",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/AdaptiveSpecialOfferConfigModel.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "AdaptiveSpecialOfferConfigModel.json: IAPConfigModels[3].ProductType",
+      "type": "",
+      "value": "0",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/AdaptiveSpecialOfferConfigModel.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "AdaptiveSpecialOfferConfigModel.json: IAPConfigModels[3].DollarEquivalent",
+      "type": "",
+      "value": "4.99",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/AdaptiveSpecialOfferConfigModel.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "AdaptiveSpecialOfferConfigModel.json: IAPConfigModels[4].ProductId",
+      "type": "",
+      "value": "sort.special10",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/AdaptiveSpecialOfferConfigModel.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "AdaptiveSpecialOfferConfigModel.json: IAPConfigModels[4].ProductType",
+      "type": "",
+      "value": "0",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/AdaptiveSpecialOfferConfigModel.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "AdaptiveSpecialOfferConfigModel.json: IAPConfigModels[4].DollarEquivalent",
+      "type": "",
+      "value": "9.99",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/AdaptiveSpecialOfferConfigModel.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "AdaptiveSpecialOfferConfigModel.json: IAPConfigModels[5].ProductId",
+      "type": "",
+      "value": "sort.special20",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/AdaptiveSpecialOfferConfigModel.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "AdaptiveSpecialOfferConfigModel.json: IAPConfigModels[5].ProductType",
+      "type": "",
+      "value": "0",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/AdaptiveSpecialOfferConfigModel.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "AdaptiveSpecialOfferConfigModel.json: IAPConfigModels[5].DollarEquivalent",
+      "type": "",
+      "value": "19.99",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/AdaptiveSpecialOfferConfigModel.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "AdaptiveSpecialOfferConfigModel.json: IAPConfigModels[6].ProductId",
+      "type": "",
+      "value": "sort.special40",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/AdaptiveSpecialOfferConfigModel.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "AdaptiveSpecialOfferConfigModel.json: IAPConfigModels[6].ProductType",
+      "type": "",
+      "value": "0",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/AdaptiveSpecialOfferConfigModel.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "AdaptiveSpecialOfferConfigModel.json: IAPConfigModels[6].DollarEquivalent",
+      "type": "",
+      "value": "39.99",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/AdaptiveSpecialOfferConfigModel.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "AdaptiveSpecialOfferConfigModel.json: IAPConfigModels[7].ProductId",
+      "type": "",
+      "value": "sort.special50",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/AdaptiveSpecialOfferConfigModel.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "AdaptiveSpecialOfferConfigModel.json: IAPConfigModels[7].ProductType",
+      "type": "",
+      "value": "0",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/AdaptiveSpecialOfferConfigModel.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "AdaptiveSpecialOfferConfigModel.json: IAPConfigModels[7].DollarEquivalent",
+      "type": "",
+      "value": "49.99",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/AdaptiveSpecialOfferConfigModel.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "AdaptiveSpecialOfferConfigModel.json: IAPConfigModels[8].ProductId",
+      "type": "",
+      "value": "sort.special80",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/AdaptiveSpecialOfferConfigModel.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "AdaptiveSpecialOfferConfigModel.json: IAPConfigModels[8].ProductType",
+      "type": "",
+      "value": "0",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/AdaptiveSpecialOfferConfigModel.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "AdaptiveSpecialOfferConfigModel.json: IAPConfigModels[8].DollarEquivalent",
+      "type": "",
+      "value": "79.99",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/AdaptiveSpecialOfferConfigModel.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "AdaptiveSpecialOfferConfigModel.json: IAPConfigModels[9].ProductId",
+      "type": "",
+      "value": "sort.special100",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/AdaptiveSpecialOfferConfigModel.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "AdaptiveSpecialOfferConfigModel.json: IAPConfigModels[9].ProductType",
+      "type": "",
+      "value": "0",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/AdaptiveSpecialOfferConfigModel.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "AdaptiveSpecialOfferConfigModel.json: IAPConfigModels[9].DollarEquivalent",
+      "type": "",
+      "value": "99.99",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/AdaptiveSpecialOfferConfigModel.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "AdaptiveSpecialOfferConfigModel.json: FallBackRewardModels[0].CurrencyType",
+      "type": "",
+      "value": "1",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/AdaptiveSpecialOfferConfigModel.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "AdaptiveSpecialOfferConfigModel.json: FallBackRewardModels[0].Amount",
+      "type": "",
+      "value": "100",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/AdaptiveSpecialOfferConfigModel.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "AdaptiveSpecialOfferConfigModel.json: FallBackRewardModels[1].CurrencyType",
+      "type": "",
+      "value": "2",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/AdaptiveSpecialOfferConfigModel.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "AdaptiveSpecialOfferConfigModel.json: FallBackRewardModels[1].TimeSpan",
+      "type": "",
+      "value": "00:15:00",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/AdaptiveSpecialOfferConfigModel.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "AdaptiveSpecialOfferConfigModel.json: FallBackRewardModels[2].CurrencyType",
+      "type": "",
+      "value": "4",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/AdaptiveSpecialOfferConfigModel.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "AdaptiveSpecialOfferConfigModel.json: FallBackRewardModels[2].Amount",
+      "type": "",
+      "value": "1",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/AdaptiveSpecialOfferConfigModel.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "AdaptiveSpecialOfferConfigModel.json: FallBackRewardModels[3].CurrencyType",
+      "type": "",
+      "value": "5",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/AdaptiveSpecialOfferConfigModel.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "AdaptiveSpecialOfferConfigModel.json: FallBackRewardModels[3].Amount",
+      "type": "",
+      "value": "1",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/AdaptiveSpecialOfferConfigModel.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "AdaptiveSpecialOfferConfigModel.json: FallBackRewardModels[4].CurrencyType",
+      "type": "",
+      "value": "6",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/AdaptiveSpecialOfferConfigModel.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "AdaptiveSpecialOfferConfigModel.json: FallBackRewardModels[4].Amount",
+      "type": "",
+      "value": "1",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/AdaptiveSpecialOfferConfigModel.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "AreYouSureOfferConfigModel.json: OfferPriorities",
+      "type": "",
+      "value": "[0, 1, 2, 3]",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/AreYouSureOfferConfigModel.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "server cache (historical)",
+      "key": "SpecialOfferConfigModel (live) = default?",
+      "type": "",
+      "value": "42/60 key trùng default, 18 key khác/thêm",
+      "meaning": "Đối chiếu config server thật (CachedRemoteConfigs) với SpecialOfferConfigModel.json",
+      "where": "Configs/CachedRemoteConfigs + Firebase RC template 3197 — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server cache (historical)",
+      "key": "SpecialOfferConfigModel: shouldShowEgoOffer",
+      "type": "",
+      "value": "false",
+      "meaning": "server-only (không có trong default)",
+      "where": "Configs/CachedRemoteConfigs + Firebase RC template 3197 — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server cache (historical)",
+      "key": "SpecialOfferConfigModel: shouldGivePlayOnAtEgo",
+      "type": "",
+      "value": "false",
+      "meaning": "server-only (không có trong default)",
+      "where": "Configs/CachedRemoteConfigs + Firebase RC template 3197 — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server cache (historical)",
+      "key": "SpecialOfferConfigModel: shouldLimitEgoPlayOnToFirstStuck",
+      "type": "",
+      "value": "false",
+      "meaning": "server-only (không có trong default)",
+      "where": "Configs/CachedRemoteConfigs + Firebase RC template 3197 — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server cache (historical)",
+      "key": "SpecialOfferConfigModel: fallBackRewardModels[0].timeSpan",
+      "type": "",
+      "value": "00:00:00",
+      "meaning": "server-only (không có trong default)",
+      "where": "Configs/CachedRemoteConfigs + Firebase RC template 3197 — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server cache (historical)",
+      "key": "SpecialOfferConfigModel: fallBackRewardModels[0].chestType",
+      "type": "",
+      "value": "0",
+      "meaning": "server-only (không có trong default)",
+      "where": "Configs/CachedRemoteConfigs + Firebase RC template 3197 — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server cache (historical)",
+      "key": "SpecialOfferConfigModel: fallBackRewardModels[0].collectionPackType",
+      "type": "",
+      "value": "0",
+      "meaning": "server-only (không có trong default)",
+      "where": "Configs/CachedRemoteConfigs + Firebase RC template 3197 — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server cache (historical)",
+      "key": "SpecialOfferConfigModel: fallBackRewardModels[1].amount",
+      "type": "",
+      "value": "0",
+      "meaning": "server-only (không có trong default)",
+      "where": "Configs/CachedRemoteConfigs + Firebase RC template 3197 — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server cache (historical)",
+      "key": "SpecialOfferConfigModel: fallBackRewardModels[1].chestType",
+      "type": "",
+      "value": "0",
+      "meaning": "server-only (không có trong default)",
+      "where": "Configs/CachedRemoteConfigs + Firebase RC template 3197 — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server cache (historical)",
+      "key": "SpecialOfferConfigModel: fallBackRewardModels[1].collectionPackType",
+      "type": "",
+      "value": "0",
+      "meaning": "server-only (không có trong default)",
+      "where": "Configs/CachedRemoteConfigs + Firebase RC template 3197 — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server cache (historical)",
+      "key": "SpecialOfferConfigModel: fallBackRewardModels[2].timeSpan",
+      "type": "",
+      "value": "00:00:00",
+      "meaning": "server-only (không có trong default)",
+      "where": "Configs/CachedRemoteConfigs + Firebase RC template 3197 — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server cache (historical)",
+      "key": "SpecialOfferConfigModel: fallBackRewardModels[2].chestType",
+      "type": "",
+      "value": "0",
+      "meaning": "server-only (không có trong default)",
+      "where": "Configs/CachedRemoteConfigs + Firebase RC template 3197 — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server cache (historical)",
+      "key": "SpecialOfferConfigModel: fallBackRewardModels[2].collectionPackType",
+      "type": "",
+      "value": "0",
+      "meaning": "server-only (không có trong default)",
+      "where": "Configs/CachedRemoteConfigs + Firebase RC template 3197 — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server cache (historical)",
+      "key": "SpecialOfferConfigModel: fallBackRewardModels[3].timeSpan",
+      "type": "",
+      "value": "00:00:00",
+      "meaning": "server-only (không có trong default)",
+      "where": "Configs/CachedRemoteConfigs + Firebase RC template 3197 — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server cache (historical)",
+      "key": "SpecialOfferConfigModel: fallBackRewardModels[3].chestType",
+      "type": "",
+      "value": "0",
+      "meaning": "server-only (không có trong default)",
+      "where": "Configs/CachedRemoteConfigs + Firebase RC template 3197 — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server cache (historical)",
+      "key": "SpecialOfferConfigModel: fallBackRewardModels[3].collectionPackType",
+      "type": "",
+      "value": "0",
+      "meaning": "server-only (không có trong default)",
+      "where": "Configs/CachedRemoteConfigs + Firebase RC template 3197 — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server cache (historical)",
+      "key": "SpecialOfferConfigModel: fallBackRewardModels[4].timeSpan",
+      "type": "",
+      "value": "00:00:00",
+      "meaning": "server-only (không có trong default)",
+      "where": "Configs/CachedRemoteConfigs + Firebase RC template 3197 — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server cache (historical)",
+      "key": "SpecialOfferConfigModel: fallBackRewardModels[4].chestType",
+      "type": "",
+      "value": "0",
+      "meaning": "server-only (không có trong default)",
+      "where": "Configs/CachedRemoteConfigs + Firebase RC template 3197 — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server cache (historical)",
+      "key": "SpecialOfferConfigModel: fallBackRewardModels[4].collectionPackType",
+      "type": "",
+      "value": "0",
+      "meaning": "server-only (không có trong default)",
+      "where": "Configs/CachedRemoteConfigs + Firebase RC template 3197 — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server cache (historical)",
+      "key": "AdaptiveSpecialOfferConfigModel (live) = default?",
+      "type": "",
+      "value": "43/63 key trùng default, 20 key khác/thêm",
+      "meaning": "Đối chiếu config server thật (CachedRemoteConfigs) với AdaptiveSpecialOfferConfigModel.json",
+      "where": "Configs/CachedRemoteConfigs + Firebase RC template 3197 — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server cache (historical)",
+      "key": "AdaptiveSpecialOfferConfigModel: isEnable",
+      "type": "",
+      "value": "true",
+      "meaning": "server ghi đè (default = false)",
+      "where": "Configs/CachedRemoteConfigs + Firebase RC template 3197 — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server cache (historical)",
+      "key": "AdaptiveSpecialOfferConfigModel: eventType",
+      "type": "",
+      "value": "10",
+      "meaning": "server ghi đè (default = 1)",
+      "where": "Configs/CachedRemoteConfigs + Firebase RC template 3197 — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server cache (historical)",
+      "key": "AdaptiveSpecialOfferConfigModel: shouldShowEgoOffer",
+      "type": "",
+      "value": "false",
+      "meaning": "server-only (không có trong default)",
+      "where": "Configs/CachedRemoteConfigs + Firebase RC template 3197 — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server cache (historical)",
+      "key": "AdaptiveSpecialOfferConfigModel: shouldGivePlayOnAtEgo",
+      "type": "",
+      "value": "false",
+      "meaning": "server-only (không có trong default)",
+      "where": "Configs/CachedRemoteConfigs + Firebase RC template 3197 — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server cache (historical)",
+      "key": "AdaptiveSpecialOfferConfigModel: shouldLimitEgoPlayOnToFirstStuck",
+      "type": "",
+      "value": "false",
+      "meaning": "server-only (không có trong default)",
+      "where": "Configs/CachedRemoteConfigs + Firebase RC template 3197 — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server cache (historical)",
+      "key": "AdaptiveSpecialOfferConfigModel: fallBackRewardModels[0].timeSpan",
+      "type": "",
+      "value": "00:00:00",
+      "meaning": "server-only (không có trong default)",
+      "where": "Configs/CachedRemoteConfigs + Firebase RC template 3197 — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server cache (historical)",
+      "key": "AdaptiveSpecialOfferConfigModel: fallBackRewardModels[0].chestType",
+      "type": "",
+      "value": "0",
+      "meaning": "server-only (không có trong default)",
+      "where": "Configs/CachedRemoteConfigs + Firebase RC template 3197 — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server cache (historical)",
+      "key": "AdaptiveSpecialOfferConfigModel: fallBackRewardModels[0].collectionPackType",
+      "type": "",
+      "value": "0",
+      "meaning": "server-only (không có trong default)",
+      "where": "Configs/CachedRemoteConfigs + Firebase RC template 3197 — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server cache (historical)",
+      "key": "AdaptiveSpecialOfferConfigModel: fallBackRewardModels[1].amount",
+      "type": "",
+      "value": "0",
+      "meaning": "server-only (không có trong default)",
+      "where": "Configs/CachedRemoteConfigs + Firebase RC template 3197 — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server cache (historical)",
+      "key": "AdaptiveSpecialOfferConfigModel: fallBackRewardModels[1].chestType",
+      "type": "",
+      "value": "0",
+      "meaning": "server-only (không có trong default)",
+      "where": "Configs/CachedRemoteConfigs + Firebase RC template 3197 — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server cache (historical)",
+      "key": "AdaptiveSpecialOfferConfigModel: fallBackRewardModels[1].collectionPackType",
+      "type": "",
+      "value": "0",
+      "meaning": "server-only (không có trong default)",
+      "where": "Configs/CachedRemoteConfigs + Firebase RC template 3197 — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server cache (historical)",
+      "key": "AdaptiveSpecialOfferConfigModel: fallBackRewardModels[2].timeSpan",
+      "type": "",
+      "value": "00:00:00",
+      "meaning": "server-only (không có trong default)",
+      "where": "Configs/CachedRemoteConfigs + Firebase RC template 3197 — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server cache (historical)",
+      "key": "AdaptiveSpecialOfferConfigModel: fallBackRewardModels[2].chestType",
+      "type": "",
+      "value": "0",
+      "meaning": "server-only (không có trong default)",
+      "where": "Configs/CachedRemoteConfigs + Firebase RC template 3197 — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server cache (historical)",
+      "key": "AdaptiveSpecialOfferConfigModel: fallBackRewardModels[2].collectionPackType",
+      "type": "",
+      "value": "0",
+      "meaning": "server-only (không có trong default)",
+      "where": "Configs/CachedRemoteConfigs + Firebase RC template 3197 — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server cache (historical)",
+      "key": "AdaptiveSpecialOfferConfigModel: fallBackRewardModels[3].timeSpan",
+      "type": "",
+      "value": "00:00:00",
+      "meaning": "server-only (không có trong default)",
+      "where": "Configs/CachedRemoteConfigs + Firebase RC template 3197 — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server cache (historical)",
+      "key": "AdaptiveSpecialOfferConfigModel: fallBackRewardModels[3].chestType",
+      "type": "",
+      "value": "0",
+      "meaning": "server-only (không có trong default)",
+      "where": "Configs/CachedRemoteConfigs + Firebase RC template 3197 — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server cache (historical)",
+      "key": "AdaptiveSpecialOfferConfigModel: fallBackRewardModels[3].collectionPackType",
+      "type": "",
+      "value": "0",
+      "meaning": "server-only (không có trong default)",
+      "where": "Configs/CachedRemoteConfigs + Firebase RC template 3197 — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server cache (historical)",
+      "key": "AdaptiveSpecialOfferConfigModel: fallBackRewardModels[4].timeSpan",
+      "type": "",
+      "value": "00:00:00",
+      "meaning": "server-only (không có trong default)",
+      "where": "Configs/CachedRemoteConfigs + Firebase RC template 3197 — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server cache (historical)",
+      "key": "AdaptiveSpecialOfferConfigModel: fallBackRewardModels[4].chestType",
+      "type": "",
+      "value": "0",
+      "meaning": "server-only (không có trong default)",
+      "where": "Configs/CachedRemoteConfigs + Firebase RC template 3197 — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server cache (historical)",
+      "key": "AdaptiveSpecialOfferConfigModel: fallBackRewardModels[4].collectionPackType",
+      "type": "",
+      "value": "0",
+      "meaning": "server-only (không có trong default)",
+      "where": "Configs/CachedRemoteConfigs + Firebase RC template 3197 — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server cache (historical)",
+      "key": "egoOfferConfigModel: offerPriorities",
+      "type": "",
+      "value": "[0, 1, 2, 3]",
+      "meaning": "server-only (không có file default)",
+      "where": "Configs/CachedRemoteConfigs + Firebase RC template 3197 — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server instance (historical)",
+      "key": "SpecialOfferDataModel (instance)",
+      "type": "",
+      "value": "39 key, xem facts/runtime/event_instances/SpecialOfferDataModel.json",
+      "meaning": "Dữ liệu phiên event đang chạy (ngày, mốc, thưởng, đối thủ)",
+      "where": "PlayerPrefs SpecialOfferDataModel (instance event đang chạy) — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server instance (historical)",
+      "key": "SpecialOfferDataModel: specialOfferSyncableDataModel.isPurchased",
+      "type": "",
+      "value": "false",
+      "meaning": "",
+      "where": "PlayerPrefs SpecialOfferDataModel (instance event đang chạy) — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server instance (historical)",
+      "key": "SpecialOfferDataModel: specialOfferResponse.event_id",
+      "type": "",
+      "value": "a3af9f8b-340c-4a4b-8c9f-0ccc75d2d9b9",
+      "meaning": "",
+      "where": "PlayerPrefs SpecialOfferDataModel (instance event đang chạy) — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server instance (historical)",
+      "key": "SpecialOfferDataModel: specialOfferResponse.event_start_time",
+      "type": "",
+      "value": "1788937200",
+      "meaning": "",
+      "where": "PlayerPrefs SpecialOfferDataModel (instance event đang chạy) — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server instance (historical)",
+      "key": "SpecialOfferDataModel: specialOfferResponse.event_end_time",
+      "type": "",
+      "value": "1789023600",
+      "meaning": "",
+      "where": "PlayerPrefs SpecialOfferDataModel (instance event đang chạy) — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server instance (historical)",
+      "key": "SpecialOfferDataModel: specialOfferResponse.is_finished",
+      "type": "",
+      "value": "false",
+      "meaning": "",
+      "where": "PlayerPrefs SpecialOfferDataModel (instance event đang chạy) — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server instance (historical)",
+      "key": "SpecialOfferDataModel: specialOfferResponse.is_claimed",
+      "type": "",
+      "value": "false",
+      "meaning": "",
+      "where": "PlayerPrefs SpecialOfferDataModel (instance event đang chạy) — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server instance (historical)",
+      "key": "SpecialOfferDataModel: specialOfferResponse.segmented_offer_package.iapProductDiscountAmount",
+      "type": "",
+      "value": "90",
+      "meaning": "",
+      "where": "PlayerPrefs SpecialOfferDataModel (instance event đang chạy) — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server instance (historical)",
+      "key": "SpecialOfferDataModel: specialOfferResponse.segmented_offer_package.rewardModels[0].currencyType",
+      "type": "",
+      "value": "1",
+      "meaning": "",
+      "where": "PlayerPrefs SpecialOfferDataModel (instance event đang chạy) — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server instance (historical)",
+      "key": "SpecialOfferDataModel: specialOfferResponse.segmented_offer_package.rewardModels[0].amount",
+      "type": "",
+      "value": "1200",
+      "meaning": "",
+      "where": "PlayerPrefs SpecialOfferDataModel (instance event đang chạy) — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server instance (historical)",
+      "key": "SpecialOfferDataModel: specialOfferResponse.segmented_offer_package.rewardModels[0].timeSpan",
+      "type": "",
+      "value": "00:00:00",
+      "meaning": "",
+      "where": "PlayerPrefs SpecialOfferDataModel (instance event đang chạy) — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server instance (historical)",
+      "key": "SpecialOfferDataModel: specialOfferResponse.segmented_offer_package.rewardModels[0].chestType",
+      "type": "",
+      "value": "0",
+      "meaning": "",
+      "where": "PlayerPrefs SpecialOfferDataModel (instance event đang chạy) — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server instance (historical)",
+      "key": "SpecialOfferDataModel: specialOfferResponse.segmented_offer_package.rewardModels[0].collectionPackType",
+      "type": "",
+      "value": "0",
+      "meaning": "",
+      "where": "PlayerPrefs SpecialOfferDataModel (instance event đang chạy) — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server instance (historical)",
+      "key": "SpecialOfferDataModel: specialOfferResponse.segmented_offer_package.rewardModels[1].currencyType",
+      "type": "",
+      "value": "2",
+      "meaning": "",
+      "where": "PlayerPrefs SpecialOfferDataModel (instance event đang chạy) — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server instance (historical)",
+      "key": "SpecialOfferDataModel: specialOfferResponse.segmented_offer_package.rewardModels[1].amount",
+      "type": "",
+      "value": "0",
+      "meaning": "",
+      "where": "PlayerPrefs SpecialOfferDataModel (instance event đang chạy) — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server instance (historical)",
+      "key": "SpecialOfferDataModel: specialOfferResponse.segmented_offer_package.rewardModels[1].timeSpan",
+      "type": "",
+      "value": "01:00:00",
+      "meaning": "",
+      "where": "PlayerPrefs SpecialOfferDataModel (instance event đang chạy) — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server instance (historical)",
+      "key": "SpecialOfferDataModel: specialOfferResponse.segmented_offer_package.rewardModels[1].chestType",
+      "type": "",
+      "value": "0",
+      "meaning": "",
+      "where": "PlayerPrefs SpecialOfferDataModel (instance event đang chạy) — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server instance (historical)",
+      "key": "SpecialOfferDataModel: specialOfferResponse.segmented_offer_package.rewardModels[1].collectionPackType",
+      "type": "",
+      "value": "0",
+      "meaning": "",
+      "where": "PlayerPrefs SpecialOfferDataModel (instance event đang chạy) — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server instance (historical)",
+      "key": "SpecialOfferDataModel: specialOfferResponse.segmented_offer_package.rewardModels[2].currencyType",
+      "type": "",
+      "value": "4",
+      "meaning": "",
+      "where": "PlayerPrefs SpecialOfferDataModel (instance event đang chạy) — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server instance (historical)",
+      "key": "SpecialOfferDataModel: specialOfferResponse.segmented_offer_package.rewardModels[2].amount",
+      "type": "",
+      "value": "1",
+      "meaning": "",
+      "where": "PlayerPrefs SpecialOfferDataModel (instance event đang chạy) — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server instance (historical)",
+      "key": "SpecialOfferDataModel: specialOfferResponse.segmented_offer_package.rewardModels[2].timeSpan",
+      "type": "",
+      "value": "00:00:00",
+      "meaning": "",
+      "where": "PlayerPrefs SpecialOfferDataModel (instance event đang chạy) — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server instance (historical)",
+      "key": "SpecialOfferDataModel: specialOfferResponse.segmented_offer_package.rewardModels[2].chestType",
+      "type": "",
+      "value": "0",
+      "meaning": "",
+      "where": "PlayerPrefs SpecialOfferDataModel (instance event đang chạy) — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server instance (historical)",
+      "key": "SpecialOfferDataModel: specialOfferResponse.segmented_offer_package.rewardModels[2].collectionPackType",
+      "type": "",
+      "value": "0",
+      "meaning": "",
+      "where": "PlayerPrefs SpecialOfferDataModel (instance event đang chạy) — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server instance (historical)",
+      "key": "SpecialOfferDataModel: specialOfferResponse.segmented_offer_package.rewardModels[3].currencyType",
+      "type": "",
+      "value": "5",
+      "meaning": "",
+      "where": "PlayerPrefs SpecialOfferDataModel (instance event đang chạy) — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server instance (historical)",
+      "key": "SpecialOfferDataModel: specialOfferResponse.segmented_offer_package.rewardModels[3].amount",
+      "type": "",
+      "value": "1",
+      "meaning": "",
+      "where": "PlayerPrefs SpecialOfferDataModel (instance event đang chạy) — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server instance (historical)",
+      "key": "SpecialOfferDataModel: specialOfferResponse.segmented_offer_package.rewardModels[3].timeSpan",
+      "type": "",
+      "value": "00:00:00",
+      "meaning": "",
+      "where": "PlayerPrefs SpecialOfferDataModel (instance event đang chạy) — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server instance (historical)",
+      "key": "SpecialOfferDataModel: specialOfferResponse.segmented_offer_package.rewardModels[3].chestType",
+      "type": "",
+      "value": "0",
+      "meaning": "",
+      "where": "PlayerPrefs SpecialOfferDataModel (instance event đang chạy) — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server instance (historical)",
+      "key": "SpecialOfferDataModel: specialOfferResponse.segmented_offer_package.rewardModels[3].collectionPackType",
+      "type": "",
+      "value": "0",
+      "meaning": "",
+      "where": "PlayerPrefs SpecialOfferDataModel (instance event đang chạy) — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server instance (historical)",
+      "key": "SpecialOfferDataModel: specialOfferResponse.segmented_offer_package.rewardModels[4].currencyType",
+      "type": "",
+      "value": "6",
+      "meaning": "",
+      "where": "PlayerPrefs SpecialOfferDataModel (instance event đang chạy) — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server instance (historical)",
+      "key": "SpecialOfferDataModel: specialOfferResponse.segmented_offer_package.rewardModels[4].amount",
+      "type": "",
+      "value": "1",
+      "meaning": "",
+      "where": "PlayerPrefs SpecialOfferDataModel (instance event đang chạy) — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server instance (historical)",
+      "key": "SpecialOfferDataModel: specialOfferResponse.segmented_offer_package.rewardModels[4].timeSpan",
+      "type": "",
+      "value": "00:00:00",
+      "meaning": "",
+      "where": "PlayerPrefs SpecialOfferDataModel (instance event đang chạy) — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server instance (historical)",
+      "key": "SpecialOfferDataModel: specialOfferResponse.segmented_offer_package.rewardModels[4].chestType",
+      "type": "",
+      "value": "0",
+      "meaning": "",
+      "where": "PlayerPrefs SpecialOfferDataModel (instance event đang chạy) — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server instance (historical)",
+      "key": "SpecialOfferDataModel: specialOfferResponse.segmented_offer_package.rewardModels[4].collectionPackType",
+      "type": "",
+      "value": "0",
+      "meaning": "",
+      "where": "PlayerPrefs SpecialOfferDataModel (instance event đang chạy) — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server instance (historical)",
+      "key": "SpecialOfferDataModel: specialOfferResponse.segmented_offer_package.iapProductId",
+      "type": "",
+      "value": "sort.special1",
+      "meaning": "",
+      "where": "PlayerPrefs SpecialOfferDataModel (instance event đang chạy) — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server instance (historical)",
+      "key": "SpecialOfferDataModel: specialOfferResponse.ui_type",
+      "type": "",
+      "value": "1",
+      "meaning": "",
+      "where": "PlayerPrefs SpecialOfferDataModel (instance event đang chạy) — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server instance (historical)",
+      "key": "SpecialOfferDataModel: specialOfferResponse.segment",
+      "type": "",
+      "value": "non-purchaser",
+      "meaning": "",
+      "where": "PlayerPrefs SpecialOfferDataModel (instance event đang chạy) — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server instance (historical)",
+      "key": "SpecialOfferDataModel: specialOfferResponse.theme_type",
+      "type": "",
+      "value": "0",
+      "meaning": "",
+      "where": "PlayerPrefs SpecialOfferDataModel (instance event đang chạy) — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server instance (historical)",
+      "key": "SpecialOfferDataModel: popupTriggerCount",
+      "type": "",
+      "value": "0",
+      "meaning": "",
+      "where": "PlayerPrefs SpecialOfferDataModel (instance event đang chạy) — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server instance (historical)",
+      "key": "SpecialOfferDataModel: isPopupShown",
+      "type": "",
+      "value": "false",
+      "meaning": "",
+      "where": "PlayerPrefs SpecialOfferDataModel (instance event đang chạy) — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server instance (historical)",
+      "key": "SpecialOfferDataModel: popupTypeForOldSpecialOffer",
+      "type": "",
+      "value": "1",
+      "meaning": "",
+      "where": "PlayerPrefs SpecialOfferDataModel (instance event đang chạy) — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    }
+  ],
+  "rewards": [
+    {
+      "context": "Gói theo phân khúc",
+      "reward": "SegmentedOfferPackage.RewardModels — CurrencyEarnReason.SpecialOffer (17)",
+      "evidence": "SpecialOfferService.GetRewardsForProductId"
+    },
+    {
+      "context": "Dự phòng",
+      "reward": "SpecialOfferConfigModel.FallBackRewardModels",
+      "evidence": "SpecialOfferService.ClaimPurchasedSpecialOfferRewards"
+    },
+    {
+      "context": "Ego",
+      "reward": "1 lượt Play On miễn phí khi ShouldGivePlayOnAtEgo",
+      "evidence": "SpecialOfferService.ShouldShowPlayOnAtEgo"
+    },
+    {
+      "context": "Loại thưởng xuất hiện",
+      "reward": "coin, life, life_in_seconds, additional_life_inventory, undo, shuffle, extra_bottle, duck_x2_in_seconds, merge_energy, collection_pack_1..5",
+      "evidence": "SpecialOfferService.ClaimPurchasedSpecialOfferRewards (analytics 'earned')"
+    }
+  ],
+  "backend": [
+    {
+      "command": "SpecialOfferRemoteService.SendGetRequest(SpecialOfferRequestModel{EventId, EventType, HasPurchased})",
+      "direction": "client→server",
+      "purpose": "lấy SpecialOfferResponse theo phân khúc"
+    },
+    {
+      "command": "SpecialOfferRemoteService.SendClaimRequest(SpecialOfferRequestModel)",
+      "direction": "client→server",
+      "purpose": "báo đã mua/nhận thưởng"
+    },
+    {
+      "command": "Schema magicsort.schemas.v1.liveops.special_offer.SpecialOfferResponse",
+      "direction": "server→client",
+      "purpose": "FlatBuffer của response"
+    },
+    {
+      "command": "AssetManager – bundle theo chủ đề",
+      "direction": "client→CDN",
+      "purpose": "tải giao diện mùa"
+    },
+    {
+      "command": "IAPService + IAPPurchaseVerificationService",
+      "direction": "client→store→server",
+      "purpose": "mua và xác thực gói"
+    },
+    {
+      "command": "SyncService – SyncName 'SpecialOfferSyncableDataModel'",
+      "direction": "hai chiều",
+      "purpose": "đồng bộ IsPurchased"
+    }
+  ],
+  "ui": [
+    {
+      "element": "Icon lobby",
+      "class": "Modules.Contexts.Home.Monetization.SpecialOffer.Scripts.UI.SpecialOfferLobbyButton / SpecialOfferLobbyButtonAnimationView / SpecialOfferCoinFallLobbyButtonAnimationView / SpecialOfferLobbyIconThemeVariants",
+      "purpose": "icon đổi theo chủ đề"
+    },
+    {
+      "element": "Popup",
+      "class": "SpecialOfferPopup (+SpecialOfferPopupArguments) / SpecialOfferController / FourthOfJulyOfferPopup",
+      "purpose": "bán gói"
+    },
+    {
+      "element": "Chủ đề",
+      "class": "SpecialOfferThemeController (_specialOfferUIVariants)",
+      "purpose": "chọn biến thể UI theo ThemeType/PopupType"
+    },
+    {
+      "element": "Ego",
+      "class": "SpecialOfferEgoView / SpecialOfferEgoUIVariantView",
+      "purpose": "offer trong màn hết nước cuối level"
+    },
+    {
+      "element": "Command",
+      "class": "Modules.Contexts.Home.Monetization.SpecialOffer.Scripts.Commands.ShowSpecialOfferPopupCommand / SpecialOfferHomeWelcomingCommand / TryToShowSpecialOfferLobbyReturnCommand / TryToShowNoAdsOfferLobbyReturnCommand",
+      "purpose": "điều phối mở popup"
+    }
+  ],
+  "analytics": [
+    {
+      "event": "special_offer_impression",
+      "params": "source, offer_name, event_id, event_ui_id, product_id, price, currency, dollar_equivalent, user_segment, remaining_duration, progress",
+      "when": "mở popup offer"
+    },
+    {
+      "event": "special_offer_purchased",
+      "params": "source='SpecialOfferPopup', offer_name, event_id, event_ui_id, product_id, price, currency, dollar_equivalent, user_segment, remaining_duration, progress",
+      "when": "mua thành công"
+    },
+    {
+      "event": "special_offer_fallback_rewards",
+      "params": "-",
+      "when": "phải dùng thưởng dự phòng"
+    },
+    {
+      "event": "wrong_special_offer_data",
+      "params": "-",
+      "when": "dữ liệu offer không hợp lệ"
+    },
+    {
+      "event": "not_requested_iap",
+      "params": "product_id",
+      "when": "giao dịch tới trễ"
+    },
+    {
+      "event": "earned",
+      "params": "reason=SpecialOffer, danh sách thưởng",
+      "when": "trao thưởng"
+    },
+    {
+      "event": "iap_purchase / purchase_failed",
+      "params": "origin=SpecialOffer, source=SpecialOffer, context",
+      "when": "mua thành công / thất bại"
+    }
+  ],
+  "storage_keys": [
+    "SpecialOfferSyncableDataModel (sync name)",
+    "SpecialOfferSyncableDataModel.IsPurchased",
+    "SpecialOfferDataModel.SpecialOfferResponse (cache)",
+    "SpecialOfferDataModel.PopupTriggerCount",
+    "SpecialOfferDataModel.IsPopupShown",
+    "SpecialOfferDataModel.PopupTypeForOldSpecialOffer"
+  ],
+  "related_features": [
+    "Store",
+    "ChooseOneSpecialOffer",
+    "NoAdsOffer",
+    "PawTouchOffer",
+    "EndlessPortal",
+    "Inventory"
+  ],
+  "gaps": [
+    "Giá, product id và nội dung thưởng của từng phân khúc do server gửi trong SegmentedOfferPackage — không có trong client.",
+    "15/11 — resolved_historical_snapshot: Đã trích toàn bộ field/value của SpecialOfferConfigModel từ default0.0.3063 và cache lịch sử hiện có. Nhận định không có giá trị trong client đã được đối chiếu bằng file thật; không xác nhận effective runtime. Còn lại: Kiểm chứng effective config/asset và nhánh runtime trên đúng build nếu cần.",
+    "15/11 — resolved_historical_snapshot: Initialize tạo 3 ánh xạ ThemeType → bundle và 5 ánh xạ PopupType → bundle. GetBundleId ưu tiên ThemeType khác 0 khi tìm thấy trong dictionary, sau đó dùng popup map; không tìm thấy thì trả chuỗi rỗng. Đã có đủ 8 ánh xạ của nguồn native này. Còn lại: Giữ rõ build và phiên bản cache của nguồn; kiểm nhánh runtime riêng khi cần.",
+    "Enum SpecialOfferThemeTpye chỉ có 4 giá trị nhưng có 8 bundle và 9 tên offer — phần lớn chủ đề được chọn qua PopupType chứ không qua ThemeType.",
+    "Endpoint HTTP nằm trong BackendEnvironmentConfig.",
+    "[Runtime 2026-09-10] Config server LIVE đã đọc trực tiếp từ cache máy (không cần request); các hàng 'server live' là giá trị server ghi đè/thêm so với default.",
+    "[Runtime 2026-09-10] Model server-only egoOfferConfigModel (không có trong Resources/defaultconfigs) đã đọc từ cache live.",
+    "[Runtime 2026-09-10] Instance phiên event đang chạy đã đọc (SpecialOfferDataModel); phần từng ghi 'do server gửi' nay có giá trị thật trong các hàng 'server instance'."
+  ],
+  "sources": [
+    "features/SpecialOfferService.md",
+    "features/SpecialOfferDataService.md",
+    "features/SpecialOfferStateService.md",
+    "features/SpecialOfferRemoteService.md",
+    "features/SpecialOfferConfigModel.md",
+    "features/SpecialOfferDataModel.md",
+    "features/SpecialOfferSyncableDataModel.md",
+    "RecoveredNative/strings-by-type.tsv (EventSender.SendSpecialOffer*, SendWrongSpecialOfferDataStat)",
+    "GameDesign/appendix/localization.tsv (SpecialOffer*)",
+    "GameDesign/facts/facts.json (SpecialOfferState, SpecialOfferThemeTpye, SpecialOfferPopupImpressionSource, SegmentedOfferPackage, SpecialOfferResponse)"
+  ],
+  "related_feature_aliases": [
+    {
+      "original": "Lives",
+      "feature": "Inventory"
+    }
+  ],
+  "audit_provenance": {
+    "review_date": "2026-11-15",
+    "mode": "offline_existing_files",
+    "code_build": "0.0.3063 ARMv7",
+    "runtime_build_observed_historically": "0.0.3129 ARM64 (audit 2026-10-18); not rechecked 2026-11-15",
+    "new_playtests": 0,
+    "uc_status": "See facts/audit_20261115/uc_registry.json; image reference is not pass",
+    "workbook_status": "Existing XLSX is historical; JSON and local web include 2026-11-15 corrections",
+    "static_review": "facts/local_code_gap_results_20261115.json; facts/local_asset_gap_results_20261115.json; facts/final_data_gap_decisions_20261115.json; facts/core_body_gap_decisions_20261115.json; facts/remaining_asset_gap_decisions_20261115.json"
+  },
+  "static_review_20261115": {
+    "date": "2026-11-15",
+    "scope": "Historical code/assets 0.0.3063, dated caches, device 0.0.3129 cached bundles and explicitly scoped runtime evidence. Not full runtime pass.",
+    "findings": [
+      {
+        "kind": "remaining_asset",
+        "source_report": "facts/remaining_asset_gap_decisions_20261115.json",
+        "id": "MS-RA-021",
+        "gap_ids": [
+          "MS-SpecialOffer-G003"
+        ],
+        "title": "Bảng ánh xạ đầy đủ giữa SpecialOfferThemeTpye/PopupType và tên bundle không đọc được từ pseudo-C (chỉ thấy danh sách chuỗi bundle).",
+        "status": "resolved_historical_snapshot",
+        "conclusion": "Initialize tạo 3 ánh xạ ThemeType → bundle và 5 ánh xạ PopupType → bundle. GetBundleId ưu tiên ThemeType khác 0 khi tìm thấy trong dictionary, sau đó dùng popup map; không tìm thấy thì trả chuỗi rỗng. Đã có đủ 8 ánh xạ của nguồn native này.",
+        "evidence": [
+          "facts/remaining_asset_review_20261115/special_offer_bundle_map.json",
+          "facts/remaining_asset_review_20261115/native_body_evidence.json"
+        ],
+        "remaining": "",
+        "next_action": "Giữ rõ build và phiên bản cache của nguồn; kiểm nhánh runtime riêng khi cần.",
+        "scope": "Asset/native export 0.0.3063 và cache UnityFS đọc ngày 15/11 từ app 0.0.3129 được giữ riêng; ảnh render asset không phải ảnh chụp playtest.",
+        "reviewed": "2026-11-15",
+        "full_uc_pass": false
+      },
+      {
+        "kind": "final_data",
+        "source_report": "facts/final_data_gap_decisions_20261115.json",
+        "id": "MS-FDG-020",
+        "gap_ids": [
+          "MS-SpecialOffer-G002"
+        ],
+        "title": "ShowFrequency và MaxShowCount là remote config, không có giá trị mặc định.",
+        "status": "resolved_historical_snapshot",
+        "conclusion": "Đã trích toàn bộ field/value của SpecialOfferConfigModel từ default0.0.3063 và cache lịch sử hiện có. Nhận định không có giá trị trong client đã được đối chiếu bằng file thật; không xác nhận effective runtime.",
+        "evidence": [
+          "facts/local_asset_review_20261115/config_catalog.json"
+        ],
+        "remaining": "Full historical data answered; current effective selection and full runtime remain unverified.",
+        "next_action": "Kiểm chứng effective config/asset và nhánh runtime trên đúng build nếu cần.",
+        "scope": "question-specific source/observed branch only; no full-UC or production claim",
+        "source_records": [
+          {
+            "snapshot": "default0.0.3063",
+            "model": "SpecialOfferConfigModel",
+            "source": "Resources\\defaultconfigs\\SpecialOfferConfigModel.json",
+            "root": "UnityExport Assets 0.0.3063",
+            "sha256": "65a193e93a4b6ba645acbe16bde3ec4b2034a7d56884d096779095c83f984a61",
+            "line": 1,
+            "build": "0.0.3063 ARMv7"
+          },
+          {
+            "snapshot": "cache20260910",
+            "model": "SpecialOfferConfigModel",
+            "source": "facts\\runtime\\server_configs\\specialOfferConfigModel.json",
+            "root": "GameDesign",
+            "sha256": "960f91664cdba5f92d8c9158c572af854c60443db84606994cadefddb5c4fe28",
+            "line": 1,
+            "build": "snapshot provenance at path"
+          },
+          {
+            "snapshot": "cache20261010",
+            "model": "SpecialOfferConfigModel",
+            "source": "facts\\runtime\\test_20261010\\before\\CachedRemoteConfigs",
+            "root": "GameDesign",
+            "sha256": "433164d4877b2dee55d2bbd79ef2fe83d3fe9519492fe15e3cb0926daf216050",
+            "line": 1,
+            "build": "snapshot provenance at path"
+          }
+        ]
+      },
+      {
+        "kind": "asset",
+        "source_report": "facts/local_asset_gap_results_20261115.json",
+        "id": "MS-SpecialOffer-G002",
+        "status": "resolved_static_snapshot",
+        "conclusion": "Đã trích toàn bộ field/value của SpecialOfferConfigModel từ default0.0.3063 và cache lịch sử hiện có. Nhận định không có giá trị trong client đã được đối chiếu bằng file thật; không xác nhận effective runtime.",
+        "evidence": [
+          {
+            "snapshot": "default0.0.3063",
+            "model": "SpecialOfferConfigModel",
+            "source": "Resources\\defaultconfigs\\SpecialOfferConfigModel.json",
+            "root": "UnityExport Assets 0.0.3063",
+            "sha256": "65a193e93a4b6ba645acbe16bde3ec4b2034a7d56884d096779095c83f984a61",
+            "line": 1,
+            "build": "0.0.3063 ARMv7"
+          },
+          {
+            "snapshot": "cache20260910",
+            "model": "SpecialOfferConfigModel",
+            "source": "facts\\runtime\\server_configs\\specialOfferConfigModel.json",
+            "root": "GameDesign",
+            "sha256": "960f91664cdba5f92d8c9158c572af854c60443db84606994cadefddb5c4fe28",
+            "line": 1,
+            "build": "snapshot provenance at path"
+          },
+          {
+            "snapshot": "cache20261010",
+            "model": "SpecialOfferConfigModel",
+            "source": "facts\\runtime\\test_20261010\\before\\CachedRemoteConfigs",
+            "root": "GameDesign",
+            "sha256": "433164d4877b2dee55d2bbd79ef2fe83d3fe9519492fe15e3cb0926daf216050",
+            "line": 1,
+            "build": "snapshot provenance at path"
+          }
+        ],
+        "data": "config_catalog.json",
+        "scope": "static_export0.0.3063_or_historical_cache_not_runtime_pass",
+        "reviewed": "2026-11-15",
+        "next_action": "Kiểm chứng effective config/asset và nhánh runtime trên đúng build nếu cần.",
+        "superseded_or_refined_by": "MS-FDG-020"
+      }
+    ]
+  },
+  "acceptance_review_20261115": {
+    "source": "facts/feature_acceptance_20261115.json",
+    "feature_id": "SpecialOffer",
+    "scope": "All eleven dossier dimensions reviewed; full_feature_verified is not implied; read per-dimension gaps and actual runtime evidence."
+  },
+  "segment_ab_review_20261115": {
+    "status": "not_identified_in_sources",
+    "segment_ids": [],
+    "matching_basis": "explicit_gd_config_map_or_exact_model_token_in_gdd_configs_where_key_sources; rootfieldscoped",
+    "rows": [],
+    "classifications": {},
+    "assignment_verified": false,
+    "uplift_verified": false,
+    "note": "No matchingrow does not prove no segmentation/AB. Rewardbucketfalsepositives remain explicitly classified."
+  },
+  "continuation_review_20261116": {
+    "date": "2026-11-16",
+    "build": "0.0.3129 ARM64 host APK",
+    "build_scope": "Host APK version3129 matches LAST observed installed version15/11 only; installed bytes/live device16/11 not verified.",
+    "runtime_status": "device_unavailable",
+    "runtime_case_ids": [],
+    "current_apk_model_links": {
+      "feature": "SpecialOffer",
+      "models": [
+        {
+          "model": "AdaptiveSpecialOfferConfigModel",
+          "current_default_file": "facts/review_20261116/public_current_config_3129/defaults/AdaptiveSpecialOfferConfigModel.json",
+          "resource_path": "defaultconfigs/adaptivespecialofferconfigmodel",
+          "sha256": "df6b3de2197521650a15bcf2d36042b0f51722cd0b51f4540a315741b4e6c1ad",
+          "matching_basis": [
+            "gdd/SpecialOffer.json#/configs"
+          ],
+          "scope": "Packaged default3129, not effective server config.",
+          "site_data_path": "data/current_config_3129/defaults/AdaptiveSpecialOfferConfigModel.json",
+          "original_source_sha256": "df6b3de2197521650a15bcf2d36042b0f51722cd0b51f4540a315741b4e6c1ad",
+          "public_artifact_sha256": "b66e9fd0cc7d8a97015faafe9bb45aa6c2edd4a42c902c0cd840527e6ea5e934",
+          "sha256_scope": "sha256 is original raw model; public_artifact_sha256 is the sanitized download"
+        },
+        {
+          "model": "AreYouSureOfferConfigModel",
+          "current_default_file": "facts/review_20261116/public_current_config_3129/defaults/AreYouSureOfferConfigModel.json",
+          "resource_path": "defaultconfigs/areyousureofferconfigmodel",
+          "sha256": "db81d29a89baefa877cb4219b4e3c4993f2a0dcf40a5d9da82f45714d701b0ca",
+          "matching_basis": [
+            "gdd/SpecialOffer.json#/configs"
+          ],
+          "scope": "Packaged default3129, not effective server config.",
+          "site_data_path": "data/current_config_3129/defaults/AreYouSureOfferConfigModel.json",
+          "original_source_sha256": "db81d29a89baefa877cb4219b4e3c4993f2a0dcf40a5d9da82f45714d701b0ca",
+          "public_artifact_sha256": "06e372b2b5381fea1ea631be7093c0e2d3eba7593ec1eb9eefe0c7a5f57a6866",
+          "sha256_scope": "sha256 is original raw model; public_artifact_sha256 is the sanitized download"
+        },
+        {
+          "model": "SpecialOfferConfigModel",
+          "current_default_file": "facts/review_20261116/public_current_config_3129/defaults/SpecialOfferConfigModel.json",
+          "resource_path": "defaultconfigs/specialofferconfigmodel",
+          "sha256": "65a193e93a4b6ba645acbe16bde3ec4b2034a7d56884d096779095c83f984a61",
+          "matching_basis": [
+            "gdd/SpecialOffer.json#/configs",
+            "gdd/SpecialOffer.json#/sources",
+            "gdd/SpecialOffer.json#/flow",
+            "gdd/SpecialOffer.json#/managers"
+          ],
+          "scope": "Packaged default3129, not effective server config.",
+          "site_data_path": "data/current_config_3129/defaults/SpecialOfferConfigModel.json",
+          "original_source_sha256": "65a193e93a4b6ba645acbe16bde3ec4b2034a7d56884d096779095c83f984a61",
+          "public_artifact_sha256": "f1c6eb9ebb2d54d578fd10587a17ed67fad275d8026838d268216484c2404cb9",
+          "sha256_scope": "sha256 is original raw model; public_artifact_sha256 is the sanitized download"
+        }
+      ],
+      "status": "exact_model_source_association",
+      "distribution": "sanitized_public",
+      "public_mapping_pending": false
+    },
+    "current_packaged_defaults": [
+      {
+        "model": "AdaptiveSpecialOfferConfigModel",
+        "source": "facts/review_20261116/public_current_config_3129/defaults/AdaptiveSpecialOfferConfigModel.json",
+        "site_data_path": "data/current_config_3129/defaults/AdaptiveSpecialOfferConfigModel.json",
+        "public_artifact_sha256": "b66e9fd0cc7d8a97015faafe9bb45aa6c2edd4a42c902c0cd840527e6ea5e934",
+        "original_source_sha256": "df6b3de2197521650a15bcf2d36042b0f51722cd0b51f4540a315741b4e6c1ad",
+        "source_class": "static_asset",
+        "build": "0.0.3129 host APK",
+        "scope": "Sanitized packaged default fullvalues only; not effective remote/selected config or runtime.",
+        "values": {
+          "IsEnable": false,
+          "FirstLevelToShow": 55,
+          "EventType": 1,
+          "ShowFrequency": 2,
+          "MaxShowCount": 10,
+          "IAPConfigModels": [
+            {
+              "ProductId": "sort.special1",
+              "ProductType": 0,
+              "DollarEquivalent": 0.99
+            },
+            {
+              "ProductId": "sort.special3",
+              "ProductType": 0,
+              "DollarEquivalent": 2.99
+            },
+            {
+              "ProductId": "sort.special4.99",
+              "ProductType": 0,
+              "DollarEquivalent": 4.99
+            },
+            {
+              "ProductId": "sort.special5",
+              "ProductType": 0,
+              "DollarEquivalent": 4.99
+            },
+            {
+              "ProductId": "sort.special10",
+              "ProductType": 0,
+              "DollarEquivalent": 9.99
+            },
+            {
+              "ProductId": "sort.special20",
+              "ProductType": 0,
+              "DollarEquivalent": 19.99
+            },
+            {
+              "ProductId": "sort.special40",
+              "ProductType": 0,
+              "DollarEquivalent": 39.99
+            },
+            {
+              "ProductId": "sort.special50",
+              "ProductType": 0,
+              "DollarEquivalent": 49.99
+            },
+            {
+              "ProductId": "sort.special80",
+              "ProductType": 0,
+              "DollarEquivalent": 79.99
+            },
+            {
+              "ProductId": "sort.special100",
+              "ProductType": 0,
+              "DollarEquivalent": 99.99
+            }
+          ],
+          "FallBackRewardModels": [
+            {
+              "CurrencyType": 1,
+              "Amount": 100
+            },
+            {
+              "CurrencyType": 2,
+              "TimeSpan": "00:15:00"
+            },
+            {
+              "CurrencyType": 4,
+              "Amount": 1
+            },
+            {
+              "CurrencyType": 5,
+              "Amount": 1
+            },
+            {
+              "CurrencyType": 6,
+              "Amount": 1
+            }
+          ]
+        }
+      },
+      {
+        "model": "AreYouSureOfferConfigModel",
+        "source": "facts/review_20261116/public_current_config_3129/defaults/AreYouSureOfferConfigModel.json",
+        "site_data_path": "data/current_config_3129/defaults/AreYouSureOfferConfigModel.json",
+        "public_artifact_sha256": "06e372b2b5381fea1ea631be7093c0e2d3eba7593ec1eb9eefe0c7a5f57a6866",
+        "original_source_sha256": "db81d29a89baefa877cb4219b4e3c4993f2a0dcf40a5d9da82f45714d701b0ca",
+        "source_class": "static_asset",
+        "build": "0.0.3129 host APK",
+        "scope": "Sanitized packaged default fullvalues only; not effective remote/selected config or runtime.",
+        "values": {
+          "OfferPriorities": [
+            0,
+            1,
+            2,
+            3
+          ]
+        }
+      },
+      {
+        "model": "SpecialOfferConfigModel",
+        "source": "facts/review_20261116/public_current_config_3129/defaults/SpecialOfferConfigModel.json",
+        "site_data_path": "data/current_config_3129/defaults/SpecialOfferConfigModel.json",
+        "public_artifact_sha256": "f1c6eb9ebb2d54d578fd10587a17ed67fad275d8026838d268216484c2404cb9",
+        "original_source_sha256": "65a193e93a4b6ba645acbe16bde3ec4b2034a7d56884d096779095c83f984a61",
+        "source_class": "static_asset",
+        "build": "0.0.3129 host APK",
+        "scope": "Sanitized packaged default fullvalues only; not effective remote/selected config or runtime.",
+        "values": {
+          "IsEnable": false,
+          "FirstLevelToShow": 55,
+          "EventType": 2,
+          "ShowFrequency": 2,
+          "MaxShowCount": 10,
+          "IAPConfigModels": [
+            {
+              "ProductId": "sort.special1",
+              "ProductType": 0,
+              "DollarEquivalent": 0.99
+            },
+            {
+              "ProductId": "sort.special3",
+              "ProductType": 0,
+              "DollarEquivalent": 2.99
+            },
+            {
+              "ProductId": "sort.special5",
+              "ProductType": 0,
+              "DollarEquivalent": 4.99
+            },
+            {
+              "ProductId": "sort.special10",
+              "ProductType": 0,
+              "DollarEquivalent": 9.99
+            },
+            {
+              "ProductId": "sort.special20",
+              "ProductType": 0,
+              "DollarEquivalent": 19.99
+            },
+            {
+              "ProductId": "sort.special40",
+              "ProductType": 0,
+              "DollarEquivalent": 39.99
+            },
+            {
+              "ProductId": "sort.special50",
+              "ProductType": 0,
+              "DollarEquivalent": 49.99
+            },
+            {
+              "ProductId": "sort.special80",
+              "ProductType": 0,
+              "DollarEquivalent": 79.99
+            },
+            {
+              "ProductId": "sort.special100",
+              "ProductType": 0,
+              "DollarEquivalent": 99.99
+            }
+          ],
+          "FallBackRewardModels": [
+            {
+              "CurrencyType": 1,
+              "Amount": 100
+            },
+            {
+              "CurrencyType": 2,
+              "TimeSpan": "00:15:00"
+            },
+            {
+              "CurrencyType": 4,
+              "Amount": 1
+            },
+            {
+              "CurrencyType": 5,
+              "Amount": 1
+            },
+            {
+              "CurrencyType": 6,
+              "Amount": 1
+            }
+          ]
+        }
+      }
+    ],
+    "native_finding_ids": [],
+    "documentation_source_coverage": {
+      "dossier_present": true,
+      "use_case_catalog_count": 13,
+      "config_catalog_rows": 192,
+      "current_apk_default_model_links": 3,
+      "current_native_findings": 0,
+      "scope": "Documentation/source coverage only; not complete runtime verification."
+    },
+    "runtime_completion": {
+      "date": "2026-11-16",
+      "status": "device_unavailable",
+      "executed_case_count": 0,
+      "full_feature_runtime_verified": false
+    },
+    "planned_branch": "Kiểm tra icon offer và interceptor trước Shop; mở popup hiện có, chụp theme, reward/giá/timer và đóng.",
+    "target_uc_ids": [
+      "UC-03",
+      "UC-10",
+      "UC-13"
+    ],
+    "execution_phase": "noncore_first",
+    "core_or_levels_last": false,
+    "actionability_full_json": "facts/continuation_20261116/current/feature_actionability.json",
+    "actionability_site_data_path": "data/continuation_20261116/feature_actionability.json",
+    "source_classes": [
+      "static_asset"
+    ],
+    "full_feature_verified": false
+  }
+}

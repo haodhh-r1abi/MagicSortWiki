@@ -1,0 +1,472 @@
+{
+  "id": "Notifications",
+  "title": "Thông báo đẩy cục bộ (Notifications)",
+  "tagline": "10 mẫu thông báo cục bộ hẹn giờ kéo người chơi quay lại, tắt được toàn bộ bằng một toggle trong Settings.",
+  "infobox": [
+    [
+      "Loại",
+      "Live-ops"
+    ],
+    [
+      "Mở khóa",
+      "Có ngay từ đầu; Android 13+ và iOS cần cấp quyền qua RequestPermission()"
+    ],
+    [
+      "Chu kỳ / lịch",
+      "Hẹn theo DateTime.Now + delayAsSeconds; riêng daily đặt 10 giờ sáng hôm sau"
+    ],
+    [
+      "Tham gia",
+      "Toàn bộ người chơi"
+    ],
+    [
+      "Điều kiện / phụ thuộc",
+      "NotificationModel.IsNotificationOn và quyền hệ thống"
+    ],
+    [
+      "Manager",
+      "NotificationService (kèm LocalNotificationSo và NotificationSamples.GameNotificationsPlatform)"
+    ]
+  ],
+  "description": [
+    "Magic Sort dùng thông báo cục bộ (local notification), không có push từ server trong bản dựng này.",
+    "NotificationService nhận 10 ScriptableObject LocalNotificationSo qua constructor, mỗi cái mang Id, Title và Message viết sẵn bằng tiếng Anh kèm emoji.",
+    "Mọi thông báo đều hẹn giờ bằng DateTime.Now cộng delayAsSeconds và đăng ký qua GameNotificationsPlatform, lớp bọc Unity Mobile Notifications.",
+    "Mỗi loại thông báo có một cặp Send…/Cancel… nên khi điều kiện thay đổi, client huỷ đúng Id thay vì huỷ tất cả.",
+    "Trước khi tạo mới, SendNotification luôn gọi Cancel(id) nên không bao giờ có hai thông báo trùng loại.",
+    "Người chơi bật/tắt toàn bộ bằng một toggle trong Settings; trạng thái lưu trong NotificationModel.IsNotificationOn.",
+    "Khi tắt, mọi lời gọi Send… đều bị bỏ qua ngay trong SendNotification — kiểm tra ở một chỗ duy nhất nên không có đường vòng.",
+    "Chuỗi 'NEWLINE' trong Message được thay bằng Environment.NewLine khi dựng Body của thông báo.",
+    "Nội dung thông báo nằm thẳng trong asset bằng tiếng Anh, không đi qua bảng localization nên không đa ngôn ngữ.",
+    "Sky Jump có hai Id tách biệt cho trường hợp thắng và thua, cho phép đo tỉ lệ mở riêng cho từng nhóm."
+  ],
+  "notes": [
+    "Lưu ý: giá trị delayAsSeconds của phần lớn thông báo do dịch vụ gọi truyền vào (thời gian còn lại của sự kiện), không phải hằng số trong NotificationService.",
+    "Lưu ý: SendD1RetNotification không nhận delay; body0.0.3063 dùng DateTime.Now.AddSeconds(90000), tức25giờ. Đây là lịch local, không bảo đảm OS giao đúng giờ.",
+    "Lưu ý: Weekly Tournament không có hàm Cancel riêng trong client.",
+    "Lưu ý: giá trị bật/tắt mặc định cho người chơi mới lấy từ NotificationConfig.IsNotificationOn (ScriptableObject).",
+    "Lưu ý: NotificationService là IRestartableService nên được dựng lại sau khi đăng nhập lại.",
+    "Lưu ý: GameNotificationsPlatform còn có CancelAllScheduledNotifications() và DismissAllDisplayedNotifications() cho trường hợp cần dọn sạch.",
+    "Lưu ý: Wheel of Fortune là loại duy nhất nhận thêm tham số amount (số level còn thiếu) ghép vào nội dung."
+  ],
+  "how_it_works": [
+    "NotificationService.Initialize() nạp NotificationModel qua ISaveLoad (NotificationSaveLoad) và khởi tạo GameNotificationsPlatform.",
+    "RequestPermission() trả Task để luồng khởi động await hộp thoại quyền hệ thống trên Android 13+ và iOS.",
+    "Khi cần nhắc, dịch vụ tương ứng gọi một hàm Send…(delayAsSeconds); tất cả đổ về SendNotification(localNotificationSo, delayAsSeconds).",
+    "SendNotification trước tiên gọi Cancel(id) để huỷ thông báo cũ cùng Id.",
+    "Sau đó kiểm tra NotificationModel.IsNotificationOn — nếu tắt thì thoát sớm, không lên lịch gì.",
+    "Còn bật thì dựng GameNotification với Title/Body/Id lấy từ LocalNotificationSo, thay 'NEWLINE' bằng Environment.NewLine.",
+    "DeliveryTime được đặt bằng DateTime.Now cộng delayAsSeconds rồi đăng ký qua AndroidNotificationCenter hoặc NotificationCenter.",
+    "InventoryService giữ NotificationService trong constructor: mạng bắt đầu hồi thì SendLifeNotification(delayAsSeconds), người chơi tiêu mạng thì CancelLifeNotification().",
+    "DailyService.ScheduleDailyNotification() lấy TimeProvider.Now, cộng 1 ngày rồi đặt giờ 10, trừ thời điểm hiện tại để ra delayAsSeconds.",
+    "TryRescheduleDailyNotification(dateTime) đặt lại khi mốc đổi; CancelDailyNotification() khi người chơi đã chơi daily.",
+    "Các giải gửi thông báo với delay bằng thời gian còn lại: Magic Streak, Weekly Tournament, Jetpack Race.",
+    "Sky Jump chọn một trong hai mẫu tuỳ người chơi vừa thắng hay vừa thua, cộng biến thể riêng cho bản có stage.",
+    "Welcome Back gửi khi người chơi vắng mặt và remote config IsWelcomeBackEnabled đang bật.",
+    "Wheel of Fortune gửi SendWheelOfFortuneSpinReminderNotification(amount, delayAsSeconds) và huỷ khi người chơi đã quay.",
+    "Gạt toggle trong Settings gọi OnNotificationPreferenceChanged(isOn), ghi lại lựa chọn và huỷ các thông báo đang hẹn khi tắt."
+  ],
+  "reward_tables": [
+    {
+      "title": "10 MẪU THÔNG BÁO CỤC BỘ (LocalNotificationSo)",
+      "columns": [
+        "Asset",
+        "Id",
+        "Tiêu đề và nội dung"
+      ],
+      "rows": [
+        [
+          "LivesNotificationSo",
+          "127",
+          "\"Magic Sort!\" / \"Your lives are full! ❤️❤️❤️ (xuống dòng) Enjoy Magic Sort now! ✨\""
+        ],
+        [
+          "Ret1NotificationSo",
+          "5285",
+          "\"Unlock the hardest levels! 🧪✨\" / \"Dive back into Magic Sort now! 🪄\""
+        ],
+        [
+          "StreakTournamentEndNotificationSo",
+          "122",
+          "\"Magic Streak Tournament Ended! 🏆\" / \"Check your final ranking and rewards now! 🥇\""
+        ],
+        [
+          "WeeklyTournamentEndNotificationSo",
+          "1124",
+          "\"Weekly Tournament Ended!\" / \"Check your final ranking and rewards now!\""
+        ],
+        [
+          "JetPackRaceEndNotificationSo",
+          "5435",
+          "\"Jetpack Race Ended! 🚀\" / \"Don't miss out, start a new one to claim awesome rewards!\""
+        ],
+        [
+          "SkyJumpStartedAfterWinNoficationSo",
+          "8924",
+          "\"☁️ Sky Jump is available! ☁️\" / \"Don't miss your chance to get amazing rewards! 🎁\""
+        ],
+        [
+          "SkyJumpStartedAfterLoseNoficationSo",
+          "8874",
+          "\"☁️ Sky Jump is available! ☁️\" / \"Don't miss your chance to get amazing rewards!️ 🎁\""
+        ],
+        [
+          "DailyStartedNotificationSo",
+          "9637",
+          "\"Daily Challange!\" / \"Every day is a fresh start—tackle today's challenge and make it count! 🚀\""
+        ],
+        [
+          "WelcomeBackNotificationSo",
+          "9525",
+          "\"We have a gifts for you! 🎁\" / \"Open the app now to claim your surprises! ✨\""
+        ],
+        [
+          "WheelOfFortuneSpinNotificationSo",
+          "178178",
+          "\"Wheel of Fortune Started!\" / \"Beat 10 more levels to spin the wheel!\""
+        ]
+      ]
+    },
+    {
+      "title": "CẶP SEND / CANCEL THEO TỪNG LOẠI",
+      "columns": [
+        "Loại",
+        "Hàm gửi",
+        "Hàm huỷ"
+      ],
+      "rows": [
+        [
+          "Mạng đầy",
+          "SendLifeNotification(delayAsSeconds)",
+          "CancelLifeNotification()"
+        ],
+        [
+          "Giữ chân ngày đầu (D1)",
+          "SendD1RetNotification()",
+          "(không có)"
+        ],
+        [
+          "Thử thách hằng ngày",
+          "SendDailyStartedNotification(delayAsSeconds)",
+          "CancelDailyNotification()"
+        ],
+        [
+          "Giải Magic Streak",
+          "SendStreakTournamentEndNotification(delayAsSeconds)",
+          "CancelStreakTournamentNotification()"
+        ],
+        [
+          "Giải tuần",
+          "SendWeeklyTournamentEndNotification(delayAsSeconds)",
+          "(không có trong client)"
+        ],
+        [
+          "Jetpack Race",
+          "SendJetpackRaceEndNotification(delayAsSeconds)",
+          "CancelJetpackRaceNotification()"
+        ],
+        [
+          "Sky Jump sau khi thắng",
+          "SendSkyJumpStartedAfterWinNotification(delayAsSeconds)",
+          "CancelSkyJumpStartedAfterWinNotification()"
+        ],
+        [
+          "Sky Jump sau khi thua",
+          "SendSkyJumpStartedAfterLoseNotification(delayAsSeconds)",
+          "CancelSkyJumpStartedAfterLoseNotification()"
+        ],
+        [
+          "Sky Jump có stage, sau khi thua",
+          "SendSkyJumpWithStageStartedAfterLoseNotification(delayAsSeconds)",
+          "CancelSkyJumpWithStageStartedAfterLoseNotification()"
+        ],
+        [
+          "Welcome Back",
+          "SendWelcomeBackNotification(delayAsSeconds)",
+          "(không có)"
+        ],
+        [
+          "Wheel of Fortune",
+          "SendWheelOfFortuneSpinReminderNotification(amount, delayAsSeconds)",
+          "CancelWheelOfFortuneSpinReminderNotification()"
+        ]
+      ]
+    },
+    {
+      "title": "CẤU HÌNH VÀ HẰNG SỐ",
+      "columns": [
+        "Khoá",
+        "Giá trị",
+        "Ý nghĩa"
+      ],
+      "rows": [
+        [
+          "Lịch daily notification",
+          "AddDays(1.0) + AddHours(10.0)",
+          "Thông báo daily hẹn vào 10 giờ sáng ngày hôm sau"
+        ],
+        [
+          "Chuỗi xuống dòng trong Message",
+          "\"NEWLINE\" → Environment.NewLine",
+          "Cách viết xuống dòng trong nội dung asset"
+        ],
+        [
+          "NotificationConfig.IsNotificationOn",
+          "ScriptableObject",
+          "Trạng thái thông báo mặc định cho người chơi mới"
+        ],
+        [
+          "NotificationModel.IsNotificationOn",
+          "lưu cục bộ",
+          "Lựa chọn bật/tắt của người chơi"
+        ],
+        [
+          "LocalNotificationSo",
+          "Id (int), Title (string), Message (string)",
+          "Khuôn mẫu một thông báo cục bộ"
+        ],
+        [
+          "IsWelcomeBackEnabled",
+          "(server)",
+          "Bật tính năng Welcome Back, kéo theo thông báo tương ứng"
+        ]
+      ]
+    }
+  ],
+  "key_numbers": [
+    {
+      "label": "Số mẫu thông báo",
+      "value": "10 LocalNotificationSo",
+      "source": "NotificationService..ctor; Assets/MonoBehaviour/*NotificationSo.asset"
+    },
+    {
+      "label": "Id thông báo mạng đầy",
+      "value": "127",
+      "source": "LivesNotificationSo.asset"
+    },
+    {
+      "label": "Id thông báo giữ chân D1",
+      "value": "5285",
+      "source": "Ret1NotificationSo.asset"
+    },
+    {
+      "label": "Id giải Magic Streak",
+      "value": "122",
+      "source": "StreakTournamentEndNotificationSo.asset"
+    },
+    {
+      "label": "Id giải tuần",
+      "value": "1124",
+      "source": "WeeklyTournamentEndNotificationSo.asset"
+    },
+    {
+      "label": "Id Jetpack Race",
+      "value": "5435",
+      "source": "JetPackRaceEndNotificationSo.asset"
+    },
+    {
+      "label": "Id Sky Jump sau khi thắng",
+      "value": "8924",
+      "source": "SkyJumpStartedAfterWinNoficationSo.asset"
+    },
+    {
+      "label": "Id Sky Jump sau khi thua",
+      "value": "8874",
+      "source": "SkyJumpStartedAfterLoseNoficationSo.asset"
+    },
+    {
+      "label": "Id thử thách hằng ngày",
+      "value": "9637",
+      "source": "DailyStartedNotificationSo.asset"
+    },
+    {
+      "label": "Id Welcome Back",
+      "value": "9525",
+      "source": "WelcomeBackNotificationSo.asset"
+    },
+    {
+      "label": "Id Wheel of Fortune",
+      "value": "178178",
+      "source": "WheelOfFortuneSpinNotificationSo.asset"
+    },
+    {
+      "label": "Giờ gửi thông báo daily",
+      "value": "10 giờ sáng ngày hôm sau",
+      "source": "DailyService.ScheduleDailyNotification"
+    },
+    {
+      "label": "Cách tính thời điểm gửi",
+      "value": "DateTime.Now + delayAsSeconds",
+      "source": "NotificationService.SendNotification"
+    },
+    {
+      "label": "Đánh dấu xuống dòng",
+      "value": "\"NEWLINE\"",
+      "source": "NotificationService.SendNotification"
+    },
+    {
+      "label": "Số loại thông báo có hàm Cancel riêng",
+      "value": "8 trong 11 hàm gửi",
+      "source": "NotificationService"
+    },
+    {
+      "label": "Loại nhận thêm tham số số lượng",
+      "value": "1 (Wheel of Fortune, tham số amount)",
+      "source": "NotificationService.SendWheelOfFortuneSpinReminderNotification"
+    },
+    {
+      "label": "Khoá lưu trạng thái",
+      "value": "NotificationModel qua SaveLoad<NotificationModel>",
+      "source": "NotificationSaveLoad"
+    },
+    {
+      "label": "Nền tảng đăng ký thông báo",
+      "value": "AndroidNotificationCenter / NotificationCenter qua GameNotificationsPlatform",
+      "source": "NotificationSamples.GameNotificationsPlatform"
+    },
+    {
+      "label": "Số ngôn ngữ của nội dung thông báo",
+      "value": "1 (chỉ tiếng Anh, không qua localization)",
+      "source": "Assets/MonoBehaviour/*NotificationSo.asset"
+    },
+    {
+      "label": "Push notification từ server",
+      "value": "Không có trong bản dựng này (suy luận)",
+      "source": "gaps của GDD Notifications"
+    }
+  ],
+  "config_highlights": [
+    {
+      "key": "LivesNotificationSo.asset",
+      "value": "Id 127; \"Magic Sort!\" / \"Your lives are full! ❤️❤️❤️ NEWLINE Enjoy Magic Sort now! ✨\"",
+      "meaning": "Nhắc mạng đã đầy"
+    },
+    {
+      "key": "Ret1NotificationSo.asset",
+      "value": "Id 5285; \"Unlock the hardest levels! 🧪✨\" / \"Dive back into Magic Sort now! 🪄\"",
+      "meaning": "Nhắc giữ chân ngày đầu (D1)"
+    },
+    {
+      "key": "StreakTournamentEndNotificationSo.asset",
+      "value": "Id 122; \"Magic Streak Tournament Ended! 🏆\" / \"Check your final ranking and rewards now! 🥇\"",
+      "meaning": "Giải Magic Streak kết thúc"
+    },
+    {
+      "key": "WeeklyTournamentEndNotificationSo.asset",
+      "value": "Id 1124; \"Weekly Tournament Ended!\" / \"Check your final ranking and rewards now!\"",
+      "meaning": "Giải tuần kết thúc"
+    },
+    {
+      "key": "JetPackRaceEndNotificationSo.asset",
+      "value": "Id 5435; \"Jetpack Race Ended! 🚀\" / \"Don't miss out, start a new one to claim awesome rewards!\"",
+      "meaning": "Jetpack Race kết thúc"
+    },
+    {
+      "key": "SkyJumpStartedAfterWinNoficationSo.asset",
+      "value": "Id 8924; \"☁️ Sky Jump is available! ☁️\"",
+      "meaning": "Sky Jump mở lại sau khi thắng"
+    },
+    {
+      "key": "SkyJumpStartedAfterLoseNoficationSo.asset",
+      "value": "Id 8874; \"☁️ Sky Jump is available! ☁️\"",
+      "meaning": "Sky Jump mở lại sau khi thua"
+    },
+    {
+      "key": "DailyStartedNotificationSo.asset",
+      "value": "Id 9637; \"Daily Challange!\" / \"Every day is a fresh start—tackle today's challenge and make it count! 🚀\"",
+      "meaning": "Thử thách hằng ngày mới"
+    },
+    {
+      "key": "WelcomeBackNotificationSo.asset",
+      "value": "Id 9525; \"We have a gifts for you! 🎁\" / \"Open the app now to claim your surprises! ✨\"",
+      "meaning": "Quà chào mừng quay lại"
+    },
+    {
+      "key": "WheelOfFortuneSpinNotificationSo.asset",
+      "value": "Id 178178; \"Wheel of Fortune Started!\" / \"Beat 10 more levels to spin the wheel!\"",
+      "meaning": "Nhắc quay vòng quay may mắn"
+    },
+    {
+      "key": "Lịch daily notification",
+      "value": "AddDays(1.0) + AddHours(10.0)",
+      "meaning": "Thông báo daily hẹn vào 10 giờ sáng ngày hôm sau"
+    },
+    {
+      "key": "Chuỗi xuống dòng trong Message",
+      "value": "\"NEWLINE\" → Environment.NewLine",
+      "meaning": "Cách viết xuống dòng trong nội dung asset"
+    },
+    {
+      "key": "NotificationConfig.IsNotificationOn",
+      "value": "ScriptableObject",
+      "meaning": "Trạng thái thông báo mặc định cho người chơi mới"
+    },
+    {
+      "key": "NotificationModel.IsNotificationOn",
+      "value": "lưu cục bộ qua NotificationSaveLoad",
+      "meaning": "Lựa chọn bật/tắt của người chơi"
+    },
+    {
+      "key": "LocalNotificationSo",
+      "value": "Id (int), Title (string), Message (string)",
+      "meaning": "Khuôn mẫu một thông báo cục bộ"
+    },
+    {
+      "key": "IsWelcomeBackEnabled",
+      "value": "(server)",
+      "meaning": "Bật tính năng Welcome Back, kéo theo thông báo tương ứng"
+    },
+    {
+      "key": "NotificationService.RequestPermission",
+      "value": "Task",
+      "meaning": "Xin quyền hệ thống trên Android 13+ và iOS"
+    },
+    {
+      "key": "NotificationService.OnNotificationPreferenceChanged",
+      "value": "isOn (bool)",
+      "meaning": "Ghi lựa chọn và huỷ thông báo đang hẹn khi tắt"
+    },
+    {
+      "key": "NotificationService.GetNotificationPreference",
+      "value": "bool",
+      "meaning": "Cho UI đọc lại trạng thái toggle"
+    },
+    {
+      "key": "NotificationService.Cancel",
+      "value": "Cancel(id)",
+      "meaning": "Huỷ đúng một Id qua GameNotificationsPlatform.CancelNotification"
+    },
+    {
+      "key": "GameNotificationsPlatform.CancelAllScheduledNotifications",
+      "value": "-",
+      "meaning": "Dọn sạch mọi thông báo đang hẹn"
+    },
+    {
+      "key": "GameNotificationsPlatform.DismissAllDisplayedNotifications",
+      "value": "-",
+      "meaning": "Xoá mọi thông báo đang hiển thị ở khay"
+    },
+    {
+      "key": "SettingsController._notificationToggle",
+      "value": "RadioToggle",
+      "meaning": "Toggle bật/tắt thông báo trong Settings ('SettingsPopupNotifications')"
+    },
+    {
+      "key": "NotificationService (IRestartableService)",
+      "value": "Dispose() + dựng lại",
+      "meaning": "Không rò rỉ handler khi đăng nhập lại hoặc đổi tài khoản"
+    }
+  ],
+  "tips": [
+    "Kiểm tra IsNotificationOn tại một điểm duy nhất trong SendNotification là cách chắc chắn để mọi loại thông báo đều tôn trọng lựa chọn của người chơi.",
+    "Huỷ theo Id trước khi tạo mới tránh được lỗi kinh điển của local notification: chồng nhiều thông báo cùng loại.",
+    "Tách Id cho Sky Jump thắng và thua cho phép đo hiệu quả nhắc nhở theo cảm xúc của người chơi.",
+    "Đặt thông báo daily vào 10 giờ sáng là mốc phổ biến để bắt nhịp thói quen buổi sáng.",
+    "Nội dung viết cứng bằng tiếng Anh trong asset là điểm có thể cải thiện — 10 ngôn ngữ còn lại không được phục vụ."
+  ],
+  "categories": [
+    "Live-ops",
+    "Meta",
+    "Tiến trình"
+  ]
+}

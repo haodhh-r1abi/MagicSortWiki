@@ -1,0 +1,880 @@
+{
+  "id": "Settings",
+  "name": "Cài đặt (Settings)",
+  "category": "Meta",
+  "managers": [
+    "Modules.Contexts.Home.UI.Settings.SettingsController",
+    "Modules.Contexts.Application.Sound.Scripts.SoundService",
+    "Modules.Contexts.Application.Vibration.Scripts.VibrationService",
+    "Modules.Infrastructure.Localization.LocalizationService",
+    "Modules.Contexts.Home.RateUs.Scripts.RateUsService"
+  ],
+  "summary": "Code0.0.3063 có PageType.Settings và SettingsPopUp. UI0.0.3129 ngày15/11 mở Settings qua bánh răng, không phải tab dưới. Các module tùy chọn mô tả trong code gồm: bật/tắt hiệu ứng âm thanh, nhạc nền, rung và thông báo đẩy; liên kết/ngắt Facebook và Apple; khôi phục giao dịch; xem Điều khoản và Chính sách bảo mật; liên hệ hỗ trợ; và xoá tài khoản. Âm thanh chia hai kênh riêng (SoundModel.IsSoundEffectOn và IsMusicOn) qua AudioMixer với hơn 110 SoundType và 4 MusicType. Rung dùng hệ phản hồi xúc giác riêng cho từng nền tảng: Android ánh xạ sang HapticFeedbackConstants (AndroidHapticFeedback), iOS dùng IosFeedbackConfig, cả hai mô tả bằng ScriptableObject 'Vibration' với mảng Delays và Priority. Ngôn ngữ tự nhận theo mã ngôn ngữ máy trong 11 ngôn ngữ được hỗ trợ. Ngoài ra module chứa luồng đồng ý quảng cáo (Google UMP + ATT/IDFA) và luồng xin đánh giá cửa hàng theo danh sách level cấu hình từ xa.",
+  "unlock": "Có ngay từ đầu. Bộ toggle hiển thị thay đổi theo thiết bị và cấu hình: SettingsPopupFeedbackView có 4 biến thể (ShowSoundToggle, ShowSoundAndVibrationToggles, ShowSoundAndMusicToggles, ShowSoundAndVibrationAndMusicToggles) — máy không hỗ trợ rung (VibrationService.IsVibrationSupported() = false) thì ẩn toggle rung; nhạc nền bật theo remote config 'IsMusicEnabled'; giá trị rung mặc định theo 'IsVibrationOn'. Nút Restore Purchase chỉ hiện khi 'RestorePurchaseEnabled'.",
+  "entry_points": [
+    "Trang Settings trong SwipeMenu (PageType.Settings = 5)",
+    "Nút bánh răng mở SettingsPopUp (SettingsButton)",
+    "Popup điều khoản khi mở game lần đầu (TermsOfUseController.Show)",
+    "Form đồng ý quảng cáo Google UMP khi khởi động (GoogleUmpService.InitializeGoogleMobileAdsConsent)",
+    "Popup đánh giá tự bật ở các level cấu hình (RateUsService.TryShowRateUsPopup)"
+  ],
+  "flow": "SettingsController.Awake() gắn ba toggle: _soundToggle (SimpleToggle), _vibrationToggle (SimpleToggle) và _notificationToggle (RadioToggle). OnSoundToggleChanged(toggle) và OnMusicToggleChanged(toggle) gọi SoundService, làm SoundModel.IsSoundEffectOn / IsMusicOn thay đổi và lưu qua ISaveLoad<SoundModel>; SoundService.OnSoundEffectPreferenceChanged/OnMusicPreferenceChanged chỉnh AudioMixer tương ứng và StopMusic()/PlayMusic(MusicType) khi cần. OnVibrationToggleChanged(toggle) đặt VibrationModel.IsVibrationOn qua VibrationService, MarkDataForLateUpdate() rồi LateUpdate() lưu. OnNotificationToggleChanged(toggle) chuyển tiếp sang NotificationService (xem feature Notifications). Khi gameplay phát tiếng: PlaySoundEffect(SoundType), PlayOneShotSFX(SoundType), PlayLoopingSoundEffect/StopLoopingSoundEffect cho tiếng lặp (BoilingLoop, CoinsLoop) và hai hàm ngẫu nhiên hoá — PlayRandomSoundEffect(pourAmount) chọn trong pourAmountToSoundTypes (nhóm PourShort/PourMid/PourLong 1–8) và PlayRandomIceSoundEffect() chọn trong _iceSounds (Ice1–Ice4) — để rót nước và đập băng không nghe lặp. Rung: OnPlayVibration(VibrationType) tra VibrationConfigs.GetVibration(vibrationType) lấy ScriptableObject Vibration, rồi FeedbackRunner chạy Feedback với FeedbackConfig{Delays[], Priority}; Android dùng AndroidFeedbackConfig.Feedbacks (mảng AndroidHapticFeedback), iOS dùng IosFeedbackConfig. Ngôn ngữ: LocalizationService.Initialize() đọc mã ngôn ngữ hệ thống, GetLanguage(languageCode) ánh xạ sang enum Language, GetCultureCode(language) đặt CultureInfo cho định dạng số/ngày; I2 Localization (LocalizationManager, I2Languages.asset) cung cấp chuỗi. Đánh giá: RateUsService.ShouldShow() so level hiện tại với RateUsConfig.RateUsLevels và PlayerPrefs 'FirstShowRateUsPopup'; TryShowRateUsPopup() dùng Google Play ReviewManager (in-app review), thất bại thì đặt _isRateUsPopupFailedToOpen. Đồng ý quảng cáo: GoogleUmpService.InitializeGoogleMobileAdsConsent(adService, idfaService) → GatherConsent() → LoadAndShowConsentForm(); nếu quá _cancelInitializationTimeout = 2.5 giây thì huỷ để không chặn khởi động; IdfaService.RequestATTAndCacheIdfa() xin quyền theo dõi trên iOS và lấy Google Ad Id trên Android.",
+  "use_cases": [
+    {
+      "id": "UC-01",
+      "title": "Bật/tắt hiệu ứng âm thanh",
+      "actor": "Player",
+      "trigger": "Gạt toggle Sound (localize 'Sound')",
+      "precondition": "-",
+      "steps": [
+        "SettingsController.OnSoundToggleChanged(toggle)",
+        "SoundService.OnSoundEffectPreferenceChanged(isOn) chỉnh nhóm SFX trên AudioMixer",
+        "SoundModel.IsSoundEffectOn được lưu qua ISaveLoad<SoundModel>",
+        "GetSoundEffectPreference() dùng cho các nơi khác truy vấn"
+      ],
+      "result": "Toàn bộ hiệu ứng tắt/bật ngay lập tức",
+      "rules": "Nhạc nền là kênh riêng, không bị toggle này ảnh hưởng",
+      "evidence": "SettingsController.OnSoundToggleChanged; SoundService.OnSoundEffectPreferenceChanged; SoundService.GetSoundEffectPreference; SoundModel.IsSoundEffectOn"
+    },
+    {
+      "id": "UC-02",
+      "title": "Bật/tắt nhạc nền",
+      "actor": "Player",
+      "trigger": "Gạt toggle Music (localize 'Music')",
+      "precondition": "Remote config 'IsMusicEnabled' bật",
+      "steps": [
+        "SettingsController.OnMusicToggleChanged(toggle)",
+        "SoundService.OnMusicPreferenceChanged(isOn)",
+        "Bật → PlayMusic(MusicType.Home hoặc Gameplay) qua _musicSource; tắt → StopMusic()",
+        "SoundModel.IsMusicOn lưu lại"
+      ],
+      "result": "Nhạc nền theo bối cảnh (Home/Gameplay/ChampionsLeaguePreJoin/MiniGameTrident)",
+      "rules": "MusicType: Home=1, Gameplay=2, ChampionsLeaguePreJoin=3, MiniGameTrident=4; dữ liệu trong SoundConfig.MusicDataList",
+      "evidence": "SettingsController.OnMusicToggleChanged; SoundService.OnMusicPreferenceChanged; SoundService.PlayMusic; SoundService.GetMusicData; MusicType"
+    },
+    {
+      "id": "UC-03",
+      "title": "Phát hiệu ứng rót nước không lặp lại",
+      "actor": "System",
+      "trigger": "Người chơi rót nước giữa hai chai",
+      "precondition": "Sound bật",
+      "steps": [
+        "SoundService.PlayRandomSoundEffect(pourAmount)",
+        "GetRandomSoundForPouring(pourAmount) tra pourAmountToSoundTypes: nhóm PourShort1–8 / PourMid1–8 / PourLong1–8 theo lượng nước",
+        "PlaySoundEffect(soundType) lấy SoundData từ SoundConfig.SoundDataList và dùng một AudioSource trong _sfxAudioSources"
+      ],
+      "result": "Âm thanh rót phong phú, khớp lượng nước rót",
+      "rules": "Tương tự PlayRandomIceSoundEffect() chọn ngẫu nhiên trong _iceSounds (Ice1–Ice4)",
+      "evidence": "SoundService.PlayRandomSoundEffect; SoundService.GetRandomSoundForPouring; SoundService.PlayRandomIceSoundEffect; SoundType.PourShort1"
+    },
+    {
+      "id": "UC-04",
+      "title": "Âm thanh lặp và dừng đúng lúc",
+      "actor": "System",
+      "trigger": "Vạc sôi hoặc coin bay liên tục",
+      "precondition": "-",
+      "steps": [
+        "PlayLoopingSoundEffect(SoundType.BoilingLoop / CoinsLoop) dùng _loopingAudioSources",
+        "StopLoopingSoundEffect(soundType) khi hiệu ứng kết thúc",
+        "StopAllSounds() khi chuyển cảnh hoặc mở popup toàn màn hình"
+      ],
+      "result": "Không còn tiếng lặp treo lại sau khi hiệu ứng kết thúc",
+      "rules": "PlayOneShotSFX dùng _oneShotAudioSource riêng để không cắt tiếng đang phát",
+      "evidence": "SoundService.PlayLoopingSoundEffect; SoundService.StopLoopingSoundEffect; SoundService.StopAllSounds; SoundService.PlayOneShotSFX"
+    },
+    {
+      "id": "UC-05",
+      "title": "Bật/tắt rung",
+      "actor": "Player",
+      "trigger": "Gạt toggle Vibration",
+      "precondition": "VibrationService.IsVibrationSupported() = true",
+      "steps": [
+        "SettingsController.OnVibrationToggleChanged(toggle)",
+        "VibrationService.OnVibrationPreferenceChanged(isOn) đặt VibrationModel.IsVibrationOn",
+        "MarkDataForLateUpdate() → LateUpdate() lưu qua ISaveLoad<VibrationModel>",
+        "GetVibrationPreference() dùng cho mọi lời gọi rung"
+      ],
+      "result": "Rung tắt/bật toàn cục",
+      "rules": "Máy không hỗ trợ rung thì SettingsPopupFeedbackView ẩn toggle (ShowSoundToggle / ShowSoundAndMusicToggles). Giá trị khởi tạo cho máy mới theo InitializeForNewDownload() và remote config 'IsVibrationOn'",
+      "evidence": "SettingsController.OnVibrationToggleChanged; VibrationService.OnVibrationPreferenceChanged; VibrationService.IsVibrationSupported; VibrationService.InitializeForNewDownload; SettingsPopupFeedbackView"
+    },
+    {
+      "id": "UC-06",
+      "title": "Phát rung theo sự kiện gameplay",
+      "actor": "System",
+      "trigger": "Chọn chai, rót, thắng/thua level, phá vật cản...",
+      "precondition": "Rung bật",
+      "steps": [
+        "Gọi OnPlayVibration(VibrationType)",
+        "VibrationConfigs.GetVibration(vibrationType) trả ScriptableObject Vibration tương ứng",
+        "FeedbackRunner khởi tạo Feedback.Initialize(feedbackConfig) với ElapsedDuration/TotalDuration/IsPlayedCache",
+        "Android: AndroidFeedbackConfig{Delays[], Priority, Feedbacks[] (AndroidHapticFeedback)}; iOS: IosFeedbackConfig{Delays[], Priority}"
+      ],
+      "result": "Rung ngắn/dài theo từng hành động, tôn trọng ưu tiên (Priority) khi nhiều rung chồng nhau",
+      "rules": "VibrationType có 17 giá trị: None=0, ButtonClick=1, BottleSelect=2, BottleFillStart=3, BottleFillEnd=4, BottleDeselect=5, LevelWin=6, LevelLose=7, LevelStart=8, RewardSitToPosition=9, CauldronSmoke=10, CauldronBottleWaterFallComplete=11, CurtainReveal=12, BlockerBreak=13, BlockerGenerator=14, BlockerGeneratorExplosion=15, DrillStep=16. Ví dụ asset buttonclick.asset: Delays=[0], Priority=0, Feedbacks=[1] tức AndroidHapticFeedback.VIRTUAL_KEY",
+      "evidence": "VibrationService.OnPlayVibration; VibrationConfigs.GetVibration; FeedbackRunner; Feedback.Initialize; AndroidFeedbackConfig; Assets/MonoBehaviour/buttonclick.asset"
+    },
+    {
+      "id": "UC-07",
+      "title": "Bật/tắt thông báo đẩy từ Settings",
+      "actor": "Player",
+      "trigger": "Gạt toggle Notifications (localize 'SettingsPopupNotifications')",
+      "precondition": "-",
+      "steps": [
+        "SettingsController.OnNotificationToggleChanged(toggle) (RadioToggle)",
+        "NotificationService bật/tắt lịch thông báo cục bộ"
+      ],
+      "result": "Người chơi kiểm soát nhắc nhở của game",
+      "rules": "Chi tiết lịch xem feature Notifications",
+      "evidence": "SettingsController.OnNotificationToggleChanged; NotificationService"
+    },
+    {
+      "id": "UC-08",
+      "title": "Chọn ngôn ngữ theo máy",
+      "actor": "System",
+      "trigger": "Khởi động app",
+      "precondition": "-",
+      "steps": [
+        "LocalizationService.Initialize() đọc mã ngôn ngữ hệ thống",
+        "GetLanguage(languageCode) ánh xạ sang enum Language",
+        "GetCultureCode(language) đặt CultureInfo cho định dạng số/ngày",
+        "LocalizationManager (I2) nạp chuỗi từ I2Languages.asset; LocalizationManager.CurrentRegion phân biệt vùng"
+      ],
+      "result": "Toàn bộ UI hiển thị đúng ngôn ngữ",
+      "rules": "11 ngôn ngữ: English=0, Turkish=1, Dutch=2, German=3, French=4, Italian=5, Portuguese=6, Spanish=7, Russian=8, Japanese=9, Korean=10 (khớp đúng 11 cột trong appendix/localization.tsv). Không thấy UI cho người chơi tự đổi ngôn ngữ trong build này",
+      "evidence": "LocalizationService.Initialize; LocalizationService.GetLanguage; LocalizationService.GetCultureCode; Language; Assets/Resources/I2Languages.asset"
+    },
+    {
+      "id": "UC-09",
+      "title": "Xem Điều khoản và Chính sách bảo mật",
+      "actor": "Player",
+      "trigger": "Mở game lần đầu hoặc bấm Terms/Privacy trong Settings",
+      "precondition": "-",
+      "steps": [
+        "TermsOfUseController.Show() hiển thị popup với _termsOfUseButton, _privacyPolicyButton, _privacyPolicyButton2 và _confirmButton",
+        "Bấm mở trang web tương ứng",
+        "Bấm xác nhận → CompleteShowTask() hoàn tất _showTaskCompletionSource",
+        "GetCloseTask() cho luồng khởi động await tới khi người chơi đóng"
+      ],
+      "result": "Người chơi chấp nhận điều khoản trước khi chơi",
+      "rules": "Trong Settings có TermsButton và PrivacyButton (localize 'Terms', 'Privacy')",
+      "evidence": "TermsOfUseController.Show; TermsOfUseController.CompleteShowTask; TermsOfUseController.GetCloseTask; TermsButton; PrivacyButton"
+    },
+    {
+      "id": "UC-10",
+      "title": "Thu thập đồng ý quảng cáo (Google UMP)",
+      "actor": "System",
+      "trigger": "Khởi động app",
+      "precondition": "-",
+      "steps": [
+        "GoogleUmpService.InitializeGoogleMobileAdsConsent(adService, idfaService)",
+        "GatherConsent() yêu cầu cập nhật thông tin đồng ý; lỗi → _failedInitialization",
+        "LoadAndShowConsentForm() hiện form nếu cần, đặt _consentGathered",
+        "Update() đếm _cancelInitializationTimer; quá _cancelInitializationTimeout = 2.5 giây thì _cancelInitialization = true để không chặn khởi động",
+        "CanRequestAds / ConsentStatus quyết định có tải quảng cáo hay không; GetConsentInfoAsStr() cho log"
+      ],
+      "result": "Tuân thủ GDPR/UMP mà không kéo dài thời gian vào game",
+      "rules": "_canRequestAlreadyAfterUpdate cho phép chạy quảng cáo ngay khi trạng thái đã hợp lệ sau update",
+      "evidence": "GoogleUmpService.InitializeGoogleMobileAdsConsent; GoogleUmpService.GatherConsent; GoogleUmpService.LoadAndShowConsentForm; GoogleUmpService._cancelInitializationTimeout; GoogleUmpService.get_CanRequestAds"
+    },
+    {
+      "id": "UC-11",
+      "title": "Xin quyền theo dõi và lấy IDFA / Google Ad Id",
+      "actor": "System",
+      "trigger": "Sau khi UMP hoàn tất",
+      "precondition": "-",
+      "steps": [
+        "IdfaService.RequestATTAndCacheIdfa() hiện hộp thoại ATT trên iOS",
+        "Android: _requestedForGoogleAdId và OnGoogleAdIdReceived(googleAdId)",
+        "Kết quả cache vào _cachedIdfa, IsIdfaCached() = true",
+        "GetIdfa() trả về cho các SDK quảng cáo/attribution"
+      ],
+      "result": "Quảng cáo và attribution hoạt động đúng chính sách nền tảng",
+      "rules": "_responseReceived (TaskCompletionSource) cho phép await kết quả",
+      "evidence": "IdfaService.RequestATTAndCacheIdfa; IdfaService.OnGoogleAdIdReceived; IdfaService.GetIdfa; IdfaService.IsIdfaCached"
+    },
+    {
+      "id": "UC-12",
+      "title": "Xin đánh giá trên cửa hàng",
+      "actor": "System",
+      "trigger": "Đạt một level trong danh sách cấu hình",
+      "precondition": "RateUsService.ShouldShow() = true",
+      "steps": [
+        "ShouldShow() so PlayerService.GetLevel() với RateUsConfig.RateUsLevels (remote config 'RateUsConfig')",
+        "HasPlayerShownRateUs() đọc PlayerPrefs 'FirstShowRateUsPopup' (0 = chưa hiện, 1 = đã hiện)",
+        "TryShowRateUsPopup() dùng Google Play ReviewManager mở in-app review",
+        "Thất bại → _isRateUsPopupFailedToOpen = true (có MockPass() cho môi trường thử)",
+        "SetRateUsShown() ghi lại đã hiện"
+      ],
+      "result": "Xin đánh giá đúng lúc người chơi đang vui (sau khi qua level mốc)",
+      "rules": "playerShownRateUsPopup = 1, playerNotShownRateUsPopup = 0. DeleteData() (IDeletable) xoá cờ khi xoá tài khoản",
+      "evidence": "RateUsService.ShouldShow; RateUsService.TryShowRateUsPopup; RateUsService.HasPlayerShownRateUs; RateUsService.SetRateUsShown; RateUsService.firstShowKey; RateUsConfig.RateUsLevels"
+    },
+    {
+      "id": "UC-13",
+      "title": "Liên kết tài khoản từ Settings",
+      "actor": "Player",
+      "trigger": "Bấm nút Facebook/Apple trong SettingsPopUp",
+      "precondition": "-",
+      "steps": [
+        "AppleButton / nút Facebook gọi AppleLoginService.SignIn() hoặc FacebookLoginService.SignIn()",
+        "Text mô tả 'SettingsPopupFacebookInfo' = \"Save Your Progress\"",
+        "Trạng thái hiển thị 'Connected' / 'Disconnected!'"
+      ],
+      "result": "Người chơi cứu tiến độ ngay trong Settings",
+      "rules": "Chi tiết luồng đăng nhập ở feature Account",
+      "evidence": "AppleButton; AppleLoginService.SignIn; FacebookLoginService.SignIn; SettingsPopUp"
+    },
+    {
+      "id": "UC-14",
+      "title": "Khôi phục giao dịch đã mua",
+      "actor": "Player",
+      "trigger": "Bấm 'Restore Purchase' (localize 'RestorePurchaseText')",
+      "precondition": "Remote config 'RestorePurchaseEnabled' bật",
+      "steps": [
+        "RestorePurchaseButton gọi luồng khôi phục của IAP",
+        "Các gói không quảng cáo/pass được cấp lại"
+      ],
+      "result": "Người chơi đổi máy vẫn giữ quyền lợi đã mua",
+      "rules": "Liên quan remote config 'IsAndroidIapVerificationEnabled' cho kiểm chứng biên lai",
+      "evidence": "RestorePurchaseButton; FirebaseRemoteConfigResolver (RestorePurchaseEnabled)"
+    },
+    {
+      "id": "UC-15",
+      "title": "Liên hệ hỗ trợ",
+      "actor": "Player",
+      "trigger": "Bấm Support (localize 'Support')",
+      "precondition": "-",
+      "steps": [
+        "SupportButton mở kênh hỗ trợ (web/email) kèm thông tin người chơi"
+      ],
+      "result": "Người chơi báo lỗi kèm ngữ cảnh",
+      "rules": "-",
+      "evidence": "SupportButton; SettingsPopUp"
+    },
+    {
+      "id": "UC-16",
+      "title": "Xoá tài khoản từ Settings",
+      "actor": "Player",
+      "trigger": "Bấm 'DeleteMyAccountText' (Delete My Account)",
+      "precondition": "AccountDeleteService.IsAccountDeleteEnabled()",
+      "steps": [
+        "DeleteAccountButton mở AccountDeletionInfoPopup",
+        "Luồng xác nhận và gọi API (xem feature Account)"
+      ],
+      "result": "Yêu cầu xoá tài khoản được tạo",
+      "rules": "-",
+      "evidence": "DeleteAccountButton; AccountDeleteService.CreateDeleteRequestAsync"
+    },
+    {
+      "id": "UC-17",
+      "title": "Bố cục toggle theo thiết bị",
+      "actor": "System",
+      "trigger": "Mở Settings",
+      "precondition": "-",
+      "steps": [
+        "SettingsPopupFeedbackView chọn một trong 4 hàm: ShowSoundToggle(), ShowSoundAndVibrationToggles(), ShowSoundAndMusicToggles(), ShowSoundAndVibrationAndMusicToggles()",
+        "SettingsController dùng _soundToggleMiddlePosition để căn giữa khi chỉ có một toggle"
+      ],
+      "result": "Không hiện tuỳ chọn mà thiết bị không hỗ trợ",
+      "rules": "Kết hợp IsVibrationSupported() và remote config 'IsMusicEnabled'",
+      "evidence": "SettingsPopupFeedbackView.ShowSoundAndVibrationAndMusicToggles; SettingsController._soundToggleMiddlePosition; VibrationService.IsVibrationSupported"
+    },
+    {
+      "id": "UC-18",
+      "title": "Tải/ghi cấu hình rung từ xa (công cụ nội bộ)",
+      "actor": "System",
+      "trigger": "Chỉnh cấu hình rung không cần build lại",
+      "precondition": "-",
+      "steps": [
+        "VibrationRemoteService.PutFile(fileName, serializedData) → PutFileResponse (endpoint putFileUrl trong BackendEnvironmentConfig)",
+        "VibrationRemoteService.GetFile(link) tải cấu hình về"
+      ],
+      "result": "Có thể tinh chỉnh cảm giác rung mà không phát hành bản mới",
+      "rules": "Trong BackendEnvironmentConfig.asset trường putFileUrl đang để trống ở môi trường test → nhánh này nhiều khả năng chỉ dùng nội bộ (suy luận)",
+      "evidence": "VibrationRemoteService.PutFile; VibrationRemoteService.GetFile; BackendEnvironmentConfig.asset (putFileUrl)"
+    }
+  ],
+  "configs": [
+    {
+      "source": "code enum",
+      "key": "MusicType",
+      "type": "enum int",
+      "value": "Home=1, Gameplay=2, ChampionsLeaguePreJoin=3, MiniGameTrident=4",
+      "meaning": "Các bản nhạc nền",
+      "where": "Modules.Contexts.Application.Sound.Scripts.MusicType"
+    },
+    {
+      "source": "code enum",
+      "key": "SoundType",
+      "type": "enum int",
+      "value": "111 giá trị (None=0 … MiniGameItemMove=110), gồm nhóm rót PourShort1–8 (32–36, 51–53), PourMid1–8 (37–41, 54–56), PourLong1–8 (42–46, 48–50) và Ice1–Ice4 (68–71)",
+      "meaning": "Toàn bộ hiệu ứng âm thanh của game",
+      "where": "Modules.Contexts.Application.Sound.Scripts.SoundType"
+    },
+    {
+      "source": "code enum",
+      "key": "VibrationType",
+      "type": "enum int",
+      "value": "None=0, ButtonClick=1, BottleSelect=2, BottleFillStart=3, BottleFillEnd=4, BottleDeselect=5, LevelWin=6, LevelLose=7, LevelStart=8, RewardSitToPosition=9, CauldronSmoke=10, CauldronBottleWaterFallComplete=11, CurtainReveal=12, BlockerBreak=13, BlockerGenerator=14, BlockerGeneratorExplosion=15, DrillStep=16",
+      "meaning": "Các loại rung theo sự kiện",
+      "where": "Modules.Contexts.Application.Vibration.Scripts.VibrationType"
+    },
+    {
+      "source": "code enum",
+      "key": "AndroidHapticFeedback",
+      "type": "enum int",
+      "value": "LONG_PRESS=0, VIRTUAL_KEY=1, FLAG_IGNORE_GLOBAL_SETTING=2, KEYBOARD_PRESS=3, CLOCK_TICK=4, CONTEXT_CLICK=6, KEYBOARD_RELEASE=7, VIRTUAL_KEY_RELEASE=8, TEXT_HANDLE_MOVE=9, GESTURE_START=12, GESTURE_END=13, CONFIRM=16, REJECT=17, TOGGLE_ON=21, TOGGLE_OFF=22, GESTURE_THRESHOLD_ACTIVATE=23, GESTURE_THRESHOLD_DEACTIVATE=24, DRAG_START=25, SEGMENT_TICK=26, SEGMENT_FREQUENT_TICK=27",
+      "meaning": "Ánh xạ sang HapticFeedbackConstants của Android",
+      "where": "AndroidHapticFeedback"
+    },
+    {
+      "source": "code enum",
+      "key": "Language",
+      "type": "enum int",
+      "value": "English=0, Turkish=1, Dutch=2, German=3, French=4, Italian=5, Portuguese=6, Spanish=7, Russian=8, Japanese=9, Korean=10",
+      "meaning": "11 ngôn ngữ hỗ trợ",
+      "where": "Modules.Infrastructure.Localization.Language"
+    },
+    {
+      "source": "asset",
+      "key": "SoundConfig.asset",
+      "type": "ScriptableObject",
+      "value": "SoundDataList (List<SoundData>), MusicDataList (List<MusicData>)",
+      "meaning": "Ánh xạ SoundType/MusicType sang AudioClip và tham số phát",
+      "where": "Assets/MonoBehaviour/SoundConfig.asset"
+    },
+    {
+      "source": "asset",
+      "key": "VibrationConfigs.asset",
+      "type": "ScriptableObject",
+      "value": "16 trường trỏ tới asset Vibration: ButtonClick, BottleSelect, BottleFillStart, BottleFillEnd, BottleDeselect, LevelWin, LevelLose, LevelStart, RewardSitToPosition, CauldronSmoke, CauldronBottleWaterFallComplete, CurtainReveal, BlockerBreak, BlockerGenerator, BlockerGeneratorExplosion, DrillStep",
+      "meaning": "Bản đồ VibrationType → cấu hình rung",
+      "where": "Assets/MonoBehaviour/VibrationConfigs.asset"
+    },
+    {
+      "source": "asset",
+      "key": "buttonclick.asset (Vibration)",
+      "type": "ScriptableObject",
+      "value": "_androidFeedbackConfig{Delays=[0], Priority=0, Feedbacks=[1] → VIRTUAL_KEY}; _iosFeedbackConfig{Delays=[0], Priority=0}",
+      "meaning": "Ví dụ cấu hình rung thật cho tiếng bấm nút",
+      "where": "Assets/MonoBehaviour/buttonclick.asset"
+    },
+    {
+      "source": "asset",
+      "key": "Các asset Vibration khác",
+      "type": "ScriptableObject",
+      "value": "bottleselect, bottledeselect, bottlefillstart, bottlefillend, levelstart, levelwin, levellose, blockerbreak, blockergenerator, blockergeneratorexplosion, cauldronsmoke, cauldronbottlewaterfallcomplete, curtainreveal, drillstep, rewardsittoposition",
+      "meaning": "Mỗi sự kiện rung một asset riêng",
+      "where": "Assets/MonoBehaviour/"
+    },
+    {
+      "source": "code field",
+      "key": "FeedbackConfig",
+      "type": "class",
+      "value": "Delays (int[]), Priority (int)",
+      "meaning": "Mẫu rung: các mốc trễ và độ ưu tiên khi trùng",
+      "where": "Modules.Contexts.Application.Vibration.Scripts.FeedbackConfig"
+    },
+    {
+      "source": "code field",
+      "key": "SoundModel / VibrationModel",
+      "type": "class",
+      "value": "SoundModel{IsSoundEffectOn, IsMusicOn}; VibrationModel{IsVibrationOn}",
+      "meaning": "Tuỳ chọn lưu cục bộ qua ISaveLoad",
+      "where": "Modules.Contexts.Application.Sound.Scripts / Vibration.Scripts"
+    },
+    {
+      "source": "storage key",
+      "key": "FirstShowRateUsPopup",
+      "type": "PlayerPrefs",
+      "value": "0 = chưa hiện, 1 = đã hiện",
+      "meaning": "Chỉ xin đánh giá một lần",
+      "where": "RateUsService.firstShowKey (const)"
+    },
+    {
+      "source": "code const",
+      "key": "RateUsService.playerShownRateUsPopup / playerNotShownRateUsPopup",
+      "type": "int const",
+      "value": "1 / 0",
+      "meaning": "Hai giá trị của khoá trên",
+      "where": "RateUsService (const)"
+    },
+    {
+      "source": "remote config",
+      "key": "RateUsConfig.RateUsLevels",
+      "type": "List<int>",
+      "value": "server",
+      "meaning": "Các level sẽ xin đánh giá",
+      "where": "Firebase Remote Config key 'RateUsConfig'"
+    },
+    {
+      "source": "code const",
+      "key": "GoogleUmpService._cancelInitializationTimeout",
+      "type": "float (giây)",
+      "value": "2.5",
+      "meaning": "Thời gian tối đa chờ khởi tạo đồng ý quảng cáo trước khi bỏ qua",
+      "where": "GoogleUmpService (const)"
+    },
+    {
+      "source": "remote config",
+      "key": "IsMusicEnabled",
+      "type": "bool",
+      "value": "server",
+      "meaning": "Bật kênh nhạc nền và toggle Music",
+      "where": "FirebaseRemoteConfigResolver"
+    },
+    {
+      "source": "remote config",
+      "key": "IsVibrationOn",
+      "type": "bool",
+      "value": "server",
+      "meaning": "Giá trị rung mặc định cho người chơi mới",
+      "where": "FirebaseRemoteConfigResolver → VibrationService.InitializeForNewDownload"
+    },
+    {
+      "source": "remote config",
+      "key": "RestorePurchaseEnabled / IsAndroidIapVerificationEnabled",
+      "type": "bool",
+      "value": "server",
+      "meaning": "Hiện nút khôi phục giao dịch và bật kiểm chứng biên lai",
+      "where": "FirebaseRemoteConfigResolver"
+    },
+    {
+      "source": "asset",
+      "key": "I2Languages.asset",
+      "type": "ScriptableObject",
+      "value": "Bảng chuỗi cho 11 ngôn ngữ (xuất ra appendix/localization.tsv)",
+      "meaning": "Nguồn mọi chuỗi UI",
+      "where": "Assets/Resources/I2Languages.asset"
+    },
+    {
+      "source": "asset",
+      "key": "AudioMixer (AudioMixerController)",
+      "type": "asset",
+      "value": "-",
+      "meaning": "Nhóm kênh SFX và Music để bật/tắt độc lập",
+      "where": "Assets/AudioMixerController/"
+    },
+    {
+      "source": "json default",
+      "key": "RateUsConfig.json: RateUsLevels",
+      "type": "",
+      "value": "[20, 60, 150, 300]",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/RateUsConfig.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "RateUsConfig.json: LevelToShowRateUs",
+      "type": "",
+      "value": "35",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/RateUsConfig.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "server cache (historical)",
+      "key": "RateUsConfig (live) = default?",
+      "type": "",
+      "value": "1/1 key trùng default, 0 key khác/thêm",
+      "meaning": "Đối chiếu config server thật (CachedRemoteConfigs) với RateUsConfig.json",
+      "where": "Configs/CachedRemoteConfigs + Firebase RC template 3197 — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "AB test",
+      "key": "Firebase RC: IsMusicEnabled",
+      "type": "",
+      "value": "true",
+      "meaning": "cờ AB/tinh chỉnh server-only (giá trị nhánh máy này)",
+      "where": "Configs/CachedRemoteConfigs + Firebase RC template 3197 — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "AB test",
+      "key": "Firebase RC: IsVibrationOn",
+      "type": "",
+      "value": "true",
+      "meaning": "cờ AB/tinh chỉnh server-only (giá trị nhánh máy này)",
+      "where": "Configs/CachedRemoteConfigs + Firebase RC template 3197 — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    }
+  ],
+  "rewards": [],
+  "backend": [
+    {
+      "command": "PutFile(fileName, serializedData) → PutFileResponse",
+      "direction": "client→server",
+      "purpose": "tải cấu hình rung lên (công cụ nội bộ; putFileUrl trống ở môi trường test)"
+    },
+    {
+      "command": "GetFile(link)",
+      "direction": "client→server",
+      "purpose": "tải cấu hình rung về"
+    }
+  ],
+  "ui": [
+    {
+      "element": "Trang Settings",
+      "class": "Modules.Contexts.Home.UI.Settings.SettingsController",
+      "purpose": "toggle Sound / Music / Vibration / Notifications"
+    },
+    {
+      "element": "Popup Settings",
+      "class": "Modules.Contexts.Home.SettingsPopUp.Scripts.SettingsPopUp + SettingsButton, TermsButton, PrivacyButton, SupportButton, RestorePurchaseButton, AppleButton",
+      "purpose": "các mục pháp lý, hỗ trợ, khôi phục giao dịch, liên kết Apple"
+    },
+    {
+      "element": "Bố cục toggle theo thiết bị",
+      "class": "SettingsPopupFeedbackView",
+      "purpose": "chọn hiển thị 1–3 toggle"
+    },
+    {
+      "element": "Popup điều khoản",
+      "class": "Modules.Contexts.Application.Common.Scripts.TermsOfUseController",
+      "purpose": "Terms of Use + Privacy Policy"
+    },
+    {
+      "element": "Form đồng ý quảng cáo",
+      "class": "Modules.Infrastructure.Utils.GoogleUmpService",
+      "purpose": "UMP consent form"
+    },
+    {
+      "element": "Hộp thoại ATT",
+      "class": "Modules.Infrastructure.Utils.LegalUtils.Scripts.IdfaService",
+      "purpose": "xin quyền theo dõi trên iOS"
+    },
+    {
+      "element": "In-app review",
+      "class": "Modules.Contexts.Home.RateUs.Scripts.RateUsService (Google Play ReviewManager)",
+      "purpose": "xin đánh giá không rời game"
+    }
+  ],
+  "analytics": [],
+  "storage_keys": [
+    "FirstShowRateUsPopup (PlayerPrefs)",
+    "SoundModel (ISaveLoad: IsSoundEffectOn, IsMusicOn)",
+    "VibrationModel (ISaveLoad: IsVibrationOn)"
+  ],
+  "related_features": [
+    "HomeUI",
+    "Notifications",
+    "Account",
+    "Profile"
+  ],
+  "gaps": [
+    "15/11 — partial_static_reconciliation: Đã trích 115 sound/music row và GUID/clip path/hash; SoundType22 bị lặp. Row không chứa Volume; chưa gán volume mặc định từ suy đoán. Còn lại: Trace SoundService/AudioSource/mixer volume và lookup duplicate22; ghi config volume theo nguồn thực, không tự thêm1.0.",
+    "15/11 — resolved_static_snapshot: Resolve đủ 16/16 vibration ref; xuất đầy đủ Android/iOS config, delays/feedback rawhex và int32little-endian, Priority. Không chứng minh hardware output. Còn lại: Kiểm chứng effective config/asset và nhánh runtime trên đúng build nếu cần.",
+    "15/11 — resolved_historical_snapshot: Đã trích toàn bộ field/value của RateUsConfig từ default0.0.3063 và cache lịch sử hiện có. Nhận định không có giá trị trong client đã được đối chiếu bằng file thật; không xác nhận effective runtime. Còn lại: Kiểm chứng effective config/asset và nhánh runtime trên đúng build nếu cần.",
+    "Build này không có UI cho người chơi tự chọn ngôn ngữ; ngôn ngữ suy từ hệ thống (suy luận).",
+    "15/11 — resolved_historical_snapshot: Đã trích mục tiêu công khai của các nút trong native 0.0.3063: Privacy dùng https://grand.gs/privacy; Terms dùng https://grand.gs/terms; Support dùng người nhận mailto help@grand.gs. Không mở URL hoặc gửi email trong lượt audit này. Còn lại: Giữ rõ build và phiên bản cache của nguồn; kiểm nhánh runtime riêng khi cần.",
+    "[Runtime 2026-09-10] Config server LIVE đã đọc trực tiếp từ cache máy (không cần request); các hàng 'server live' là giá trị server ghi đè/thêm so với default.",
+    "[Runtime 2026-09-10] Cờ AB/tinh chỉnh server-only đọc từ Firebase Remote Config (template 3197)."
+  ],
+  "sources": [
+    "Il2CppDumper/dump.cs: SettingsController, SettingsPopupFeedbackView, SoundService, SoundConfig, SoundModel, SoundType, MusicType, VibrationService, VibrationRemoteService, VibrationConfigs, Vibration, VibrationType, VibrationModel, FeedbackConfig, AndroidFeedbackConfig, IosFeedbackConfig, AndroidHapticFeedback, Feedback, FeedbackRunner, LocalizationService, Language, TermsOfUseController, RateUsService, RateUsConfig, GoogleUmpService, IdfaService",
+    "Assets/MonoBehaviour/VibrationConfigs.asset, buttonclick.asset, SoundConfig.asset",
+    "RecoveredNative/PseudoC/Assembly-CSharp/Modules/Contexts/Home/SettingsPopUp/**, Modules/Contexts/Application/{Sound,Vibration}/**",
+    "RecoveredNative/strings-by-type.tsv (FirebaseRemoteConfigResolver: IsMusicEnabled, IsVibrationOn, RestorePurchaseEnabled)",
+    "GameDesign/appendix/localization.tsv (Sound, Music, Settings, Terms, Privacy, Support, RestorePurchaseText)"
+  ],
+  "audit_provenance": {
+    "review_date": "2026-11-15",
+    "mode": "offline_existing_files",
+    "code_build": "0.0.3063 ARMv7",
+    "runtime_build_observed_historically": "0.0.3129 ARM64 (audit 2026-10-18); not rechecked 2026-11-15",
+    "new_playtests": 1,
+    "uc_status": "See facts/audit_20261115/uc_registry.json; image reference is not pass",
+    "workbook_status": "Existing XLSX is historical; JSON and local web include 2026-11-15 corrections",
+    "static_review": "facts/local_code_gap_results_20261115.json; facts/local_asset_gap_results_20261115.json; facts/final_data_gap_decisions_20261115.json; facts/core_body_gap_decisions_20261115.json; facts/remaining_asset_gap_decisions_20261115.json"
+  },
+  "runtime_review_20261115": [
+    {
+      "id": "MS-R15-META01",
+      "feature": "Settings",
+      "uc": [
+        "UC-01",
+        "UC-02",
+        "UC-05",
+        "UC-07"
+      ],
+      "title": "Bốn toggle: OFF, restart, khôi phục ON",
+      "precondition": "0.0.3129 ARM64, level351, offline UID MagicSort, tài nguyên fixture từ trước.",
+      "steps": [
+        "Mở Settings",
+        "Tắt Notifications/Sound/Haptic/Music",
+        "Force-stop và mở lại MagicSort",
+        "Mở Settings kiểm tra",
+        "Bật lại cả bốn"
+      ],
+      "expected": "UI và model ghi đúng lựa chọn; restart giữ lựa chọn.",
+      "actual": "Cả bốn OFF giữ qua restart. SoundModel isSoundEffectOn/isMusicOn=false; VibrationModel isVibrationOn=false; NotificationModel isNotificationOn=false. Bật lại đều true. settings_ledger.json có trạng thái từng bước.",
+      "status": "verified_observed_branch",
+      "limitations": "Xác minh UI/model/persistence; chưa xác minh âm thanh phát thực, rung vật lý hay delivery thông báo.",
+      "images": [
+        "META01_settings",
+        "META02_toggles_off",
+        "META03_restart_settings",
+        "META04_toggles_restored"
+      ],
+      "before": "META01_settings",
+      "after": "META04_toggles_restored",
+      "currency_unchanged": true,
+      "build": "0.0.3129 ARM64",
+      "mode": "offline_existing_fixture",
+      "date": "2026-11-15",
+      "ledger": {
+        "before": "META01_settings.json",
+        "after": "META04_toggles_restored.json"
+      }
+    }
+  ],
+  "static_review_20261115": {
+    "date": "2026-11-15",
+    "scope": "Historical code/assets 0.0.3063, dated caches, device 0.0.3129 cached bundles and explicitly scoped runtime evidence. Not full runtime pass.",
+    "findings": [
+      {
+        "kind": "remaining_asset",
+        "source_report": "facts/remaining_asset_gap_decisions_20261115.json",
+        "id": "MS-RA-019",
+        "gap_ids": [
+          "MS-Settings-G005"
+        ],
+        "title": "URL Terms/Privacy/Support nằm trong prefab hoặc cấu hình, chưa trích ra.",
+        "status": "resolved_historical_snapshot",
+        "conclusion": "Đã trích mục tiêu công khai của các nút trong native 0.0.3063: Privacy dùng https://grand.gs/privacy; Terms dùng https://grand.gs/terms; Support dùng người nhận mailto help@grand.gs. Không mở URL hoặc gửi email trong lượt audit này.",
+        "evidence": [
+          "facts/remaining_asset_review_20261115/settings_targets.json"
+        ],
+        "remaining": "",
+        "next_action": "Giữ rõ build và phiên bản cache của nguồn; kiểm nhánh runtime riêng khi cần.",
+        "scope": "Asset/native export 0.0.3063 và cache UnityFS đọc ngày 15/11 từ app 0.0.3129 được giữ riêng; ảnh render asset không phải ảnh chụp playtest.",
+        "reviewed": "2026-11-15",
+        "full_uc_pass": false
+      },
+      {
+        "kind": "final_data",
+        "source_report": "facts/final_data_gap_decisions_20261115.json",
+        "id": "MS-FDG-019",
+        "gap_ids": [
+          "MS-Settings-G003"
+        ],
+        "title": "RateUsConfig.RateUsLevels do remote config quyết định, không có giá trị trong build.",
+        "status": "resolved_historical_snapshot",
+        "conclusion": "Đã trích toàn bộ field/value của RateUsConfig từ default0.0.3063 và cache lịch sử hiện có. Nhận định không có giá trị trong client đã được đối chiếu bằng file thật; không xác nhận effective runtime.",
+        "evidence": [
+          "facts/local_asset_review_20261115/config_catalog.json"
+        ],
+        "remaining": "Full historical data answered; current effective selection and full runtime remain unverified.",
+        "next_action": "Kiểm chứng effective config/asset và nhánh runtime trên đúng build nếu cần.",
+        "scope": "question-specific source/observed branch only; no full-UC or production claim",
+        "source_records": [
+          {
+            "snapshot": "default0.0.3063",
+            "model": "RateUsConfig",
+            "source": "Resources\\defaultconfigs\\RateUsConfig.json",
+            "root": "UnityExport Assets 0.0.3063",
+            "sha256": "96091ee7e0f6c5a14a607f58e936da2ecfd86e0b809518632ef9736b27f3be7a",
+            "line": 1,
+            "build": "0.0.3063 ARMv7"
+          },
+          {
+            "snapshot": "cache20260910",
+            "model": "RateUsConfig",
+            "source": "facts\\runtime\\server_configs\\rateUsConfig.json",
+            "root": "GameDesign",
+            "sha256": "921a072ac190cab8ce27dd50c2bf45126dcb5560c5ee2ad65023d15f45ab516f",
+            "line": 1,
+            "build": "snapshot provenance at path"
+          },
+          {
+            "snapshot": "cache20261010",
+            "model": "RateUsConfig",
+            "source": "facts\\runtime\\test_20261010\\before\\CachedRemoteConfigs",
+            "root": "GameDesign",
+            "sha256": "433164d4877b2dee55d2bbd79ef2fe83d3fe9519492fe15e3cb0926daf216050",
+            "line": 1,
+            "build": "snapshot provenance at path"
+          }
+        ]
+      },
+      {
+        "kind": "asset",
+        "source_report": "facts/local_asset_gap_results_20261115.json",
+        "id": "MS-Settings-G003",
+        "status": "resolved_static_snapshot",
+        "conclusion": "Đã trích toàn bộ field/value của RateUsConfig từ default0.0.3063 và cache lịch sử hiện có. Nhận định không có giá trị trong client đã được đối chiếu bằng file thật; không xác nhận effective runtime.",
+        "evidence": [
+          {
+            "snapshot": "default0.0.3063",
+            "model": "RateUsConfig",
+            "source": "Resources\\defaultconfigs\\RateUsConfig.json",
+            "root": "UnityExport Assets 0.0.3063",
+            "sha256": "96091ee7e0f6c5a14a607f58e936da2ecfd86e0b809518632ef9736b27f3be7a",
+            "line": 1,
+            "build": "0.0.3063 ARMv7"
+          },
+          {
+            "snapshot": "cache20260910",
+            "model": "RateUsConfig",
+            "source": "facts\\runtime\\server_configs\\rateUsConfig.json",
+            "root": "GameDesign",
+            "sha256": "921a072ac190cab8ce27dd50c2bf45126dcb5560c5ee2ad65023d15f45ab516f",
+            "line": 1,
+            "build": "snapshot provenance at path"
+          },
+          {
+            "snapshot": "cache20261010",
+            "model": "RateUsConfig",
+            "source": "facts\\runtime\\test_20261010\\before\\CachedRemoteConfigs",
+            "root": "GameDesign",
+            "sha256": "433164d4877b2dee55d2bbd79ef2fe83d3fe9519492fe15e3cb0926daf216050",
+            "line": 1,
+            "build": "snapshot provenance at path"
+          }
+        ],
+        "data": "config_catalog.json",
+        "scope": "static_export0.0.3063_or_historical_cache_not_runtime_pass",
+        "reviewed": "2026-11-15",
+        "next_action": "Kiểm chứng effective config/asset và nhánh runtime trên đúng build nếu cần.",
+        "superseded_or_refined_by": "MS-FDG-019"
+      },
+      {
+        "kind": "asset",
+        "source_report": "facts/local_asset_gap_results_20261115.json",
+        "id": "MS-Settings-G001",
+        "status": "partial_static_reconciliation",
+        "conclusion": "Đã trích 115 sound/music row và GUID/clip path/hash; SoundType22 bị lặp. Row không chứa Volume; chưa gán volume mặc định từ suy đoán.",
+        "evidence": [
+          {
+            "source": "MonoBehaviour\\SoundConfig.asset",
+            "root": "UnityExport Assets 0.0.3063",
+            "sha256": "88540d510b31e474824daabf0d9898d9e6385f84f26682c87adca5a3a0f8a46b",
+            "line": 1,
+            "build": "0.0.3063 ARMv7"
+          }
+        ],
+        "data": "audio_catalog.json",
+        "scope": "static_export0.0.3063_or_historical_cache_not_runtime_pass",
+        "reviewed": "2026-11-15",
+        "next_action": "Trace SoundService/AudioSource/mixer volume và lookup duplicate22; ghi config volume theo nguồn thực, không tự thêm1.0.",
+        "remaining": "Toàn bộ115sound/music row và GUID đã có; SoundConfig row không chứa Volume. Chưa xác minh AudioSource/mixer/service volume áp dụng hoặc cách xử lý duplicate SoundType22."
+      },
+      {
+        "kind": "asset",
+        "source_report": "facts/local_asset_gap_results_20261115.json",
+        "id": "MS-Settings-G002",
+        "status": "resolved_static_snapshot",
+        "conclusion": "Resolve đủ 16/16 vibration ref; xuất đầy đủ Android/iOS config, delays/feedback rawhex và int32little-endian, Priority. Không chứng minh hardware output.",
+        "evidence": [
+          {
+            "source": "MonoBehaviour\\VibrationConfigs.asset",
+            "root": "UnityExport Assets 0.0.3063",
+            "sha256": "7287ebd755838e1b07e72fc601d01b494362cf6755aaf867bd21ba10b0e2745e",
+            "line": 1,
+            "build": "0.0.3063 ARMv7"
+          }
+        ],
+        "data": "vibrations.json",
+        "scope": "static_export0.0.3063_or_historical_cache_not_runtime_pass",
+        "reviewed": "2026-11-15",
+        "next_action": "Kiểm chứng effective config/asset và nhánh runtime trên đúng build nếu cần."
+      }
+    ]
+  },
+  "acceptance_review_20261115": {
+    "source": "facts/feature_acceptance_20261115.json",
+    "feature_id": "Settings",
+    "scope": "All eleven dossier dimensions reviewed; full_feature_verified is not implied; read per-dimension gaps and actual runtime evidence."
+  },
+  "segment_ab_review_20261115": {
+    "status": "not_identified_in_sources",
+    "segment_ids": [],
+    "matching_basis": "explicit_gd_config_map_or_exact_model_token_in_gdd_configs_where_key_sources; rootfieldscoped",
+    "rows": [],
+    "classifications": {},
+    "assignment_verified": false,
+    "uplift_verified": false,
+    "note": "No matchingrow does not prove no segmentation/AB. Rewardbucketfalsepositives remain explicitly classified."
+  },
+  "continuation_review_20261116": {
+    "date": "2026-11-16",
+    "build": "0.0.3129 ARM64 host APK",
+    "build_scope": "Host APK version3129 matches LAST observed installed version15/11 only; installed bytes/live device16/11 not verified.",
+    "runtime_status": "device_unavailable",
+    "runtime_case_ids": [],
+    "current_apk_model_links": {
+      "feature": "Settings",
+      "models": [
+        {
+          "model": "RateUsConfig",
+          "current_default_file": "facts/review_20261116/public_current_config_3129/defaults/RateUsConfig.json",
+          "resource_path": "defaultconfigs/rateusconfig",
+          "sha256": "96091ee7e0f6c5a14a607f58e936da2ecfd86e0b809518632ef9736b27f3be7a",
+          "matching_basis": [
+            "gdd/Settings.json#/configs",
+            "gdd/Settings.json#/sources",
+            "gdd/Settings.json#/flow"
+          ],
+          "scope": "Packaged default3129, not effective server config.",
+          "site_data_path": "data/current_config_3129/defaults/RateUsConfig.json",
+          "original_source_sha256": "96091ee7e0f6c5a14a607f58e936da2ecfd86e0b809518632ef9736b27f3be7a",
+          "public_artifact_sha256": "e5fee6566e0fc475bac50ae7cc4d7892ff6f953a931ce12a297837f9eeef11f8",
+          "sha256_scope": "sha256 is original raw model; public_artifact_sha256 is the sanitized download"
+        }
+      ],
+      "status": "exact_model_source_association",
+      "distribution": "sanitized_public",
+      "public_mapping_pending": false
+    },
+    "current_packaged_defaults": [
+      {
+        "model": "RateUsConfig",
+        "source": "facts/review_20261116/public_current_config_3129/defaults/RateUsConfig.json",
+        "site_data_path": "data/current_config_3129/defaults/RateUsConfig.json",
+        "public_artifact_sha256": "e5fee6566e0fc475bac50ae7cc4d7892ff6f953a931ce12a297837f9eeef11f8",
+        "original_source_sha256": "96091ee7e0f6c5a14a607f58e936da2ecfd86e0b809518632ef9736b27f3be7a",
+        "source_class": "static_asset",
+        "build": "0.0.3129 host APK",
+        "scope": "Sanitized packaged default fullvalues only; not effective remote/selected config or runtime.",
+        "values": {
+          "RateUsLevels": [
+            20,
+            60,
+            150,
+            300
+          ],
+          "LevelToShowRateUs": 35
+        }
+      }
+    ],
+    "native_finding_ids": [],
+    "documentation_source_coverage": {
+      "dossier_present": true,
+      "use_case_catalog_count": 18,
+      "config_catalog_rows": 25,
+      "current_apk_default_model_links": 1,
+      "current_native_findings": 0,
+      "scope": "Documentation/source coverage only; not complete runtime verification."
+    },
+    "runtime_completion": {
+      "date": "2026-11-16",
+      "status": "device_unavailable",
+      "executed_case_count": 0,
+      "full_feature_runtime_verified": false
+    },
+    "planned_branch": "Kiểm kê toàn bộ nút Settings, cuộn nếu có; mở popup Restore hoặc liên kết rồi hủy; kiểm tra nhãn hỗ trợ/điều khoản và bố cục.",
+    "target_uc_ids": [
+      "UC-09",
+      "UC-13",
+      "UC-14",
+      "UC-15",
+      "UC-17"
+    ],
+    "execution_phase": "noncore_first",
+    "core_or_levels_last": false,
+    "actionability_full_json": "facts/continuation_20261116/current/feature_actionability.json",
+    "actionability_site_data_path": "data/continuation_20261116/feature_actionability.json",
+    "source_classes": [
+      "static_asset"
+    ],
+    "full_feature_verified": false
+  }
+}

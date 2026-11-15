@@ -1,0 +1,3362 @@
+{
+  "id": "Analytics",
+  "name": "Analytics & Tracking",
+  "category": "LiveOps",
+  "managers": [
+    "Modules.Contexts.Application.Events.Scripts.EventSender",
+    "Modules.Contexts.Application.Events.Scripts.FirebaseEventSender",
+    "Modules.Contexts.Application.Events.Scripts.GrandEventSender",
+    "Modules.Contexts.Application.Events.Scripts.GrandEventSenderRemoteService",
+    "Modules.Contexts.Application.Events.Scripts.GrandScreenShotRemoteService",
+    "Modules.Contexts.Application.Events.Scripts.Event",
+    "Modules.Contexts.Application.Events.Scripts.InventoryParametersProvider",
+    "Modules.Contexts.Application.Events.Scripts.Sessions.SessionTracker",
+    "Modules.Contexts.Application.Events.Scripts.Sessions.FpsTracker",
+    "Modules.Contexts.Application.TrackingSystems.Scripts.AdjustInitializer",
+    "Modules.Contexts.Application.TrackingSystems.Scripts.AdjustStatModelService",
+    "Modules.Contexts.Application.TrackingSystems.Scripts.AdjustStatSender",
+    "Modules.Contexts.Application.TrackingSystems.Scripts.ApplovinStatSender"
+  ],
+  "summary": "Magic Sort có hai đường ống analytics chạy song song. Đường chính là EventSender (singleton): mọi tính năng gọi một hàm Send*Event, hàm này dựng một đối tượng Event (tên + Dictionary<string,object>), tự động chèn thêm tham số kho đồ (coin_inventory, life_inventory, undo_inventory, shuffle_inventory, extra_bottle_inventory, limitless_life_duration_inventory) và tiến độ (progress, segment) rồi phát cho danh sách IEventSender — hiện tại là FirebaseEventSender (Firebase Analytics). Đường thứ hai là GrandEventSender: gửi các mốc kỹ thuật/hiệu năng dạng chỉ tên sự kiện (không tham số) lên backend riêng của Grand Games qua endpoint be-event, kèm khả năng gửi ảnh chụp màn hình lỗi qua be-event-image-send. Ngoài ra có ba SDK đo lường bên thứ ba: Adjust (attribution + event token theo mốc level và theo từng sản phẩm IAP), AppLovin MAX (sự kiện chuẩn hoá cho tối ưu quảng cáo), và bộ adapter Metica cho quảng cáo interstitial/rewarded (doanh thu có EventSender ad_*/revenue và Adjust.TrackAdRevenue trong body0.0.3063). Tổng cộng client phát khoảng 300 tên sự kiện khác nhau.",
+  "unlock": "Luôn bật. EventSender.Initialize(firebaseInitializer) và GrandEventSender.Initialize(...) được gọi trong chuỗi bootstrap; FirebaseEventSender chỉ thực sự gửi khi FirebaseInitializer.IsInitializedSucesfully. Adjust khởi tạo trong AdjustInitializer.InitializeAdjust.",
+  "entry_points": [
+    "Không có UI. Mọi service/UI trong game gọi EventSender.Instance.Send*Event(...) hoặc GrandEventSender.Instance.Send*Event()"
+  ],
+  "flow": "Khởi tạo: EventSender.Initialize(firebaseInitializer) tạo singleton và một FirebaseEventSender; EventSender.SetInventoryService(inventoryService) gắn InventoryParametersProvider. Mỗi lần gửi: hàm Send* dựng new Event(\"tên_sự_kiện\"), AddData/AddDatas các tham số riêng, rồi gọi SendEvent(eventToSend) — hàm này gộp thêm 6 tham số kho đồ từ InventoryParametersProvider.GetInventoryParameters trước khi chuyển xuống từng IEventSender; bản SendEventWithoutExtraParameter bỏ qua bước gộp (dùng cho event tần suất cao hoặc event kỹ thuật). FirebaseEventSender.SendEvent chuyển Dictionary thành mảng Firebase Parameter qua AddParameter, kiểu dữ liệu không hỗ trợ sẽ bị log 'FirebaseEventSender not supported data type {0}'. Song song, GrandEventSender.SendEvent(eventToSend, extraParams) POST GrandEventSenderRequestModel { ClientId, EventName } tới be-event; nhiều event của nó ghép hậu tố động, ví dụ level_start/level_win/level_lose/level_stuck/level_play_on/level_quit/level_pause có thể kèm \"_{0}\" là số level, tutorial_split_{0}, ump_gathered_{0}, ump_already_gathered_{0}. GrandEventSender còn nối thêm chuỗi hiệu năng vào app_focus_lost: \"_fps{0}_spikes{1}\" (FpsTracker.GetLast30SecondAverageFps, GetLast30SecondSpikeCount) và \"_moves{0}_lcd{1}\". SessionTracker đếm phiên (PlayerPrefs grand_session_counter, last_application_quit, last_session_duration) và cung cấp session_count/session_durations. Khi có lỗi cần chẩn đoán, GrandEventSender.SendScreenShotToServer chụp màn hình và gửi bytes qua GrandScreenShotRemoteService.SendScreenShot (be-event-image-send). Adjust: AdjustInitializer.InitializeAdjust khởi động SDK bằng AdjustAppToken/FacebookAppId (giá trị nằm trong AdjustInitializer..ctor, không chép ở đây), lấy adid và attribution rồi bắn event on_adjust_attribution với 13 tham số (network, campaign, adgroup, creative, tracker_token, tracker_name, click_label, cost_type, cost_amount, cost_currency, adid, fb_install_referrer); AdjustStatSender.TrySendLevelReachedStat(level) tra AdjustStatModelService.GetEventTokenByLevel để bắn token mốc level (35 mốc từ level 5 đến 4000) và SendIAPStat(id) tra GetEventTokenByIAPId để bắn token doanh thu theo productId (≈145 sản phẩm). ApplovinStatSender phát bộ sự kiện chuẩn của MAX: level_start, level_complete, virtual_resource_transaction, tutorial_complete, energy_depleted, use_prop, game_shop_enter.",
+  "use_cases": [
+    {
+      "id": "UC-01",
+      "title": "Gửi một sự kiện có kèm tham số kho đồ",
+      "actor": "System",
+      "trigger": "Bất kỳ hành động nào trong game",
+      "precondition": "EventSender.Initialize đã chạy",
+      "steps": [
+        "Tính năng gọi EventSender.Instance.Send<X>Event(...)",
+        "Hàm dựng new Event(name) rồi Event.AddData/AddDatas",
+        "EventSender.SendEvent gộp InventoryParametersProvider.GetInventoryParameters (6 tham số)",
+        "Duyệt _eventSenders, gọi IEventSender.SendEvent"
+      ],
+      "result": "Sự kiện tới Firebase Analytics kèm ảnh chụp kho đồ tại thời điểm đó",
+      "rules": "Tham số kho: coin_inventory, life_inventory, limitless_life_duration_inventory, undo_inventory, shuffle_inventory, extra_bottle_inventory. InventoryParametersProvider.GetParameterCount cho biết số tham số cộng thêm",
+      "evidence": "EventSender.SendEvent; InventoryParametersProvider.GetInventoryParameters; Event.AddDatas"
+    },
+    {
+      "id": "UC-02",
+      "title": "Gửi sự kiện không kèm tham số phụ",
+      "actor": "System",
+      "trigger": "Event kỹ thuật / tần suất cao",
+      "precondition": "-",
+      "steps": [
+        "EventSender.SendEventWithoutExtraParameter(eventToSend)",
+        "Bỏ qua bước gộp inventory",
+        "Chuyển thẳng cho FirebaseEventSender.SendEventWithoutExtraParameter"
+      ],
+      "result": "Giảm kích thước payload cho event nền",
+      "rules": "-",
+      "evidence": "EventSender.SendEventWithoutExtraParameter; FirebaseEventSender.SendEventWithoutExtraParameter"
+    },
+    {
+      "id": "UC-03",
+      "title": "Gửi mốc kỹ thuật lên backend Grand (be-event)",
+      "actor": "System",
+      "trigger": "Các mốc khởi động, focus, level",
+      "precondition": "HttpProxy sẵn sàng",
+      "steps": [
+        "GrandEventSender.Send<X>Event() dựng tên sự kiện (có thể ghép hậu tố level/split/consent)",
+        "GrandEventSender.SendEvent(event, extraParams)",
+        "GrandEventSenderRemoteService.SendEvent(eventName) POST GrandEventSenderRequestModel {ClientId, EventName} tới be-event"
+      ],
+      "result": "Backend Grand có timeline khởi động và hành vi cơ bản, độc lập Firebase",
+      "rules": "Model chỉ có ClientId + EventName — mọi thông tin phải nằm trong tên sự kiện",
+      "evidence": "GrandEventSender.SendEvent; GrandEventSenderRemoteService.SendEvent; GrandEventSenderRequestModel"
+    },
+    {
+      "id": "UC-04",
+      "title": "Đo timeline khởi động app",
+      "actor": "System",
+      "trigger": "Mở app",
+      "precondition": "-",
+      "steps": [
+        "Lần lượt: application_context_installer_started → install_runtime_services_started/end → sdk_init_started → init_firebase_started → init_firebase_end (hoặc _with_fail / _with_timeout) → grand_config_fetch_end → login_end (hoặc login_end_with_fail) → ad_service_initialization_started/end → sdk_init_completed → install_app_context_services_start/end → sync_and_init_end → bootstrap_application_context_started/end → application_scene_to_home_scene_started → bootstrap_home_context_started",
+        "Mỗi mốc là một lời gọi GrandEventSender riêng"
+      ],
+      "result": "Vận hành dựng được phễu thời gian vào game và biết bước nào chậm/hỏng",
+      "rules": "Trạng thái Firebase còn được mã hoá thành chuỗi _firebaseinitializing_ / _firebaseinited_ / _fbfailed_ / _fbcanceled_",
+      "evidence": "GrandEventSender.SendApplicationContextInstallerStartedEvent; GrandEventSender.SendInitFirebaseEndWithTimeoutEvent; GrandEventSender.SendSyncAndInitEndEvent; FirebaseInitializer.GetInitializationState"
+    },
+    {
+      "id": "UC-05",
+      "title": "Theo dõi phiên chơi",
+      "actor": "System",
+      "trigger": "Awake / focus / quit",
+      "precondition": "-",
+      "steps": [
+        "SessionTracker.Awake đọc PlayerPrefs grand_session_counter, last_application_quit, last_session_duration",
+        "CheckAndStartSession so thời gian rời app với SessionTimeout; quá hạn thì StartNewSession tăng bộ đếm",
+        "OnApplicationFocus(false) bắn app_focus_lost; OnApplicationQuit lưu SaveLastData",
+        "GetSession()/GetSessionDurationInSeconds() cung cấp session_count và session_durations cho các event khác"
+      ],
+      "result": "Mọi event có bối cảnh phiên; đo được retention trong phiên",
+      "rules": "Constructor SessionTracker ởVA0x38FE248: FMOV D0,#30.0 tại0x38FE2C0; BL System.TimeSpan.FromMinutes tại0x38FE2C8; STR X0,[X19,#0x28] tại0x38FE2CC. Metadata current đặt SessionTimeout ở0x28. Chốt hằng constructor30phút, giải missing scalar; không gọi session thực luôn đúng30phút vì còn focus/time comparison.",
+      "evidence": "SessionTracker.CheckAndStartSession; SessionTracker.StartNewSession; SessionTracker.GetSession; EventSender.SendLevelEvent"
+    },
+    {
+      "id": "UC-06",
+      "title": "Đo FPS và spike hiệu năng",
+      "actor": "System",
+      "trigger": "Mỗi frame",
+      "precondition": "-",
+      "steps": [
+        "FpsTracker.Update đẩy mẫu FPS vào hàng đợi trong cửa sổ TimeWindow = 30 giây",
+        "Đếm số frame dưới FpsSpikeThreshold = 25",
+        "GrandEventSender.SendAppFocusLostEvent ghép \"_fps{0}_spikes{1}\" vào tên sự kiện app_focus_lost"
+      ],
+      "result": "Biết máy nào giật khi người chơi rời app",
+      "rules": "TimeWindow = 30 giây, FpsSpikeThreshold = 25 fps",
+      "evidence": "FpsTracker.GetLast30SecondAverageFps; FpsTracker.GetLast30SecondSpikeCount; GrandEventSender.SendAppFocusLostEvent"
+    },
+    {
+      "id": "UC-07",
+      "title": "Gửi ảnh chụp màn hình để chẩn đoán",
+      "actor": "System",
+      "trigger": "GrandEventSender.SendScreenShotToServer",
+      "precondition": "-",
+      "steps": [
+        "Chụp màn hình thành byte[]",
+        "GrandScreenShotRemoteService.SendScreenShot(bytes) POST tới be-event-image-send"
+      ],
+      "result": "Vận hành xem được màn hình lúc xảy ra sự cố",
+      "rules": "Dùng CancellationTokenSource riêng, huỷ khi Dispose",
+      "evidence": "GrandEventSender.SendScreenShotToServer; GrandScreenShotRemoteService.SendScreenShot"
+    },
+    {
+      "id": "UC-08",
+      "title": "Đo attribution cài đặt qua Adjust",
+      "actor": "System",
+      "trigger": "Khởi động, hoặc Adjust callback đổi attribution",
+      "precondition": "AdjustInitializer.SetServices đã gán playerService/adConfigService",
+      "steps": [
+        "AdjustInitializer.InitializeAdjust khởi động SDK bằng AdjustAppToken + FacebookAppId (field riêng tư)",
+        "OnGetAdid nhận adid, OnGetAttribution/OnAttributionChanged nhận AdjustAttribution",
+        "Update() gom vào AdjustAttributionModel và bắn on_adjust_attribution",
+        "AdjustAttributionRequestModel đồng bộ lên backend"
+      ],
+      "result": "Biết người chơi đến từ nguồn quảng cáo nào và chi phí tương ứng",
+      "rules": "Tham số: network, campaign, adgroup, creative, tracker_token, tracker_name, click_label, cost_type, cost_amount, cost_currency, adid, fb_install_referrer",
+      "evidence": "AdjustInitializer.InitializeAdjust; AdjustInitializer.OnAttributionChanged; AdjustInitializer.Update; EventSender.SendAdjustAttributionEvent"
+    },
+    {
+      "id": "UC-09",
+      "title": "Bắn Adjust event token theo mốc level",
+      "actor": "System",
+      "trigger": "Người chơi đạt một mốc level",
+      "precondition": "AdjustStatConfigModel đã nạp",
+      "steps": [
+        "AdjustStatSender.TrySendLevelReachedStat(level)",
+        "AdjustStatModelService.GetEventTokenByLevel(level) tra danh sách LevelStatModels",
+        "Có token → gửi cho Adjust SDK"
+      ],
+      "result": "Mạng quảng cáo tối ưu theo mốc tiến độ người chơi",
+      "rules": "35 mốc trong AdjustStatConfigModel.json: 5, 10, 15, 20, 25, 30, 35, 40, 45, 50, 60, 70, 80, 90, 100, 125, 150, 175, 200, 250, 300, 400, 500, 750, 1000, 1250, 1500, 1750, 2000, 2250, 2500, 2750, 3000, 3500, 4000 (mỗi mốc một EventToken riêng — không chép token vào tài liệu)",
+      "evidence": "AdjustStatSender.TrySendLevelReachedStat; AdjustStatModelService.GetEventTokenByLevel; AdjustStatConfigModel.LevelStatModels"
+    },
+    {
+      "id": "UC-10",
+      "title": "Bắn Adjust event token theo sản phẩm IAP",
+      "actor": "System",
+      "trigger": "Mua thành công",
+      "precondition": "-",
+      "steps": [
+        "AdjustStatSender.SendIAPStat(productId) (quy đổi về USD)",
+        "AdjustStatModelService.GetEventTokenByIAPId(productId) tra IAPStatModels",
+        "Gửi sự kiện doanh thu cho Adjust"
+      ],
+      "result": "Adjust ghi nhận doanh thu theo từng gói",
+      "rules": "IAPStatModels chứa ~145 productId (sort.coins*, sort.special*, sort.endless*, sort.magicpass*, sort.chooseone*, sort.treasuredrill*, sort.pawtouch*, sort.underwater*, sort.noads*, các gói bundle, và bản web w.sort.*). AdjustStatSender còn có token cố định cho level start đầu tiên và cho hành vi tiêu coin",
+      "evidence": "AdjustStatSender.SendIAPStat; AdjustStatModelService.GetEventTokenByIAPId; AdjustStatConfigModel.IAPStatModels"
+    },
+    {
+      "id": "UC-11",
+      "title": "Gửi sự kiện chuẩn cho AppLovin MAX",
+      "actor": "System",
+      "trigger": "Bắt đầu/hoàn thành level, kiếm/tiêu tiền, hết mạng, dùng booster, mở shop",
+      "precondition": "AdService sẵn sàng",
+      "steps": [
+        "ApplovinStatSender.SendLevelStartEvent / SendLevelCompleteEvent(level)",
+        "SendUserEarnedCurrencyEvent / SendUserSpendCurrencyEvent(amount) → virtual_resource_transaction",
+        "SendTutorialCompleteEvent, SendNoMoreLifeEvent (energy_depleted), SendUsedBoostersEvent (use_prop), SendShopOpenedEvent (game_shop_enter)"
+      ],
+      "result": "MAX có tín hiệu chuẩn để tối ưu giá thầu",
+      "rules": "Tham số chung: value",
+      "evidence": "ApplovinStatSender.SendLevelStartEvent; ApplovinStatSender.SendUserEarnedCurrencyEvent; ApplovinStatSender.SendNoMoreLifeEvent"
+    },
+    {
+      "id": "UC-12",
+      "title": "Đo doanh thu quảng cáo (impression-level revenue)",
+      "actor": "System",
+      "trigger": "Mỗi lần quảng cáo hiển thị/được bấm/lỗi",
+      "precondition": "MaxSdkBase.AdInfo có sẵn",
+      "steps": [
+        "EventSender.SendAdImpression / SendAdImpressionD14 / SendAdRevenue / SendAdShowStartedEvent / SendAdShownEvent / SendAdClickedEvent / SendAdShowFailEvent / SendAdReviewCreativeIdEvent / SendUserCmp",
+        "Gắn ad_platform (AppLovin), ad_source, ad_unit_name, ad_format, ad_placement, network_placement, creative_identifier, ad_dsp_name, revenue_precision, ad_latency_millis, value + currency USD, session_count, progress, impression_source, provider (AdProviderType, gồm cả adapter Metica)"
+      ],
+      "result": "Đo LTV quảng cáo theo từng lần hiển thị",
+      "rules": "Bản _d14 dành riêng cho cửa sổ 14 ngày đầu (ad_impression_d14, in_app_purchase_d14_v2)",
+      "evidence": "EventSender.SendAdImpression; EventSender.SendAdRevenue; EventSender.SendUserCmp; EventSender.SendAdImpressionD14"
+    },
+    {
+      "id": "UC-13",
+      "title": "Gói tiến độ live-ops vào event level",
+      "actor": "System",
+      "trigger": "Mỗi lần bắt đầu/kết thúc level",
+      "precondition": "-",
+      "steps": [
+        "EventSender.SendLevelEvent(levelState) dựng event level_event",
+        "GetLiveOpsStats() nén tiến độ nhiều sự kiện vào một chuỗi JSON: {\"MLS\",\"MLR\",\"MLT\",\"SjSc\",\"SjSs\",\"JrSc\",\"JrSs\",\"JrR\"}",
+        "GetStreakStats() thêm current_hat_count, current_multiplier, multiplier_step, in_streak_tournament",
+        "Gắn user_segment và session_durations"
+      ],
+      "result": "Một event duy nhất chứa ảnh chụp toàn bộ trạng thái live-ops",
+      "rules": "Tránh phải join nhiều bảng khi phân tích",
+      "evidence": "EventSender.SendLevelEvent; EventSender.GetLiveOpsStats; EventSender.GetStreakStats"
+    },
+    {
+      "id": "UC-14",
+      "title": "Đo thời lượng và chất lượng một lượt chơi",
+      "actor": "System",
+      "trigger": "Kết thúc level",
+      "precondition": "-",
+      "steps": [
+        "EventSender.SendLevelDurationEvent(finishStatus, levelEndType, startTs, endTs, averageMoveDuration, firstMoveDuration)",
+        "GrandEventSender.LevelFirstBottleClickEvent / LevelFirstMoveEvent / LevelCongratsEvent / LevelWinPopUpOpened / LevelWinPopUpContinueClicked đánh dấu từng bước UI"
+      ],
+      "result": "Biết level nào chơi lâu, nước đi đầu chậm (khó hiểu luật)",
+      "rules": "Tham số: level_duration, level_start_time, level_end_time, level_end_type, finish_status, average_move_duration, first_move_duration, progress",
+      "evidence": "EventSender.SendLevelDurationEvent; GrandEventSender.LevelFirstMoveEvent; GrandEventSender.LevelWinPopUpOpened"
+    },
+    {
+      "id": "UC-15",
+      "title": "Kiểu dữ liệu tham số không hỗ trợ",
+      "actor": "System",
+      "trigger": "Truyền object lạ vào Event.AddData",
+      "precondition": "-",
+      "steps": [
+        "FirebaseEventSender.AddParameter kiểm tra kiểu",
+        "Không phải string/long/double → log 'FirebaseEventSender not supported data type {0}'"
+      ],
+      "result": "Tham số bị bỏ, event vẫn gửi được",
+      "rules": "Edge case cần chú ý khi thêm tham số mới",
+      "evidence": "FirebaseEventSender.AddParameter"
+    },
+    {
+      "id": "UC-16",
+      "title": "Báo lỗi cấu hình và dữ liệu bất thường",
+      "actor": "System",
+      "trigger": "Phát hiện dữ liệu sai",
+      "precondition": "-",
+      "steps": [
+        "invalid_config_fetched (config_name) khi một remote config hỏng",
+        "firebase_cfg_faulted / leaderboard_faulted khi hệ thống phụ trợ lỗi",
+        "wrong_special_offer_data, wrong_choose_one_special_offer_data, not_requested_iap, purchase_not_verified, purchase_unable_to_verify khi dữ liệu offer/IAP sai",
+        "persistent_seed_load_failed / persistent_seed_parse_failed khi seed level hỏng",
+        "weekly_tournament_claim_corrupted khi dữ liệu giải đấu hỏng"
+      ],
+      "result": "Vận hành nhận cảnh báo sớm",
+      "rules": "Nhóm event 'chẩn đoán' này không gắn tham số kho đồ",
+      "evidence": "EventSender.SendInvalidConfigEvent; EventSender.SendFirebaseConfigFaultedEvent; EventSender.SendWrongSpecialOfferDataStat; EventSender.SendPersistentSeedParseFailedEvent"
+    },
+    {
+      "id": "UC-17",
+      "title": "Theo dõi quyền riêng tư và đồng ý (UMP / IDFA / T&C)",
+      "actor": "Player",
+      "trigger": "Lần đầu mở app",
+      "precondition": "-",
+      "steps": [
+        "GrandEventSender: ump_flow_started, ump_timeout, ump_initialization_skipped, ump_gathered_{consent}, ump_already_gathered_{consent}",
+        "EventSender: idfa_request_start / idfa_request_end",
+        "terms_and_conditions_asked / accepted / already_accepted"
+      ],
+      "result": "Đo tỉ lệ đồng ý theo dõi, ảnh hưởng doanh thu quảng cáo",
+      "rules": "ConsentStatus được ghép thẳng vào tên sự kiện",
+      "evidence": "GrandEventSender.SendUmpConsentGatheredEvent; EventSender.SendIdfaRequestStartEvent; GrandEventSender.SendTermsAndConditionsAcceptedEvent"
+    },
+    {
+      "id": "UC-18",
+      "title": "Đo tài nguyên ảo (earned / spent)",
+      "actor": "System",
+      "trigger": "Nhận hoặc tiêu tài nguyên",
+      "precondition": "-",
+      "steps": [
+        "EventSender.SendEarnedEvent(currencyEarnReason, rewardModels) → event earned, tách theo loại: coin, life, life_in_seconds, undo, shuffle, extra_bottle, merge_energy, duck_x2_in_seconds, collection_pack_1..5, additional_life_inventory",
+        "EventSender.SendCoinSpentEvent(reason, amount) → coin_spent (amount, reason, progress)",
+        "AddRewardAmount gộp phần thưởng theo mã coin/undo/shuffle/extraBottle/limitless_life"
+      ],
+      "result": "Cân bằng kinh tế theo dõi được nguồn vào/ra của mọi tài nguyên",
+      "rules": "reason là enum CurrencyEarnReason / CurrencySpendReason nên phân tích được theo nguồn",
+      "evidence": "EventSender.SendEarnedEvent; EventSender.SendCoinSpentEvent; EventSender.AddRewardAmount"
+    }
+  ],
+  "configs": [
+    {
+      "source": "code const",
+      "key": "SessionTracker.SessionCounterKey / LastApplicationQuitTimeKey / LastSessionDurationKey",
+      "type": "string",
+      "value": "\"grand_session_counter\" / \"last_application_quit\" / \"last_session_duration\"",
+      "meaning": "PlayerPrefs lưu trạng thái phiên",
+      "where": "SessionTracker"
+    },
+    {
+      "source": "code field",
+      "key": "SessionTracker.SessionTimeout",
+      "type": "TimeSpan",
+      "value": "30 phút (TimeSpan.FromMinutes(30), native0.0.3129ARM64 ctor0x38FE248)",
+      "meaning": "Rời app quá lâu thì tính là phiên mới",
+      "where": "SessionTracker"
+    },
+    {
+      "source": "code const",
+      "key": "FpsTracker.TimeWindow",
+      "type": "float",
+      "value": "30",
+      "meaning": "Cửa sổ giây để tính FPS trung bình",
+      "where": "FpsTracker"
+    },
+    {
+      "source": "code const",
+      "key": "FpsTracker.FpsSpikeThreshold",
+      "type": "int",
+      "value": "25",
+      "meaning": "Dưới ngưỡng này tính là spike giật",
+      "where": "FpsTracker"
+    },
+    {
+      "source": "code field",
+      "key": "InventoryParametersProvider tham số tự động",
+      "type": "string[]",
+      "value": "coin_inventory, life_inventory, limitless_life_duration_inventory, undo_inventory, shuffle_inventory, extra_bottle_inventory",
+      "meaning": "6 tham số kho đồ chèn vào mọi event gửi qua SendEvent",
+      "where": "InventoryParametersProvider.GetInventoryParameters"
+    },
+    {
+      "source": "code field",
+      "key": "AdjustInitializer.AdjustAppToken / FacebookAppId",
+      "type": "string",
+      "value": "(không chép — nằm trong AdjustInitializer..ctor)",
+      "meaning": "Khoá SDK Adjust và Facebook App ID",
+      "where": "AdjustInitializer"
+    },
+    {
+      "source": "json default",
+      "key": "AdjustStatConfigModel.LevelStatModels",
+      "type": "array",
+      "value": "35 mốc: 5,10,15,20,25,30,35,40,45,50,60,70,80,90,100,125,150,175,200,250,300,400,500,750,1000,1250,1500,1750,2000,2250,2500,2750,3000,3500,4000 (mỗi mốc kèm EventToken riêng, không chép)",
+      "meaning": "Mốc level báo cho Adjust",
+      "where": "Resources/defaultconfigs/AdjustStatConfigModel.json (client default; server ghi đè qua khoá Firebase AdjustStatConfigModel)"
+    },
+    {
+      "source": "json default",
+      "key": "AdjustStatConfigModel.IAPStatModels",
+      "type": "array",
+      "value": "≈145 mục ProductId→EventToken, gồm nhóm sort.coins*, sort.special*, sort.endless*/endlessnv*, sort.chooseone*, sort.treasuredrill*, sort.magicpass*, sort.pawtouch*, sort.underwater*, sort.noads*, sort.*bundle*, và bản web shop w.sort.*",
+      "meaning": "Ánh xạ sản phẩm IAP sang event token doanh thu của Adjust",
+      "where": "Resources/defaultconfigs/AdjustStatConfigModel.json"
+    },
+    {
+      "source": "code field",
+      "key": "GrandEventSenderRequestModel",
+      "type": "class",
+      "value": "{ClientId, EventName}",
+      "meaning": "Payload duy nhất gửi lên be-event",
+      "where": "GrandEventSenderRequestModel"
+    },
+    {
+      "source": "code field",
+      "key": "GrandEventSender._lowMemoryEventCount / _firstInstallAppV",
+      "type": "int / string",
+      "value": "runtime",
+      "meaning": "Đếm lần thiếu bộ nhớ; phiên bản app lúc cài lần đầu",
+      "where": "GrandEventSender"
+    },
+    {
+      "source": "server info",
+      "key": "sendEventUrl",
+      "type": "endpoint",
+      "value": ".../v1/be-event",
+      "meaning": "Nhận sự kiện dạng tên",
+      "where": "BackendEnvironmentConfig.asset"
+    },
+    {
+      "source": "server info",
+      "key": "sendImageUrl",
+      "type": "endpoint",
+      "value": ".../v1/be-event-image-send",
+      "meaning": "Nhận ảnh chụp màn hình",
+      "where": "BackendEnvironmentConfig.asset"
+    },
+    {
+      "source": "code const",
+      "key": "Định dạng tên sự kiện động (GrandEventSender)",
+      "type": "format string",
+      "value": "\"_{0}\" (số level), \"tutorial_split_{0}\", \"ump_gathered_{0}\", \"ump_already_gathered_{0}\", \"_fps{0}_spikes{1}\", \"_moves{0}_lcd{1}\"",
+      "meaning": "Nhét dữ liệu vào tên sự kiện vì payload chỉ có EventName",
+      "where": "GrandEventSender"
+    },
+    {
+      "source": "code const",
+      "key": "EventSender.GetLiveOpsStats",
+      "type": "format string",
+      "value": "{\"MLS\":..,\"MLR\":..,\"MLT\":..,\"SjSc\":..,\"SjSs\":..,\"JrSc\":..,\"JrSs\":..,\"JrR\":..}",
+      "meaning": "Chuỗi nén tiến độ MagicLab/SkyJump/JetpackRace gắn vào level_event",
+      "where": "EventSender.GetLiveOpsStats"
+    },
+    {
+      "source": "code field",
+      "key": "AdjustStatSender token cố định",
+      "type": "string",
+      "value": "một token cho sự kiện bắt đầu level đầu tiên và một token cho sự kiện tiêu coin (không chép giá trị)",
+      "meaning": "Hai event token hardcode ngoài bảng config",
+      "where": "AdjustStatSender.SendLevelStart1Event, AdjustStatSender.SendCoinSpendEvent"
+    },
+    {
+      "source": "json default",
+      "key": "AdjustStatConfigModel.json: IAPStatModels[0].EventToken",
+      "type": "",
+      "value": "2r6v62",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/AdjustStatConfigModel.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "AdjustStatConfigModel.json: IAPStatModels[0].ProductId",
+      "type": "",
+      "value": "sort.starterbundle1",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/AdjustStatConfigModel.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "AdjustStatConfigModel.json: IAPStatModels[1].EventToken",
+      "type": "",
+      "value": "77dixk",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/AdjustStatConfigModel.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "AdjustStatConfigModel.json: IAPStatModels[1].ProductId",
+      "type": "",
+      "value": "sort.apprenticebundle5",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/AdjustStatConfigModel.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "AdjustStatConfigModel.json: IAPStatModels[2].EventToken",
+      "type": "",
+      "value": "opelwl",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/AdjustStatConfigModel.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "AdjustStatConfigModel.json: IAPStatModels[2].ProductId",
+      "type": "",
+      "value": "sort.magicianbundle10",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/AdjustStatConfigModel.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "AdjustStatConfigModel.json: IAPStatModels[3].EventToken",
+      "type": "",
+      "value": "pllfqr",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/AdjustStatConfigModel.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "AdjustStatConfigModel.json: IAPStatModels[3].ProductId",
+      "type": "",
+      "value": "sort.sorcererbundle20",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/AdjustStatConfigModel.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "AdjustStatConfigModel.json: IAPStatModels[4].EventToken",
+      "type": "",
+      "value": "3clirc",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/AdjustStatConfigModel.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "AdjustStatConfigModel.json: IAPStatModels[4].ProductId",
+      "type": "",
+      "value": "sort.magebundle50",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/AdjustStatConfigModel.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "AdjustStatConfigModel.json: IAPStatModels[5].EventToken",
+      "type": "",
+      "value": "g249zl",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/AdjustStatConfigModel.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "AdjustStatConfigModel.json: IAPStatModels[5].ProductId",
+      "type": "",
+      "value": "sort.wizardbundle100",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/AdjustStatConfigModel.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "AdjustStatConfigModel.json: IAPStatModels[6].EventToken",
+      "type": "",
+      "value": "c0q0zz",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/AdjustStatConfigModel.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "AdjustStatConfigModel.json: IAPStatModels[6].ProductId",
+      "type": "",
+      "value": "sort.coins2",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/AdjustStatConfigModel.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "AdjustStatConfigModel.json: IAPStatModels[7].EventToken",
+      "type": "",
+      "value": "v5eoet",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/AdjustStatConfigModel.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "AdjustStatConfigModel.json: IAPStatModels[7].ProductId",
+      "type": "",
+      "value": "sort.coins8",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/AdjustStatConfigModel.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "AdjustStatConfigModel.json: IAPStatModels[8].EventToken",
+      "type": "",
+      "value": "8q2aiz",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/AdjustStatConfigModel.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "AdjustStatConfigModel.json: IAPStatModels[8].ProductId",
+      "type": "",
+      "value": "sort.coins15",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/AdjustStatConfigModel.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "AdjustStatConfigModel.json: IAPStatModels[9].EventToken",
+      "type": "",
+      "value": "mc7vnz",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/AdjustStatConfigModel.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "AdjustStatConfigModel.json: IAPStatModels[9].ProductId",
+      "type": "",
+      "value": "sort.coins30",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/AdjustStatConfigModel.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "AdjustStatConfigModel.json: IAPStatModels[10].EventToken",
+      "type": "",
+      "value": "rbw09y",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/AdjustStatConfigModel.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "AdjustStatConfigModel.json: IAPStatModels[10].ProductId",
+      "type": "",
+      "value": "sort.coins55",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/AdjustStatConfigModel.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "AdjustStatConfigModel.json: IAPStatModels[11].EventToken",
+      "type": "",
+      "value": "3th4e5",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/AdjustStatConfigModel.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "AdjustStatConfigModel.json: IAPStatModels[11].ProductId",
+      "type": "",
+      "value": "sort.coins100",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/AdjustStatConfigModel.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "AdjustStatConfigModel.json: IAPStatModels[12].EventToken",
+      "type": "",
+      "value": "c914di",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/AdjustStatConfigModel.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "AdjustStatConfigModel.json: IAPStatModels[12].ProductId",
+      "type": "",
+      "value": "sort.endless2",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/AdjustStatConfigModel.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "AdjustStatConfigModel.json: IAPStatModels[13].EventToken",
+      "type": "",
+      "value": "1uyl86",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/AdjustStatConfigModel.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "AdjustStatConfigModel.json: IAPStatModels[13].ProductId",
+      "type": "",
+      "value": "sort.endless3",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/AdjustStatConfigModel.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "AdjustStatConfigModel.json: IAPStatModels[14].EventToken",
+      "type": "",
+      "value": "m34yrf",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/AdjustStatConfigModel.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "AdjustStatConfigModel.json: IAPStatModels[14].ProductId",
+      "type": "",
+      "value": "sort.endless5",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/AdjustStatConfigModel.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "AdjustStatConfigModel.json: IAPStatModels[15].EventToken",
+      "type": "",
+      "value": "rq4kcc",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/AdjustStatConfigModel.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "AdjustStatConfigModel.json: IAPStatModels[15].ProductId",
+      "type": "",
+      "value": "sort.endless10",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/AdjustStatConfigModel.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "AdjustStatConfigModel.json: IAPStatModels[16].EventToken",
+      "type": "",
+      "value": "t9ibj3",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/AdjustStatConfigModel.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "AdjustStatConfigModel.json: IAPStatModels[16].ProductId",
+      "type": "",
+      "value": "sort.endless12",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/AdjustStatConfigModel.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "AdjustStatConfigModel.json: IAPStatModels[17].EventToken",
+      "type": "",
+      "value": "wh94gf",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/AdjustStatConfigModel.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "AdjustStatConfigModel.json: IAPStatModels[17].ProductId",
+      "type": "",
+      "value": "sort.endless15",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/AdjustStatConfigModel.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "AdjustStatConfigModel.json: IAPStatModels[18].EventToken",
+      "type": "",
+      "value": "4lo4lc",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/AdjustStatConfigModel.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "AdjustStatConfigModel.json: IAPStatModels[18].ProductId",
+      "type": "",
+      "value": "sort.endless20",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/AdjustStatConfigModel.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "AdjustStatConfigModel.json: IAPStatModels[19].EventToken",
+      "type": "",
+      "value": "ugtty4",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/AdjustStatConfigModel.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "AdjustStatConfigModel.json: IAPStatModels[19].ProductId",
+      "type": "",
+      "value": "sort.endless25",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/AdjustStatConfigModel.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "AdjustStatConfigModel.json: IAPStatModels[20].EventToken",
+      "type": "",
+      "value": "dl26wf",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/AdjustStatConfigModel.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "AdjustStatConfigModel.json: IAPStatModels[20].ProductId",
+      "type": "",
+      "value": "sort.endless50",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/AdjustStatConfigModel.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "AdjustStatConfigModel.json: IAPStatModels[21].EventToken",
+      "type": "",
+      "value": "kbiseu",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/AdjustStatConfigModel.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "AdjustStatConfigModel.json: IAPStatModels[21].ProductId",
+      "type": "",
+      "value": "sort.endless100",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/AdjustStatConfigModel.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "AdjustStatConfigModel.json: IAPStatModels[22].EventToken",
+      "type": "",
+      "value": "gquuii",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/AdjustStatConfigModel.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "AdjustStatConfigModel.json: IAPStatModels[22].ProductId",
+      "type": "",
+      "value": "sort.special0.8",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/AdjustStatConfigModel.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "AdjustStatConfigModel.json: IAPStatModels[23].EventToken",
+      "type": "",
+      "value": "4atpx7",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/AdjustStatConfigModel.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "AdjustStatConfigModel.json: IAPStatModels[23].ProductId",
+      "type": "",
+      "value": "sort.special1",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/AdjustStatConfigModel.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "AdjustStatConfigModel.json: IAPStatModels[24].EventToken",
+      "type": "",
+      "value": "eyou4e",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/AdjustStatConfigModel.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "AdjustStatConfigModel.json: IAPStatModels[24].ProductId",
+      "type": "",
+      "value": "sort.special3",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/AdjustStatConfigModel.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "AdjustStatConfigModel.json: IAPStatModels[25].EventToken",
+      "type": "",
+      "value": "f1xqqo",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/AdjustStatConfigModel.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "AdjustStatConfigModel.json: IAPStatModels[25].ProductId",
+      "type": "",
+      "value": "sort.special4",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/AdjustStatConfigModel.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "AdjustStatConfigModel.json: IAPStatModels[26].EventToken",
+      "type": "",
+      "value": "p37hwv",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/AdjustStatConfigModel.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "AdjustStatConfigModel.json: IAPStatModels[26].ProductId",
+      "type": "",
+      "value": "sort.special4.99",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/AdjustStatConfigModel.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "AdjustStatConfigModel.json: IAPStatModels[27].EventToken",
+      "type": "",
+      "value": "xjci9k",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/AdjustStatConfigModel.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "AdjustStatConfigModel.json: IAPStatModels[27].ProductId",
+      "type": "",
+      "value": "sort.special5",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/AdjustStatConfigModel.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "AdjustStatConfigModel.json: IAPStatModels[28].EventToken",
+      "type": "",
+      "value": "n9ainl",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/AdjustStatConfigModel.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "AdjustStatConfigModel.json: IAPStatModels[28].ProductId",
+      "type": "",
+      "value": "sort.special8.5",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/AdjustStatConfigModel.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "AdjustStatConfigModel.json: IAPStatModels[29].EventToken",
+      "type": "",
+      "value": "3l2gd9",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/AdjustStatConfigModel.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "AdjustStatConfigModel.json: IAPStatModels[29].ProductId",
+      "type": "",
+      "value": "sort.special10",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/AdjustStatConfigModel.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "AdjustStatConfigModel.json: IAPStatModels[30].EventToken",
+      "type": "",
+      "value": "xr53ib",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/AdjustStatConfigModel.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "AdjustStatConfigModel.json: IAPStatModels[30].ProductId",
+      "type": "",
+      "value": "sort.special18",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/AdjustStatConfigModel.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "AdjustStatConfigModel.json: IAPStatModels[31].EventToken",
+      "type": "",
+      "value": "29jvd5",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/AdjustStatConfigModel.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "AdjustStatConfigModel.json: IAPStatModels[31].ProductId",
+      "type": "",
+      "value": "sort.special20",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/AdjustStatConfigModel.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "AdjustStatConfigModel.json: IAPStatModels[32].EventToken",
+      "type": "",
+      "value": "dbl30b",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/AdjustStatConfigModel.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "AdjustStatConfigModel.json: IAPStatModels[32].ProductId",
+      "type": "",
+      "value": "sort.special40",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/AdjustStatConfigModel.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "AdjustStatConfigModel.json: IAPStatModels[33].EventToken",
+      "type": "",
+      "value": "yfs5p1",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/AdjustStatConfigModel.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "AdjustStatConfigModel.json: IAPStatModels[33].ProductId",
+      "type": "",
+      "value": "sort.special45",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/AdjustStatConfigModel.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "AdjustStatConfigModel.json: IAPStatModels[34].EventToken",
+      "type": "",
+      "value": "gcglna",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/AdjustStatConfigModel.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "AdjustStatConfigModel.json: IAPStatModels[34].ProductId",
+      "type": "",
+      "value": "sort.special50",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/AdjustStatConfigModel.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "AdjustStatConfigModel.json: IAPStatModels[35].EventToken",
+      "type": "",
+      "value": "sauwb3",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/AdjustStatConfigModel.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "AdjustStatConfigModel.json: IAPStatModels[35].ProductId",
+      "type": "",
+      "value": "sort.special80",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/AdjustStatConfigModel.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "AdjustStatConfigModel.json: IAPStatModels[36].EventToken",
+      "type": "",
+      "value": "q4pyhc",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/AdjustStatConfigModel.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "AdjustStatConfigModel.json: IAPStatModels[36].ProductId",
+      "type": "",
+      "value": "sort.special100",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/AdjustStatConfigModel.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "AdjustStatConfigModel.json: IAPStatModels[37].EventToken",
+      "type": "",
+      "value": "noqz2e",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/AdjustStatConfigModel.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "AdjustStatConfigModel.json: IAPStatModels[37].ProductId",
+      "type": "",
+      "value": "sort.pawtouch1",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/AdjustStatConfigModel.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "AdjustStatConfigModel.json: IAPStatModels[38].EventToken",
+      "type": "",
+      "value": "8l8m9r",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/AdjustStatConfigModel.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "AdjustStatConfigModel.json: IAPStatModels[38].ProductId",
+      "type": "",
+      "value": "sort.pawtouch3",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/AdjustStatConfigModel.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "AdjustStatConfigModel.json: IAPStatModels[39].EventToken",
+      "type": "",
+      "value": "7ugm1u",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/AdjustStatConfigModel.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "AdjustStatConfigModel.json: IAPStatModels[39].ProductId",
+      "type": "",
+      "value": "sort.pawtouch10",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/AdjustStatConfigModel.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "AdjustStatConfigModel.json: IAPStatModels[40..137]",
+      "type": "",
+      "value": "… 98 phần tử nữa (xem appendix/default-configs.md)",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/AdjustStatConfigModel.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "AdjustStatConfigModel.json: LevelStatModels[0].EventToken",
+      "type": "",
+      "value": "k3yff1",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/AdjustStatConfigModel.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "AdjustStatConfigModel.json: LevelStatModels[0].ReachedLevel",
+      "type": "",
+      "value": "5",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/AdjustStatConfigModel.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "AdjustStatConfigModel.json: LevelStatModels[1].EventToken",
+      "type": "",
+      "value": "4na3pe",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/AdjustStatConfigModel.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "AdjustStatConfigModel.json: LevelStatModels[1].ReachedLevel",
+      "type": "",
+      "value": "10",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/AdjustStatConfigModel.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "AdjustStatConfigModel.json: LevelStatModels[2].EventToken",
+      "type": "",
+      "value": "gta5kt",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/AdjustStatConfigModel.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "AdjustStatConfigModel.json: LevelStatModels[2].ReachedLevel",
+      "type": "",
+      "value": "15",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/AdjustStatConfigModel.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "AdjustStatConfigModel.json: LevelStatModels[3].EventToken",
+      "type": "",
+      "value": "r4yrba",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/AdjustStatConfigModel.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "AdjustStatConfigModel.json: LevelStatModels[3].ReachedLevel",
+      "type": "",
+      "value": "20",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/AdjustStatConfigModel.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "AdjustStatConfigModel.json: LevelStatModels[4].EventToken",
+      "type": "",
+      "value": "xuk4pl",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/AdjustStatConfigModel.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "AdjustStatConfigModel.json: LevelStatModels[4].ReachedLevel",
+      "type": "",
+      "value": "25",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/AdjustStatConfigModel.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "AdjustStatConfigModel.json: LevelStatModels[5].EventToken",
+      "type": "",
+      "value": "mie0lb",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/AdjustStatConfigModel.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "AdjustStatConfigModel.json: LevelStatModels[5].ReachedLevel",
+      "type": "",
+      "value": "30",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/AdjustStatConfigModel.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "AdjustStatConfigModel.json: LevelStatModels[6].EventToken",
+      "type": "",
+      "value": "vb990c",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/AdjustStatConfigModel.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "AdjustStatConfigModel.json: LevelStatModels[6].ReachedLevel",
+      "type": "",
+      "value": "35",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/AdjustStatConfigModel.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "AdjustStatConfigModel.json: LevelStatModels[7].EventToken",
+      "type": "",
+      "value": "gvehzl",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/AdjustStatConfigModel.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "AdjustStatConfigModel.json: LevelStatModels[7].ReachedLevel",
+      "type": "",
+      "value": "40",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/AdjustStatConfigModel.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "AdjustStatConfigModel.json: LevelStatModels[8].EventToken",
+      "type": "",
+      "value": "5g49kk",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/AdjustStatConfigModel.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "AdjustStatConfigModel.json: LevelStatModels[8].ReachedLevel",
+      "type": "",
+      "value": "45",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/AdjustStatConfigModel.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "AdjustStatConfigModel.json: LevelStatModels[9].EventToken",
+      "type": "",
+      "value": "1itggl",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/AdjustStatConfigModel.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "AdjustStatConfigModel.json: LevelStatModels[9].ReachedLevel",
+      "type": "",
+      "value": "50",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/AdjustStatConfigModel.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "AdjustStatConfigModel.json: LevelStatModels[10].EventToken",
+      "type": "",
+      "value": "15oaj2",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/AdjustStatConfigModel.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "AdjustStatConfigModel.json: LevelStatModels[10].ReachedLevel",
+      "type": "",
+      "value": "60",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/AdjustStatConfigModel.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "AdjustStatConfigModel.json: LevelStatModels[11].EventToken",
+      "type": "",
+      "value": "8arp2x",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/AdjustStatConfigModel.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "AdjustStatConfigModel.json: LevelStatModels[11].ReachedLevel",
+      "type": "",
+      "value": "70",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/AdjustStatConfigModel.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "AdjustStatConfigModel.json: LevelStatModels[12].EventToken",
+      "type": "",
+      "value": "rjiyxy",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/AdjustStatConfigModel.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "AdjustStatConfigModel.json: LevelStatModels[12].ReachedLevel",
+      "type": "",
+      "value": "80",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/AdjustStatConfigModel.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "AdjustStatConfigModel.json: LevelStatModels[13].EventToken",
+      "type": "",
+      "value": "2g6wav",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/AdjustStatConfigModel.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "AdjustStatConfigModel.json: LevelStatModels[13].ReachedLevel",
+      "type": "",
+      "value": "90",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/AdjustStatConfigModel.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "AdjustStatConfigModel.json: LevelStatModels[14].EventToken",
+      "type": "",
+      "value": "7am4qy",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/AdjustStatConfigModel.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "AdjustStatConfigModel.json: LevelStatModels[14].ReachedLevel",
+      "type": "",
+      "value": "100",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/AdjustStatConfigModel.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "AdjustStatConfigModel.json: LevelStatModels[15].EventToken",
+      "type": "",
+      "value": "dzr2pn",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/AdjustStatConfigModel.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "AdjustStatConfigModel.json: LevelStatModels[15].ReachedLevel",
+      "type": "",
+      "value": "125",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/AdjustStatConfigModel.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "AdjustStatConfigModel.json: LevelStatModels[16].EventToken",
+      "type": "",
+      "value": "enqtxq",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/AdjustStatConfigModel.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "AdjustStatConfigModel.json: LevelStatModels[16].ReachedLevel",
+      "type": "",
+      "value": "150",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/AdjustStatConfigModel.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "AdjustStatConfigModel.json: LevelStatModels[17].EventToken",
+      "type": "",
+      "value": "vi42u4",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/AdjustStatConfigModel.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "AdjustStatConfigModel.json: LevelStatModels[17].ReachedLevel",
+      "type": "",
+      "value": "175",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/AdjustStatConfigModel.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "AdjustStatConfigModel.json: LevelStatModels[18].EventToken",
+      "type": "",
+      "value": "iytj1n",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/AdjustStatConfigModel.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "AdjustStatConfigModel.json: LevelStatModels[18].ReachedLevel",
+      "type": "",
+      "value": "200",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/AdjustStatConfigModel.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "AdjustStatConfigModel.json: LevelStatModels[19].EventToken",
+      "type": "",
+      "value": "mlsl57",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/AdjustStatConfigModel.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "AdjustStatConfigModel.json: LevelStatModels[19].ReachedLevel",
+      "type": "",
+      "value": "250",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/AdjustStatConfigModel.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "AdjustStatConfigModel.json: LevelStatModels[20].EventToken",
+      "type": "",
+      "value": "y76x5w",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/AdjustStatConfigModel.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "AdjustStatConfigModel.json: LevelStatModels[20].ReachedLevel",
+      "type": "",
+      "value": "300",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/AdjustStatConfigModel.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "AdjustStatConfigModel.json: LevelStatModels[21].EventToken",
+      "type": "",
+      "value": "y9zy9v",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/AdjustStatConfigModel.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "AdjustStatConfigModel.json: LevelStatModels[21].ReachedLevel",
+      "type": "",
+      "value": "400",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/AdjustStatConfigModel.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "AdjustStatConfigModel.json: LevelStatModels[22].EventToken",
+      "type": "",
+      "value": "h1gqqa",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/AdjustStatConfigModel.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "AdjustStatConfigModel.json: LevelStatModels[22].ReachedLevel",
+      "type": "",
+      "value": "500",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/AdjustStatConfigModel.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "AdjustStatConfigModel.json: LevelStatModels[23].EventToken",
+      "type": "",
+      "value": "ls9ro4",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/AdjustStatConfigModel.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "AdjustStatConfigModel.json: LevelStatModels[23].ReachedLevel",
+      "type": "",
+      "value": "750",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/AdjustStatConfigModel.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "AdjustStatConfigModel.json: LevelStatModels[24].EventToken",
+      "type": "",
+      "value": "aghmi3",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/AdjustStatConfigModel.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "AdjustStatConfigModel.json: LevelStatModels[24].ReachedLevel",
+      "type": "",
+      "value": "1000",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/AdjustStatConfigModel.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "AdjustStatConfigModel.json: LevelStatModels[25].EventToken",
+      "type": "",
+      "value": "l71s11",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/AdjustStatConfigModel.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "AdjustStatConfigModel.json: LevelStatModels[25].ReachedLevel",
+      "type": "",
+      "value": "1250",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/AdjustStatConfigModel.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "AdjustStatConfigModel.json: LevelStatModels[26].EventToken",
+      "type": "",
+      "value": "wvwqkn",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/AdjustStatConfigModel.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "AdjustStatConfigModel.json: LevelStatModels[26].ReachedLevel",
+      "type": "",
+      "value": "1500",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/AdjustStatConfigModel.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "AdjustStatConfigModel.json: LevelStatModels[27].EventToken",
+      "type": "",
+      "value": "l68c6e",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/AdjustStatConfigModel.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "AdjustStatConfigModel.json: LevelStatModels[27].ReachedLevel",
+      "type": "",
+      "value": "1750",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/AdjustStatConfigModel.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "AdjustStatConfigModel.json: LevelStatModels[28].EventToken",
+      "type": "",
+      "value": "5tmfjz",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/AdjustStatConfigModel.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "AdjustStatConfigModel.json: LevelStatModels[28].ReachedLevel",
+      "type": "",
+      "value": "2000",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/AdjustStatConfigModel.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "AdjustStatConfigModel.json: LevelStatModels[29].EventToken",
+      "type": "",
+      "value": "ji2ls1",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/AdjustStatConfigModel.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "AdjustStatConfigModel.json: LevelStatModels[29].ReachedLevel",
+      "type": "",
+      "value": "2250",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/AdjustStatConfigModel.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "AdjustStatConfigModel.json: LevelStatModels[30].EventToken",
+      "type": "",
+      "value": "w755ao",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/AdjustStatConfigModel.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "AdjustStatConfigModel.json: LevelStatModels[30].ReachedLevel",
+      "type": "",
+      "value": "2500",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/AdjustStatConfigModel.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "AdjustStatConfigModel.json: LevelStatModels[31].EventToken",
+      "type": "",
+      "value": "mbqlu0",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/AdjustStatConfigModel.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "AdjustStatConfigModel.json: LevelStatModels[31].ReachedLevel",
+      "type": "",
+      "value": "2750",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/AdjustStatConfigModel.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "AdjustStatConfigModel.json: LevelStatModels[32].EventToken",
+      "type": "",
+      "value": "rvijp7",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/AdjustStatConfigModel.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "AdjustStatConfigModel.json: LevelStatModels[32].ReachedLevel",
+      "type": "",
+      "value": "3000",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/AdjustStatConfigModel.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "AdjustStatConfigModel.json: LevelStatModels[33].EventToken",
+      "type": "",
+      "value": "dvffjf",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/AdjustStatConfigModel.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "AdjustStatConfigModel.json: LevelStatModels[33].ReachedLevel",
+      "type": "",
+      "value": "3500",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/AdjustStatConfigModel.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "AdjustStatConfigModel.json: LevelStatModels[34].EventToken",
+      "type": "",
+      "value": "blje4v",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/AdjustStatConfigModel.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "AdjustStatConfigModel.json: LevelStatModels[34].ReachedLevel",
+      "type": "",
+      "value": "4000",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/AdjustStatConfigModel.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "server cache (historical)",
+      "key": "AdjustStatConfigModel (live) = default?",
+      "type": "",
+      "value": "302/352 key trùng default, 50 key khác/thêm",
+      "meaning": "Đối chiếu config server thật (CachedRemoteConfigs) với AdjustStatConfigModel.json",
+      "where": "Configs/CachedRemoteConfigs + Firebase RC template 3197 — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server cache (historical)",
+      "key": "AdjustStatConfigModel: iapStatModels[116].productId",
+      "type": "",
+      "value": "w.sort.treasuredrill1",
+      "meaning": "server ghi đè (default = w.sort.apprenticebundle5)",
+      "where": "Configs/CachedRemoteConfigs + Firebase RC template 3197 — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server cache (historical)",
+      "key": "AdjustStatConfigModel: iapStatModels[116].eventToken",
+      "type": "",
+      "value": "xsgajz",
+      "meaning": "server ghi đè (default = 2i60xz)",
+      "where": "Configs/CachedRemoteConfigs + Firebase RC template 3197 — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server cache (historical)",
+      "key": "AdjustStatConfigModel: iapStatModels[117].productId",
+      "type": "",
+      "value": "w.sort.treasuredrill4",
+      "meaning": "server ghi đè (default = w.sort.magicianbundle10)",
+      "where": "Configs/CachedRemoteConfigs + Firebase RC template 3197 — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server cache (historical)",
+      "key": "AdjustStatConfigModel: iapStatModels[117].eventToken",
+      "type": "",
+      "value": "1nygfy",
+      "meaning": "server ghi đè (default = 9zs0dc)",
+      "where": "Configs/CachedRemoteConfigs + Firebase RC template 3197 — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server cache (historical)",
+      "key": "AdjustStatConfigModel: iapStatModels[118].productId",
+      "type": "",
+      "value": "w.sort.treasuredrill18",
+      "meaning": "server ghi đè (default = w.sort.sorcererbundle20)",
+      "where": "Configs/CachedRemoteConfigs + Firebase RC template 3197 — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server cache (historical)",
+      "key": "AdjustStatConfigModel: iapStatModels[118].eventToken",
+      "type": "",
+      "value": "x56qzm",
+      "meaning": "server ghi đè (default = 17dsb3)",
+      "where": "Configs/CachedRemoteConfigs + Firebase RC template 3197 — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server cache (historical)",
+      "key": "AdjustStatConfigModel: iapStatModels[119].productId",
+      "type": "",
+      "value": "w.sort.apprenticebundle5",
+      "meaning": "server ghi đè (default = w.sort.magebundle50)",
+      "where": "Configs/CachedRemoteConfigs + Firebase RC template 3197 — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server cache (historical)",
+      "key": "AdjustStatConfigModel: iapStatModels[119].eventToken",
+      "type": "",
+      "value": "2i60xz",
+      "meaning": "server ghi đè (default = tqx5k5)",
+      "where": "Configs/CachedRemoteConfigs + Firebase RC template 3197 — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server cache (historical)",
+      "key": "AdjustStatConfigModel: iapStatModels[120].productId",
+      "type": "",
+      "value": "w.sort.magicianbundle10",
+      "meaning": "server ghi đè (default = w.sort.wizardbundle100)",
+      "where": "Configs/CachedRemoteConfigs + Firebase RC template 3197 — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server cache (historical)",
+      "key": "AdjustStatConfigModel: iapStatModels[120].eventToken",
+      "type": "",
+      "value": "9zs0dc",
+      "meaning": "server ghi đè (default = li4bnb)",
+      "where": "Configs/CachedRemoteConfigs + Firebase RC template 3197 — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server cache (historical)",
+      "key": "AdjustStatConfigModel: iapStatModels[121].productId",
+      "type": "",
+      "value": "w.sort.sorcererbundle20",
+      "meaning": "server ghi đè (default = w.sort.apprenticebundle4.5)",
+      "where": "Configs/CachedRemoteConfigs + Firebase RC template 3197 — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server cache (historical)",
+      "key": "AdjustStatConfigModel: iapStatModels[121].eventToken",
+      "type": "",
+      "value": "17dsb3",
+      "meaning": "server ghi đè (default = pjt2nl)",
+      "where": "Configs/CachedRemoteConfigs + Firebase RC template 3197 — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server cache (historical)",
+      "key": "AdjustStatConfigModel: iapStatModels[122].productId",
+      "type": "",
+      "value": "w.sort.magebundle50",
+      "meaning": "server ghi đè (default = w.sort.magicianbundle9)",
+      "where": "Configs/CachedRemoteConfigs + Firebase RC template 3197 — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server cache (historical)",
+      "key": "AdjustStatConfigModel: iapStatModels[122].eventToken",
+      "type": "",
+      "value": "tqx5k5",
+      "meaning": "server ghi đè (default = 4h221q)",
+      "where": "Configs/CachedRemoteConfigs + Firebase RC template 3197 — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server cache (historical)",
+      "key": "AdjustStatConfigModel: iapStatModels[123].productId",
+      "type": "",
+      "value": "w.sort.wizardbundle100",
+      "meaning": "server ghi đè (default = w.sort.sorcererbundle18)",
+      "where": "Configs/CachedRemoteConfigs + Firebase RC template 3197 — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server cache (historical)",
+      "key": "AdjustStatConfigModel: iapStatModels[123].eventToken",
+      "type": "",
+      "value": "li4bnb",
+      "meaning": "server ghi đè (default = 5dmii8)",
+      "where": "Configs/CachedRemoteConfigs + Firebase RC template 3197 — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server cache (historical)",
+      "key": "AdjustStatConfigModel: iapStatModels[124].productId",
+      "type": "",
+      "value": "w.sort.apprenticebundle4.5",
+      "meaning": "server ghi đè (default = w.sort.magebundle45)",
+      "where": "Configs/CachedRemoteConfigs + Firebase RC template 3197 — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server cache (historical)",
+      "key": "AdjustStatConfigModel: iapStatModels[124].eventToken",
+      "type": "",
+      "value": "pjt2nl",
+      "meaning": "server ghi đè (default = 6wr21j)",
+      "where": "Configs/CachedRemoteConfigs + Firebase RC template 3197 — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server cache (historical)",
+      "key": "AdjustStatConfigModel: iapStatModels[125].productId",
+      "type": "",
+      "value": "w.sort.magicianbundle9",
+      "meaning": "server ghi đè (default = w.sort.wizardbundle90)",
+      "where": "Configs/CachedRemoteConfigs + Firebase RC template 3197 — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server cache (historical)",
+      "key": "AdjustStatConfigModel: iapStatModels[125].eventToken",
+      "type": "",
+      "value": "4h221q",
+      "meaning": "server ghi đè (default = 9ez70c)",
+      "where": "Configs/CachedRemoteConfigs + Firebase RC template 3197 — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server cache (historical)",
+      "key": "AdjustStatConfigModel: iapStatModels[126].productId",
+      "type": "",
+      "value": "w.sort.sorcererbundle18",
+      "meaning": "server ghi đè (default = w.sort.coins2)",
+      "where": "Configs/CachedRemoteConfigs + Firebase RC template 3197 — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server cache (historical)",
+      "key": "AdjustStatConfigModel: iapStatModels[126].eventToken",
+      "type": "",
+      "value": "5dmii8",
+      "meaning": "server ghi đè (default = g4qv1s)",
+      "where": "Configs/CachedRemoteConfigs + Firebase RC template 3197 — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server cache (historical)",
+      "key": "AdjustStatConfigModel: iapStatModels[127].productId",
+      "type": "",
+      "value": "w.sort.magebundle45",
+      "meaning": "server ghi đè (default = w.sort.coins8)",
+      "where": "Configs/CachedRemoteConfigs + Firebase RC template 3197 — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server cache (historical)",
+      "key": "AdjustStatConfigModel: iapStatModels[127].eventToken",
+      "type": "",
+      "value": "6wr21j",
+      "meaning": "server ghi đè (default = ovfj3c)",
+      "where": "Configs/CachedRemoteConfigs + Firebase RC template 3197 — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server cache (historical)",
+      "key": "AdjustStatConfigModel: iapStatModels[128].productId",
+      "type": "",
+      "value": "w.sort.wizardbundle90",
+      "meaning": "server ghi đè (default = w.sort.coins15)",
+      "where": "Configs/CachedRemoteConfigs + Firebase RC template 3197 — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server cache (historical)",
+      "key": "AdjustStatConfigModel: iapStatModels[128].eventToken",
+      "type": "",
+      "value": "9ez70c",
+      "meaning": "server ghi đè (default = jptsej)",
+      "where": "Configs/CachedRemoteConfigs + Firebase RC template 3197 — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server cache (historical)",
+      "key": "AdjustStatConfigModel: iapStatModels[129].productId",
+      "type": "",
+      "value": "w.sort.coins2",
+      "meaning": "server ghi đè (default = w.sort.coins30)",
+      "where": "Configs/CachedRemoteConfigs + Firebase RC template 3197 — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server cache (historical)",
+      "key": "AdjustStatConfigModel: iapStatModels[129].eventToken",
+      "type": "",
+      "value": "g4qv1s",
+      "meaning": "server ghi đè (default = 2hsacv)",
+      "where": "Configs/CachedRemoteConfigs + Firebase RC template 3197 — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server cache (historical)",
+      "key": "AdjustStatConfigModel: iapStatModels[130].productId",
+      "type": "",
+      "value": "w.sort.coins8",
+      "meaning": "server ghi đè (default = w.sort.coins55)",
+      "where": "Configs/CachedRemoteConfigs + Firebase RC template 3197 — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server cache (historical)",
+      "key": "AdjustStatConfigModel: iapStatModels[130].eventToken",
+      "type": "",
+      "value": "ovfj3c",
+      "meaning": "server ghi đè (default = dphgqp)",
+      "where": "Configs/CachedRemoteConfigs + Firebase RC template 3197 — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server cache (historical)",
+      "key": "AdjustStatConfigModel: iapStatModels[131].productId",
+      "type": "",
+      "value": "w.sort.coins15",
+      "meaning": "server ghi đè (default = w.sort.coins100)",
+      "where": "Configs/CachedRemoteConfigs + Firebase RC template 3197 — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server cache (historical)",
+      "key": "AdjustStatConfigModel: iapStatModels[131].eventToken",
+      "type": "",
+      "value": "jptsej",
+      "meaning": "server ghi đè (default = ls13d7)",
+      "where": "Configs/CachedRemoteConfigs + Firebase RC template 3197 — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server cache (historical)",
+      "key": "AdjustStatConfigModel: iapStatModels[132].productId",
+      "type": "",
+      "value": "w.sort.coins30",
+      "meaning": "server ghi đè (default = w.sort.coins1.8)",
+      "where": "Configs/CachedRemoteConfigs + Firebase RC template 3197 — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server cache (historical)",
+      "key": "AdjustStatConfigModel: iapStatModels[132].eventToken",
+      "type": "",
+      "value": "2hsacv",
+      "meaning": "server ghi đè (default = 6xdj9t)",
+      "where": "Configs/CachedRemoteConfigs + Firebase RC template 3197 — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server cache (historical)",
+      "key": "AdjustStatConfigModel: iapStatModels[133].productId",
+      "type": "",
+      "value": "w.sort.coins55",
+      "meaning": "server ghi đè (default = w.sort.coins7)",
+      "where": "Configs/CachedRemoteConfigs + Firebase RC template 3197 — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server cache (historical)",
+      "key": "AdjustStatConfigModel: iapStatModels[133].eventToken",
+      "type": "",
+      "value": "dphgqp",
+      "meaning": "server ghi đè (default = o26r2n)",
+      "where": "Configs/CachedRemoteConfigs + Firebase RC template 3197 — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server cache (historical)",
+      "key": "AdjustStatConfigModel: iapStatModels[134].productId",
+      "type": "",
+      "value": "w.sort.coins100",
+      "meaning": "server ghi đè (default = w.sort.coins13.5)",
+      "where": "Configs/CachedRemoteConfigs + Firebase RC template 3197 — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server cache (historical)",
+      "key": "AdjustStatConfigModel: iapStatModels[134].eventToken",
+      "type": "",
+      "value": "ls13d7",
+      "meaning": "server ghi đè (default = hdlgx2)",
+      "where": "Configs/CachedRemoteConfigs + Firebase RC template 3197 — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server cache (historical)",
+      "key": "AdjustStatConfigModel: iapStatModels[135].productId",
+      "type": "",
+      "value": "w.sort.coins1.8",
+      "meaning": "server ghi đè (default = w.sort.coins27)",
+      "where": "Configs/CachedRemoteConfigs + Firebase RC template 3197 — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server cache (historical)",
+      "key": "AdjustStatConfigModel: iapStatModels[135].eventToken",
+      "type": "",
+      "value": "6xdj9t",
+      "meaning": "server ghi đè (default = q4kzdv)",
+      "where": "Configs/CachedRemoteConfigs + Firebase RC template 3197 — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server cache (historical)",
+      "key": "AdjustStatConfigModel: iapStatModels[136].productId",
+      "type": "",
+      "value": "w.sort.coins7",
+      "meaning": "server ghi đè (default = w.sort.coins49)",
+      "where": "Configs/CachedRemoteConfigs + Firebase RC template 3197 — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server cache (historical)",
+      "key": "AdjustStatConfigModel: iapStatModels[136].eventToken",
+      "type": "",
+      "value": "o26r2n",
+      "meaning": "server ghi đè (default = 37crlq)",
+      "where": "Configs/CachedRemoteConfigs + Firebase RC template 3197 — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server cache (historical)",
+      "key": "AdjustStatConfigModel: iapStatModels[137].productId",
+      "type": "",
+      "value": "w.sort.coins13.5",
+      "meaning": "server ghi đè (default = w.sort.coins90)",
+      "where": "Configs/CachedRemoteConfigs + Firebase RC template 3197 — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server cache (historical)",
+      "key": "AdjustStatConfigModel: iapStatModels[137].eventToken",
+      "type": "",
+      "value": "hdlgx2",
+      "meaning": "server ghi đè (default = opofg8)",
+      "where": "Configs/CachedRemoteConfigs + Firebase RC template 3197 — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server cache (historical)",
+      "key": "AdjustStatConfigModel: iapStatModels[138].productId",
+      "type": "",
+      "value": "w.sort.coins27",
+      "meaning": "server-only (không có trong default)",
+      "where": "Configs/CachedRemoteConfigs + Firebase RC template 3197 — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server cache (historical)",
+      "key": "AdjustStatConfigModel: iapStatModels[138].eventToken",
+      "type": "",
+      "value": "q4kzdv",
+      "meaning": "server-only (không có trong default)",
+      "where": "Configs/CachedRemoteConfigs + Firebase RC template 3197 — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server cache (historical)",
+      "key": "AdjustStatConfigModel: iapStatModels[139].productId",
+      "type": "",
+      "value": "w.sort.coins49",
+      "meaning": "server-only (không có trong default)",
+      "where": "Configs/CachedRemoteConfigs + Firebase RC template 3197 — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server cache (historical)",
+      "key": "AdjustStatConfigModel: iapStatModels[139].eventToken",
+      "type": "",
+      "value": "37crlq",
+      "meaning": "server-only (không có trong default)",
+      "where": "Configs/CachedRemoteConfigs + Firebase RC template 3197 — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server cache (historical)",
+      "key": "AdjustStatConfigModel: iapStatModels[140].productId",
+      "type": "",
+      "value": "w.sort.coins90",
+      "meaning": "server-only (không có trong default)",
+      "where": "Configs/CachedRemoteConfigs + Firebase RC template 3197 — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server cache (historical)",
+      "key": "AdjustStatConfigModel: iapStatModels[140].eventToken",
+      "type": "",
+      "value": "opofg8",
+      "meaning": "server-only (không có trong default)",
+      "where": "Configs/CachedRemoteConfigs + Firebase RC template 3197 — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    }
+  ],
+  "rewards": [],
+  "backend": [
+    {
+      "command": "be-event",
+      "direction": "client→server",
+      "purpose": "gửi tên sự kiện kỹ thuật (GrandEventSenderRemoteService.SendEvent)"
+    },
+    {
+      "command": "be-event-image-send",
+      "direction": "client→server",
+      "purpose": "gửi ảnh chụp màn hình (GrandScreenShotRemoteService.SendScreenShot)"
+    },
+    {
+      "command": "Firebase Analytics (SDK)",
+      "direction": "client→Firebase",
+      "purpose": "toàn bộ event có tham số (FirebaseEventSender)"
+    },
+    {
+      "command": "Adjust SDK",
+      "direction": "client→Adjust",
+      "purpose": "attribution + event token mốc level và IAP"
+    },
+    {
+      "command": "AppLovin MAX SDK",
+      "direction": "client→MAX",
+      "purpose": "sự kiện chuẩn hoá tối ưu quảng cáo (ApplovinStatSender)"
+    },
+    {
+      "command": "Metica adapter",
+      "direction": "client→ad network",
+      "purpose": "interstitial/rewarded; doanh thu quy về nhóm event ad_* với tham số provider"
+    }
+  ],
+  "ui": [],
+  "analytics": [
+    {
+      "event": "level_event",
+      "params": "state, user_segment, liveOps_stats, session_durations + 6 tham số kho đồ",
+      "when": "bắt đầu/kết thúc mỗi level"
+    },
+    {
+      "event": "level_duration",
+      "params": "level_duration, level_start_time, level_end_time, level_end_type, finish_status, average_move_duration, first_move_duration, progress",
+      "when": "kết thúc level"
+    },
+    {
+      "event": "daily_level",
+      "params": "state, fail_reason",
+      "when": "chơi level daily"
+    },
+    {
+      "event": "daily_progress_bar_fill / daily_challenge_month_completed / daily_challenge_screen_view / daily_rewarded_watched",
+      "params": "progress_bar_month (MM/yyyy), current_step, daily_challenge_day, reason",
+      "when": "tiến trình Daily Challenge"
+    },
+    {
+      "event": "tutorial_split_start",
+      "params": "split_index",
+      "when": "mỗi bước tutorial (TutorialEventHandler)"
+    },
+    {
+      "event": "iap_purchase",
+      "params": "product_id, product_type, product_rank, currency, price, origin, source, context, from_web, web_product_id, ml_joined, ml_rank, ml_remaining_duration, progress",
+      "when": "mua thành công"
+    },
+    {
+      "event": "in_app_purchase_d14_v2",
+      "params": "product_id, product_type, product_rank, currency USD, value, origin, source, from_web, progress",
+      "when": "mua trong 14 ngày đầu"
+    },
+    {
+      "event": "iap_button_selected",
+      "params": "product_id, origin, source, context",
+      "when": "bấm nút mua"
+    },
+    {
+      "event": "purchase_failed / purchase_not_verified / purchase_unable_to_verify / not_requested_iap",
+      "params": "product_id, reason, price, currency",
+      "when": "lỗi thanh toán"
+    },
+    {
+      "event": "restore_purchase_selected",
+      "params": "source",
+      "when": "bấm khôi phục giao dịch"
+    },
+    {
+      "event": "total_revenue_v2",
+      "params": "value, currency (mặc định USD)",
+      "when": "tổng doanh thu (EventSender.SendRevenueEvent)"
+    },
+    {
+      "event": "earned",
+      "params": "reason, progress + lượng từng loại: coin, life, life_in_seconds, undo, shuffle, extra_bottle, merge_energy, duck_x2_in_seconds, collection_pack_1..5",
+      "when": "nhận tài nguyên"
+    },
+    {
+      "event": "coin_spent",
+      "params": "amount, reason, progress",
+      "when": "tiêu coin"
+    },
+    {
+      "event": "booster_used / booster_purchased",
+      "params": "booster_type, booster_price, attempt, segment, progress",
+      "when": "dùng/mua booster"
+    },
+    {
+      "event": "refill_popup_opened / refill_purchased",
+      "params": "refill_price, additional_life_inventory",
+      "when": "popup nạp mạng"
+    },
+    {
+      "event": "shop_opened / shop_closed",
+      "params": "source",
+      "when": "mở/đóng cửa hàng"
+    },
+    {
+      "event": "ad_impression / ad_impression_d14 / ad_revenue / ad_shown / ad_show_started / ad_show_fail / ad_clicked / ad_review_creative_id / user_cpm",
+      "params": "ad_platform, ad_source, ad_unit_name, ad_format, ad_placement, network_placement, creative_identifier, ad_dsp_name, revenue_precision, ad_latency_millis, value, currency USD, session_count, impression_source, provider, ad_rank, loaded_ad_rank, progress",
+      "when": "vòng đời một lần hiển thị quảng cáo"
+    },
+    {
+      "event": "ad_service_initialization_started / ad_service_initialization_end / ad_service_initialized",
+      "params": "provider",
+      "when": "khởi tạo SDK quảng cáo"
+    },
+    {
+      "event": "game_state (vibration_enabled/disabled, sound_enabled/disabled, music_enabled/disabled, notifications_enabled/disabled, facebook_connected/disconnected, apple_connected/disconnected, name_changed, home_return, app_kill)",
+      "params": "game_state, old_name, new_name",
+      "when": "đổi cài đặt / kết nối tài khoản / thoát app"
+    },
+    {
+      "event": "streak_tournament_joined / streak_leaderboard_impression / streak_tournament_finished / streak_tournament_progress_claim / hat_collected / streak_info_impression",
+      "params": "bot_count, real_user_count, total_users, current_rank, entrance_rank, current_streak, remaining_duration, tournament_start_time, reward, claimed_step_need, claimed_step_rank, level_id",
+      "when": "Magic Streak Tournament"
+    },
+    {
+      "event": "weekly_tournament_joined / weekly_tournament_claimed / weekly_tournament_finished / weekly_tournament_claim_corrupted",
+      "params": "tournament_id, last_tournament_id, last_score, remote_score, remote_tournament_id, bot_count, entrance_rank",
+      "when": "giải tuần"
+    },
+    {
+      "event": "broom_streak_joined / broom_streak_impression(_v2) / broom_streak_info_impression(_v2) / broom_streak_finished(_v2) / broom_streak_won(_v2) / broom_streak_reward_claim(_v2)",
+      "params": "tournament_id, readable_event_id, current_streak, max_streak_current_tower, step_rewards, reward_index, remaining_duration",
+      "when": "Broom Streak / Tower Win Streak"
+    },
+    {
+      "event": "jetpack_race_joined / jetpack_race_screen_impression / jetpack_race_info_impression / jetpack_race_won / jetpack_race_lost (và bản _staged_)",
+      "params": "tournament_id, leaderboard_id, stage, race_rank, current_race_streak, max_streak, step_rewards, close_button_enabled",
+      "when": "Jetpack Race"
+    },
+    {
+      "event": "sky_jump_joined / sky_jump_screen_impression / sky_jump_join_impression / sky_jump_wait_impression / sky_jump_info_impression / sky_jump_won / sky_jump_lost (và bản _staged_)",
+      "params": "current_step, lost_step, stage, winner_count, earned_coins, remaining_penalty_duration, end_time",
+      "when": "Sky Jump"
+    },
+    {
+      "event": "endless_portal_started / endless_portal_screen_impression / endless_portal_claim / endless_portal_purchase / endless_portal_claim_with_fallback",
+      "params": "event_id, current_step, claimed_step, purchased_step, step_type (Free/Paid), segment, dollar_equivalent, productId",
+      "when": "Endless Portal"
+    },
+    {
+      "event": "special_offer_impression / special_offer_purchased / special_offer_fallback_rewards / wrong_special_offer_data",
+      "params": "event_id, event_ui_id, offer_name, product_id, price, currency, dollar_equivalent, user_segment, source",
+      "when": "Special Offer (kể cả bản adaptive)"
+    },
+    {
+      "event": "choose_one_popup_impression / choose_one_purchased / wrong_choose_one_special_offer_data",
+      "params": "impression_source, package_id, product_id, price",
+      "when": "Choose One Offer"
+    },
+    {
+      "event": "paw_touch_offer_impression / paw_touch_offer_first_impression / paw_touch_offer_purchased / paw_touch_offer_fallback_rewards",
+      "params": "event_id, event_type, product_id, price, currency, dollar_equivalent, user_segment, remaining_duration",
+      "when": "Paw Touch Offer"
+    },
+    {
+      "event": "no_ads_popup_impression / no_ads_offer_purchased",
+      "params": "product_id, price",
+      "when": "No Ads Offer"
+    },
+    {
+      "event": "minigame_offer_impression / minigame_offer_purchased / minigame_offer_purchased_fallback",
+      "params": "-",
+      "when": "MiniGame Offer"
+    },
+    {
+      "event": "treasuredrill_started / treasuredrill_popup_impression / treasuredrill_task_completed / treasuredrill_purchased / treasure_drill_finished / treasure_drill_purchased_fallback",
+      "params": "task_id",
+      "when": "Treasure Drill"
+    },
+    {
+      "event": "magic_pass_started / magic_pass_popup_impression / magic_pass_info_popup_impression / magic_pass_purchase_popup_impression / magic_pass_purchased / magic_pass_purchased_fallback / magic_pass_reward_claimed / magic_pass_step_completed / magic_pass_bonus_vault_activated / magic_pass_bonus_vault_completed / magic_pass_finished / magic_pass_team_gift_claimed",
+      "params": "step, is_free, reward, magic_pass_status, claimable_reward_amount, event_id, readable_event_id, segment",
+      "when": "Magic Pass"
+    },
+    {
+      "event": "magic_lab_start / magic_lab_info_impression / magic_lab_task_completed / magic_lab_stage_completed / magic_lab_stage_claimed / magic_lab_completed / magic_lab_finished",
+      "params": "current_stage, claimed_stage, stage_id, task_type, event_id, readable_event_id, segment",
+      "when": "Magic Lab"
+    },
+    {
+      "event": "magic_streak_gae_joined / magic_streak_gae_popup_impression / magic_streak_gae_info_impression / magic_streak_gae_hat_collected / magic_streak_gae_reward_claim / magic_streak_gae_finished / magic_streak_gae_completed",
+      "params": "level_id, total_completed_step_count, reward",
+      "when": "Magic Streak GAE"
+    },
+    {
+      "event": "masterleague_prejoinpopup_impression / masterleague_joined / masterlegue_leaderboard_impression / masterleague_league_finished / master_league_start",
+      "params": "tournament_id, elo, rank, score, promotion_info",
+      "when": "Champions League"
+    },
+    {
+      "event": "duck_festival_popup_impression / duck_festival_info_impression / duck_festival_stage_popup_impression / duck_collected / duck_festival_joined / duck_festival_leaderboard_impression / duck_festival_stage_completed / duck_festival_finished",
+      "params": "collected_duck_amount, reward, impression_source",
+      "when": "Duck Festival"
+    },
+    {
+      "event": "wof_started / wof_popup_impression / wof_wheel_spinned / wof_wheel_unlocked / wof_wheel_finished / wof_task_selected / wof_task_claimed / wof_task_finished",
+      "params": "stage, segment, readable_event_id, total_currency, currency_type, currency_amount, unlocked_stage, task_order_id, task_type, task_goal, total_task_completed, total_spinned_wheel, is_completed, remaining_progress, current_task_types, reason",
+      "when": "Wheel of Fortune"
+    },
+    {
+      "event": "boat_rush_popup_impression / boat_rush_race_screen_impression / boat_rush_tutorial_impression / boat_rush_joined / boat_rush_race_won / boat_rush_race_lost",
+      "params": "race_id, tier, step, score, current_race_rank, tournament_id, readable_event_id, reason, source, remaining_duration",
+      "when": "Boat Rush"
+    },
+    {
+      "event": "underwater_treasures_started / underwater_treasures_popup_impression / underwater_treasures_info_impression / underwater_treasures_step_completed / underwater_treasures_finished",
+      "params": "current_step, completed_step, trident_inventory, used_trident_count, chest_type, step_rewards",
+      "when": "MiniGame (Underwater Treasures)"
+    },
+    {
+      "event": "merge_event_join / merge_event_screen_open / merge_event_screen_close / merge_event_new_item_found / merge_event_generator_item_finished / merge_event_spend_energy / merge_event_finished",
+      "params": "founded_item_id, generator_item_id, multiplier, source",
+      "when": "Merge MiniGame"
+    },
+    {
+      "event": "team_quest_started / team_quest_popup_impression / team_quest_join_popup_impression / team_quest_info_popup_impression / team_quest_joined / team_quest_reward_claimed / team_quest_finished",
+      "params": "step, reward, impression_source",
+      "when": "Team Quest"
+    },
+    {
+      "event": "team_arena_started / team_arena_join_popup_impression / team_arena_event_popup_impression / team_arena_info_popup_impression / team_arena_joined / team_arena_step_completed / team_arena_finished",
+      "params": "current_step, previous_elo, current_elo, team_rank, rank, team_reward, reward, eligibility, leaderboard_id",
+      "when": "Team Arena"
+    },
+    {
+      "event": "teams_created / teams_changed / teams_left / teams_joined / teams_kicked_out_from_team / teams_unlocked / teams_join_available / user_team_info / teams_message_sent / teams_help_requested / teams_help_made / teams_card_requested / teams_card_sent / teams_free_lives_popup_opened / teams_free_lives_popup_additional_life_add_button / teams_more_lives_popup_free_lives_button",
+      "params": "team_id, message_type, segment, progress, additional_life_inventory",
+      "when": "Teams"
+    },
+    {
+      "event": "collection_started / collection_page_impression / theme_completed / collection_completed / star_chest_opened / token_selected / card_received / card_sent",
+      "params": "collection_id, collection_name, theme_id, package_type, received_count, total_card_count, total_unique_card_count, start_chest_star_count, source",
+      "when": "Collection"
+    },
+    {
+      "event": "journey_opened / journey_poster_selected / journey_poster_unlocked / journey_reward_given / journey_poster_time_tracking / journey_master_league_poster_selected",
+      "params": "old_poster_id, selected_poster_id, unlocked_poster_id, level, rewards",
+      "when": "Journey"
+    },
+    {
+      "event": "daily_bonus_started / daily_bonus_popup_impression / daily_bonus_claimed",
+      "params": "claimed_reward, source, event_id, segment",
+      "when": "Daily Reward"
+    },
+    {
+      "event": "watchandwin_popup_impression / watchandwin_ad_impression",
+      "params": "impression_source, ad_id",
+      "when": "Watch & Win"
+    },
+    {
+      "event": "welcome_back_claim",
+      "params": "welcome_back_id, progress",
+      "when": "Welcome Back"
+    },
+    {
+      "event": "compensation_claim",
+      "params": "compensation_id, is_super_charger, progress",
+      "when": "nhận quà bù"
+    },
+    {
+      "event": "friend_interaction / friends_tab_impression / invite_popup_impression / invite_send / referral_popup_invite_impression / referral_milestone_reached / referral_registered",
+      "params": "interaction_type, target_user_id, source, referrer_id, friends_count, reason",
+      "when": "Friends & Referral"
+    },
+    {
+      "event": "user_profile_opened / frame_selected / name_style_selected / forced_name_impression / forced_name_changed / forced_name_picture_changed",
+      "params": "source, frame_id, name_style_id, old_name, new_name, profile_picture, facebook_connection",
+      "when": "Profile"
+    },
+    {
+      "event": "web_shop_offer_impression / web_shop_offer_selected / web_shop_offer_redirected / web_shop_offer_applied / web_shop_offer_claimed / web_shop_offer_status / web_shop_offer_status_failed / web_shop_offer_fetch_claimable_started / web_shop_offer_fulfilled_purchase_count / web_shop_offer_prompt_result / web_shop_purchase_failed_closed / purchase (web)",
+      "params": "product_id, web_product_id, transaction_id, price, transaction_status, status_code, count, result",
+      "when": "Web Shop"
+    },
+    {
+      "event": "supercharger_popup_impression / supercharger_activation_impression / supercharger_used / supercharger_status / super_charger_tutorial_seen",
+      "params": "charger_type, charger_status, context, is_active, supercharger_progress, usage_count, color_filled, moves_made, bottle_completed, is_stuck_after_use, added_bottle_for_stuck, play_on_count, ingame_status, tutorial_seen_count, attempt, reason",
+      "when": "Super Charger"
+    },
+    {
+      "event": "snitch_popup_impression / snitch_info_impression / snitch_activation_impression / snitch_claim / snitch_lost",
+      "params": "impression_source, snitch_progress, progress",
+      "when": "Snitch"
+    },
+    {
+      "event": "magic_bottle_popup_impression / magic_bottle_info_impression / magic_bottle_claim / magic_bottle_lost",
+      "params": "impression_source, current_bottle_progress, magic_bottle_max_progress, progress",
+      "when": "Magic Bottle"
+    },
+    {
+      "event": "playon_withrewarded / playon_withrewarded_mega_shuffle_stucked",
+      "params": "source, rewards, attempt, segment",
+      "when": "chơi tiếp bằng quảng cáo"
+    },
+    {
+      "event": "new_blocker_introduced",
+      "params": "blocker_id",
+      "when": "gặp chướng ngại mới lần đầu"
+    },
+    {
+      "event": "startup_network_info / startup_battery_info",
+      "params": "network info, battery_status, battery_level",
+      "when": "khởi động (chẩn đoán thiết bị)"
+    },
+    {
+      "event": "time_spent_in_operation",
+      "params": "operation_name, time_spent_in_seconds",
+      "when": "đo thao tác nặng"
+    },
+    {
+      "event": "level_reach_45_24h / level_reach_45_72h / level_reach_100_72h",
+      "params": "seconds_since_first_open, progress",
+      "when": "đạt mốc level trong cửa sổ thời gian sau cài đặt"
+    },
+    {
+      "event": "on_adjust_attribution",
+      "params": "network, campaign, adgroup, creative, tracker_token, tracker_name, click_label, cost_type, cost_amount, cost_currency, adid, fb_install_referrer",
+      "when": "nhận attribution từ Adjust"
+    },
+    {
+      "event": "invalid_config_fetched / firebase_cfg_faulted / leaderboard_faulted / persistent_seed_load_failed / persistent_seed_parse_failed / default_backend_config / default_backend_daily_config",
+      "params": "config_name, file_name",
+      "when": "sự cố cấu hình/dữ liệu"
+    },
+    {
+      "event": "GrandEventSender (be-event, không tham số)",
+      "params": "tên sự kiện tự mang thông tin",
+      "when": "application_context_installer_started, install_runtime_services_started/end, sdk_init_started, init_firebase_started/end/end_with_fail/end_with_timeout, grand_config_fetch_end, login_end, login_end_with_fail, ad_service_initialization_started/end, sdk_init_completed, install_app_context_services_start/end, sync_and_init_end, bootstrap_application_context_started/end, application_scene_to_home_scene_started, bootstrap_home_context_started, notification_initialization_started, notification_initialized, facebook_sdk_init_started, facebook_initialized, inter_ad_show_started, rewarded_ad_show_started, level_start/win/lose/stuck/play_on/quit/pause/none (+_level), level_entrance_animation_end, level_is_not_loaded, level_first_bottle_click, level_first_move_click, level_congrats, level_win_pop_up_opened, level_win_pop_up_continue_clicked, play_button_clicked, play_button_click_failed, app_focus_lost (+_fps_spikes), app_focus_gain, app_low_memory, refill_pop_up_opened, reinstalled, home_return, home_return_completed, quit_from_settings_clicked, booster_clicked, settings_clicked, ump_flow_started, ump_timeout, ump_initialization_skipped, ump_gathered_*, ump_already_gathered_*, terms_and_conditions_asked/accepted/already_accepted, tutorial_split_*"
+    },
+    {
+      "event": "AppLovin MAX (ApplovinStatSender)",
+      "params": "value",
+      "when": "level_start, level_complete, virtual_resource_transaction (earn/spend), tutorial_complete, energy_depleted, use_prop, game_shop_enter"
+    }
+  ],
+  "storage_keys": [
+    "grand_session_counter",
+    "last_application_quit",
+    "last_session_duration",
+    "AppStartCount"
+  ],
+  "related_features": [
+    "LiveOps",
+    "EventsFramework",
+    "Ads",
+    "Store",
+    "SuperCharger",
+    "Snitch",
+    "MagicBottle"
+  ],
+  "gaps": [
+    "Tên sự kiện được suy ra từ chuỗi hằng trong từng method; với vài method có nhiều chuỗi giống nhau (ví dụ SendTeamCreated/SendTeamChanged/SendTeamLeft) tên thật đã được đối chiếu lại thủ công là teams_created/teams_changed/teams_left",
+    "Không chép Adjust event token, Adjust app token, Facebook App Id, khoá Firebase/AppLovin — chỉ ghi nhận vị trí field",
+    "15/11 — resolved_static_code_historical_build: MeticaInterstitial.OnInterstitialRevenuePaidEvent gọi EventSender.SendRevenueEvent, TrackAdRevenue, SendAdImpression/D14/SendAdRevenue. TrackAdRevenue dựng AdjustAdRevenue và gọi Adjust.TrackAdRevenue. Vì vậy mô tả doanh thu chỉ đi ad_* là thiếu; có revenue pipeline bên ngoài list FirebaseEventSender. Còn lại: Cần đối chiếu ARM64/current runtime và các nhánh caller còn chưa đủ bằng chứng.",
+    "15/11 — partial_static_code_unresolved: Constructor SessionTracker có DateTime.MinValue và TimeSpan.FromMinutes(in_d0); in_d0 được decompiler gán từ extraout_s1/return register thay vì literal rõ. Đã có body nhưng chưa đủ chứng minh số phút SessionTimeout; không lấy default phổ biến30phút điền vào. Còn lại: Cần ARM disassembly quanh RVA0x3AFF728/loaddouble hoặc metadata field initializer để khôi phục số phút; declaration không giải được giá trị.",
+    "15/11 — partial_static_code_unresolved: Đã đọc constructor: tạo List<IEventSender>, dựng FirebaseEventSender bằng FirebaseInitializer và Add một lần. Kết luận giới hạn ở constructor này. Chưa audit toàn bộ mutation/caller list để chứng minh không có sender thêm sau hoặc pipeline độc lập. Còn lại: Cần trace mọi mutation _eventSenders và pipeline analytics độc lập; không nâng một constructor thành toàn bộ telemetry runtime.",
+    "[Runtime 2026-09-10] Config server LIVE đã đọc trực tiếp từ cache máy (không cần request); các hàng 'server live' là giá trị server ghi đè/thêm so với default."
+  ],
+  "sources": [
+    "GameDesign/facts/facts.json (EventSender 312 method + chuỗi tham số, GrandEventSender, FirebaseEventSender, SessionTracker, FpsTracker, InventoryParametersProvider, AdjustInitializer, AdjustStatSender, ApplovinStatSender)",
+    "UnityExport/ExportedProject/Assets/Resources/defaultconfigs/AdjustStatConfigModel.json",
+    "UnityExport/ExportedProject/Assets/MonoBehaviour/BackendEnvironmentConfig.asset (sendEventUrl, sendImageUrl)",
+    "RecoveredNative/strings-by-type.tsv"
+  ],
+  "related_feature_aliases": [
+    {
+      "original": "IAP",
+      "feature": "Store"
+    }
+  ],
+  "audit_provenance": {
+    "review_date": "2026-11-15",
+    "mode": "offline_existing_files",
+    "code_build": "0.0.3063 ARMv7",
+    "runtime_build_observed_historically": "0.0.3129 ARM64 (audit 2026-10-18); not rechecked 2026-11-15",
+    "new_playtests": 0,
+    "uc_status": "See facts/audit_20261115/uc_registry.json; image reference is not pass",
+    "workbook_status": "Existing XLSX is historical; JSON and local web include 2026-11-15 corrections",
+    "static_review": "facts/local_code_gap_results_20261115.json; facts/local_asset_gap_results_20261115.json; facts/final_data_gap_decisions_20261115.json; facts/core_body_gap_decisions_20261115.json; facts/remaining_asset_gap_decisions_20261115.json"
+  },
+  "static_review_20261115": {
+    "date": "2026-11-15",
+    "scope": "Historical code/assets 0.0.3063, dated caches, device 0.0.3129 cached bundles and explicitly scoped runtime evidence. Not full runtime pass.",
+    "findings": [
+      {
+        "kind": "code",
+        "source_report": "facts/local_code_gap_results_20261115.json",
+        "id": "MS-CODE-14",
+        "gap_ids": [
+          "MS-Analytics-G005"
+        ],
+        "title": "Constructor EventSender chỉ thêm Firebase sender",
+        "status": "partial_static_code",
+        "conclusion": "Đã đọc constructor: tạo List<IEventSender>, dựng FirebaseEventSender bằng FirebaseInitializer và Add một lần. Kết luận giới hạn ở constructor này. Chưa audit toàn bộ mutation/caller list để chứng minh không có sender thêm sau hoặc pipeline độc lập.",
+        "evidence": [
+          {
+            "file": "../com.grandgames.magicsort_Unity_20260909_112501/RecoveredNative/PseudoC/Assembly-CSharp/Modules/Contexts/Application/Events/Scripts/EventSender.c",
+            "line": 181,
+            "end_line": 253,
+            "method": "// ===== EventSender :: private void .ctor(FirebaseInitializer",
+            "sha256": "55fce90ff50b7fefc93eb6ade339d3dbbb7a40e9bc89075d81393c1fdf4c6aa5",
+            "body_checked": true,
+            "build": "0.0.3063 ARMv7",
+            "required_body_tokens": [
+              "FirebaseEventSender___ctor",
+              "_eventSenders",
+              "List<IEventSender>_Add"
+            ]
+          }
+        ],
+        "remaining": "Cần trace mọi mutation _eventSenders và pipeline analytics độc lập; không nâng một constructor thành toàn bộ telemetry runtime.",
+        "scope": "recovered_native_0.0.3063_only",
+        "runtime_verified": false
+      },
+      {
+        "kind": "code",
+        "source_report": "facts/local_code_gap_results_20261115.json",
+        "id": "MS-CODE-26",
+        "gap_ids": [
+          "MS-Analytics-G003"
+        ],
+        "title": "Metica có đường revenue tới Adjust",
+        "status": "resolved_static_code",
+        "conclusion": "MeticaInterstitial.OnInterstitialRevenuePaidEvent gọi EventSender.SendRevenueEvent, TrackAdRevenue, SendAdImpression/D14/SendAdRevenue. TrackAdRevenue dựng AdjustAdRevenue và gọi Adjust.TrackAdRevenue. Vì vậy mô tả doanh thu chỉ đi ad_* là thiếu; có revenue pipeline bên ngoài list FirebaseEventSender.",
+        "evidence": [
+          {
+            "file": "../com.grandgames.magicsort_Unity_20260909_112501/RecoveredNative/PseudoC/Assembly-CSharp/Modules/Contexts/Application/Ads/Scripts/MeticaAdapter/MeticaInterstitial.c",
+            "line": 1239,
+            "end_line": 1306,
+            "method": "// ===== MeticaInterstitial :: private void TrackAdRevenue(",
+            "sha256": "5dbb27416ac8bd305778c8fbefb6835eb7325f75e304c3714fd815bdd54966b3",
+            "body_checked": true,
+            "build": "0.0.3063 ARMv7",
+            "required_body_tokens": [
+              "AdjustSdk_Adjust__TrackAdRevenue"
+            ]
+          }
+        ],
+        "remaining": "Cần đối chiếu ARM64/current runtime và các nhánh caller còn chưa đủ bằng chứng.",
+        "scope": "recovered_native_0.0.3063_only",
+        "runtime_verified": false
+      },
+      {
+        "kind": "code",
+        "source_report": "facts/local_code_gap_results_20261115.json",
+        "id": "MS-CODE-27",
+        "gap_ids": [
+          "MS-Analytics-G004"
+        ],
+        "title": "SessionTimeout bị mất hằng double khi decompile",
+        "status": "partial_static_code",
+        "conclusion": "Constructor SessionTracker có DateTime.MinValue và TimeSpan.FromMinutes(in_d0); in_d0 được decompiler gán từ extraout_s1/return register thay vì literal rõ. Đã có body nhưng chưa đủ chứng minh số phút SessionTimeout; không lấy default phổ biến30phút điền vào.",
+        "evidence": [
+          {
+            "file": "../com.grandgames.magicsort_Unity_20260909_112501/RecoveredNative/PseudoC/Assembly-CSharp/Modules/Contexts/Application/Events/Scripts/Sessions/SessionTracker.c",
+            "line": 554,
+            "end_line": 602,
+            "method": "// ===== SessionTracker :: public void .ctor()",
+            "sha256": "ea501835fb7917de7d2d5b7af996ce6e568fc08dd24e08e24e10bfbfc989aad2",
+            "body_checked": true,
+            "build": "0.0.3063 ARMv7",
+            "required_body_tokens": [
+              "System_TimeSpan__FromMinutes",
+              "double in_d0"
+            ]
+          }
+        ],
+        "remaining": "Cần ARM disassembly quanh RVA0x3AFF728/loaddouble hoặc metadata field initializer để khôi phục số phút; declaration không giải được giá trị.",
+        "scope": "recovered_native_0.0.3063_only",
+        "runtime_verified": false
+      }
+    ]
+  },
+  "acceptance_review_20261115": {
+    "source": "facts/feature_acceptance_20261115.json",
+    "feature_id": "Analytics",
+    "scope": "All eleven dossier dimensions reviewed; full_feature_verified is not implied; read per-dimension gaps and actual runtime evidence."
+  },
+  "segment_ab_review_20261115": {
+    "status": "not_identified_in_sources",
+    "segment_ids": [],
+    "matching_basis": "explicit_gd_config_map_or_exact_model_token_in_gdd_configs_where_key_sources; rootfieldscoped",
+    "rows": [],
+    "classifications": {},
+    "assignment_verified": false,
+    "uplift_verified": false,
+    "note": "No matchingrow does not prove no segmentation/AB. Rewardbucketfalsepositives remain explicitly classified."
+  },
+  "current_native_review_20261116": {
+    "reviewed": "2026-11-16",
+    "scope": "file_only_host_APK_0.0.3129_ARM64_matches_last_observed_installed_version_2026-11-15",
+    "live_installed_20261116_verified": false,
+    "installed_binary_identity_verified": false,
+    "runtime_cases_new": 0,
+    "source_facts": "facts/review_20261116/code_findings.json",
+    "source_facts_sha256": "7adb0ab760cea248de7baaa76671082aff9231708782bc0bbcdadff38e2564ea",
+    "native_sha256": "d901f86380bdecae3a8ec5cf9a9b60acc5132d50dfcf7ec1f606de807e22b2d5",
+    "metadata_sha256": "d019f1787d94bcaf0e31508eea72a86dae8df2f422454f6263a2df7d56e3786a",
+    "findings": [
+      {
+        "id": "MS-CURRENT-20261116-02",
+        "gap_ids": [
+          "MS-Analytics-G004"
+        ],
+        "status": "resolved_static_code_current_build",
+        "conclusion": "Constructor SessionTracker ởVA0x38FE248: FMOV D0,#30.0 tại0x38FE2C0; BL System.TimeSpan.FromMinutes tại0x38FE2C8; STR X0,[X19,#0x28] tại0x38FE2CC. Metadata current đặt SessionTimeout ở0x28. Chốt hằng constructor30phút, giải missing scalar; không gọi session thực luôn đúng30phút vì còn focus/time comparison.",
+        "remaining": "Runtime clock/focus/session emission vẫn cần case riêng; không phải runtime pass.",
+        "evidence": [
+          {
+            "file": "facts/review_20261116/current_build_dump/dump.cs",
+            "line": 210332,
+            "end_line": 210377,
+            "sha256": "47edf53b3a3e0e82dd81316c145d0cebde72ad2bc5d2dfe3a35492e9cfbd2df2",
+            "text": "public class SessionTracker : MonoBehaviour // TypeDefIndex: 4964\n{\n\t// Fields\n\tprivate float _sessionDuration; // 0x18\n\tprivate int _session; // 0x1C\n\tprivate DateTime _lastQuitTime; // 0x20\n\tprivate const string LastApplicationQuitTimeKey = \"last_application_quit\";\n\tprivate const string LastSessionDurationKey = \"last_session_duration\";\n\tprivate readonly TimeSpan SessionTimeout; // 0x28\n\tprivate const string SessionCounterKey = \"grand_session_counter\";\n\n\t// Methods\n\n\t// RVA: 0x38FDD78 Offset: 0x38FDD78 VA: 0x38FDD78\n\tprivate void Awake() { }\n\n\t// RVA: 0x38FDF04 Offset: 0x38FDF04 VA: 0x38FDF04\n\tpublic void Update() { }\n\n\t// RVA: 0x38FDF30 Offset: 0x38FDF30 VA: 0x38FDF30\n\tprivate void OnApplicationFocus(bool hasFocus) { }\n\n\t// RVA: 0x38FE17C Offset: 0x38FE17C VA: 0x38FE17C\n\tprivate void OnApplicationQuit() { }\n\n\t// RVA: 0x38FDF88 Offset: 0x38FDF88 VA: 0x38FDF88\n\tprivate void CheckAndStartSession() { }\n\n\t// RVA: 0x38FE180 Offset: 0x38FE180 VA: 0x38FE180\n\tprivate void StartNewSession() { }\n\n\t// RVA: 0x38FE088 Offset: 0x38FE088 VA: 0x38FE088\n\tprivate void SaveLastData() { }\n\n\t// RVA: 0x38FDDEC Offset: 0x38FDDEC VA: 0x38FDDEC\n\tprivate void LoadLastData() { }\n\n\t// RVA: 0x38FE220 Offset: 0x38FE220 VA: 0x38FE220\n\tpublic int GetSessionDurationInSeconds() { }\n\n\t// RVA: 0x38FE240 Offset: 0x38FE240 VA: 0x38FE240\n\tpublic int GetSession() { }\n\n\t// RVA: 0x38FE248 Offset: 0x38FE248 VA: 0x38FE248\n\tpublic void .ctor() { }\n}",
+            "build": "0.0.3129 ARM64",
+            "kind": "metadata_declaration_not_method_body"
+          },
+          {
+            "file": "facts/review_20261116/current_build_inputs/libil2cpp.so",
+            "sha256": "d901f86380bdecae3a8ec5cf9a9b60acc5132d50dfcf7ec1f606de807e22b2d5",
+            "build": "0.0.3129 ARM64",
+            "kind": "native_instruction_bytes",
+            "start_va": "0x38fe248",
+            "end_va_exclusive": "0x38fe2e4",
+            "file_offset": "0x38fe248",
+            "bytes_sha256": "a168770cc15a1033f5fcdffc98666002becbd4dc261a64dab092e4e8db67b57c"
+          }
+        ]
+      }
+    ],
+    "historical_review_policy": "Existing15Nov fields/gap decisions retained unchanged. Current native review is independent; static evidence is not device acceptance."
+  },
+  "continuation_review_20261116": {
+    "date": "2026-11-16",
+    "build": "0.0.3129 ARM64 host APK",
+    "build_scope": "Host APK version3129 matches LAST observed installed version15/11 only; installed bytes/live device16/11 not verified.",
+    "runtime_status": "device_unavailable",
+    "runtime_case_ids": [],
+    "current_apk_model_links": {
+      "feature": "Analytics",
+      "models": [
+        {
+          "model": "AdjustStatConfigModel",
+          "current_default_file": "facts/review_20261116/public_current_config_3129/defaults/AdjustStatConfigModel.json",
+          "resource_path": "defaultconfigs/adjuststatconfigmodel",
+          "sha256": "70fe9f7a78cba85e97d59aa8f1d2b7e736f6046f06b17c04ad34bd11bae915cd",
+          "matching_basis": [
+            "gdd/Analytics.json#/configs",
+            "gdd/Analytics.json#/sources"
+          ],
+          "scope": "Packaged default3129, not effective server config.",
+          "site_data_path": "data/current_config_3129/defaults/AdjustStatConfigModel.json",
+          "original_source_sha256": "70fe9f7a78cba85e97d59aa8f1d2b7e736f6046f06b17c04ad34bd11bae915cd",
+          "public_artifact_sha256": "d4afb2e411db0bfba16de3bd08f480aa697ddfc397e812a97417ce2cecb04cf0",
+          "sha256_scope": "sha256 is original raw model; public_artifact_sha256 is the sanitized download"
+        }
+      ],
+      "status": "exact_model_source_association",
+      "distribution": "sanitized_public",
+      "public_mapping_pending": false
+    },
+    "current_packaged_defaults": [
+      {
+        "model": "AdjustStatConfigModel",
+        "source": "facts/review_20261116/public_current_config_3129/defaults/AdjustStatConfigModel.json",
+        "site_data_path": "data/current_config_3129/defaults/AdjustStatConfigModel.json",
+        "public_artifact_sha256": "d4afb2e411db0bfba16de3bd08f480aa697ddfc397e812a97417ce2cecb04cf0",
+        "original_source_sha256": "70fe9f7a78cba85e97d59aa8f1d2b7e736f6046f06b17c04ad34bd11bae915cd",
+        "source_class": "static_asset",
+        "build": "0.0.3129 host APK",
+        "scope": "Sanitized packaged default fullvalues only; not effective remote/selected config or runtime.",
+        "values": {
+          "IAPStatModels": [
+            {
+              "EventToken": "2r6v62",
+              "ProductId": "sort.starterbundle1"
+            },
+            {
+              "EventToken": "77dixk",
+              "ProductId": "sort.apprenticebundle5"
+            },
+            {
+              "EventToken": "opelwl",
+              "ProductId": "sort.magicianbundle10"
+            },
+            {
+              "EventToken": "pllfqr",
+              "ProductId": "sort.sorcererbundle20"
+            },
+            {
+              "EventToken": "3clirc",
+              "ProductId": "sort.magebundle50"
+            },
+            {
+              "EventToken": "g249zl",
+              "ProductId": "sort.wizardbundle100"
+            },
+            {
+              "EventToken": "c0q0zz",
+              "ProductId": "sort.coins2"
+            },
+            {
+              "EventToken": "v5eoet",
+              "ProductId": "sort.coins8"
+            },
+            {
+              "EventToken": "8q2aiz",
+              "ProductId": "sort.coins15"
+            },
+            {
+              "EventToken": "mc7vnz",
+              "ProductId": "sort.coins30"
+            },
+            {
+              "EventToken": "rbw09y",
+              "ProductId": "sort.coins55"
+            },
+            {
+              "EventToken": "3th4e5",
+              "ProductId": "sort.coins100"
+            },
+            {
+              "EventToken": "c914di",
+              "ProductId": "sort.endless2"
+            },
+            {
+              "EventToken": "1uyl86",
+              "ProductId": "sort.endless3"
+            },
+            {
+              "EventToken": "m34yrf",
+              "ProductId": "sort.endless5"
+            },
+            {
+              "EventToken": "rq4kcc",
+              "ProductId": "sort.endless10"
+            },
+            {
+              "EventToken": "t9ibj3",
+              "ProductId": "sort.endless12"
+            },
+            {
+              "EventToken": "wh94gf",
+              "ProductId": "sort.endless15"
+            },
+            {
+              "EventToken": "4lo4lc",
+              "ProductId": "sort.endless20"
+            },
+            {
+              "EventToken": "ugtty4",
+              "ProductId": "sort.endless25"
+            },
+            {
+              "EventToken": "dl26wf",
+              "ProductId": "sort.endless50"
+            },
+            {
+              "EventToken": "kbiseu",
+              "ProductId": "sort.endless100"
+            },
+            {
+              "EventToken": "gquuii",
+              "ProductId": "sort.special0.8"
+            },
+            {
+              "EventToken": "4atpx7",
+              "ProductId": "sort.special1"
+            },
+            {
+              "EventToken": "eyou4e",
+              "ProductId": "sort.special3"
+            },
+            {
+              "EventToken": "f1xqqo",
+              "ProductId": "sort.special4"
+            },
+            {
+              "EventToken": "p37hwv",
+              "ProductId": "sort.special4.99"
+            },
+            {
+              "EventToken": "xjci9k",
+              "ProductId": "sort.special5"
+            },
+            {
+              "EventToken": "n9ainl",
+              "ProductId": "sort.special8.5"
+            },
+            {
+              "EventToken": "3l2gd9",
+              "ProductId": "sort.special10"
+            },
+            {
+              "EventToken": "xr53ib",
+              "ProductId": "sort.special18"
+            },
+            {
+              "EventToken": "29jvd5",
+              "ProductId": "sort.special20"
+            },
+            {
+              "EventToken": "dbl30b",
+              "ProductId": "sort.special40"
+            },
+            {
+              "EventToken": "yfs5p1",
+              "ProductId": "sort.special45"
+            },
+            {
+              "EventToken": "gcglna",
+              "ProductId": "sort.special50"
+            },
+            {
+              "EventToken": "sauwb3",
+              "ProductId": "sort.special80"
+            },
+            {
+              "EventToken": "q4pyhc",
+              "ProductId": "sort.special100"
+            },
+            {
+              "EventToken": "noqz2e",
+              "ProductId": "sort.pawtouch1"
+            },
+            {
+              "EventToken": "8l8m9r",
+              "ProductId": "sort.pawtouch3"
+            },
+            {
+              "EventToken": "7ugm1u",
+              "ProductId": "sort.pawtouch10"
+            },
+            {
+              "EventToken": "97mkb0",
+              "ProductId": "sort.pawtouch20"
+            },
+            {
+              "EventToken": "z0bv93",
+              "ProductId": "sort.pawtouch50"
+            },
+            {
+              "EventToken": "62fuji",
+              "ProductId": "sort.endlessnv3"
+            },
+            {
+              "EventToken": "tqew62",
+              "ProductId": "sort.endlessnv4"
+            },
+            {
+              "EventToken": "rm1130",
+              "ProductId": "sort.endlessnv6"
+            },
+            {
+              "EventToken": "ec36g4",
+              "ProductId": "sort.endlessnv8"
+            },
+            {
+              "EventToken": "4gll4s",
+              "ProductId": "sort.endlessnv12"
+            },
+            {
+              "EventToken": "dpu1we",
+              "ProductId": "sort.endlessnv25"
+            },
+            {
+              "EventToken": "y7z7k6",
+              "ProductId": "sort.endlessnv45"
+            },
+            {
+              "EventToken": "u9cfrm",
+              "ProductId": "sort.endlessnv90"
+            },
+            {
+              "EventToken": "r46k4f",
+              "ProductId": "sort.endlessnv7"
+            },
+            {
+              "EventToken": "wjn5sl",
+              "ProductId": "sort.endlessnv120"
+            },
+            {
+              "EventToken": "n1tu1m",
+              "ProductId": "sort.endlessnv200"
+            },
+            {
+              "EventToken": "dfiq94",
+              "ProductId": "sort.noadsoffer"
+            },
+            {
+              "EventToken": "dzyc3y",
+              "ProductId": "sort.chooseone10"
+            },
+            {
+              "EventToken": "yyxod2",
+              "ProductId": "sort.chooseone14"
+            },
+            {
+              "EventToken": "4v0a76",
+              "ProductId": "sort.chooseone15"
+            },
+            {
+              "EventToken": "4xcbmm",
+              "ProductId": "sort.chooseone21"
+            },
+            {
+              "EventToken": "gcosty",
+              "ProductId": "sort.chooseone3"
+            },
+            {
+              "EventToken": "3opgpo",
+              "ProductId": "sort.chooseone35"
+            },
+            {
+              "EventToken": "39gghk",
+              "ProductId": "sort.chooseone6"
+            },
+            {
+              "EventToken": "3hmlfb",
+              "ProductId": "sort.chooseone6.99"
+            },
+            {
+              "EventToken": "b2ymo3",
+              "ProductId": "sort.treasuredrill2"
+            },
+            {
+              "EventToken": "g2bhex",
+              "ProductId": "sort.treasuredrill5"
+            },
+            {
+              "EventToken": "ucwpbq",
+              "ProductId": "sort.treasuredrill10"
+            },
+            {
+              "EventToken": "o317ma",
+              "ProductId": "sort.treasuredrill15"
+            },
+            {
+              "EventToken": "8zp4l3",
+              "ProductId": "sort.treasuredrill25"
+            },
+            {
+              "EventToken": "o7q1ox",
+              "ProductId": "sort.magicpass10"
+            },
+            {
+              "EventToken": "6645uu",
+              "ProductId": "sort.magicpass5"
+            },
+            {
+              "EventToken": "v72y4n",
+              "ProductId": "sort.magicpass8"
+            },
+            {
+              "EventToken": "zbcpmz",
+              "ProductId": "sort.magicpass13"
+            },
+            {
+              "EventToken": "1m5flk",
+              "ProductId": "sort.magicpass18"
+            },
+            {
+              "EventToken": "ufnkfq",
+              "ProductId": "sort.underwater1"
+            },
+            {
+              "EventToken": "apzg8e",
+              "ProductId": "sort.underwater2"
+            },
+            {
+              "EventToken": "3mwkql",
+              "ProductId": "sort.underwater3"
+            },
+            {
+              "EventToken": "gahi7s",
+              "ProductId": "sort.underwater4"
+            },
+            {
+              "EventToken": "h4ogzg",
+              "ProductId": "sort.underwater5"
+            },
+            {
+              "EventToken": "6twsw1",
+              "ProductId": "sort.underwater10"
+            },
+            {
+              "EventToken": "2fu2wk",
+              "ProductId": "sort.noads5"
+            },
+            {
+              "EventToken": "tbj9hr",
+              "ProductId": "sort.noads7"
+            },
+            {
+              "EventToken": "lpcfqx",
+              "ProductId": "w.sort.chooseone3"
+            },
+            {
+              "EventToken": "jrhjrj",
+              "ProductId": "w.sort.chooseone6"
+            },
+            {
+              "EventToken": "tizf2d",
+              "ProductId": "w.sort.chooseone6.99"
+            },
+            {
+              "EventToken": "lv0kbe",
+              "ProductId": "w.sort.chooseone10"
+            },
+            {
+              "EventToken": "n03o3s",
+              "ProductId": "w.sort.chooseone14"
+            },
+            {
+              "EventToken": "qxyqbl",
+              "ProductId": "w.sort.chooseone15"
+            },
+            {
+              "EventToken": "l8auw3",
+              "ProductId": "w.sort.chooseone21"
+            },
+            {
+              "EventToken": "p8v618",
+              "ProductId": "w.sort.chooseone35"
+            },
+            {
+              "EventToken": "gefbsa",
+              "ProductId": "w.sort.chooseone2.5"
+            },
+            {
+              "EventToken": "dwh3p4",
+              "ProductId": "w.sort.chooseone5"
+            },
+            {
+              "EventToken": "8t99n7",
+              "ProductId": "w.sort.chooseone6.1"
+            },
+            {
+              "EventToken": "qx5wab",
+              "ProductId": "w.sort.chooseone8.5"
+            },
+            {
+              "EventToken": "z74pje",
+              "ProductId": "w.sort.chooseone11.5"
+            },
+            {
+              "EventToken": "m0gdl1",
+              "ProductId": "w.sort.chooseone13"
+            },
+            {
+              "EventToken": "vytabj",
+              "ProductId": "w.sort.chooseone18.5"
+            },
+            {
+              "EventToken": "h8i2iv",
+              "ProductId": "w.sort.chooseone31"
+            },
+            {
+              "EventToken": "lses3x",
+              "ProductId": "w.sort.special1"
+            },
+            {
+              "EventToken": "t2jul3",
+              "ProductId": "w.sort.special4.99"
+            },
+            {
+              "EventToken": "z6rm6a",
+              "ProductId": "w.sort.special10"
+            },
+            {
+              "EventToken": "q1h58z",
+              "ProductId": "w.sort.special20"
+            },
+            {
+              "EventToken": "av7cdc",
+              "ProductId": "w.sort.special50"
+            },
+            {
+              "EventToken": "vify9j",
+              "ProductId": "w.sort.special0.8"
+            },
+            {
+              "EventToken": "tgihcb",
+              "ProductId": "w.sort.special4"
+            },
+            {
+              "EventToken": "7t381h",
+              "ProductId": "w.sort.special8.5"
+            },
+            {
+              "EventToken": "6vcl9l",
+              "ProductId": "w.sort.special18"
+            },
+            {
+              "EventToken": "jatop0",
+              "ProductId": "w.sort.special45"
+            },
+            {
+              "EventToken": "h21lvs",
+              "ProductId": "w.sort.treasuredrill2"
+            },
+            {
+              "EventToken": "y1m86m",
+              "ProductId": "w.sort.treasuredrill5"
+            },
+            {
+              "EventToken": "7m80m8",
+              "ProductId": "w.sort.treasuredrill10"
+            },
+            {
+              "EventToken": "hg8yf5",
+              "ProductId": "w.sort.treasuredrill15"
+            },
+            {
+              "EventToken": "h2vju6",
+              "ProductId": "w.sort.treasuredrill25"
+            },
+            {
+              "EventToken": "a6q8ku",
+              "ProductId": "w.sort.treasuredrill1.5"
+            },
+            {
+              "EventToken": "f5foyn",
+              "ProductId": "w.sort.treasuredrill4"
+            },
+            {
+              "EventToken": "tlbq8z",
+              "ProductId": "w.sort.treasuredrill8.5"
+            },
+            {
+              "EventToken": "qr0kni",
+              "ProductId": "w.sort.treasuredrill13.5"
+            },
+            {
+              "EventToken": "9cslw5",
+              "ProductId": "w.sort.treasuredrill22.5"
+            },
+            {
+              "EventToken": "2i60xz",
+              "ProductId": "w.sort.apprenticebundle5"
+            },
+            {
+              "EventToken": "9zs0dc",
+              "ProductId": "w.sort.magicianbundle10"
+            },
+            {
+              "EventToken": "17dsb3",
+              "ProductId": "w.sort.sorcererbundle20"
+            },
+            {
+              "EventToken": "tqx5k5",
+              "ProductId": "w.sort.magebundle50"
+            },
+            {
+              "EventToken": "li4bnb",
+              "ProductId": "w.sort.wizardbundle100"
+            },
+            {
+              "EventToken": "pjt2nl",
+              "ProductId": "w.sort.apprenticebundle4.5"
+            },
+            {
+              "EventToken": "4h221q",
+              "ProductId": "w.sort.magicianbundle9"
+            },
+            {
+              "EventToken": "5dmii8",
+              "ProductId": "w.sort.sorcererbundle18"
+            },
+            {
+              "EventToken": "6wr21j",
+              "ProductId": "w.sort.magebundle45"
+            },
+            {
+              "EventToken": "9ez70c",
+              "ProductId": "w.sort.wizardbundle90"
+            },
+            {
+              "EventToken": "g4qv1s",
+              "ProductId": "w.sort.coins2"
+            },
+            {
+              "EventToken": "ovfj3c",
+              "ProductId": "w.sort.coins8"
+            },
+            {
+              "EventToken": "jptsej",
+              "ProductId": "w.sort.coins15"
+            },
+            {
+              "EventToken": "2hsacv",
+              "ProductId": "w.sort.coins30"
+            },
+            {
+              "EventToken": "dphgqp",
+              "ProductId": "w.sort.coins55"
+            },
+            {
+              "EventToken": "ls13d7",
+              "ProductId": "w.sort.coins100"
+            },
+            {
+              "EventToken": "6xdj9t",
+              "ProductId": "w.sort.coins1.8"
+            },
+            {
+              "EventToken": "o26r2n",
+              "ProductId": "w.sort.coins7"
+            },
+            {
+              "EventToken": "hdlgx2",
+              "ProductId": "w.sort.coins13.5"
+            },
+            {
+              "EventToken": "q4kzdv",
+              "ProductId": "w.sort.coins27"
+            },
+            {
+              "EventToken": "37crlq",
+              "ProductId": "w.sort.coins49"
+            },
+            {
+              "EventToken": "opofg8",
+              "ProductId": "w.sort.coins90"
+            }
+          ],
+          "LevelStatModels": [
+            {
+              "EventToken": "k3yff1",
+              "ReachedLevel": 5
+            },
+            {
+              "EventToken": "4na3pe",
+              "ReachedLevel": 10
+            },
+            {
+              "EventToken": "gta5kt",
+              "ReachedLevel": 15
+            },
+            {
+              "EventToken": "r4yrba",
+              "ReachedLevel": 20
+            },
+            {
+              "EventToken": "xuk4pl",
+              "ReachedLevel": 25
+            },
+            {
+              "EventToken": "mie0lb",
+              "ReachedLevel": 30
+            },
+            {
+              "EventToken": "vb990c",
+              "ReachedLevel": 35
+            },
+            {
+              "EventToken": "gvehzl",
+              "ReachedLevel": 40
+            },
+            {
+              "EventToken": "5g49kk",
+              "ReachedLevel": 45
+            },
+            {
+              "EventToken": "1itggl",
+              "ReachedLevel": 50
+            },
+            {
+              "EventToken": "15oaj2",
+              "ReachedLevel": 60
+            },
+            {
+              "EventToken": "8arp2x",
+              "ReachedLevel": 70
+            },
+            {
+              "EventToken": "rjiyxy",
+              "ReachedLevel": 80
+            },
+            {
+              "EventToken": "2g6wav",
+              "ReachedLevel": 90
+            },
+            {
+              "EventToken": "7am4qy",
+              "ReachedLevel": 100
+            },
+            {
+              "EventToken": "dzr2pn",
+              "ReachedLevel": 125
+            },
+            {
+              "EventToken": "enqtxq",
+              "ReachedLevel": 150
+            },
+            {
+              "EventToken": "vi42u4",
+              "ReachedLevel": 175
+            },
+            {
+              "EventToken": "iytj1n",
+              "ReachedLevel": 200
+            },
+            {
+              "EventToken": "mlsl57",
+              "ReachedLevel": 250
+            },
+            {
+              "EventToken": "y76x5w",
+              "ReachedLevel": 300
+            },
+            {
+              "EventToken": "y9zy9v",
+              "ReachedLevel": 400
+            },
+            {
+              "EventToken": "h1gqqa",
+              "ReachedLevel": 500
+            },
+            {
+              "EventToken": "ls9ro4",
+              "ReachedLevel": 750
+            },
+            {
+              "EventToken": "aghmi3",
+              "ReachedLevel": 1000
+            },
+            {
+              "EventToken": "l71s11",
+              "ReachedLevel": 1250
+            },
+            {
+              "EventToken": "wvwqkn",
+              "ReachedLevel": 1500
+            },
+            {
+              "EventToken": "l68c6e",
+              "ReachedLevel": 1750
+            },
+            {
+              "EventToken": "5tmfjz",
+              "ReachedLevel": 2000
+            },
+            {
+              "EventToken": "ji2ls1",
+              "ReachedLevel": 2250
+            },
+            {
+              "EventToken": "w755ao",
+              "ReachedLevel": 2500
+            },
+            {
+              "EventToken": "mbqlu0",
+              "ReachedLevel": 2750
+            },
+            {
+              "EventToken": "rvijp7",
+              "ReachedLevel": 3000
+            },
+            {
+              "EventToken": "dvffjf",
+              "ReachedLevel": 3500
+            },
+            {
+              "EventToken": "blje4v",
+              "ReachedLevel": 4000
+            }
+          ]
+        }
+      }
+    ],
+    "native_finding_ids": [
+      "MS-CURRENT-20261116-02"
+    ],
+    "documentation_source_coverage": {
+      "dossier_present": true,
+      "use_case_catalog_count": 18,
+      "config_catalog_rows": 217,
+      "current_apk_default_model_links": 1,
+      "current_native_findings": 1,
+      "scope": "Documentation/source coverage only; not complete runtime verification."
+    },
+    "runtime_completion": {
+      "date": "2026-11-16",
+      "status": "device_unavailable",
+      "executed_case_count": 0,
+      "full_feature_runtime_verified": false
+    },
+    "planned_branch": "Gắn timestamp trước/sau cho các thao tác UI mới; chỉ nhận event local nếu log thực có tên và payload đã lọc ID.",
+    "target_uc_ids": [
+      "UC-01",
+      "UC-05",
+      "UC-18"
+    ],
+    "execution_phase": "noncore_first",
+    "core_or_levels_last": false,
+    "actionability_full_json": "facts/continuation_20261116/current/feature_actionability.json",
+    "actionability_site_data_path": "data/continuation_20261116/feature_actionability.json",
+    "source_classes": [
+      "recovered_code",
+      "static_asset"
+    ],
+    "full_feature_verified": false
+  }
+}

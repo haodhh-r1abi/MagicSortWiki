@@ -1,0 +1,149 @@
+{
+  "id": "TeamQuest",
+  "title": "Nhiệm vụ đội (Team Quest)",
+  "tagline": "Sự kiện hợp tác: cả đội gom điểm thắng level để mở dần các rương mốc chung.",
+  "infobox": [
+    ["Loại", "Sự kiện đội"],
+    ["Mở khóa", "Level 45 (FirstLevelToShow, client default)"],
+    ["Thời lượng", "Theo startTime/finishTime do server gửi (server)"],
+    ["Chu kỳ / lịch", "Live-ops, bật/tắt bằng IsEnabled (mặc định false)"],
+    ["Tham gia", "Toàn đội; phải bấm Join trước khi cửa sổ tham gia đóng"],
+    ["Vật phẩm thu thập", "Điểm nhiệm vụ (score) từ level đã thắng"],
+    ["Tiền tệ", "Không có tiền tệ riêng"],
+    ["Thưởng chính", "Rương mốc theo RewardModel / RewardModelWithCollection (server)"],
+    ["Điều kiện / phụ thuộc", "Phải thuộc một đội (Teams); cần bundle team_quest_bundle"],
+    ["Manager", "TeamQuestService"]
+  ],
+  "description": [
+    "Team Quest (backend gọi là 'team adventure') là sự kiện hợp tác trong đội: mọi thành viên cùng gom điểm vào một thanh tiến độ chung.",
+    "Mỗi level thắng cộng điểm theo độ khó: level thường 1 điểm, Hard 3 điểm, Super Hard 5 điểm (client default).",
+    "Tổng điểm đội mở dần các mốc rương; mỗi mốc có ngưỡng RequiredTeamScore do server quyết định.",
+    "Chỉ thành viên CÓ đóng góp mới mở được rương; người không đóng góp bị chặn ở trạng thái NotContributed.",
+    "Có cửa sổ tham gia: khi isJoinWindowEnded bật thì không thể Join nữa, dù sự kiện vẫn đang chạy.",
+    "Bảng xếp hạng nội bộ đội liệt kê điểm đóng góp của từng thành viên, tạo áp lực xã hội chống 'free rider'.",
+    "Sự kiện được đẩy qua nhiều điểm chạm: nút lobby, thẻ sự kiện trong chat đội, popup mời tham gia và popup tự mở sau khi Join.",
+    "Đổi đội giữa chừng không giúp farm thêm rương: teamId đã mở rương được ghi vào OpenedChestTeamIds.",
+    "Khi Collection đang bật, phần thưởng mốc chuyển sang RewardModelWithCollection (thường chứa CollectionPack).",
+    "Điểm được tích local rồi đẩy lên server qua trường score của request kế tiếp, nên mất mạng không làm mất tiến độ cá nhân."
+  ],
+  "notes": [
+    "Lưu ý: người chơi chưa có điểm cá nhân nào sẽ không mở được rương dù đội đã đạt mốc (TeamQuestStepChestState.NotContributed).",
+    "Lưu ý: thua level không bị trừ điểm.",
+    "Lưu ý: phải bấm Join trong cửa sổ cho phép; IsJoinWindowEnded chặn tham gia muộn.",
+    "Lưu ý: sự kiện có hai trạng thái kết thúc tách biệt — LocalEnd(6) khi hết giờ ở client và RemoteEnd(7) khi server báo isFinished — để xử lý lệch giờ.",
+    "Lưu ý: rương chưa mở khi sự kiện đóng sẽ bị mất.",
+    "Lưu ý: HTTP status 425 (NotActiveStatusCode) nghĩa là sự kiện không hoạt động, khác với lỗi mạng.",
+    "Lưu ý: khi bundle 'team_quest_bundle' chưa tải xong, state là AssetsNotReady(9) và popup không mở.",
+    "Lưu ý: số mốc rương, ngưỡng điểm và nội dung thưởng đều do server gửi — client không có bảng mặc định."
+  ],
+  "how_it_works": [
+    "Khởi tạo: Initialize() đặt bundle sự kiện là 'team_quest_bundle' và subscribe signal đổi đội.",
+    "Tải asset: nếu bundle chưa sẵn sàng, state = AssetsNotReady(9), popup bị chặn (CheckAndResolveAssetDependency).",
+    "Kiểm tra điều kiện: state Disable(0) nếu IsEnabled = false, ProgressNotEnough(1) nếu level < 45, NoCache(2) nếu chưa fetch được (GetEventState).",
+    "Lấy dữ liệu: gửi request tới /v1/get-team-adventure với payload {score, tournamentType (EventType = 2), teamID} (SendGetRequest).",
+    "So sánh cache: nếu tournamentID khác cache cũ thì xoá toàn bộ dữ liệu sự kiện (ChangeTournamentCache → ResetEventData).",
+    "Mời tham gia: popup Join hoặc nút lobby đổi nhãn thành 'Join' khi chưa tham gia (ShouldShowJoinTextLobbyIcon).",
+    "Tham gia: bấm Join → /v1/join-team-adventure; thành công thì IsJoined = true, server ghi scoreAtUserJoin (điểm đội tại thời điểm vào), analytics team_quest_joined.",
+    "Ngay sau Join, popup bản đồ tự mở với nguồn AfterJoin(3) (SetShouldShowPopupAfterJoin).",
+    "Chơi: mỗi level thắng quy đổi độ khó thành điểm (Normal 1, Hard 3, SuperHard 5) và cộng vào cả tiến độ đội lẫn điểm cá nhân, rồi đẩy lên server qua trường 'score' của request kế tiếp (TryIncreaseTaskProgress).",
+    "Theo dõi mốc: bản đồ cho biết mốc hiện tại và còn thiếu bao nhiêu điểm (GetStepForProgress, RemainingScoreForStep).",
+    "Nhận rương: khi đội vượt ngưỡng và người chơi có đóng góp, rương chuyển sang Claimable(1) → TryClaimStep(stepIndex) trao RewardModel.",
+    "Xác nhận: client gọi /v1/claim-team-adventure và ghi teamId vào OpenedChestTeamIds để chống nhận trùng khi đổi đội (SetStepAsClaimed).",
+    "Nhận dồn: nếu offline lâu và đội vượt nhiều mốc, các rương tồn đọng được trao lần lượt (HasBulkRewardInQueue → GiveBulkRewardInQueue).",
+    "Chấm đỏ lobby: so LastSeenProgress với tiến độ hiện tại để chạy animation và tắt chấm đỏ sau khi xem (HasUnseenProgress, MarkLobbySeen).",
+    "Kết thúc: hết giờ → LocalEnd(6), server báo isFinished → RemoteEnd(7), nhận xong hết → Claimed(8); analytics team_quest_finished."
+  ],
+  "reward_tables": [
+    {
+      "title": "ĐIỂM ĐÓNG GÓP THEO ĐỘ KHÓ LEVEL",
+      "columns": ["Độ khó level", "Điểm cộng", "Nguồn"],
+      "rows": [
+        ["Normal", "1 điểm", "NormalScore (json default)"],
+        ["Hard", "3 điểm", "HardScore (json default)"],
+        ["Super Hard", "5 điểm", "SuperHardScore (json default)"],
+        ["Thua level", "0 điểm (không bị trừ)", "UC-05"]
+      ]
+    },
+    {
+      "title": "PHẦN THƯỞNG MỐC RƯƠNG (cấu trúc)",
+      "columns": ["Thành phần", "Điều kiện", "Phần thưởng"],
+      "rows": [
+        ["Mốc rương (TeamQuestStepModel)", "Tổng điểm đội ≥ RequiredTeamScore (server) và người chơi có đóng góp", "RewardModel theo chestID (server)"],
+        ["Mốc rương khi Collection bật", "Cùng điều kiện, CollectionService đang bật", "RewardModelWithCollection, thường chứa CollectionPack (server)"],
+        ["Người không đóng góp", "Đội đã đạt mốc nhưng điểm cá nhân = 0", "Không nhận được gì (TeamQuestStepChestState.NotContributed)"],
+        ["Rương chưa mở khi hết sự kiện", "Sự kiện chuyển LocalEnd/RemoteEnd", "Mất, không nhận được"]
+      ]
+    },
+    {
+      "title": "TRẠNG THÁI RƯƠNG (TeamQuestStepChestState)",
+      "columns": ["Mã", "Trạng thái", "Ý nghĩa"],
+      "rows": [
+        ["0", "Claimed", "Đã nhận thưởng"],
+        ["1", "Claimable", "Đủ điều kiện, có thể mở"],
+        ["2", "NotEnoughProgress", "Đội chưa đủ điểm"],
+        ["3", "NotClaimable", "Không thể nhận"],
+        ["4", "NotContributed", "Người chơi không đóng góp điểm nào"]
+      ]
+    }
+  ],
+  "key_numbers": [
+    {"label": "Level mở khóa tối thiểu", "value": "45", "source": "TeamQuestConfigModel.FirstLevelToShow"},
+    {"label": "Trạng thái bật/tắt mặc định", "value": "false (tắt)", "source": "TeamQuestConfigModel.IsEnabled"},
+    {"label": "EventType (tournamentType gửi backend)", "value": "2", "source": "TeamQuestConfigModel.EventType"},
+    {"label": "Điểm level thường", "value": "1", "source": "TeamQuestConfigModel.NormalScore"},
+    {"label": "Điểm level Hard", "value": "3", "source": "TeamQuestConfigModel.HardScore"},
+    {"label": "Điểm level Super Hard", "value": "5", "source": "TeamQuestConfigModel.SuperHardScore"},
+    {"label": "HTTP status sự kiện không hoạt động", "value": "425", "source": "TeamQuestService.NotActiveStatusCode"},
+    {"label": "Asset bundle của sự kiện", "value": "team_quest_bundle", "source": "TeamQuestService.Initialize"},
+    {"label": "Số trạng thái sự kiện", "value": "10 (Disable=0 … AssetsNotReady=9)", "source": "TeamQuestStateType"},
+    {"label": "Số trạng thái rương", "value": "5 (Claimed=0 … NotContributed=4)", "source": "TeamQuestStepChestState"},
+    {"label": "Số loại thông báo bảng xếp hạng", "value": "6 (None=0 … TeamQuestClaimedChestInAnotherTeam=5)", "source": "TeamQuestAlertMessageType"},
+    {"label": "Số nguồn mở popup chính", "value": "4 (Force=0, LobbyIcon=1, TeamBanner=2, AfterJoin=3)", "source": "TeamQuestPopUpImpressionSource"},
+    {"label": "Tab của popup", "value": "Join=0, Leaderboard=1, Info=3", "source": "TeamQuestPopupStateType"},
+    {"label": "Loại request backend", "value": "Join=0, GetLeaderboard=1, Claim=2", "source": "TeamQuestTournamentRequestType"},
+    {"label": "Ngưỡng điểm từng mốc", "value": "RequiredTeamScore (server)", "source": "TeamQuestStepModel.RequiredTeamScore"},
+    {"label": "Số mốc rương", "value": "Do server gửi qua teamAdventureSteps[] (server)", "source": "TeamQuestLeaderboardModel"},
+    {"label": "Thời gian sự kiện", "value": "startTime / finishTime (server)", "source": "TeamQuestStatusModel"},
+    {"label": "Điểm đội tại thời điểm người chơi vào", "value": "scoreAtUserJoin (server)", "source": "TeamQuestLeaderboardModel.scoreAtUserJoin"},
+    {"label": "Chỉ số ghép cặp đội", "value": "elo (server)", "source": "TeamQuestLeaderboardModel.elo"},
+    {"label": "Tên khối sync", "value": "TeamQuestDataModel", "source": "TeamQuestDataService.GetSyncName"}
+  ],
+  "config_highlights": [
+    {"key": "IsEnabled", "value": "false", "meaning": "Bật/tắt Team Quest (json default)"},
+    {"key": "EventType", "value": "2", "meaning": "tournamentType gửi lên backend"},
+    {"key": "FirstLevelToShow", "value": "45", "meaning": "Level tối thiểu để thấy sự kiện"},
+    {"key": "NormalScore", "value": "1", "meaning": "Điểm khi thắng level thường"},
+    {"key": "HardScore", "value": "3", "meaning": "Điểm khi thắng level Hard"},
+    {"key": "SuperHardScore", "value": "5", "meaning": "Điểm khi thắng level Super Hard"},
+    {"key": "TeamQuestService.NotActiveStatusCode", "value": "425", "meaning": "Server báo sự kiện không hoạt động"},
+    {"key": "_teamQuestBundleId", "value": "team_quest_bundle", "meaning": "Asset bundle riêng của sự kiện"},
+    {"key": "TeamQuestStateType", "value": "Disable=0, ProgressNotEnough=1, NoCache=2, NotIntroduced=3, PreJoin=4, InProgress=5, LocalEnd=6, RemoteEnd=7, Claimed=8, AssetsNotReady=9", "meaning": "Trạng thái sự kiện"},
+    {"key": "TeamQuestPopupStateType", "value": "Join=0, Leaderboard=1, Info=3", "meaning": "Tab của popup"},
+    {"key": "TeamQuestPopUpImpressionSource", "value": "Force=0, LobbyIcon=1, TeamBanner=2, AfterJoin=3", "meaning": "Nguồn mở popup chính"},
+    {"key": "TeamQuestInfoPopupImpressionSource", "value": "Force=0, InfoButton=1", "meaning": "Nguồn mở popup info"},
+    {"key": "TeamQuestStepChestState", "value": "Claimed=0, Claimable=1, NotEnoughProgress=2, NotClaimable=3, NotContributed=4", "meaning": "Trạng thái từng rương"},
+    {"key": "TeamQuestAlertMessageType", "value": "None=0, TeamQuestCompletedNoContribution=1, TeamQuestCompleted=2, TeamQuestFinished=3, TeamQuestClaimedChest=4, TeamQuestClaimedChestInAnotherTeam=5", "meaning": "Thông báo hiển thị trong bảng"},
+    {"key": "TeamQuestTournamentRequestType", "value": "Join=0, GetLeaderboard=1, Claim=2", "meaning": "Loại request tới backend"},
+    {"key": "TeamQuestStatusModel", "value": "tournamentID, teamID, startTime, finishTime, isFinished, isJoined, isJoinWindowEnded", "meaning": "Trạng thái sự kiện của đội (server)"},
+    {"key": "TeamQuestLeaderboardModel", "value": "isClaimed, totalScore, elo, scoreAtUserJoin, teamAdventureLeaderboard[], teamAdventureSteps[]", "meaning": "Tổng điểm đội, danh sách thành viên và mốc (server)"},
+    {"key": "TeamQuestStep (server)", "value": "chestID, reward, rewardWithCollection, requiredTeamScore", "meaning": "Một mốc rương"},
+    {"key": "TeamQuestLeaderboardPlayer", "value": "userPublicID, userName, score, fbImageURL, imageID, tokenID, nameStyle, frameID, isMe", "meaning": "Dòng bảng đóng góp"},
+    {"key": "TeamQuestTournamentRequestModel", "value": "score, tournamentType, teamID", "meaning": "Payload chung cho join/get/claim"},
+    {"key": "TeamQuestTournamentProgress.OpenedChestTeamIds", "value": "mảng string teamId", "meaning": "Chống nhận rương trùng khi đổi đội"},
+    {"key": "TeamQuestTournamentProgress.LobbyProgressCount / LastSeenProgress", "value": "-", "meaning": "Tiến độ chưa xem trên nút lobby"},
+    {"key": "TeamQuestTournamentCacheModel", "value": "Segment, IsClaimed, TeamQuestLeaderboard, TeamQuestStepsModels, Progress, ScoreAtUserJoin", "meaning": "Ảnh chụp bảng và mốc"},
+    {"key": "teamQuestGetUrl", "value": "{base}/v1/get-team-adventure", "meaning": "Lấy trạng thái + bảng xếp hạng + mốc"},
+    {"key": "teamQuestJoinUrl", "value": "{base}/v1/join-team-adventure", "meaning": "Tham gia sự kiện"},
+    {"key": "teamQuestClaimUrl", "value": "{base}/v1/claim-team-adventure", "meaning": "Xác nhận nhận thưởng mốc"},
+    {"key": "teamQuestInfoUrl", "value": "chỉ '/v1/' (để trống trong build này)", "meaning": "Endpoint info không rõ có tồn tại"},
+    {"key": "TeamQuestPopupAnimationConfig / TeamQuestLobbyButtonAnimationConfig", "value": "ScriptableObject", "meaning": "Tham số hoạt ảnh popup và nút lobby"}
+  ],
+  "tips": [
+    "Điểm 1/3/5 theo độ khó đẩy người chơi vào level Hard/Super Hard để đóng góp nhanh hơn cho đội.",
+    "Cơ chế NotContributed là đòn bẩy xã hội: đội đạt mốc nhưng người lười vẫn tay trắng.",
+    "Cửa sổ Join tạo cảm giác khan hiếm và buộc người chơi mở game sớm trong chu kỳ sự kiện.",
+    "OpenedChestTeamIds cho thấy thiết kế đã lường trước việc nhảy đội để farm rương nhiều lần.",
+    "Toàn bộ bảng mốc do server cấp nên có thể tune ngưỡng và thưởng theo segment mà không cần cập nhật client."
+  ],
+  "categories": ["Sự kiện", "Sự kiện đội", "Có bảng xếp hạng", "Xã hội", "Live-ops"]
+}

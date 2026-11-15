@@ -1,0 +1,1712 @@
+{
+  "id": "ChooseOneSpecialOffer",
+  "name": "Choose One Offer",
+  "category": "Economy",
+  "managers": [
+    "Modules.Contexts.Home.Monetization.ChooseOneSpecialOffer.Scripts.ChooseOneSpecialOfferService",
+    "Modules.Contexts.Home.Monetization.ChooseOneSpecialOffer.Scripts.ChooseOneSpecialOfferDataService",
+    "Modules.Contexts.Home.Monetization.ChooseOneSpecialOffer.Scripts.ChooseOneSpecialOfferStateService",
+    "Modules.Contexts.Home.Monetization.ChooseOneSpecialOffer.Scripts.ChooseOneSpecialOfferRemoteService",
+    "Modules.Contexts.Home.Monetization.ChooseOneSpecialOffer.Scripts.ChooseOneSpecialOfferConfigModel"
+  ],
+  "summary": "Choose One Offer bày ba gói ưu đãi cạnh nhau (Package1, Package2, Package3) và mời người chơi 'chọn một' — kèm lựa chọn thứ tư là mua trọn bộ (AllPackages) với mức giảm giá hiển thị 'Buy All {0}% OFF'. Server gửi ba gói theo phân khúc (SegmentedChooseOneOfferPackages) và một gói combo (SegmentedChooseOneCombinedPackage). Kỹ thuật tâm lý ở đây là chuyển câu hỏi từ 'mua hay không' sang 'mua cái nào', cộng thêm mồi nhử combo giảm giá. Offer có thời hạn, tần suất hiện được kiểm soát bằng ShowFrequency/MaxShowCount, và chỉ mua được một lần.",
+  "unlock": "ChooseOneSpecialOfferStateService.CanShowChooseOneSpecialOffer() kết hợp: ChooseOneSpecialOfferConfigModel.IsEnable, level >= FirstLevelToShow (IPlayerService), có ChooseOneSpecialOfferResponse trong cache, chưa mua (IsPurchased == false), còn hạn, và dữ liệu hợp lệ (IsDataWrong() == false). StateService còn giữ AdService — trạng thái quảng cáo tham gia vào quyết định hiển thị (suy luận từ dependency).",
+  "entry_points": [
+    "Icon lobby Choose One (ChooseOneSpecialOfferPopupImpressionSource.LobbyIcon)",
+    "Popup 'ChooseOneSpecialOfferPopup'",
+    "Chèn trước Store (CanShowBeforeStore / ShouldDisplayBeforeStore)",
+    "Banner trong Booster / Play On / Teams (impression source Booster, PlayOn, Teams)",
+    "Lần hiện đầu tiên (FirstShow)"
+  ],
+  "flow": "ChooseOneSpecialOfferStateService.GetState() cho ra ChooseOneSpecialOfferState: Disable(0) → ProgressNotEnough(1) → NoCache(2) → Enable(3) → LocalTimeIsUp(4) → RemoteTimeIsUp(5) → Purchased(6) → WrongData(7). Khi ShouldSendGetRequest() (và popup 'ChooseOneSpecialOfferPopup' không mở), ChooseOneSpecialOfferService.TryFetchCurrentEvent() dựng ChooseOneSpecialOfferRequestModel{EventId, EventType} rồi gọi ChooseOneSpecialOfferRemoteService; HandleChooseOneSpecialOfferResponse(response) → UpdateAndCacheBackendOfferResponse() kiểm tra hợp lệ (sai thì bắn wrong_choose_one_special_offer_data) và ChooseOneSpecialOfferDataService.CacheBackendResponse(ChooseOneSpecialOfferResponse{EventId, StartTime, FinishTime, IsFinished, IsClaimed, SegmentedChooseOneOfferPackages, SegmentedChooseOneCombinedPackage, Segment}). UI dựng 3 thẻ gói + 1 nút mua trọn bộ; GetDiscountAmount() cấp số % cho text ChooseOneSpecialOfferDiscount 'Buy All {0}% OFF'. Mua: GetChooseOneSpecialOfferUniqueIAPs() / GetIAPConfigModel(iapProductId) lấy sản phẩm từ ChooseOneSpecialOfferConfigModel.IAPConfigModels; GetPackageIdByProductId(productId) xác định người chơi chọn gói nào (ChooseOneSpecialOfferPackageType: None=0, Package1=1, Package2=2, Package3=3, AllPackages=4); IAPService mua với IAPOrigin.ChooseOneSpecialOffer (7), IAPReason.ChooseOneSpecialOffer (9). Thành công: ClaimPurchasedChooseOneSpecialOfferRewards(productId, giveRewardsWithoutAnimation) → GetRewardsForProductId(productId); nếu không tra được thì TryGetFallbackRewards(productId) dùng ChooseOneSpecialOfferConfigModel.FallbackRewardMappings (FallbackRewardMapping{ProductIds, RewardModels}). Trao thưởng với CurrencyEarnReason.ChooseOneSpecialOffer (29), SetIsPurchased(true) và ShouldSendClaimRequest() gửi claim lên server. Analytics: choose_one_popup_impression (impression_source) và choose_one_purchased (offer_type, price, currency, dollar_equivalent). Tần suất: IncrementPopupTrigger() so với ShowFrequency, giới hạn bởi MaxShowCount, ClearPopupTriggerCount() reset sau khi mở.",
+  "use_cases": [
+    {
+      "id": "UC-01",
+      "title": "Kiểm tra điều kiện hiện offer",
+      "actor": "System",
+      "trigger": "Vào Home / IntervalUpdate",
+      "precondition": "Có remote config",
+      "steps": [
+        "ChooseOneSpecialOfferStateService.GetConfig() lấy ChooseOneSpecialOfferConfigModel",
+        "GetState() kiểm tra IsEnable → level vs FirstLevelToShow → có cache → đã mua chưa → hết giờ chưa → IsDataWrong()",
+        "CanShowChooseOneSpecialOffer() tổng hợp; UpdateState() phát Signal khi trạng thái đổi"
+      ],
+      "result": "Icon và popup chỉ hiện khi đủ điều kiện",
+      "rules": "ChooseOneSpecialOfferState: Disable=0, ProgressNotEnough=1, NoCache=2, Enable=3, LocalTimeIsUp=4, RemoteTimeIsUp=5, Purchased=6, WrongData=7",
+      "evidence": "ChooseOneSpecialOfferStateService.CanShowChooseOneSpecialOffer; ChooseOneSpecialOfferStateService.GetState; ChooseOneSpecialOfferStateService.IsDataWrong"
+    },
+    {
+      "id": "UC-02",
+      "title": "Lấy ba gói và gói combo từ server",
+      "actor": "System",
+      "trigger": "ChooseOneSpecialOfferStateService.ShouldSendGetRequest() == true",
+      "precondition": "Popup 'ChooseOneSpecialOfferPopup' không đang mở",
+      "steps": [
+        "ChooseOneSpecialOfferService.TryFetchCurrentEvent() → GetRequestModel() dựng ChooseOneSpecialOfferRequestModel{EventId, EventType}",
+        "ChooseOneSpecialOfferRemoteService gửi request",
+        "HandleChooseOneSpecialOfferResponse(ApiResponse<ChooseOneSpecialOfferResponse>) → UpdateAndCacheBackendOfferResponse()",
+        "Response gồm EventId, StartTime, FinishTime, IsFinished, IsClaimed, SegmentedChooseOneOfferPackages (3 gói), SegmentedChooseOneCombinedPackage (gói trọn bộ), Segment",
+        "ChooseOneSpecialOfferDataService.CacheBackendResponse(responseData); Invoke Signal",
+        "ScheduleChooseOneSpecialOfferFetch() đặt SecondTimer lấy lại khi hết hạn (callback b__23_0)"
+      ],
+      "result": "Ba lựa chọn + một lựa chọn combo sẵn sàng hiển thị",
+      "rules": "Nội dung gói khác nhau theo Segment do server quyết định",
+      "evidence": "ChooseOneSpecialOfferService.TryFetchCurrentEvent; ChooseOneSpecialOfferService.GetRequestModel; ChooseOneSpecialOfferService.HandleChooseOneSpecialOfferResponse; ChooseOneSpecialOfferService.ScheduleChooseOneSpecialOfferFetch"
+    },
+    {
+      "id": "UC-03",
+      "title": "Hiển thị popup 'Choose One'",
+      "actor": "Player",
+      "trigger": "Bấm icon lobby hoặc popup tự bật",
+      "precondition": "State = Enable",
+      "steps": [
+        "Popup hiển thị 3 thẻ gói (localization ChooseOneHeader 'Choose One!')",
+        "GetDiscountAmount() trả % giảm giá cho nút mua trọn bộ (text ChooseOneSpecialOfferDiscount 'Buy All {0}% OFF')",
+        "ChooseOneSpecialOfferService.OnPopupOpened() ghi nhận; ChooseOneSpecialOfferDataService.SetIsPopupShown(true)",
+        "EventSender.SendChooseOnePopUpImpressionEvent(impressionSource) → choose_one_popup_impression với impression_source, event_id, segment"
+      ],
+      "result": "Người chơi đứng trước lựa chọn thay vì câu hỏi mua/không mua",
+      "rules": "ChooseOneSpecialOfferPopupImpressionSource: None=0, LobbyIcon=1, FirstShow=2, Booster=3, PlayOn=4, Teams=5",
+      "evidence": "ChooseOneSpecialOfferService.OnPopupOpened; ChooseOneSpecialOfferService.GetDiscountAmount; ChooseOneSpecialOfferDataService.SetIsPopupShown; EventSender.SendChooseOnePopUpImpressionEvent"
+    },
+    {
+      "id": "UC-04",
+      "title": "Mua một trong ba gói",
+      "actor": "Player",
+      "trigger": "Bấm nút mua trên một thẻ gói",
+      "precondition": "State = Enable",
+      "steps": [
+        "ChooseOneSpecialOfferService.GetIAPConfigModel(iapProductId) lấy sản phẩm tương ứng",
+        "IAPService mua với IAPOrigin.ChooseOneSpecialOffer (7), IAPReason.ChooseOneSpecialOffer (9)",
+        "GetPackageIdByProductId(productId) xác định ChooseOneSpecialOfferPackageType (Package1=1 / Package2=2 / Package3=3)",
+        "ClaimPurchasedChooseOneSpecialOfferRewards(productId, giveRewardsWithoutAnimation) → GetRewardsForProductId(productId)",
+        "RewardService trao với CurrencyEarnReason.ChooseOneSpecialOffer (29); analytics 'earned' với coin/life/undo/shuffle/extra_bottle/collection_pack_1..5/duck_x2_in_seconds/merge_energy/additional_life_inventory/life_in_seconds",
+        "ChooseOneSpecialOfferDataService.SetIsPurchased(true)",
+        "EventSender.SendChooseOnePurchasedEvent(iapModel, packageId, iapConfigModel) → choose_one_purchased với offer_type, price, currency, dollar_equivalent, event_id, segment"
+      ],
+      "result": "Nhận thưởng gói đã chọn, offer chuyển sang Purchased (6) và đóng lại",
+      "rules": "Tham số offer_type trong analytics chính là packageId",
+      "evidence": "ChooseOneSpecialOfferService.GetIAPConfigModel; ChooseOneSpecialOfferService.GetPackageIdByProductId; ChooseOneSpecialOfferService.ClaimPurchasedChooseOneSpecialOfferRewards; ChooseOneSpecialOfferDataService.SetIsPurchased; EventSender.SendChooseOnePurchasedEvent"
+    },
+    {
+      "id": "UC-05",
+      "title": "Mua trọn bộ ba gói (Buy All)",
+      "actor": "Player",
+      "trigger": "Bấm nút Buy All",
+      "precondition": "SegmentedChooseOneCombinedPackage có dữ liệu",
+      "steps": [
+        "Sản phẩm combo lấy từ ChooseOneSpecialOfferResponse.SegmentedChooseOneCombinedPackage",
+        "GetDiscountAmount() hiển thị % tiết kiệm so với mua lẻ",
+        "GetPackageIdByProductId(productId) trả ChooseOneSpecialOfferPackageType.AllPackages (4)",
+        "Trao gộp thưởng của cả ba gói",
+        "analytics choose_one_purchased với offer_type = 4"
+      ],
+      "result": "Đơn hàng giá trị cao hơn nhờ mồi nhử giảm giá",
+      "rules": "AllPackages = 4 trong ChooseOneSpecialOfferPackageType",
+      "evidence": "ChooseOneSpecialOfferService.GetDiscountAmount; ChooseOneSpecialOfferService.GetPackageIdByProductId; ChooseOneSpecialOfferResponse.SegmentedChooseOneCombinedPackage"
+    },
+    {
+      "id": "UC-06",
+      "title": "Thưởng dự phòng theo bảng ánh xạ productId",
+      "actor": "System",
+      "trigger": "GetRewardsForProductId trả rỗng (giao dịch tới trễ, cache mất)",
+      "precondition": "-",
+      "steps": [
+        "ChooseOneSpecialOfferService.TryGetFallbackRewards(productId)",
+        "Duyệt ChooseOneSpecialOfferConfigModel.FallbackRewardMappings — mỗi FallbackRewardMapping{ProductIds, RewardModels} ánh xạ một nhóm productId sang bộ thưởng",
+        "Trao bộ thưởng khớp",
+        "Nếu vẫn không khớp thì không trao và bắn wrong_choose_one_special_offer_data"
+      ],
+      "result": "Người chơi vẫn nhận đúng gói đã mua kể cả khi client mất cache",
+      "rules": "Khác với SpecialOffer (một danh sách FallBackRewardModels chung), ở đây là bảng ánh xạ theo nhóm productId",
+      "evidence": "ChooseOneSpecialOfferService.TryGetFallbackRewards; ChooseOneSpecialOfferConfigModel.FallbackRewardMappings; FallbackRewardMapping"
+    },
+    {
+      "id": "UC-07",
+      "title": "Dữ liệu offer sai",
+      "actor": "System",
+      "trigger": "Response thiếu gói hoặc productId không hợp lệ",
+      "precondition": "-",
+      "steps": [
+        "ChooseOneSpecialOfferService.CheckWrongData() / UpdateAndCacheBackendOfferResponse phát hiện lỗi",
+        "EventSender.SendWrongChooseOneSpecialOfferDataStat() → wrong_choose_one_special_offer_data",
+        "ChooseOneSpecialOfferStateService.IsDataWrong() → State = WrongData (7), ẩn offer"
+      ],
+      "result": "Không bán gói hỏng",
+      "rules": "Cổng an toàn giống SpecialOffer",
+      "evidence": "ChooseOneSpecialOfferService.CheckWrongData; ChooseOneSpecialOfferStateService.IsDataWrong; EventSender.SendWrongChooseOneSpecialOfferDataStat"
+    },
+    {
+      "id": "UC-08",
+      "title": "Tự bật popup theo tần suất",
+      "actor": "System",
+      "trigger": "Vào Home hoặc quay lại Home",
+      "precondition": "ChooseOneSpecialOfferService.ShouldForceShowPopup() == true",
+      "steps": [
+        "IncrementPopupTrigger() → ChooseOneSpecialOfferDataService.IncrementPopupTriggerCount()",
+        "So GetPopupTriggerCount() với ChooseOneSpecialOfferConfigModel.ShowFrequency",
+        "MaxShowCount giới hạn tổng số lần hiện",
+        "Mở popup, sau đó ClearPopupTriggerCount()"
+      ],
+      "result": "Offer xuất hiện đều đặn nhưng có trần",
+      "rules": "Cơ chế đếm giống hệt SpecialOffer",
+      "evidence": "ChooseOneSpecialOfferService.ShouldForceShowPopup; ChooseOneSpecialOfferService.IncrementPopupTrigger; ChooseOneSpecialOfferDataService.ClearPopupTriggerCount"
+    },
+    {
+      "id": "UC-09",
+      "title": "Hiện offer trước khi mở Store",
+      "actor": "System",
+      "trigger": "Người chơi bấm mở cửa hàng",
+      "precondition": "ChooseOneSpecialOfferService.CanShowBeforeStore() == true",
+      "steps": [
+        "ShouldDisplayBeforeStore() / CanShowBeforeStore() kiểm tra trạng thái",
+        "OpenStorePopupCommand (enum lồng OfferBeforeStore) mở popup Choose One trước",
+        "Đóng offer xong mới mở Store"
+      ],
+      "result": "Ưu tiên offer giới hạn thời gian hơn danh mục thường",
+      "rules": "Nhiều offer cùng tranh vị trí này (SpecialOffer, ChooseOne, NoAdsOffer) — thứ tự do OpenStorePopupCommand quyết định",
+      "evidence": "ChooseOneSpecialOfferService.CanShowBeforeStore; ChooseOneSpecialOfferService.ShouldDisplayBeforeStore; OpenStorePopupCommand.OfferBeforeStore"
+    },
+    {
+      "id": "UC-10",
+      "title": "Hết hạn offer",
+      "actor": "System",
+      "trigger": "Quá FinishTime hoặc response.IsFinished",
+      "precondition": "-",
+      "steps": [
+        "GetRemainingSeconds() / GetEndDate() về 0 → LocalTimeIsUp (4); server báo IsFinished → RemoteTimeIsUp (5)",
+        "ClearChooseOneSpecialOfferData() dọn cache",
+        "ScheduleChooseOneSpecialOfferFetch() lấy đợt mới"
+      ],
+      "result": "Offer biến mất, chờ đợt tiếp theo",
+      "rules": "Hai trạng thái hết giờ tách riêng để phát hiện lệch giờ client",
+      "evidence": "ChooseOneSpecialOfferService.GetRemainingSeconds; ChooseOneSpecialOfferService.ClearChooseOneSpecialOfferData; ChooseOneSpecialOfferStateService.GetState"
+    },
+    {
+      "id": "UC-11",
+      "title": "Đồng bộ trạng thái đã mua",
+      "actor": "System",
+      "trigger": "SyncService",
+      "precondition": "-",
+      "steps": [
+        "ChooseOneSpecialOfferDataService.GetSyncName() = 'ChooseOneSpecialOfferSyncableDataModel'",
+        "SerializeModelForSync() chỉ xuất ChooseOneSpecialOfferSyncableDataModel.IsPurchased",
+        "OverwriteModelFromSync(data); MarkDataForLateUpdate(shouldSyncWithBackend)",
+        "LateUpdate() lưu khi IsDataChangedSinceLastSave(); DeleteData() xoá khi reset"
+      ],
+      "result": "Không mua lại được offer trên thiết bị khác",
+      "rules": "Cache response, PopupTriggerCount, IsPopupShown là dữ liệu cục bộ",
+      "evidence": "ChooseOneSpecialOfferDataService.GetSyncName; ChooseOneSpecialOfferDataService.SerializeModelForSync; ChooseOneSpecialOfferDataService.IsPurchased; ChooseOneSpecialOfferDataService.DeleteData"
+    },
+    {
+      "id": "UC-12",
+      "title": "Mua thất bại",
+      "actor": "System",
+      "trigger": "Store từ chối hoặc verify thất bại",
+      "precondition": "-",
+      "steps": [
+        "IAPService trả StorePurchaseFailureReason",
+        "EventSender.SendPurchaseFailedEvent(productId, …, reason, IAPReason.ChooseOneSpecialOffer) → purchase_failed",
+        "IsPurchased vẫn false, offer còn nguyên",
+        "Giao dịch treo xử lý ở lần vào game sau qua TryGetFallbackRewards"
+      ],
+      "result": "Không mất tiền, không mất thưởng",
+      "rules": "SendNotRequestedIAPStat ghi lại giao dịch chưa được yêu cầu",
+      "evidence": "EventSender.SendPurchaseFailedEvent; EventSender.SendNotRequestedIAPStat; ChooseOneSpecialOfferService.TryGetFallbackRewards"
+    }
+  ],
+  "configs": [
+    {
+      "source": "server info",
+      "key": "ChooseOneSpecialOfferConfigModel.IsEnable / FirstLevelToShow / EventType",
+      "type": "bool/int",
+      "value": "server",
+      "meaning": "Bật tắt, level mở khoá, loại sự kiện",
+      "where": "RemoteConfigs → ChooseOneSpecialOfferConfigModel (IRemoteConfigValidatable)"
+    },
+    {
+      "source": "server info",
+      "key": "ChooseOneSpecialOfferConfigModel.ShowFrequency / MaxShowCount",
+      "type": "int",
+      "value": "server",
+      "meaning": "Tần suất và trần số lần hiện popup",
+      "where": "ChooseOneSpecialOfferService.ShouldForceShowPopup"
+    },
+    {
+      "source": "server info",
+      "key": "ChooseOneSpecialOfferConfigModel.IAPConfigModels",
+      "type": "List<IAPConfigModel>",
+      "value": "server",
+      "meaning": "Danh sách sản phẩm IAP dùng cho các gói",
+      "where": "ChooseOneSpecialOfferService.GetChooseOneSpecialOfferUniqueIAPs"
+    },
+    {
+      "source": "server info",
+      "key": "ChooseOneSpecialOfferConfigModel.FallbackRewardMappings",
+      "type": "List<FallbackRewardMapping{ProductIds, RewardModels}>",
+      "value": "server",
+      "meaning": "Bảng ánh xạ nhóm productId sang bộ thưởng dự phòng",
+      "where": "ChooseOneSpecialOfferService.TryGetFallbackRewards"
+    },
+    {
+      "source": "server info",
+      "key": "ChooseOneSpecialOfferResponse.EventId / StartTime / FinishTime / IsFinished / IsClaimed / Segment",
+      "type": "response",
+      "value": "server",
+      "meaning": "Phiên offer",
+      "where": "ChooseOneSpecialOfferRemoteService"
+    },
+    {
+      "source": "server info",
+      "key": "ChooseOneSpecialOfferResponse.SegmentedChooseOneOfferPackages",
+      "type": "list",
+      "value": "server",
+      "meaning": "Ba gói lựa chọn theo phân khúc",
+      "where": "ChooseOneSpecialOfferService.GetRewardsForProductId"
+    },
+    {
+      "source": "server info",
+      "key": "ChooseOneSpecialOfferResponse.SegmentedChooseOneCombinedPackage",
+      "type": "object",
+      "value": "server",
+      "meaning": "Gói trọn bộ (Buy All) theo phân khúc",
+      "where": "ChooseOneSpecialOfferService.GetDiscountAmount"
+    },
+    {
+      "source": "code const",
+      "key": "ChooseOneSpecialOfferState",
+      "type": "enum",
+      "value": "Disable=0, ProgressNotEnough=1, NoCache=2, Enable=3, LocalTimeIsUp=4, RemoteTimeIsUp=5, Purchased=6, WrongData=7",
+      "meaning": "Máy trạng thái",
+      "where": "ChooseOneSpecialOfferStateService.GetState"
+    },
+    {
+      "source": "code const",
+      "key": "ChooseOneSpecialOfferPackageType",
+      "type": "enum",
+      "value": "None=0, Package1=1, Package2=2, Package3=3, AllPackages=4",
+      "meaning": "Gói người chơi chọn (gửi làm offer_type trong analytics)",
+      "where": "ChooseOneSpecialOfferService.GetPackageIdByProductId"
+    },
+    {
+      "source": "code const",
+      "key": "ChooseOneSpecialOfferPopupImpressionSource",
+      "type": "enum",
+      "value": "None=0, LobbyIcon=1, FirstShow=2, Booster=3, PlayOn=4, Teams=5",
+      "meaning": "Nguồn mở popup cho analytics",
+      "where": "Modules.Contexts.Home.Monetization.ChooseOneSpecialOffer.Scripts.UI"
+    },
+    {
+      "source": "code const",
+      "key": "IAPOrigin.ChooseOneSpecialOffer / IAPReason.ChooseOneSpecialOffer",
+      "type": "enum",
+      "value": "7 / 9",
+      "meaning": "Phân loại giao dịch",
+      "where": "Modules.Contexts.Application.IAP.Scripts"
+    },
+    {
+      "source": "code const",
+      "key": "CurrencyEarnReason.ChooseOneSpecialOffer",
+      "type": "enum",
+      "value": "29",
+      "meaning": "Lý do nhận thưởng",
+      "where": "Modules.Contexts.Application.Inventory.Scripts.CurrencyEarnReason"
+    },
+    {
+      "source": "code const",
+      "key": "Popup key",
+      "type": "string",
+      "value": "\"ChooseOneSpecialOfferPopup\"",
+      "meaning": "Tên popup kiểm tra trong IPopUpService trước khi fetch/claim",
+      "where": "ChooseOneSpecialOfferStateService.ShouldSendGetRequest / ShouldSendClaimRequest"
+    },
+    {
+      "source": "storage key",
+      "key": "ChooseOneSpecialOfferSyncableDataModel",
+      "type": "sync name",
+      "value": "\"ChooseOneSpecialOfferSyncableDataModel\"",
+      "meaning": "Tên bản ghi đồng bộ",
+      "where": "ChooseOneSpecialOfferDataService.GetSyncName"
+    },
+    {
+      "source": "storage key",
+      "key": "ChooseOneSpecialOfferSyncableDataModel.IsPurchased",
+      "type": "bool",
+      "value": "client + server",
+      "meaning": "Đã mua offer chưa",
+      "where": "ChooseOneSpecialOfferDataService.SetIsPurchased"
+    },
+    {
+      "source": "storage key",
+      "key": "ChooseOneSpecialOfferDataModel.ChooseOneSpecialOfferResponse / PopupTriggerCount / IsPopupShown",
+      "type": "object",
+      "value": "client (không đồng bộ)",
+      "meaning": "Cache response và trạng thái popup",
+      "where": "ChooseOneSpecialOfferDataModel"
+    },
+    {
+      "source": "code const",
+      "key": "Localization",
+      "type": "string",
+      "value": "ChooseOneHeader 'Choose One!'; ChooseOneSpecialOfferDiscount 'Buy All <color=#f6e480>{0}% OFF</color>'",
+      "meaning": "Text UI",
+      "where": "appendix/localization.tsv"
+    },
+    {
+      "source": "json default",
+      "key": "ChooseOneSpecialOfferConfigModel.json: IsEnable",
+      "type": "",
+      "value": "false",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/ChooseOneSpecialOfferConfigModel.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "ChooseOneSpecialOfferConfigModel.json: FirstLevelToShow",
+      "type": "",
+      "value": "65",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/ChooseOneSpecialOfferConfigModel.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "ChooseOneSpecialOfferConfigModel.json: EventType",
+      "type": "",
+      "value": "1",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/ChooseOneSpecialOfferConfigModel.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "ChooseOneSpecialOfferConfigModel.json: ShowFrequency",
+      "type": "",
+      "value": "1",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/ChooseOneSpecialOfferConfigModel.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "ChooseOneSpecialOfferConfigModel.json: MaxShowCount",
+      "type": "",
+      "value": "50",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/ChooseOneSpecialOfferConfigModel.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "ChooseOneSpecialOfferConfigModel.json: IAPConfigModels[0].ProductId",
+      "type": "",
+      "value": "sort.chooseone10",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/ChooseOneSpecialOfferConfigModel.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "ChooseOneSpecialOfferConfigModel.json: IAPConfigModels[0].ProductType",
+      "type": "",
+      "value": "0",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/ChooseOneSpecialOfferConfigModel.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "ChooseOneSpecialOfferConfigModel.json: IAPConfigModels[0].DollarEquivalent",
+      "type": "",
+      "value": "9.99",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/ChooseOneSpecialOfferConfigModel.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "ChooseOneSpecialOfferConfigModel.json: IAPConfigModels[1].ProductId",
+      "type": "",
+      "value": "sort.chooseone14",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/ChooseOneSpecialOfferConfigModel.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "ChooseOneSpecialOfferConfigModel.json: IAPConfigModels[1].ProductType",
+      "type": "",
+      "value": "0",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/ChooseOneSpecialOfferConfigModel.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "ChooseOneSpecialOfferConfigModel.json: IAPConfigModels[1].DollarEquivalent",
+      "type": "",
+      "value": "13.99",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/ChooseOneSpecialOfferConfigModel.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "ChooseOneSpecialOfferConfigModel.json: IAPConfigModels[2].ProductId",
+      "type": "",
+      "value": "sort.chooseone15",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/ChooseOneSpecialOfferConfigModel.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "ChooseOneSpecialOfferConfigModel.json: IAPConfigModels[2].ProductType",
+      "type": "",
+      "value": "0",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/ChooseOneSpecialOfferConfigModel.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "ChooseOneSpecialOfferConfigModel.json: IAPConfigModels[2].DollarEquivalent",
+      "type": "",
+      "value": "14.99",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/ChooseOneSpecialOfferConfigModel.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "ChooseOneSpecialOfferConfigModel.json: IAPConfigModels[3].ProductId",
+      "type": "",
+      "value": "sort.chooseone21",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/ChooseOneSpecialOfferConfigModel.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "ChooseOneSpecialOfferConfigModel.json: IAPConfigModels[3].ProductType",
+      "type": "",
+      "value": "0",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/ChooseOneSpecialOfferConfigModel.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "ChooseOneSpecialOfferConfigModel.json: IAPConfigModels[3].DollarEquivalent",
+      "type": "",
+      "value": "20.99",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/ChooseOneSpecialOfferConfigModel.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "ChooseOneSpecialOfferConfigModel.json: IAPConfigModels[4].ProductId",
+      "type": "",
+      "value": "sort.chooseone3",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/ChooseOneSpecialOfferConfigModel.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "ChooseOneSpecialOfferConfigModel.json: IAPConfigModels[4].ProductType",
+      "type": "",
+      "value": "0",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/ChooseOneSpecialOfferConfigModel.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "ChooseOneSpecialOfferConfigModel.json: IAPConfigModels[4].DollarEquivalent",
+      "type": "",
+      "value": "2.99",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/ChooseOneSpecialOfferConfigModel.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "ChooseOneSpecialOfferConfigModel.json: IAPConfigModels[5].ProductId",
+      "type": "",
+      "value": "sort.chooseone35",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/ChooseOneSpecialOfferConfigModel.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "ChooseOneSpecialOfferConfigModel.json: IAPConfigModels[5].ProductType",
+      "type": "",
+      "value": "0",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/ChooseOneSpecialOfferConfigModel.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "ChooseOneSpecialOfferConfigModel.json: IAPConfigModels[5].DollarEquivalent",
+      "type": "",
+      "value": "34.99",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/ChooseOneSpecialOfferConfigModel.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "ChooseOneSpecialOfferConfigModel.json: IAPConfigModels[6].ProductId",
+      "type": "",
+      "value": "sort.chooseone6",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/ChooseOneSpecialOfferConfigModel.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "ChooseOneSpecialOfferConfigModel.json: IAPConfigModels[6].ProductType",
+      "type": "",
+      "value": "0",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/ChooseOneSpecialOfferConfigModel.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "ChooseOneSpecialOfferConfigModel.json: IAPConfigModels[6].DollarEquivalent",
+      "type": "",
+      "value": "5.99",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/ChooseOneSpecialOfferConfigModel.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "ChooseOneSpecialOfferConfigModel.json: IAPConfigModels[7].ProductId",
+      "type": "",
+      "value": "sort.chooseone6.99",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/ChooseOneSpecialOfferConfigModel.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "ChooseOneSpecialOfferConfigModel.json: IAPConfigModels[7].ProductType",
+      "type": "",
+      "value": "0",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/ChooseOneSpecialOfferConfigModel.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "ChooseOneSpecialOfferConfigModel.json: IAPConfigModels[7].DollarEquivalent",
+      "type": "",
+      "value": "6.99",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/ChooseOneSpecialOfferConfigModel.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "ChooseOneSpecialOfferConfigModel.json: FallbackRewardMappings[0].ProductIds",
+      "type": "",
+      "value": "[\"sort.chooseone6.99\", \"sort.chooseone3\"]",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/ChooseOneSpecialOfferConfigModel.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "ChooseOneSpecialOfferConfigModel.json: FallbackRewardMappings[0].RewardModels[0].CurrencyType",
+      "type": "",
+      "value": "1",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/ChooseOneSpecialOfferConfigModel.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "ChooseOneSpecialOfferConfigModel.json: FallbackRewardMappings[0].RewardModels[0].Amount",
+      "type": "",
+      "value": "1200",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/ChooseOneSpecialOfferConfigModel.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "ChooseOneSpecialOfferConfigModel.json: FallbackRewardMappings[0].RewardModels[1].CurrencyType",
+      "type": "",
+      "value": "4",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/ChooseOneSpecialOfferConfigModel.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "ChooseOneSpecialOfferConfigModel.json: FallbackRewardMappings[0].RewardModels[1].Amount",
+      "type": "",
+      "value": "1",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/ChooseOneSpecialOfferConfigModel.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "ChooseOneSpecialOfferConfigModel.json: FallbackRewardMappings[1].ProductIds",
+      "type": "",
+      "value": "[\"sort.chooseone15\", \"sort.chooseone6\"]",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/ChooseOneSpecialOfferConfigModel.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "ChooseOneSpecialOfferConfigModel.json: FallbackRewardMappings[1].RewardModels[0].CurrencyType",
+      "type": "",
+      "value": "1",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/ChooseOneSpecialOfferConfigModel.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "ChooseOneSpecialOfferConfigModel.json: FallbackRewardMappings[1].RewardModels[0].Amount",
+      "type": "",
+      "value": "3000",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/ChooseOneSpecialOfferConfigModel.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "ChooseOneSpecialOfferConfigModel.json: FallbackRewardMappings[1].RewardModels[1].CurrencyType",
+      "type": "",
+      "value": "4",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/ChooseOneSpecialOfferConfigModel.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "ChooseOneSpecialOfferConfigModel.json: FallbackRewardMappings[1].RewardModels[1].Amount",
+      "type": "",
+      "value": "2",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/ChooseOneSpecialOfferConfigModel.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "ChooseOneSpecialOfferConfigModel.json: FallbackRewardMappings[1].RewardModels[2].CurrencyType",
+      "type": "",
+      "value": "5",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/ChooseOneSpecialOfferConfigModel.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "ChooseOneSpecialOfferConfigModel.json: FallbackRewardMappings[1].RewardModels[2].Amount",
+      "type": "",
+      "value": "2",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/ChooseOneSpecialOfferConfigModel.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "ChooseOneSpecialOfferConfigModel.json: FallbackRewardMappings[2].ProductIds",
+      "type": "",
+      "value": "[\"sort.chooseone21\", \"sort.chooseone10\"]",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/ChooseOneSpecialOfferConfigModel.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "ChooseOneSpecialOfferConfigModel.json: FallbackRewardMappings[2].RewardModels[0].CurrencyType",
+      "type": "",
+      "value": "1",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/ChooseOneSpecialOfferConfigModel.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "ChooseOneSpecialOfferConfigModel.json: FallbackRewardMappings[2].RewardModels[0].Amount",
+      "type": "",
+      "value": "8000",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/ChooseOneSpecialOfferConfigModel.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "ChooseOneSpecialOfferConfigModel.json: FallbackRewardMappings[2].RewardModels[1].CurrencyType",
+      "type": "",
+      "value": "4",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/ChooseOneSpecialOfferConfigModel.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "ChooseOneSpecialOfferConfigModel.json: FallbackRewardMappings[2].RewardModels[1].Amount",
+      "type": "",
+      "value": "4",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/ChooseOneSpecialOfferConfigModel.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "ChooseOneSpecialOfferConfigModel.json: FallbackRewardMappings[2].RewardModels[2].CurrencyType",
+      "type": "",
+      "value": "5",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/ChooseOneSpecialOfferConfigModel.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "ChooseOneSpecialOfferConfigModel.json: FallbackRewardMappings[2].RewardModels[2].Amount",
+      "type": "",
+      "value": "4",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/ChooseOneSpecialOfferConfigModel.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "ChooseOneSpecialOfferConfigModel.json: FallbackRewardMappings[2].RewardModels[3].CurrencyType",
+      "type": "",
+      "value": "6",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/ChooseOneSpecialOfferConfigModel.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "ChooseOneSpecialOfferConfigModel.json: FallbackRewardMappings[2].RewardModels[3].Amount",
+      "type": "",
+      "value": "4",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/ChooseOneSpecialOfferConfigModel.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "ChooseOneSpecialOfferConfigModel.json: FallbackRewardMappings[3].ProductIds",
+      "type": "",
+      "value": "[\"sort.chooseone35\", \"sort.chooseone14\"]",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/ChooseOneSpecialOfferConfigModel.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "ChooseOneSpecialOfferConfigModel.json: FallbackRewardMappings[3].RewardModels[0].CurrencyType",
+      "type": "",
+      "value": "1",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/ChooseOneSpecialOfferConfigModel.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "ChooseOneSpecialOfferConfigModel.json: FallbackRewardMappings[3].RewardModels[0].Amount",
+      "type": "",
+      "value": "12200",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/ChooseOneSpecialOfferConfigModel.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "ChooseOneSpecialOfferConfigModel.json: FallbackRewardMappings[3].RewardModels[1].CurrencyType",
+      "type": "",
+      "value": "4",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/ChooseOneSpecialOfferConfigModel.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "ChooseOneSpecialOfferConfigModel.json: FallbackRewardMappings[3].RewardModels[1].Amount",
+      "type": "",
+      "value": "7",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/ChooseOneSpecialOfferConfigModel.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "ChooseOneSpecialOfferConfigModel.json: FallbackRewardMappings[3].RewardModels[2].CurrencyType",
+      "type": "",
+      "value": "5",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/ChooseOneSpecialOfferConfigModel.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "ChooseOneSpecialOfferConfigModel.json: FallbackRewardMappings[3].RewardModels[2].Amount",
+      "type": "",
+      "value": "6",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/ChooseOneSpecialOfferConfigModel.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "ChooseOneSpecialOfferConfigModel.json: FallbackRewardMappings[3].RewardModels[3].CurrencyType",
+      "type": "",
+      "value": "6",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/ChooseOneSpecialOfferConfigModel.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "ChooseOneSpecialOfferConfigModel.json: FallbackRewardMappings[3].RewardModels[3].Amount",
+      "type": "",
+      "value": "4",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/ChooseOneSpecialOfferConfigModel.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "server cache (historical)",
+      "key": "ChooseOneSpecialOfferConfigModel (live) = default?",
+      "type": "",
+      "value": "56/98 key trùng default, 42 key khác/thêm",
+      "meaning": "Đối chiếu config server thật (CachedRemoteConfigs) với ChooseOneSpecialOfferConfigModel.json",
+      "where": "Configs/CachedRemoteConfigs + Firebase RC template 3197 — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server cache (historical)",
+      "key": "ChooseOneSpecialOfferConfigModel: isEnable",
+      "type": "",
+      "value": "true",
+      "meaning": "server ghi đè (default = false)",
+      "where": "Configs/CachedRemoteConfigs + Firebase RC template 3197 — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server cache (historical)",
+      "key": "ChooseOneSpecialOfferConfigModel: showFrequency",
+      "type": "",
+      "value": "0",
+      "meaning": "server ghi đè (default = 1)",
+      "where": "Configs/CachedRemoteConfigs + Firebase RC template 3197 — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server cache (historical)",
+      "key": "ChooseOneSpecialOfferConfigModel: maxShowCount",
+      "type": "",
+      "value": "0",
+      "meaning": "server ghi đè (default = 50)",
+      "where": "Configs/CachedRemoteConfigs + Firebase RC template 3197 — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server cache (historical)",
+      "key": "ChooseOneSpecialOfferConfigModel: fallbackRewardMappings[0].rewardModels[0].timeSpan",
+      "type": "",
+      "value": "00:00:00",
+      "meaning": "server-only (không có trong default)",
+      "where": "Configs/CachedRemoteConfigs + Firebase RC template 3197 — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server cache (historical)",
+      "key": "ChooseOneSpecialOfferConfigModel: fallbackRewardMappings[0].rewardModels[0].chestType",
+      "type": "",
+      "value": "0",
+      "meaning": "server-only (không có trong default)",
+      "where": "Configs/CachedRemoteConfigs + Firebase RC template 3197 — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server cache (historical)",
+      "key": "ChooseOneSpecialOfferConfigModel: fallbackRewardMappings[0].rewardModels[0].collectionPackType",
+      "type": "",
+      "value": "0",
+      "meaning": "server-only (không có trong default)",
+      "where": "Configs/CachedRemoteConfigs + Firebase RC template 3197 — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server cache (historical)",
+      "key": "ChooseOneSpecialOfferConfigModel: fallbackRewardMappings[0].rewardModels[1].timeSpan",
+      "type": "",
+      "value": "00:00:00",
+      "meaning": "server-only (không có trong default)",
+      "where": "Configs/CachedRemoteConfigs + Firebase RC template 3197 — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server cache (historical)",
+      "key": "ChooseOneSpecialOfferConfigModel: fallbackRewardMappings[0].rewardModels[1].chestType",
+      "type": "",
+      "value": "0",
+      "meaning": "server-only (không có trong default)",
+      "where": "Configs/CachedRemoteConfigs + Firebase RC template 3197 — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server cache (historical)",
+      "key": "ChooseOneSpecialOfferConfigModel: fallbackRewardMappings[0].rewardModels[1].collectionPackType",
+      "type": "",
+      "value": "0",
+      "meaning": "server-only (không có trong default)",
+      "where": "Configs/CachedRemoteConfigs + Firebase RC template 3197 — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server cache (historical)",
+      "key": "ChooseOneSpecialOfferConfigModel: fallbackRewardMappings[1].rewardModels[0].timeSpan",
+      "type": "",
+      "value": "00:00:00",
+      "meaning": "server-only (không có trong default)",
+      "where": "Configs/CachedRemoteConfigs + Firebase RC template 3197 — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server cache (historical)",
+      "key": "ChooseOneSpecialOfferConfigModel: fallbackRewardMappings[1].rewardModels[0].chestType",
+      "type": "",
+      "value": "0",
+      "meaning": "server-only (không có trong default)",
+      "where": "Configs/CachedRemoteConfigs + Firebase RC template 3197 — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server cache (historical)",
+      "key": "ChooseOneSpecialOfferConfigModel: fallbackRewardMappings[1].rewardModels[0].collectionPackType",
+      "type": "",
+      "value": "0",
+      "meaning": "server-only (không có trong default)",
+      "where": "Configs/CachedRemoteConfigs + Firebase RC template 3197 — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server cache (historical)",
+      "key": "ChooseOneSpecialOfferConfigModel: fallbackRewardMappings[1].rewardModels[1].timeSpan",
+      "type": "",
+      "value": "00:00:00",
+      "meaning": "server-only (không có trong default)",
+      "where": "Configs/CachedRemoteConfigs + Firebase RC template 3197 — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server cache (historical)",
+      "key": "ChooseOneSpecialOfferConfigModel: fallbackRewardMappings[1].rewardModels[1].chestType",
+      "type": "",
+      "value": "0",
+      "meaning": "server-only (không có trong default)",
+      "where": "Configs/CachedRemoteConfigs + Firebase RC template 3197 — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server cache (historical)",
+      "key": "ChooseOneSpecialOfferConfigModel: fallbackRewardMappings[1].rewardModels[1].collectionPackType",
+      "type": "",
+      "value": "0",
+      "meaning": "server-only (không có trong default)",
+      "where": "Configs/CachedRemoteConfigs + Firebase RC template 3197 — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server cache (historical)",
+      "key": "ChooseOneSpecialOfferConfigModel: fallbackRewardMappings[1].rewardModels[2].timeSpan",
+      "type": "",
+      "value": "00:00:00",
+      "meaning": "server-only (không có trong default)",
+      "where": "Configs/CachedRemoteConfigs + Firebase RC template 3197 — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server cache (historical)",
+      "key": "ChooseOneSpecialOfferConfigModel: fallbackRewardMappings[1].rewardModels[2].chestType",
+      "type": "",
+      "value": "0",
+      "meaning": "server-only (không có trong default)",
+      "where": "Configs/CachedRemoteConfigs + Firebase RC template 3197 — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server cache (historical)",
+      "key": "ChooseOneSpecialOfferConfigModel: fallbackRewardMappings[1].rewardModels[2].collectionPackType",
+      "type": "",
+      "value": "0",
+      "meaning": "server-only (không có trong default)",
+      "where": "Configs/CachedRemoteConfigs + Firebase RC template 3197 — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server cache (historical)",
+      "key": "ChooseOneSpecialOfferConfigModel: fallbackRewardMappings[2].rewardModels[0].timeSpan",
+      "type": "",
+      "value": "00:00:00",
+      "meaning": "server-only (không có trong default)",
+      "where": "Configs/CachedRemoteConfigs + Firebase RC template 3197 — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server cache (historical)",
+      "key": "ChooseOneSpecialOfferConfigModel: fallbackRewardMappings[2].rewardModels[0].chestType",
+      "type": "",
+      "value": "0",
+      "meaning": "server-only (không có trong default)",
+      "where": "Configs/CachedRemoteConfigs + Firebase RC template 3197 — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server cache (historical)",
+      "key": "ChooseOneSpecialOfferConfigModel: fallbackRewardMappings[2].rewardModels[0].collectionPackType",
+      "type": "",
+      "value": "0",
+      "meaning": "server-only (không có trong default)",
+      "where": "Configs/CachedRemoteConfigs + Firebase RC template 3197 — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server cache (historical)",
+      "key": "ChooseOneSpecialOfferConfigModel: fallbackRewardMappings[2].rewardModels[1].timeSpan",
+      "type": "",
+      "value": "00:00:00",
+      "meaning": "server-only (không có trong default)",
+      "where": "Configs/CachedRemoteConfigs + Firebase RC template 3197 — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server cache (historical)",
+      "key": "ChooseOneSpecialOfferConfigModel: fallbackRewardMappings[2].rewardModels[1].chestType",
+      "type": "",
+      "value": "0",
+      "meaning": "server-only (không có trong default)",
+      "where": "Configs/CachedRemoteConfigs + Firebase RC template 3197 — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server cache (historical)",
+      "key": "ChooseOneSpecialOfferConfigModel: fallbackRewardMappings[2].rewardModels[1].collectionPackType",
+      "type": "",
+      "value": "0",
+      "meaning": "server-only (không có trong default)",
+      "where": "Configs/CachedRemoteConfigs + Firebase RC template 3197 — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server cache (historical)",
+      "key": "ChooseOneSpecialOfferConfigModel: fallbackRewardMappings[2].rewardModels[2].timeSpan",
+      "type": "",
+      "value": "00:00:00",
+      "meaning": "server-only (không có trong default)",
+      "where": "Configs/CachedRemoteConfigs + Firebase RC template 3197 — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server cache (historical)",
+      "key": "ChooseOneSpecialOfferConfigModel: fallbackRewardMappings[2].rewardModels[2].chestType",
+      "type": "",
+      "value": "0",
+      "meaning": "server-only (không có trong default)",
+      "where": "Configs/CachedRemoteConfigs + Firebase RC template 3197 — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server cache (historical)",
+      "key": "ChooseOneSpecialOfferConfigModel: fallbackRewardMappings[2].rewardModels[2].collectionPackType",
+      "type": "",
+      "value": "0",
+      "meaning": "server-only (không có trong default)",
+      "where": "Configs/CachedRemoteConfigs + Firebase RC template 3197 — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server cache (historical)",
+      "key": "ChooseOneSpecialOfferConfigModel: fallbackRewardMappings[2].rewardModels[3].timeSpan",
+      "type": "",
+      "value": "00:00:00",
+      "meaning": "server-only (không có trong default)",
+      "where": "Configs/CachedRemoteConfigs + Firebase RC template 3197 — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server cache (historical)",
+      "key": "ChooseOneSpecialOfferConfigModel: fallbackRewardMappings[2].rewardModels[3].chestType",
+      "type": "",
+      "value": "0",
+      "meaning": "server-only (không có trong default)",
+      "where": "Configs/CachedRemoteConfigs + Firebase RC template 3197 — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server cache (historical)",
+      "key": "ChooseOneSpecialOfferConfigModel: fallbackRewardMappings[2].rewardModels[3].collectionPackType",
+      "type": "",
+      "value": "0",
+      "meaning": "server-only (không có trong default)",
+      "where": "Configs/CachedRemoteConfigs + Firebase RC template 3197 — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server cache (historical)",
+      "key": "ChooseOneSpecialOfferConfigModel: fallbackRewardMappings[3].rewardModels[0].timeSpan",
+      "type": "",
+      "value": "00:00:00",
+      "meaning": "server-only (không có trong default)",
+      "where": "Configs/CachedRemoteConfigs + Firebase RC template 3197 — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server cache (historical)",
+      "key": "ChooseOneSpecialOfferConfigModel: fallbackRewardMappings[3].rewardModels[0].chestType",
+      "type": "",
+      "value": "0",
+      "meaning": "server-only (không có trong default)",
+      "where": "Configs/CachedRemoteConfigs + Firebase RC template 3197 — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server cache (historical)",
+      "key": "ChooseOneSpecialOfferConfigModel: fallbackRewardMappings[3].rewardModels[0].collectionPackType",
+      "type": "",
+      "value": "0",
+      "meaning": "server-only (không có trong default)",
+      "where": "Configs/CachedRemoteConfigs + Firebase RC template 3197 — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server cache (historical)",
+      "key": "ChooseOneSpecialOfferConfigModel: fallbackRewardMappings[3].rewardModels[1].timeSpan",
+      "type": "",
+      "value": "00:00:00",
+      "meaning": "server-only (không có trong default)",
+      "where": "Configs/CachedRemoteConfigs + Firebase RC template 3197 — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server cache (historical)",
+      "key": "ChooseOneSpecialOfferConfigModel: fallbackRewardMappings[3].rewardModels[1].chestType",
+      "type": "",
+      "value": "0",
+      "meaning": "server-only (không có trong default)",
+      "where": "Configs/CachedRemoteConfigs + Firebase RC template 3197 — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server cache (historical)",
+      "key": "ChooseOneSpecialOfferConfigModel: fallbackRewardMappings[3].rewardModels[1].collectionPackType",
+      "type": "",
+      "value": "0",
+      "meaning": "server-only (không có trong default)",
+      "where": "Configs/CachedRemoteConfigs + Firebase RC template 3197 — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server cache (historical)",
+      "key": "ChooseOneSpecialOfferConfigModel: fallbackRewardMappings[3].rewardModels[2].timeSpan",
+      "type": "",
+      "value": "00:00:00",
+      "meaning": "server-only (không có trong default)",
+      "where": "Configs/CachedRemoteConfigs + Firebase RC template 3197 — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server cache (historical)",
+      "key": "ChooseOneSpecialOfferConfigModel: fallbackRewardMappings[3].rewardModels[2].chestType",
+      "type": "",
+      "value": "0",
+      "meaning": "server-only (không có trong default)",
+      "where": "Configs/CachedRemoteConfigs + Firebase RC template 3197 — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server cache (historical)",
+      "key": "ChooseOneSpecialOfferConfigModel: fallbackRewardMappings[3].rewardModels[2].collectionPackType",
+      "type": "",
+      "value": "0",
+      "meaning": "server-only (không có trong default)",
+      "where": "Configs/CachedRemoteConfigs + Firebase RC template 3197 — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server cache (historical)",
+      "key": "ChooseOneSpecialOfferConfigModel: fallbackRewardMappings[3].rewardModels[3].timeSpan",
+      "type": "",
+      "value": "00:00:00",
+      "meaning": "server-only (không có trong default)",
+      "where": "Configs/CachedRemoteConfigs + Firebase RC template 3197 — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server cache (historical)",
+      "key": "ChooseOneSpecialOfferConfigModel: fallbackRewardMappings[3].rewardModels[3].chestType",
+      "type": "",
+      "value": "0",
+      "meaning": "server-only (không có trong default)",
+      "where": "Configs/CachedRemoteConfigs + Firebase RC template 3197 — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server cache (historical)",
+      "key": "ChooseOneSpecialOfferConfigModel: fallbackRewardMappings[3].rewardModels[3].collectionPackType",
+      "type": "",
+      "value": "0",
+      "meaning": "server-only (không có trong default)",
+      "where": "Configs/CachedRemoteConfigs + Firebase RC template 3197 — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server instance (historical)",
+      "key": "ChooseOneSpecialOfferDataModel (instance)",
+      "type": "",
+      "value": "3 key, xem facts/runtime/event_instances/ChooseOneSpecialOfferDataModel.json",
+      "meaning": "Dữ liệu phiên event đang chạy (ngày, mốc, thưởng, đối thủ)",
+      "where": "PlayerPrefs ChooseOneSpecialOfferDataModel (instance event đang chạy) — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server instance (historical)",
+      "key": "ChooseOneSpecialOfferDataModel: chooseOneSpecialOfferSyncableDataModel.isPurchased",
+      "type": "",
+      "value": "false",
+      "meaning": "",
+      "where": "PlayerPrefs ChooseOneSpecialOfferDataModel (instance event đang chạy) — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server instance (historical)",
+      "key": "ChooseOneSpecialOfferDataModel: popupTriggerCount",
+      "type": "",
+      "value": "0",
+      "meaning": "",
+      "where": "PlayerPrefs ChooseOneSpecialOfferDataModel (instance event đang chạy) — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server instance (historical)",
+      "key": "ChooseOneSpecialOfferDataModel: isPopupShown",
+      "type": "",
+      "value": "false",
+      "meaning": "",
+      "where": "PlayerPrefs ChooseOneSpecialOfferDataModel (instance event đang chạy) — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    }
+  ],
+  "rewards": [
+    {
+      "context": "Một trong ba gói",
+      "reward": "SegmentedChooseOneOfferPackages[i].RewardModels — CurrencyEarnReason.ChooseOneSpecialOffer (29)",
+      "evidence": "ChooseOneSpecialOfferService.GetRewardsForProductId"
+    },
+    {
+      "context": "Gói trọn bộ",
+      "reward": "SegmentedChooseOneCombinedPackage — thưởng của cả ba gói với giá giảm GetDiscountAmount()%",
+      "evidence": "ChooseOneSpecialOfferService.GetDiscountAmount"
+    },
+    {
+      "context": "Dự phòng",
+      "reward": "FallbackRewardMapping{ProductIds, RewardModels}",
+      "evidence": "ChooseOneSpecialOfferService.TryGetFallbackRewards"
+    },
+    {
+      "context": "Loại thưởng xuất hiện",
+      "reward": "coin, life, life_in_seconds, additional_life_inventory, undo, shuffle, extra_bottle, duck_x2_in_seconds, merge_energy, collection_pack_1..5",
+      "evidence": "ChooseOneSpecialOfferService.ClaimPurchasedChooseOneSpecialOfferRewards"
+    }
+  ],
+  "backend": [
+    {
+      "command": "ChooseOneSpecialOfferRemoteService – get offer",
+      "direction": "client→server",
+      "purpose": "lấy ChooseOneSpecialOfferResponse (request ChooseOneSpecialOfferRequestModel{EventId, EventType})"
+    },
+    {
+      "command": "ChooseOneSpecialOfferRemoteService – claim",
+      "direction": "client→server",
+      "purpose": "báo đã mua (ShouldSendClaimRequest)"
+    },
+    {
+      "command": "IAPService + IAPPurchaseVerificationService",
+      "direction": "client→store→server",
+      "purpose": "mua và xác thực gói"
+    },
+    {
+      "command": "SyncService – SyncName 'ChooseOneSpecialOfferSyncableDataModel'",
+      "direction": "hai chiều",
+      "purpose": "đồng bộ IsPurchased"
+    }
+  ],
+  "ui": [
+    {
+      "element": "Popup Choose One",
+      "class": "Modules.Contexts.Home.Monetization.ChooseOneSpecialOffer.Scripts.UI (popup 'ChooseOneSpecialOfferPopup')",
+      "purpose": "3 thẻ gói + nút Buy All"
+    },
+    {
+      "element": "Icon lobby",
+      "class": "Modules.Contexts.Home.Monetization.ChooseOneSpecialOffer.Scripts.UI",
+      "purpose": "vào offer từ Home"
+    },
+    {
+      "element": "Enum UI",
+      "class": "ChooseOneSpecialOfferPackageType / ChooseOneSpecialOfferPopupImpressionSource",
+      "purpose": "phân loại gói và nguồn hiển thị"
+    }
+  ],
+  "analytics": [
+    {
+      "event": "choose_one_popup_impression",
+      "params": "impression_source, event_id, segment",
+      "when": "mở popup"
+    },
+    {
+      "event": "choose_one_purchased",
+      "params": "offer_type (packageId), price, currency, dollar_equivalent, event_id, segment",
+      "when": "mua một gói hoặc trọn bộ"
+    },
+    {
+      "event": "wrong_choose_one_special_offer_data",
+      "params": "-",
+      "when": "dữ liệu offer không hợp lệ"
+    },
+    {
+      "event": "earned",
+      "params": "reason=ChooseOneSpecialOffer, danh sách thưởng",
+      "when": "trao thưởng"
+    },
+    {
+      "event": "iap_purchase / purchase_failed",
+      "params": "origin=ChooseOneSpecialOffer, source=ChooseOneSpecialOffer",
+      "when": "mua thành công / thất bại"
+    }
+  ],
+  "storage_keys": [
+    "ChooseOneSpecialOfferSyncableDataModel (sync name)",
+    "ChooseOneSpecialOfferSyncableDataModel.IsPurchased",
+    "ChooseOneSpecialOfferDataModel.ChooseOneSpecialOfferResponse (cache)",
+    "ChooseOneSpecialOfferDataModel.PopupTriggerCount",
+    "ChooseOneSpecialOfferDataModel.IsPopupShown"
+  ],
+  "related_features": [
+    "SpecialOffer",
+    "Store",
+    "NoAdsOffer",
+    "PawTouchOffer",
+    "Ads"
+  ],
+  "gaps": [
+    "15/11 — partial_actual_evidence: Bản mặc định có 8 IAPConfigModels và 4 FallbackRewardMappings. Đây là dữ liệu default thật của export 0.0.3063, không phải response production mới. Câu hỏi cũ không nên tiếp tục được hiểu là chưa có dữ liệu tĩnh nào. Còn lại: Giữ default, cache và runtime được chọn thành các nguồn riêng. Chỉ xác minh phần hiện hành còn thiếu bằng instance, store sandbox hoặc backend hợp lệ.",
+    "15/11 — resolved_historical_snapshot: Đã trích toàn bộ field/value của ChooseOneSpecialOfferConfigModel từ default0.0.3063 và cache lịch sử hiện có. Nhận định không có giá trị trong client đã được đối chiếu bằng file thật; không xác nhận effective runtime. Còn lại: Kiểm chứng effective config/asset và nhánh runtime trên đúng build nếu cần.",
+    "15/11 — resolved_static_code_historical_build: GetState đọc IsEnable, rồi gọi AdService.IsChooseOneSpecialOfferDisabled; nếu flag true nhánh tiếp tục bị chặn ở state0. AdService method này trả AdConfigModel.IsChooseOneOfferDisabled. Dependency có mục đích cụ thể là remote feature suppression; không phải bằng chứng mua NoAds sẽ ẩn offer. Còn lại: Cần đối chiếu method/consumer trên app0.0.3129 ARM64; chưa là runtime pass.",
+    "15/11 — resolved_historical_snapshot: ChooseOneSpecialOfferPopup có trong metadata và kế thừa MonoBehaviour, IPopUp. GUID script khớp component trong ChooseOneSpecialOfferPopup.prefab. Nhận định cũ rằng chỉ có enum/ViewModel là thiếu sót của lần khảo sát trước. Còn lại: Giữ rõ build và phiên bản cache của nguồn; kiểm nhánh runtime riêng khi cần.",
+    "Endpoint HTTP nằm trong BackendEnvironmentConfig.",
+    "[Runtime 2026-09-10] Config server LIVE đã đọc trực tiếp từ cache máy (không cần request); các hàng 'server live' là giá trị server ghi đè/thêm so với default.",
+    "[Runtime 2026-09-10] Instance phiên event đang chạy đã đọc (ChooseOneSpecialOfferDataModel); phần từng ghi 'do server gửi' nay có giá trị thật trong các hàng 'server instance'."
+  ],
+  "sources": [
+    "features/ChooseOneSpecialOfferService.md",
+    "features/ChooseOneSpecialOfferDataService.md",
+    "features/ChooseOneSpecialOfferStateService.md",
+    "features/ChooseOneSpecialOfferRemoteService.md",
+    "features/ChooseOneSpecialOfferConfigModel.md",
+    "features/ChooseOneSpecialOfferDataModel.md",
+    "features/ChooseOneSpecialOfferSyncableDataModel.md",
+    "RecoveredNative/strings-by-type.tsv (EventSender.SendChooseOne*)",
+    "GameDesign/appendix/localization.tsv (ChooseOneHeader, ChooseOneSpecialOfferDiscount)",
+    "GameDesign/facts/facts.json (ChooseOneSpecialOfferState, ChooseOneSpecialOfferPackageType, ChooseOneSpecialOfferResponse, FallbackRewardMapping)"
+  ],
+  "audit_provenance": {
+    "review_date": "2026-11-15",
+    "mode": "offline_existing_files",
+    "code_build": "0.0.3063 ARMv7",
+    "runtime_build_observed_historically": "0.0.3129 ARM64 (audit 2026-10-18); not rechecked 2026-11-15",
+    "new_playtests": 0,
+    "uc_status": "See facts/audit_20261115/uc_registry.json; image reference is not pass",
+    "workbook_status": "Existing XLSX is historical; JSON and local web include 2026-11-15 corrections",
+    "static_review": "facts/local_code_gap_results_20261115.json; facts/local_asset_gap_results_20261115.json; facts/final_data_gap_decisions_20261115.json; facts/core_body_gap_decisions_20261115.json; facts/remaining_asset_gap_decisions_20261115.json"
+  },
+  "static_review_20261115": {
+    "date": "2026-11-15",
+    "scope": "Historical code/assets 0.0.3063, dated caches, device 0.0.3129 cached bundles and explicitly scoped runtime evidence. Not full runtime pass.",
+    "findings": [
+      {
+        "kind": "remaining_asset",
+        "source_report": "facts/remaining_asset_gap_decisions_20261115.json",
+        "id": "MS-RA-002",
+        "gap_ids": [
+          "MS-ChooseOneSpecialOffer-G004"
+        ],
+        "title": "Không tìm thấy class UI cụ thể của popup trong types-index — chỉ có enum trong namespace UI.",
+        "status": "resolved_historical_snapshot",
+        "conclusion": "ChooseOneSpecialOfferPopup có trong metadata và kế thừa MonoBehaviour, IPopUp. GUID script khớp component trong ChooseOneSpecialOfferPopup.prefab. Nhận định cũ rằng chỉ có enum/ViewModel là thiếu sót của lần khảo sát trước.",
+        "evidence": [
+          "facts/remaining_asset_review_20261115/ui_class_prefab_proof.json"
+        ],
+        "remaining": "",
+        "next_action": "Giữ rõ build và phiên bản cache của nguồn; kiểm nhánh runtime riêng khi cần.",
+        "scope": "Asset/native export 0.0.3063 và cache UnityFS đọc ngày 15/11 từ app 0.0.3129 được giữ riêng; ảnh render asset không phải ảnh chụp playtest.",
+        "reviewed": "2026-11-15",
+        "full_uc_pass": false
+      },
+      {
+        "kind": "final_data",
+        "source_report": "facts/final_data_gap_decisions_20261115.json",
+        "id": "MS-FDG-003",
+        "gap_ids": [
+          "MS-ChooseOneSpecialOffer-G002"
+        ],
+        "title": "ShowFrequency / MaxShowCount là remote config, không có giá trị mặc định trong client.",
+        "status": "resolved_historical_snapshot",
+        "conclusion": "Đã trích toàn bộ field/value của ChooseOneSpecialOfferConfigModel từ default0.0.3063 và cache lịch sử hiện có. Nhận định không có giá trị trong client đã được đối chiếu bằng file thật; không xác nhận effective runtime.",
+        "evidence": [
+          "facts/local_asset_review_20261115/config_catalog.json"
+        ],
+        "remaining": "Full historical data answered; current effective selection and full runtime remain unverified.",
+        "next_action": "Kiểm chứng effective config/asset và nhánh runtime trên đúng build nếu cần.",
+        "scope": "question-specific source/observed branch only; no full-UC or production claim",
+        "source_records": [
+          {
+            "snapshot": "default0.0.3063",
+            "model": "ChooseOneSpecialOfferConfigModel",
+            "source": "Resources\\defaultconfigs\\ChooseOneSpecialOfferConfigModel.json",
+            "root": "UnityExport Assets 0.0.3063",
+            "sha256": "38a35a83db30dd33b7bde5023efac738660305c70906479b1886d6737fc28da5",
+            "line": 1,
+            "build": "0.0.3063 ARMv7"
+          },
+          {
+            "snapshot": "cache20260910",
+            "model": "ChooseOneSpecialOfferConfigModel",
+            "source": "facts\\runtime\\server_configs\\chooseOneSpecialOfferConfigModel.json",
+            "root": "GameDesign",
+            "sha256": "69634041cfa5f8e15926b8d0475e77584eafad75ef7c53f6f12bc7de881f9116",
+            "line": 1,
+            "build": "snapshot provenance at path"
+          },
+          {
+            "snapshot": "cache20261010",
+            "model": "ChooseOneSpecialOfferConfigModel",
+            "source": "facts\\runtime\\test_20261010\\before\\CachedRemoteConfigs",
+            "root": "GameDesign",
+            "sha256": "433164d4877b2dee55d2bbd79ef2fe83d3fe9519492fe15e3cb0926daf216050",
+            "line": 1,
+            "build": "snapshot provenance at path"
+          }
+        ]
+      },
+      {
+        "kind": "code",
+        "source_report": "facts/local_code_gap_results_20261115.json",
+        "id": "MS-CODE-06",
+        "gap_ids": [
+          "MS-ChooseOneSpecialOffer-G003"
+        ],
+        "title": "ChooseOne bị chặn bằng ad-config flag",
+        "status": "resolved_static_code",
+        "conclusion": "GetState đọc IsEnable, rồi gọi AdService.IsChooseOneSpecialOfferDisabled; nếu flag true nhánh tiếp tục bị chặn ở state0. AdService method này trả AdConfigModel.IsChooseOneOfferDisabled. Dependency có mục đích cụ thể là remote feature suppression; không phải bằng chứng mua NoAds sẽ ẩn offer.",
+        "evidence": [
+          {
+            "file": "../com.grandgames.magicsort_Unity_20260909_112501/RecoveredNative/PseudoC/Assembly-CSharp/Modules/Contexts/Home/Monetization/ChooseOneSpecialOffer/Scripts/ChooseOneSpecialOfferStateService.c",
+            "line": 130,
+            "end_line": 323,
+            "method": "// ===== ChooseOneSpecialOfferStateService :: private ChooseOneSpecialOfferState GetState()",
+            "sha256": "30500d49286cdcc230e332672a3393eea0ce605d1faafcd522e16425c3a28cbb",
+            "body_checked": true,
+            "build": "0.0.3063 ARMv7",
+            "required_body_tokens": [
+              "_IsEnable_k__BackingField",
+              "AdService__IsChooseOneSpecialOfferDisabled"
+            ]
+          },
+          {
+            "file": "../com.grandgames.magicsort_Unity_20260909_112501/RecoveredNative/PseudoC/Assembly-CSharp/Modules/Contexts/Application/Ads/Scripts/AdService.c",
+            "line": 4021,
+            "end_line": 4046,
+            "method": "// ===== AdService :: public bool IsChooseOneSpecialOfferDisabled()",
+            "sha256": "d72c73bbe448cce5aee2d1826b7e11301104d9fc13d8bf4c199239a53fb23860",
+            "body_checked": true,
+            "build": "0.0.3063 ARMv7",
+            "required_body_tokens": [
+              "_IsChooseOneOfferDisabled_k__BackingField"
+            ]
+          }
+        ],
+        "remaining": "Cần đối chiếu method/consumer trên app0.0.3129 ARM64; chưa là runtime pass.",
+        "scope": "recovered_native_0.0.3063_only",
+        "runtime_verified": false
+      },
+      {
+        "kind": "asset",
+        "source_report": "facts/local_asset_gap_results_20261115.json",
+        "id": "MS-ChooseOneSpecialOffer-G002",
+        "status": "resolved_static_snapshot",
+        "conclusion": "Đã trích toàn bộ field/value của ChooseOneSpecialOfferConfigModel từ default0.0.3063 và cache lịch sử hiện có. Nhận định không có giá trị trong client đã được đối chiếu bằng file thật; không xác nhận effective runtime.",
+        "evidence": [
+          {
+            "snapshot": "default0.0.3063",
+            "model": "ChooseOneSpecialOfferConfigModel",
+            "source": "Resources\\defaultconfigs\\ChooseOneSpecialOfferConfigModel.json",
+            "root": "UnityExport Assets 0.0.3063",
+            "sha256": "38a35a83db30dd33b7bde5023efac738660305c70906479b1886d6737fc28da5",
+            "line": 1,
+            "build": "0.0.3063 ARMv7"
+          },
+          {
+            "snapshot": "cache20260910",
+            "model": "ChooseOneSpecialOfferConfigModel",
+            "source": "facts\\runtime\\server_configs\\chooseOneSpecialOfferConfigModel.json",
+            "root": "GameDesign",
+            "sha256": "69634041cfa5f8e15926b8d0475e77584eafad75ef7c53f6f12bc7de881f9116",
+            "line": 1,
+            "build": "snapshot provenance at path"
+          },
+          {
+            "snapshot": "cache20261010",
+            "model": "ChooseOneSpecialOfferConfigModel",
+            "source": "facts\\runtime\\test_20261010\\before\\CachedRemoteConfigs",
+            "root": "GameDesign",
+            "sha256": "433164d4877b2dee55d2bbd79ef2fe83d3fe9519492fe15e3cb0926daf216050",
+            "line": 1,
+            "build": "snapshot provenance at path"
+          }
+        ],
+        "data": "config_catalog.json",
+        "scope": "static_export0.0.3063_or_historical_cache_not_runtime_pass",
+        "reviewed": "2026-11-15",
+        "next_action": "Kiểm chứng effective config/asset và nhánh runtime trên đúng build nếu cần.",
+        "superseded_or_refined_by": "MS-FDG-003"
+      }
+    ]
+  },
+  "acceptance_review_20261115": {
+    "source": "facts/feature_acceptance_20261115.json",
+    "feature_id": "ChooseOneSpecialOffer",
+    "scope": "All eleven dossier dimensions reviewed; full_feature_verified is not implied; read per-dimension gaps and actual runtime evidence."
+  },
+  "segment_ab_review_20261115": {
+    "status": "not_identified_in_sources",
+    "segment_ids": [],
+    "matching_basis": "explicit_gd_config_map_or_exact_model_token_in_gdd_configs_where_key_sources; rootfieldscoped",
+    "rows": [],
+    "classifications": {},
+    "assignment_verified": false,
+    "uplift_verified": false,
+    "note": "No matchingrow does not prove no segmentation/AB. Rewardbucketfalsepositives remain explicitly classified."
+  },
+  "continuation_review_20261116": {
+    "date": "2026-11-16",
+    "build": "0.0.3129 ARM64 host APK",
+    "build_scope": "Host APK version3129 matches LAST observed installed version15/11 only; installed bytes/live device16/11 not verified.",
+    "runtime_status": "device_unavailable",
+    "runtime_case_ids": [],
+    "current_apk_model_links": {
+      "feature": "ChooseOneSpecialOffer",
+      "models": [
+        {
+          "model": "ChooseOneSpecialOfferConfigModel",
+          "current_default_file": "facts/review_20261116/public_current_config_3129/defaults/ChooseOneSpecialOfferConfigModel.json",
+          "resource_path": "defaultconfigs/chooseonespecialofferconfigmodel",
+          "sha256": "38a35a83db30dd33b7bde5023efac738660305c70906479b1886d6737fc28da5",
+          "matching_basis": [
+            "gdd/ChooseOneSpecialOffer.json#/configs",
+            "gdd/ChooseOneSpecialOffer.json#/sources",
+            "gdd/ChooseOneSpecialOffer.json#/flow",
+            "gdd/ChooseOneSpecialOffer.json#/managers"
+          ],
+          "scope": "Packaged default3129, not effective server config.",
+          "site_data_path": "data/current_config_3129/defaults/ChooseOneSpecialOfferConfigModel.json",
+          "original_source_sha256": "38a35a83db30dd33b7bde5023efac738660305c70906479b1886d6737fc28da5",
+          "public_artifact_sha256": "c850c3fae5bce1da9a0d0dd8959fe8755dedf34434f8388ce9d3f799f05f2f30",
+          "sha256_scope": "sha256 is original raw model; public_artifact_sha256 is the sanitized download"
+        }
+      ],
+      "status": "exact_model_source_association",
+      "distribution": "sanitized_public",
+      "public_mapping_pending": false
+    },
+    "current_packaged_defaults": [
+      {
+        "model": "ChooseOneSpecialOfferConfigModel",
+        "source": "facts/review_20261116/public_current_config_3129/defaults/ChooseOneSpecialOfferConfigModel.json",
+        "site_data_path": "data/current_config_3129/defaults/ChooseOneSpecialOfferConfigModel.json",
+        "public_artifact_sha256": "c850c3fae5bce1da9a0d0dd8959fe8755dedf34434f8388ce9d3f799f05f2f30",
+        "original_source_sha256": "38a35a83db30dd33b7bde5023efac738660305c70906479b1886d6737fc28da5",
+        "source_class": "static_asset",
+        "build": "0.0.3129 host APK",
+        "scope": "Sanitized packaged default fullvalues only; not effective remote/selected config or runtime.",
+        "values": {
+          "IsEnable": false,
+          "FirstLevelToShow": 65,
+          "EventType": 1,
+          "ShowFrequency": 1,
+          "MaxShowCount": 50,
+          "IAPConfigModels": [
+            {
+              "ProductId": "sort.chooseone10",
+              "ProductType": 0,
+              "DollarEquivalent": 9.99
+            },
+            {
+              "ProductId": "sort.chooseone14",
+              "ProductType": 0,
+              "DollarEquivalent": 13.99
+            },
+            {
+              "ProductId": "sort.chooseone15",
+              "ProductType": 0,
+              "DollarEquivalent": 14.99
+            },
+            {
+              "ProductId": "sort.chooseone21",
+              "ProductType": 0,
+              "DollarEquivalent": 20.99
+            },
+            {
+              "ProductId": "sort.chooseone3",
+              "ProductType": 0,
+              "DollarEquivalent": 2.99
+            },
+            {
+              "ProductId": "sort.chooseone35",
+              "ProductType": 0,
+              "DollarEquivalent": 34.99
+            },
+            {
+              "ProductId": "sort.chooseone6",
+              "ProductType": 0,
+              "DollarEquivalent": 5.99
+            },
+            {
+              "ProductId": "sort.chooseone6.99",
+              "ProductType": 0,
+              "DollarEquivalent": 6.99
+            }
+          ],
+          "FallbackRewardMappings": [
+            {
+              "ProductIds": [
+                "sort.chooseone6.99",
+                "sort.chooseone3"
+              ],
+              "RewardModels": [
+                {
+                  "CurrencyType": 1,
+                  "Amount": 1200
+                },
+                {
+                  "CurrencyType": 4,
+                  "Amount": 1
+                }
+              ]
+            },
+            {
+              "ProductIds": [
+                "sort.chooseone15",
+                "sort.chooseone6"
+              ],
+              "RewardModels": [
+                {
+                  "CurrencyType": 1,
+                  "Amount": 3000
+                },
+                {
+                  "CurrencyType": 4,
+                  "Amount": 2
+                },
+                {
+                  "CurrencyType": 5,
+                  "Amount": 2
+                }
+              ]
+            },
+            {
+              "ProductIds": [
+                "sort.chooseone21",
+                "sort.chooseone10"
+              ],
+              "RewardModels": [
+                {
+                  "CurrencyType": 1,
+                  "Amount": 8000
+                },
+                {
+                  "CurrencyType": 4,
+                  "Amount": 4
+                },
+                {
+                  "CurrencyType": 5,
+                  "Amount": 4
+                },
+                {
+                  "CurrencyType": 6,
+                  "Amount": 4
+                }
+              ]
+            },
+            {
+              "ProductIds": [
+                "sort.chooseone35",
+                "sort.chooseone14"
+              ],
+              "RewardModels": [
+                {
+                  "CurrencyType": 1,
+                  "Amount": 12200
+                },
+                {
+                  "CurrencyType": 4,
+                  "Amount": 7
+                },
+                {
+                  "CurrencyType": 5,
+                  "Amount": 6
+                },
+                {
+                  "CurrencyType": 6,
+                  "Amount": 4
+                }
+              ]
+            }
+          ]
+        }
+      }
+    ],
+    "native_finding_ids": [],
+    "documentation_source_coverage": {
+      "dossier_present": true,
+      "use_case_catalog_count": 12,
+      "config_catalog_rows": 123,
+      "current_apk_default_model_links": 1,
+      "current_native_findings": 0,
+      "scope": "Documentation/source coverage only; not complete runtime verification."
+    },
+    "runtime_completion": {
+      "date": "2026-11-16",
+      "status": "device_unavailable",
+      "executed_case_count": 0,
+      "full_feature_runtime_verified": false
+    },
+    "planned_branch": "Tìm icon Choose One hoặc entry trước Shop; nếu hiện chụp ba gói/combo, chọn tab nếu có và đóng không mua.",
+    "target_uc_ids": [
+      "UC-03",
+      "UC-09"
+    ],
+    "execution_phase": "noncore_first",
+    "core_or_levels_last": false,
+    "actionability_full_json": "facts/continuation_20261116/current/feature_actionability.json",
+    "actionability_site_data_path": "data/continuation_20261116/feature_actionability.json",
+    "source_classes": [
+      "static_asset"
+    ],
+    "full_feature_verified": false
+  }
+}

@@ -1,0 +1,171 @@
+{
+  "id": "Tutorial",
+  "title": "Hướng dẫn người chơi mới (Tutorial)",
+  "tagline": "Nhiều lớp hướng dẫn chồng nhau: 4 level đầu dẫn tay, rồi popup giới thiệu theo mốc level.",
+  "infobox": [
+    ["Loại", "Tiến trình"],
+    ["Mở khóa", "Level 1–4 tự chạy; các lớp sau theo mốc level riêng"],
+    ["Thời lượng", "Hai chặng trong level 1, ba level còn lại để luyện tập"],
+    ["Chu kỳ / lịch", "Mỗi hướng dẫn chỉ chạy đúng một lần"],
+    ["Tham gia", "Cá nhân"],
+    ["Điều kiện / phụ thuộc", "LevelsConfigv2 isTutorial, BlockerIntroConfigModel, GameEconomyModel"],
+    ["Manager", "TutorialSystem"]
+  ],
+  "description": [
+    "Magic Sort không có một 'màn tutorial' duy nhất mà dùng nhiều lớp hướng dẫn chồng lên nhau.",
+    "Lớp một: TutorialSystem chạy trong 4 level đầu, khoá bàn, hiện ngón tay và chỉ cho chạm đúng chai cần chạm.",
+    "Chặng 1 dạy thao tác tap–tap chọn chai nguồn rồi chai đích; chặng 2 dạy luật chỉ đổ nước vào chai cùng màu.",
+    "Bốn câu hướng dẫn là chuỗi tiếng Anh cứng trong code, không đi qua bảng localization.",
+    "Lớp hai: popup giới thiệu theo mốc level — vật cản Curtain ở level 20, Clay ở 60, Plaster ở 110.",
+    "Booster Undo, Shuffle và Extra Bottle cùng mở khoá ở level 15 và có popup giới thiệu riêng.",
+    "Lớp ba: tutorial theo tính năng cho Super Charger, Snitch, Mini Game, Merge Mini Game và bàn tutorial của Daily.",
+    "Dấu xanh đánh dấu chai đích hợp lệ, dấu đỏ đánh dấu chai sai, dựng bằng pool SelectionSuccessFailView.",
+    "Analytics 'tutorial_split_start' và 'tutorial_split_{0}' đo tỉ lệ rơi rớt ở từng chặng của phễu đầu game.",
+    "Mọi cờ đã-hướng-dẫn đi qua ISyncable nên đổi máy không bị lặp lại tutorial."
+  ],
+  "notes": [
+    "Lưu ý: chỉ 4 trong 219 level trong bảng cấu hình được đánh dấu isTutorial.",
+    "Lưu ý: level 1 có 4 seed, các level 2–4 mỗi level đúng 1 seed cố định; từ level 5 chuyển sang bộ seed v3magicsort với 5 biến thể mỗi level.",
+    "Lưu ý: có hai định dạng cờ vật cản song song — cũ theo tên ItemType ('{ItemType}Introduced') và mới theo blockerId — dấu vết của một lần migrate dữ liệu.",
+    "Lưu ý: ItemType = None (0) thì bỏ qua bước giới thiệu vật cản.",
+    "Lưu ý: server có thể dời mốc dạy vật cản qua GrandRemoteRegularLevelsConfigs.BlockerIntroConfigModel mà không cần cập nhật app.",
+    "Lưu ý: tutorial Super Charger chỉ chạy khi server bật (SuperChargerConfigModel.IsEnabled mặc định false).",
+    "Lưu ý: tutorial Snitch cũng bị tắt trong bản đóng gói (SnitchConfigModel.IsEnabled = false, FirstLevelToShow = 290).",
+    "Lưu ý: không có hệ thống tutorial tổng quát — mỗi tính năng tự quản tutorial riêng, không có bảng cấu hình tập trung."
+  ],
+  "how_it_works": [
+    "Vào level tutorial, TutorialSystem lắng nghe tín hiệu vào bàn rồi chờ hoạt ảnh chai xuất hiện xong.",
+    "Chặng 1 bắt đầu: hiện dòng chữ 'Tap the left bottle to pick up' và đánh dấu chai hợp lệ.",
+    "Ngón tay hướng dẫn mô phỏng cú chạm vào đúng vị trí chai (FingerView.PlaySpawnAndClickAnimation).",
+    "Mọi chai khác bị bỏ qua — hệ thống chọn chỉ nhận chai đã được đánh dấu.",
+    "Chạm đúng chai nguồn: dòng chữ đổi thành 'Tap the left bottle to pour' hoặc 'Tap the right bottle to pour' tuỳ hướng.",
+    "Các chai đích hợp lệ được đánh dấu xanh, chai sai đánh dấu đỏ (RecalculateSelections).",
+    "Chạm đúng chai đích: chặng 1 hoàn tất, ngón tay và dòng chữ được ẩn đi.",
+    "Chặng 2 bắt đầu ngay trong cùng level với dòng chữ 'Only pour water into the same color'.",
+    "Người chơi thực hiện nước đi hợp lệ → chặng 2 hoàn tất, toàn bộ chỉ dẫn biến mất; rời level thì pool được dọn.",
+    "Ba level tutorial còn lại (2, 3, 4) là bàn cực dễ không có vật cản, chỉ để luyện tập.",
+    "Song song, analytics gửi 'tutorial_split_start' kèm split_index cho mỗi đợt chai mới để đo phễu.",
+    "Từ level 15, popup giới thiệu booster mới hiện ra khi Undo/Shuffle/Extra Bottle mở khoá.",
+    "Trước level đầu tiên có vật cản mới, popup giới thiệu vật cản mở ra và ghi cờ đã giới thiệu (analytics new_blocker_introduced).",
+    "Lần đầu vào Daily, bàn tutorial riêng chạy với 180 giây, 3 chai trống và 4 chai đầy.",
+    "Các tính năng meta (Super Charger, Snitch, Mini Game, Merge Mini Game) có tutorial riêng, mỗi cái chỉ chạy một lần khi tính năng được bật."
+  ],
+  "reward_tables": [
+    {
+      "title": "MỐC GIỚI THIỆU VẬT CẢN (BlockerIntroConfigModel.json)",
+      "columns": ["Vật cản", "Mốc level", "Ghi chú"],
+      "rows": [
+        ["Curtain", "Level 20", "Client default, remote config ghi đè"],
+        ["Clay", "Level 60", "Client default, remote config ghi đè"],
+        ["Plaster", "Level 110", "Client default, remote config ghi đè"]
+      ]
+    },
+    {
+      "title": "MỐC MỞ KHOÁ BOOSTER KÈM POPUP GIỚI THIỆU (GameEconomyModel.json)",
+      "columns": ["Booster", "Mốc level", "Ghi chú"],
+      "rows": [
+        ["Undo", "Level 15", "UndoUnlockAtLevel"],
+        ["Shuffle", "Level 15", "ShuffleUnlockAtLevel"],
+        ["Extra Bottle", "Level 15", "ExtraBottleUnlockAtLevel"],
+        ["Reveal", "Không có mốc level trong config", "Có tutorial dẫn tay riêng (ShouldShowRevealTutorial)"],
+        ["Mega Shuffle", "Không có mốc level trong config", "Có tutorial dẫn tay riêng (ShouldShowMegaShuffleTutorial)"]
+      ]
+    },
+    {
+      "title": "BỐN LEVEL TUTORIAL ĐẦU GAME (LevelsConfigv2.json)",
+      "columns": ["Level", "Seed", "Đặc điểm"],
+      "rows": [
+        ["Level 1", "magicsort_magicsort1..4_difficulty1-1 (4 seed)", "Chạy cả chặng 1 và chặng 2 của TutorialSystem"],
+        ["Level 2", "magicsort_magicsort2_difficulty1-1", "Bàn cố định, không vật cản"],
+        ["Level 3", "magicsort_magicsort3_difficulty1-1", "Bàn cố định, không vật cản"],
+        ["Level 4", "magicsort_magicsort4_difficulty1-1", "Bàn cố định, không vật cản"],
+        ["Bàn tutorial Daily", "daily_daily16_difficulty1-10", "180 giây, 3 chai trống + 4 chai đầy"]
+      ]
+    },
+    {
+      "title": "CÂU HƯỚNG DẪN TRONG BÀN (chuỗi cứng trong TutorialSystem)",
+      "columns": ["Thứ tự", "Nội dung", "Chặng"],
+      "rows": [
+        ["1", "\"Tap the left bottle to pick up\"", "Chặng 1 — chọn chai nguồn"],
+        ["2", "\"Tap the left bottle to pour\" / \"Tap the right bottle to pour\"", "Chặng 1 — chọn chai đích"],
+        ["3", "\"Only pour water into the same color\"", "Chặng 2 — luật cùng màu"]
+      ]
+    },
+    {
+      "title": "TUTORIAL THEO TÍNH NĂNG",
+      "columns": ["Tính năng", "Điều kiện chạy", "Nội dung hướng dẫn"],
+      "rows": [
+        ["Super Charger", "IsEnabled = true, level ≥ 5", "\"Sort colors to charge the Supercharger!\" rồi \"Each bottle can be used once. Sort colors to recharge.\""],
+        ["Snitch", "IsEnabled = true, level ≥ 290, TargetLevelProgress 10", "\"Beat {0} Levels!\", \"Activate your Snitches!\", \"Power Snitch removes blocker!\" / \"Silver Snitch reveals <sprite>\""],
+        ["Mini Game", "MiniGameConfigModel bật", "\"Use tridents to break tiles and find the treasures!\""],
+        ["Merge Mini Game", "MergeMiniGameConfigModel bật", "6 bước: \"Tap to spawn items\", \"Merge 2 items to upgrade!\", \"Uncover bubble item by merging it!\", \"Tap to collect rewards\""],
+        ["Booster mới", "Level 15", "\"Reveal!\" / \"Reveal removes obstacles!\"; \"Mega Shuffle!\" / \"Shuffles the entire board!\""],
+        ["Daily Challenge", "DidTutorialLevelPlay = false", "Bàn tutorial 180 giây dạy luật thời gian và chai cao 12 ô"]
+      ]
+    }
+  ],
+  "key_numbers": [
+    {"label": "Số level tutorial", "value": "4 (levelIndex 1, 2, 3, 4)", "source": "LevelsConfigv2 isTutorial"},
+    {"label": "Tỉ lệ level tutorial", "value": "4 trên 219 level trong bảng cấu hình", "source": "UC-04"},
+    {"label": "Số seed của level 1", "value": "4", "source": "LevelsConfigv2.json"},
+    {"label": "Số seed của level 2–4", "value": "1 mỗi level", "source": "LevelsConfigv2.json"},
+    {"label": "Số biến thể seed từ level 5", "value": "5 mỗi level (bộ v3magicsort)", "source": "UC-04"},
+    {"label": "Mốc giới thiệu Curtain", "value": "Level 20", "source": "BlockerIntroConfigModel.Curtain"},
+    {"label": "Mốc giới thiệu Clay", "value": "Level 60", "source": "BlockerIntroConfigModel.Clay"},
+    {"label": "Mốc giới thiệu Plaster", "value": "Level 110", "source": "BlockerIntroConfigModel.Plaster"},
+    {"label": "Mốc mở khoá Undo", "value": "Level 15", "source": "GameEconomyModel.UndoUnlockAtLevel"},
+    {"label": "Mốc mở khoá Shuffle", "value": "Level 15", "source": "GameEconomyModel.ShuffleUnlockAtLevel"},
+    {"label": "Mốc mở khoá Extra Bottle", "value": "Level 15", "source": "GameEconomyModel.ExtraBottleUnlockAtLevel"},
+    {"label": "Thời gian bàn tutorial Daily", "value": "180 giây", "source": "GrandRemoteDailyLevelsConfig.tutorial_level.levelDuration"},
+    {"label": "Thời gian bàn Daily thường", "value": "105–130 giây", "source": "UC-13"},
+    {"label": "Cấu hình chai bàn tutorial Daily", "value": "3 chai trống + 4 chai đầy", "source": "GrandRemoteDailyLevelsConfig.tutorial_level"},
+    {"label": "Super Charger — level tối thiểu", "value": "5 (client default)", "source": "SuperChargerConfigModel.FirstLevelToShow"},
+    {"label": "Super Charger — trạng thái mặc định", "value": "IsEnabled = false", "source": "SuperChargerConfigModel.IsEnabled"},
+    {"label": "Snitch — level tối thiểu", "value": "290 (client default)", "source": "SnitchConfigModel.FirstLevelToShow"},
+    {"label": "Snitch — số level cần thắng để kích hoạt", "value": "10", "source": "SnitchConfigModel.TargetLevelProgress"},
+    {"label": "Số bước tutorial Merge Mini Game", "value": "6 (GeneratorButtonTutorial=0 … BubbleTutorial=5)", "source": "MergeTutorialType"},
+    {"label": "Số câu hướng dẫn cứng trong code", "value": "4", "source": "TutorialSystem (strings-by-type.tsv)"},
+    {"label": "Giá Reveal và Mega Shuffle", "value": "900 coin", "source": "UC-08"},
+    {"label": "Giá trị level_type trong analytics", "value": "'tutorial' cho level 1–4", "source": "LevelStats.GetLevelType"}
+  ],
+  "config_highlights": [
+    {"key": "LevelsConfigv2 isTutorial", "value": "true cho levelIndex 1, 2, 3, 4", "meaning": "Bốn level tutorial đầu game"},
+    {"key": "Seed level 1", "value": "magicsort_magicsort1..4_difficulty1-1", "meaning": "Bốn bàn cố định cho level đầu tiên"},
+    {"key": "Seed level 2 / 3 / 4", "value": "magicsort_magicsort2/3/4_difficulty1-1", "meaning": "Mỗi level một bàn cố định"},
+    {"key": "BlockerIntroConfigModel.Curtain", "value": "20", "meaning": "Mốc level giới thiệu vật cản Curtain"},
+    {"key": "BlockerIntroConfigModel.Clay", "value": "60", "meaning": "Mốc level giới thiệu vật cản Clay"},
+    {"key": "BlockerIntroConfigModel.Plaster", "value": "110", "meaning": "Mốc level giới thiệu vật cản Plaster"},
+    {"key": "GameEconomyModel.UndoUnlockAtLevel", "value": "15", "meaning": "Mốc mở khoá Undo, kéo theo popup giới thiệu"},
+    {"key": "GameEconomyModel.ShuffleUnlockAtLevel", "value": "15", "meaning": "Mốc mở khoá Shuffle"},
+    {"key": "GameEconomyModel.ExtraBottleUnlockAtLevel", "value": "15", "meaning": "Mốc mở khoá Extra Bottle"},
+    {"key": "SuperChargerConfigModel.IsEnabled / FirstLevelToShow / TargetLevelProgress", "value": "false / 5 / 0", "meaning": "Điều kiện chạy tutorial Super Charger"},
+    {"key": "SnitchConfigModel.IsEnabled / FirstLevelToShow / TargetLevelProgress", "value": "false / 290 / 10", "meaning": "Điều kiện chạy tutorial Snitch"},
+    {"key": "GrandRemoteDailyLevelsConfig.tutorial_level", "value": "levelDuration 180, seeds ['daily_daily16_difficulty1-10'], emptyBottleCount 3, filledBottleCount 4", "meaning": "Bàn tutorial của Daily"},
+    {"key": "Chuỗi hướng dẫn TutorialSystem", "value": "\"Tap the left bottle to pick up\", \"Tap the left bottle to pour\", \"Tap the right bottle to pour\", \"Only pour water into the same color\"", "meaning": "Bốn câu cứng trong code, không qua localization"},
+    {"key": "SuperChargerBottleTutorialDescription1", "value": "\"Sort colors to charge the Supercharger!\"", "meaning": "Bước 1 tutorial Super Charger"},
+    {"key": "SuperChargerBottleTutorialDescription2", "value": "\"Each bottle can be used once. Sort colors to recharge.\"", "meaning": "Bước 2 tutorial Super Charger"},
+    {"key": "MiniGameTutorialInfo", "value": "\"Use tridents to break tiles and find the treasures!\"", "meaning": "Hướng dẫn Mini Game"},
+    {"key": "MergeTutorialGeneratorItem / MergeTutorialItem", "value": "\"Tap to spawn items\" / \"Merge 2 items to upgrade!\"", "meaning": "Hướng dẫn Merge Mini Game"},
+    {"key": "MergeTutorialBubble / MergeTutorialCollectible", "value": "\"Uncover bubble item by merging it!\" / \"Tap to collect rewards\"", "meaning": "Hướng dẫn Merge Mini Game"},
+    {"key": "SnitchInfoStep1 / Step2", "value": "\"Beat {0} Levels!\" / \"Activate your Snitches!\"", "meaning": "Hai bước đầu tutorial Snitch"},
+    {"key": "SnitchInfoStep3Power / Step3Silver", "value": "\"Power Snitch removes blocker!\" / \"Silver Snitch reveals <sprite=0>\"", "meaning": "Bước 3 tutorial Snitch, hai loại"},
+    {"key": "RevealTitle / RevealDescription", "value": "\"Reveal!\" / \"Reveal removes obstacles!\"", "meaning": "Popup giới thiệu booster Reveal"},
+    {"key": "MegaShuffleTitle / MegaShuffleDescription", "value": "\"Mega Shuffle!\" / \"Shuffles the entire board!\"", "meaning": "Popup giới thiệu booster Mega Shuffle"},
+    {"key": "TapToContinue / TapToClaim / TaptoOpen", "value": "\"Tap to Continue\" / \"Tap to Claim\" / \"Tap to open\"", "meaning": "Chỉ dẫn chạm dùng lại ở nhiều popup"},
+    {"key": "MergeTutorialType", "value": "GeneratorButtonTutorial=0, MergeItemTutorial=1, EventInfoTutorial=2, GeneratorItemTutorial=3, RewardedTutorial=4, BubbleTutorial=5", "meaning": "Sáu bước tutorial của Merge Mini Game"},
+    {"key": "TutorialSystem._inFirstTutorial / _inSecondTutorial", "value": "cờ runtime", "meaning": "Đang chạy chặng 1 hay chặng 2 trong bàn"},
+    {"key": "SelectionView pools", "value": "_selectionSuccessPool, _selectionFailPool", "meaning": "Dấu xanh/đỏ đánh dấu chai đúng-sai"},
+    {"key": "\"{ItemType}Introduced\"", "value": "cờ bool client", "meaning": "Định dạng cũ của cờ đã giới thiệu vật cản"},
+    {"key": "DailyModel.DailyIntroduced / DidTutorialLevelPlay", "value": "cờ bool sync server", "meaning": "Đã giới thiệu Daily và đã chơi bàn tutorial Daily"},
+    {"key": "GrandRemoteRegularLevelsConfigs.BlockerIntroConfigModel", "value": "server ghi đè", "meaning": "Dời thời điểm dạy vật cản mà không cập nhật app"},
+    {"key": "TutorialAnimationConfig", "value": "ScriptableObject", "meaning": "Tham số hoạt hoạ tutorial Merge Mini Game"}
+  ],
+  "tips": [
+    "Dạy hai luật cốt lõi (thao tác tap–tap và luật cùng màu) ngay trong level 1 giúp rút ngắn phễu onboarding tối đa.",
+    "Đánh dấu xanh/đỏ trực tiếp trên chai dạy luật bằng phản hồi thị giác thay vì bằng chữ — hiệu quả xuyên ngôn ngữ.",
+    "Tách analytics theo từng chặng cho phép xác định chính xác bước nào làm người chơi mới bỏ game.",
+    "Giới thiệu vật cản đúng ngay trước lần đầu gặp (level 20, 60, 110) tránh dồn thông tin vào đầu game.",
+    "Việc bốn câu hướng dẫn nằm cứng trong code chứ không qua localization là rủi ro cho thị trường không nói tiếng Anh."
+  ],
+  "categories": ["Tiến trình", "Cơ chế lõi", "Meta"]
+}

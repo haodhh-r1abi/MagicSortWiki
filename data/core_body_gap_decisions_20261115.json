@@ -1,0 +1,1842 @@
+{
+  "schema_version": 1,
+  "reviewed": "2026-11-15",
+  "scope": "file-only historical native0.0.3063 ARMv7; runtime0.0.3129 not claimed",
+  "summary": {
+    "target_count": 17,
+    "reviewed_count": 17,
+    "status_counts": {
+      "partial_static_code_unresolved": 10,
+      "resolved_static_code_historical_build": 7
+    },
+    "patch_count": 20,
+    "patch_audit_status": "20 restored historical applied records; original target hashes explicitly unavailable"
+  },
+  "findings": [
+    {
+      "id": "MS-CORE-BODY-01",
+      "gap_ids": [
+        "MS-Boosters-G001"
+      ],
+      "title": "PreBooster service không có gameplay body",
+      "conclusion": "PreBoosterWinStreakService chỉ có constructor return; không chứa threshold, increment/reset hoặc grant. Không được suy từ empty class rằng feature bị tắt.",
+      "evidence": [
+        {
+          "file": "../com.grandgames.magicsort_Unity_20260909_112501/RecoveredNative/PseudoC/Assembly-CSharp/Modules/Contexts/Home/PreBoosterWinStreak/Scripts/PreBoosterWinStreakService.c",
+          "line": 6,
+          "end_line": 18,
+          "method": "// =====",
+          "sha256": "9f3ce227d9d2d684585f522c7f867a5a71ab8f9f21b309020f722c59b335ff61",
+          "body_checked": true,
+          "build": "0.0.3063 ARMv7",
+          "required_body_tokens": []
+        }
+      ],
+      "status": "partial_static_code_unresolved",
+      "remaining": "Cần implementation khác/build hiện hành hoặc config consumer thực; export này không cung cấp rule streak.",
+      "runtime_verified": false,
+      "scope": "recovered_native_0.0.3063_only"
+    },
+    {
+      "id": "MS-CORE-BODY-02",
+      "gap_ids": [
+        "MS-Boosters-G002"
+      ],
+      "title": "PreLevel popup chỉ có lifecycle",
+      "conclusion": "Đã đọc Show/ShowAsync: lấy gameObject, SetActive(true); async trả completed task. Không có chọn booster, spend inventory hoặc streak consumer trong các body này.",
+      "evidence": [
+        {
+          "file": "../com.grandgames.magicsort_Unity_20260909_112501/RecoveredNative/PseudoC/Assembly-CSharp/Modules/Contexts/GamePlay/UI/PreLevelPopUpNS/Scripts/Home/PreLevelPopUp.c",
+          "line": 6,
+          "end_line": 32,
+          "method": "// ===== PreLevelPopUp :: public void Show(",
+          "sha256": "a1cf9182efbcb1ff7c426d0c54e617e05049f7db6cdfaf586492bd7946b6408f",
+          "body_checked": true,
+          "build": "0.0.3063 ARMv7",
+          "required_body_tokens": []
+        },
+        {
+          "file": "../com.grandgames.magicsort_Unity_20260909_112501/RecoveredNative/PseudoC/Assembly-CSharp/Modules/Contexts/GamePlay/UI/PreLevelPopUpNS/Scripts/Home/PreLevelPopUp.c",
+          "line": 33,
+          "end_line": 70,
+          "method": "// ===== PreLevelPopUp :: public Task ShowAsync(",
+          "sha256": "a1cf9182efbcb1ff7c426d0c54e617e05049f7db6cdfaf586492bd7946b6408f",
+          "body_checked": true,
+          "build": "0.0.3063 ARMv7",
+          "required_body_tokens": []
+        }
+      ],
+      "status": "partial_static_code_unresolved",
+      "remaining": "Cần prefab listener/caller của picker hoặc runtime build có entry; lifecycle không chứng minh không tồn tại picker toàn game.",
+      "runtime_verified": false,
+      "scope": "recovered_native_0.0.3063_only"
+    },
+    {
+      "id": "MS-CORE-BODY-03",
+      "gap_ids": [
+        "MS-BottleSortMechanics-G002"
+      ],
+      "title": "ShouldComplete đầy chai và long-board",
+      "conclusion": "Base = isCompletable && !IsCompleted && !IsEmpty && topWater.Height==Height && IsAllWatersVisible. Không có long bottle trên board→base. Có long bottle→base && (collection.GetColorCount(topColor)==Height || IsLongBottle). Không có nhánh hoàn thành chai chưa đầy chỉ vì màu còn ít.",
+      "evidence": [
+        {
+          "file": "../com.grandgames.magicsort_Unity_20260909_112501/RecoveredNative/PseudoC/Assembly-CSharp/Modules/Contexts/GamePlay/BoardItems/Scripts/Bottle/BottleItem.c",
+          "line": 5650,
+          "end_line": 5715,
+          "method": "// ===== BottleItem :: private bool ShouldComplete()   [RVA 0x174A924, ok]",
+          "sha256": "e4fb405af0fe63ffe36bf9962b8dcc383461779d50d702a035481df96f08635a",
+          "body_checked": true,
+          "build": "0.0.3063 ARMv7",
+          "required_body_tokens": []
+        }
+      ],
+      "status": "resolved_static_code_historical_build",
+      "remaining": "Đối chiếu nhánh này trên app0.0.3129 ARM64; chưa là runtime pass.",
+      "runtime_verified": false,
+      "scope": "recovered_native_0.0.3063_only"
+    },
+    {
+      "id": "MS-CORE-BODY-04",
+      "gap_ids": [
+        "MS-BottleSortMechanics-G004"
+      ],
+      "title": "No-move và special resolver",
+      "conclusion": "HasNoMove chỉ scan khi !EditorMode,!IsOgPlayStyle và state1/7. Scan origin/target qua IsSelectable...ExceptAnimation, bỏ chuyển một màu sang chai trống có chiều cao đủ chứa origin; cộng empty-cell capacity của target hợp lệ. Có target và topWaterHeight<=capacity→false; topcell MagicSeal(raw17) dùng height1. Scan tiếp empty completable targets và chai all-visible-same-color-not-full trước true. TrySolveSpecialStuck chỉ chạy khi AreBottlesWithoutBlockersSingleColored, duyệt blockers, dispatch ISpecialStuckResolver interface khi blocker implement.",
+      "evidence": [
+        {
+          "file": "../com.grandgames.magicsort_Unity_20260909_112501/RecoveredNative/PseudoC/Assembly-CSharp/Modules/Contexts/GamePlay/Systems/Scripts/WinOrStuck/LevelWinOrStuckSystem.c",
+          "line": 1091,
+          "end_line": 1450,
+          "method": "// ===== LevelWinOrStuckSystem :: public bool HasNoMove(",
+          "sha256": "c2bb3abd9bc3d383eb6cd88afbd61c075d5fedf6400abfa319da51bf0d9bc561",
+          "body_checked": true,
+          "build": "0.0.3063 ARMv7",
+          "required_body_tokens": []
+        },
+        {
+          "file": "../com.grandgames.magicsort_Unity_20260909_112501/RecoveredNative/PseudoC/Assembly-CSharp/Modules/Contexts/GamePlay/Systems/Scripts/WinOrStuck/LevelWinOrStuckSystem.c",
+          "line": 1788,
+          "end_line": 1913,
+          "method": "// ===== LevelWinOrStuckSystem :: public void TrySolveSpecialStuck()   [RVA 0xE3BD34, ok]",
+          "sha256": "c2bb3abd9bc3d383eb6cd88afbd61c075d5fedf6400abfa319da51bf0d9bc561",
+          "body_checked": true,
+          "build": "0.0.3063 ARMv7",
+          "required_body_tokens": []
+        }
+      ],
+      "status": "partial_static_code_unresolved",
+      "remaining": "Đã đọc predicate đầy đủ; từng resolver/blocker và race animation cần board fixture/runtime, chưa chứng minh mọi stuck recovery thành công.",
+      "runtime_verified": false,
+      "scope": "recovered_native_0.0.3063_only"
+    },
+    {
+      "id": "MS-CORE-BODY-05",
+      "gap_ids": [
+        "MS-DailyLevel-G003"
+      ],
+      "title": "Daily lives: không thấy debit trong manager",
+      "conclusion": "StartLevel dựng daily model/attempt và ShowBanner. LoseLevel/QuitLevel chỉ set state2/6 rồi kiểm adService; WinLevel set3. Daily LoseState.Enter chạy analytics/sync/return-home; không có lời gọi Inventory life debit trong các body đã đọc. Không dùng sự vắng mặt ở manager để kết luận Daily miễn phí vô hạn.",
+      "evidence": [
+        {
+          "file": "../com.grandgames.magicsort_Unity_20260909_112501/RecoveredNative/PseudoC/Assembly-CSharp/Modules/Contexts/GamePlay/Levels/Scripts/DailyLevels/DailyLevelManager.c",
+          "line": 75,
+          "end_line": 300,
+          "method": "// ===== DailyLevelManager :: public void StartLevel(",
+          "sha256": "9b843a6b1b3a38254d1e9f6ccea99ee7e918f18c3ae9dadb49ed0a470fa9a52a",
+          "body_checked": true,
+          "build": "0.0.3063 ARMv7",
+          "required_body_tokens": []
+        },
+        {
+          "file": "../com.grandgames.magicsort_Unity_20260909_112501/RecoveredNative/PseudoC/Assembly-CSharp/Modules/Contexts/GamePlay/Levels/Scripts/DailyLevels/DailyLevelManager.c",
+          "line": 398,
+          "end_line": 414,
+          "method": "// ===== DailyLevelManager :: public void LoseLevel(",
+          "sha256": "9b843a6b1b3a38254d1e9f6ccea99ee7e918f18c3ae9dadb49ed0a470fa9a52a",
+          "body_checked": true,
+          "build": "0.0.3063 ARMv7",
+          "required_body_tokens": []
+        },
+        {
+          "file": "../com.grandgames.magicsort_Unity_20260909_112501/RecoveredNative/PseudoC/Assembly-CSharp/Modules/Contexts/GamePlay/Levels/Scripts/DailyLevels/DailyLevelManager.c",
+          "line": 415,
+          "end_line": 431,
+          "method": "// ===== DailyLevelManager :: public void QuitLevel(",
+          "sha256": "9b843a6b1b3a38254d1e9f6ccea99ee7e918f18c3ae9dadb49ed0a470fa9a52a",
+          "body_checked": true,
+          "build": "0.0.3063 ARMv7",
+          "required_body_tokens": []
+        }
+      ],
+      "status": "partial_static_code_unresolved",
+      "remaining": "Cần finite-life fixture và theo dõi inventory trước/sau Start/quit/lose; chưa trace mọi signal listener/remote sync debit.",
+      "runtime_verified": false,
+      "scope": "recovered_native_0.0.3063_only"
+    },
+    {
+      "id": "MS-CORE-BODY-06",
+      "gap_ids": [
+        "MS-DailyLevel-G004"
+      ],
+      "title": "Daily A/C cùng price consumer",
+      "conclusion": "Shared DailyStuckPopUp.Show đọc HasFreePlayOn: freeView=value,priceView=!value; khi trả coin, lấy ILevelManager.GetLevel rồi ALevel.GetCurrentPlayOnPrice và render số. A/C OnEntrance/PlayEnter/PlayPlayOn là animation subclass; không có bảng giá riêng chỉ từ tên A/C.",
+      "evidence": [
+        {
+          "file": "../com.grandgames.magicsort_Unity_20260909_112501/RecoveredNative/PseudoC/Assembly-CSharp/Modules/Contexts/Home/Daily/Scripts/UI/DailyStuckPopUp.c",
+          "line": 6,
+          "end_line": 221,
+          "method": "// ===== DailyStuckPopUp :: public void Show(",
+          "sha256": "b07177fe197759aabeadabdae186c8abc3cc539afebca31a02c8a16ef27f9ebd",
+          "body_checked": true,
+          "build": "0.0.3063 ARMv7",
+          "required_body_tokens": []
+        },
+        {
+          "file": "../com.grandgames.magicsort_Unity_20260909_112501/RecoveredNative/PseudoC/Assembly-CSharp/Modules/Contexts/Home/Daily/Scripts/UI/DailyStuckPopUpVariantA.c",
+          "line": 6,
+          "end_line": 91,
+          "method": "// ===== DailyStuckPopUpVariantA ::",
+          "sha256": "242ce869d951bd87e8f2e8932a787a5498387fc218430888e1d10918f993a222",
+          "body_checked": true,
+          "build": "0.0.3063 ARMv7",
+          "required_body_tokens": []
+        },
+        {
+          "file": "../com.grandgames.magicsort_Unity_20260909_112501/RecoveredNative/PseudoC/Assembly-CSharp/Modules/Contexts/Home/Daily/Scripts/UI/DailyStuckPopUpVariantC.c",
+          "line": 6,
+          "end_line": 91,
+          "method": "// ===== DailyStuckPopUpVariantC ::",
+          "sha256": "81acb3394df5c288aec591dde4da1e2daea9b7b5927e589f740c597127debdca",
+          "body_checked": true,
+          "build": "0.0.3063 ARMv7",
+          "required_body_tokens": []
+        }
+      ],
+      "status": "partial_static_code_unresolved",
+      "remaining": "Cần selected prefab/variant và play-on count fixture; giá effective lấy level/config, không gán giá A khác C từ view.",
+      "runtime_verified": false,
+      "scope": "recovered_native_0.0.3063_only"
+    },
+    {
+      "id": "MS-CORE-BODY-07",
+      "gap_ids": [
+        "MS-LevelFlow-G002"
+      ],
+      "title": "Bốn queue return-home",
+      "conclusion": "Constructor ReturnToHomeSequenceService dựng 4 danh sách có số phần tử9 regularLose,57 regularWin,2 dailyLose,6 dailyWin; ordered type rows đã lưu tại local_code_gap_results.supporting_tables.return_home_sequences. Đây là queue command count, không phải57 popup đều xuất hiện.",
+      "evidence": [
+        {
+          "file": "../com.grandgames.magicsort_Unity_20260909_112501/RecoveredNative/PseudoC/Assembly-CSharp/Modules/Contexts/GamePlay/Loop/Scripts/ReturnToHomeSequenceService.c",
+          "line": 1015,
+          "end_line": 1048,
+          "method": "// ===== ReturnToHomeSequenceService :: public void .ctor(",
+          "sha256": "7950940e30fbffce0b9d6a07d8f020bacb799f6cb7b8fb0bee4079aae370bd06",
+          "body_checked": true,
+          "build": "0.0.3063 ARMv7",
+          "required_body_tokens": []
+        }
+      ],
+      "status": "resolved_static_code_historical_build",
+      "remaining": "Đối chiếu nhánh này trên app0.0.3129 ARM64; chưa là runtime pass.",
+      "runtime_verified": false,
+      "scope": "recovered_native_0.0.3063_only"
+    },
+    {
+      "id": "MS-CORE-BODY-08",
+      "gap_ids": [
+        "MS-LevelFlow-G003"
+      ],
+      "title": "PlayOn variant mapping đã giải ELF",
+      "conclusion": "GetDefaultPlayOnBehaviour: variant0/out-of-range→ExtraBottle0; table variant1..9=[Tiny1,Extra0,Extra0,Tiny1,Tiny1,Tiny1,Tiny1,Undo3,Mega4]. GetPlayOnBehaviours special variant3: watchedCount1→[Undo3],<2→[],>=2→[Undo3,Extra0]. Các variant khác dùng table. Disabled99 default0 trong helper này không chứng minh offer enabled; eligibility nằm caller khác.",
+      "evidence": [
+        {
+          "file": "../com.grandgames.magicsort_Unity_20260909_112501/RecoveredNative/PseudoC/Assembly-CSharp/Modules/Contexts/GamePlay/PlayOn/Scripts/PlayOnWithRewarded/PlayOnWithRewardedService.c",
+          "line": 687,
+          "end_line": 823,
+          "method": "// ===== PlayOnWithRewardedService :: public List<PlayOnBehaviourType> GetPlayOnBehaviours(",
+          "sha256": "76a2d9193b57c1c0685bba2736edf412b16df608b9c1c5821da3567487cf342d",
+          "body_checked": true,
+          "build": "0.0.3063 ARMv7",
+          "required_body_tokens": []
+        },
+        {
+          "file": "../com.grandgames.magicsort_Unity_20260909_112501/RecoveredNative/PseudoC/Assembly-CSharp/Modules/Contexts/GamePlay/PlayOn/Scripts/PlayOnWithRewarded/PlayOnWithRewardedService.c",
+          "line": 824,
+          "end_line": 848,
+          "method": "// ===== PlayOnWithRewardedService :: public PlayOnBehaviourType GetDefaultPlayOnBehaviour(",
+          "sha256": "76a2d9193b57c1c0685bba2736edf412b16df608b9c1c5821da3567487cf342d",
+          "body_checked": true,
+          "build": "0.0.3063 ARMv7",
+          "required_body_tokens": []
+        }
+      ],
+      "status": "resolved_static_code_historical_build",
+      "remaining": "Đối chiếu nhánh này trên app0.0.3129 ARM64; chưa là runtime pass.",
+      "runtime_verified": false,
+      "scope": "recovered_native_0.0.3063_only"
+    },
+    {
+      "id": "MS-CORE-BODY-09",
+      "gap_ids": [
+        "MS-MagicBottle-G004"
+      ],
+      "title": "Magic bottle thêm với height1",
+      "conclusion": "AddMagicBottleAndHide gọi AddBottleAsMagicBottle và hide sprite. AddBottleAsMagicBottle gọi AddBottle(x,0,1); tham số thứ3 có signature bottleHeight, AddBottle chọn config bằng height và gọi ItemFactory.GetBottleItem→BottleItem.Prepare. Không có bước add water trong AddMagicBottleAndHide. Vì vậy không được mặc định magic bottle cao4 như chai thường.",
+      "evidence": [
+        {
+          "file": "../com.grandgames.magicsort_Unity_20260909_112501/RecoveredNative/PseudoC/Assembly-CSharp/Modules/Contexts/GamePlay/MagicBottle/Scripts/MagicBottleInGameManager.c",
+          "line": 78,
+          "end_line": 165,
+          "method": "// ===== MagicBottleInGameManager :: public void AddMagicBottleAndHide(",
+          "sha256": "c3cf4fafb00006c993e28b73b9d44963e751e467a4073f4c206a52665ea1c7e9",
+          "body_checked": true,
+          "build": "0.0.3063 ARMv7",
+          "required_body_tokens": []
+        },
+        {
+          "file": "../com.grandgames.magicsort_Unity_20260909_112501/RecoveredNative/PseudoC/Assembly-CSharp/Modules/Contexts/GamePlay/Board/Common/Scripts/BottleCollection.c",
+          "line": 10112,
+          "end_line": 10269,
+          "method": "// ===== BottleCollection :: public BottleItem AddBottleAsMagicBottle(",
+          "sha256": "63a000c895d1bea54297896e5fde02f69b55f1759e9889f6b88e0ccf36794387",
+          "body_checked": true,
+          "build": "0.0.3063 ARMv7",
+          "required_body_tokens": []
+        },
+        {
+          "file": "../com.grandgames.magicsort_Unity_20260909_112501/RecoveredNative/PseudoC/Assembly-CSharp/Modules/Contexts/GamePlay/Board/Common/Scripts/BottleCollection.c",
+          "line": 10913,
+          "end_line": 11289,
+          "method": "// ===== BottleCollection :: private BottleItem AddBottle(",
+          "sha256": "63a000c895d1bea54297896e5fde02f69b55f1759e9889f6b88e0ccf36794387",
+          "body_checked": true,
+          "build": "0.0.3063 ARMv7",
+          "required_body_tokens": []
+        },
+        {
+          "file": "../com.grandgames.magicsort_Unity_20260909_112501/RecoveredNative/PseudoC/Assembly-CSharp/Modules/Contexts/GamePlay/BoardItems/Scripts/Generation/ItemFactory.c",
+          "line": 281,
+          "end_line": 356,
+          "method": "// ===== ItemFactory :: public BottleItem GetBottleItem(",
+          "sha256": "5084765a0cfbfdda4b98d5689fbc5efc6db13d35069a65c37f771cea80c00d62",
+          "body_checked": true,
+          "build": "0.0.3063 ARMv7",
+          "required_body_tokens": []
+        }
+      ],
+      "status": "partial_static_code_unresolved",
+      "remaining": "Native GetBottleItem có ABI struct bị decompiler gán sai tên tham số và halt_baddata ở nhánh lỗi; height argument1 rõ tại caller, empty/full effective cần runtime/pool reset trace.",
+      "runtime_verified": false,
+      "scope": "recovered_native_0.0.3063_only"
+    },
+    {
+      "id": "MS-CORE-BODY-10",
+      "gap_ids": [
+        "MS-MiniGame-G004"
+      ],
+      "title": "JellyFish là probability check",
+      "conclusion": "TryActivateBoosterDynamically gate: chưa activated stage, hitCell destroyed, boosterItems.Count>0,collectedBoosterCount==0. Đọc P=GetCurrentStageBoosterHitPercentage, draw=RandomUtil.GetRandomFromTo(1,100). P<draw→IncreaseCurrentStageBoosterHitPercentage và false; ngược lại lấy boosterItems[0],SetBoosterCell(hitCell),add collectedItems,MarkAsCurrentStageDynamicBoosterActivated. RandomUtil dùng System.Random.Next(from,to), upper exclusive nên draw1..99. Không phải chờ thanh100%; P>=99 đảm bảo vượt draw khi mọi gate khác đúng.",
+      "evidence": [
+        {
+          "file": "../com.grandgames.magicsort_Unity_20260909_112501/RecoveredNative/PseudoC/Assembly-CSharp/Modules/Contexts/Home/MiniGame/Scripts/Board/MiniGameController.c",
+          "line": 6747,
+          "end_line": 6875,
+          "method": "// ===== MiniGameController :: private bool TryActivateBoosterDynamically(",
+          "sha256": "4c250ddc2b84710ab8573572f3bbc72ba631478f50b93cbe5c48535905b4e340",
+          "body_checked": true,
+          "build": "0.0.3063 ARMv7",
+          "required_body_tokens": []
+        },
+        {
+          "file": "../com.grandgames.magicsort_Unity_20260909_112501/RecoveredNative/PseudoC/Assembly-CSharp/Modules/Infrastructure/Common/Scripts/RandomUtil.c",
+          "line": 162,
+          "end_line": 191,
+          "method": "// ===== RandomUtil :: public static int GetRandomFromTo(",
+          "sha256": "66126c501e9a70fb19886b5215c066f339e2c30375dba5fb13429487ee92eb05",
+          "body_checked": true,
+          "build": "0.0.3063 ARMv7",
+          "required_body_tokens": []
+        }
+      ],
+      "status": "resolved_static_code_historical_build",
+      "remaining": "Đối chiếu nhánh này trên app0.0.3129 ARM64; chưa là runtime pass.",
+      "runtime_verified": false,
+      "scope": "recovered_native_0.0.3063_only"
+    },
+    {
+      "id": "MS-CORE-BODY-11",
+      "gap_ids": [
+        "MS-Obstacles-G001"
+      ],
+      "title": "Icicle/Ivy/Frog state rules",
+      "conclusion": "Icicle: pour target là belongingBottle, nước đúng màu belongingCell, chưa complete→pendingBreak; OnAnyMoveFinished phá. Ivy Prepare state4; move đúng _colorId và target không overlay blocker→state--, remove cell blockers theo state, <1 complete. Frog OnAnyMoveStarted gỡ blocker/outitem chai cũ, tăng index theo direction, đảo tại hai đầu belongingBottles rồi add blocker/outitem chai mới; không test waterColorId. Frog IsSelectableAsOrigin/Target đều false. Không có health-N chung cho cả3.",
+      "evidence": [
+        {
+          "file": "../com.grandgames.magicsort_Unity_20260909_112501/RecoveredNative/PseudoC/Assembly-CSharp/Modules/Contexts/GamePlay/Board/Items/Scripts/Icicle/IcicleItem.c",
+          "line": 268,
+          "end_line": 321,
+          "method": "// ===== IcicleItem :: public override void OnAnyMoveStarted(",
+          "sha256": "a2956dff45296f1121cceed066ba69dd73f7cb060cba81e1dc0ce8bd4511233f",
+          "body_checked": true,
+          "build": "0.0.3063 ARMv7",
+          "required_body_tokens": []
+        },
+        {
+          "file": "../com.grandgames.magicsort_Unity_20260909_112501/RecoveredNative/PseudoC/Assembly-CSharp/Modules/Contexts/GamePlay/Board/Items/Scripts/Icicle/IcicleItem.c",
+          "line": 322,
+          "end_line": 395,
+          "method": "// ===== IcicleItem :: public override void OnAnyMoveFinished(",
+          "sha256": "a2956dff45296f1121cceed066ba69dd73f7cb060cba81e1dc0ce8bd4511233f",
+          "body_checked": true,
+          "build": "0.0.3063 ARMv7",
+          "required_body_tokens": []
+        },
+        {
+          "file": "../com.grandgames.magicsort_Unity_20260909_112501/RecoveredNative/PseudoC/Assembly-CSharp/Modules/Contexts/GamePlay/Board/Items/Scripts/Ivy/IvyItem.c",
+          "line": 105,
+          "end_line": 156,
+          "method": "// ===== IvyItem :: public void Prepare(",
+          "sha256": "140991d0ff1edf28cc9e0b819f3a3d3953b5c53922ae8a29d4f6c3426fe40a72",
+          "body_checked": true,
+          "build": "0.0.3063 ARMv7",
+          "required_body_tokens": []
+        },
+        {
+          "file": "../com.grandgames.magicsort_Unity_20260909_112501/RecoveredNative/PseudoC/Assembly-CSharp/Modules/Contexts/GamePlay/Board/Items/Scripts/Ivy/IvyItem.c",
+          "line": 157,
+          "end_line": 315,
+          "method": "// ===== IvyItem :: public override void OnAnyMoveStarted(",
+          "sha256": "140991d0ff1edf28cc9e0b819f3a3d3953b5c53922ae8a29d4f6c3426fe40a72",
+          "body_checked": true,
+          "build": "0.0.3063 ARMv7",
+          "required_body_tokens": []
+        },
+        {
+          "file": "../com.grandgames.magicsort_Unity_20260909_112501/RecoveredNative/PseudoC/Assembly-CSharp/Modules/Contexts/GamePlay/Board/Items/Scripts/Frog/FrogItem.c",
+          "line": 169,
+          "end_line": 283,
+          "method": "// ===== FrogItem :: public override void OnAnyMoveStarted(",
+          "sha256": "f0ba41b2c0aa5c2010b3f2233b59d7e113201859baba35e9b32bf3480fedc750",
+          "body_checked": true,
+          "build": "0.0.3063 ARMv7",
+          "required_body_tokens": []
+        },
+        {
+          "file": "../com.grandgames.magicsort_Unity_20260909_112501/RecoveredNative/PseudoC/Assembly-CSharp/Modules/Contexts/GamePlay/Board/Items/Scripts/Frog/FrogItem.c",
+          "line": 284,
+          "end_line": 296,
+          "method": "// ===== FrogItem :: public override bool IsSelectableAsOrigin(",
+          "sha256": "f0ba41b2c0aa5c2010b3f2233b59d7e113201859baba35e9b32bf3480fedc750",
+          "body_checked": true,
+          "build": "0.0.3063 ARMv7",
+          "required_body_tokens": []
+        },
+        {
+          "file": "../com.grandgames.magicsort_Unity_20260909_112501/RecoveredNative/PseudoC/Assembly-CSharp/Modules/Contexts/GamePlay/Board/Items/Scripts/Frog/FrogItem.c",
+          "line": 297,
+          "end_line": 310,
+          "method": "// ===== FrogItem :: public override bool IsSelectableAsTarget(",
+          "sha256": "f0ba41b2c0aa5c2010b3f2233b59d7e113201859baba35e9b32bf3480fedc750",
+          "body_checked": true,
+          "build": "0.0.3063 ARMv7",
+          "required_body_tokens": []
+        }
+      ],
+      "status": "partial_static_code_unresolved",
+      "remaining": "Cần runtime board fixtures cho animation, selection timing và tương tác Snitch; rule body đã có, không suy mọi level chỉ dùng state4.",
+      "runtime_verified": false,
+      "scope": "recovered_native_0.0.3063_only"
+    },
+    {
+      "id": "MS-CORE-BODY-12",
+      "gap_ids": [
+        "MS-PawTouchOffer-G004"
+      ],
+      "title": "Có integration StuckAreYouSure",
+      "conclusion": "StuckAreYouSurePopup gọi PawTouchOfferService.ShouldShowPlayOnContainer, OnPlayOnContainerShowed và PawTouchOfferContainerView.Show. Đây là entry confirmation AreYouSure đã có consumer body, không chỉ một nhãn PlayOn trong dossier.",
+      "evidence": [
+        {
+          "file": "../com.grandgames.magicsort_Unity_20260909_112501/RecoveredNative/PseudoC/Assembly-CSharp/Modules/Contexts/GamePlay/UI/StuckAreYouSurePopUpNs/Scripts/StuckAreYouSurePopup.c",
+          "line": 1717,
+          "end_line": 2019,
+          "method": "// ===== StuckAreYouSurePopup :: private bool TryShowOffer(",
+          "sha256": "372508165c7b8bee12484c8cc5e38c37dae8687689c31d8f40957c8f78b01c9b",
+          "body_checked": true,
+          "build": "0.0.3063 ARMv7",
+          "required_body_tokens": []
+        }
+      ],
+      "status": "partial_static_code_unresolved",
+      "remaining": "Cần enumerate toàn bộ popup/prefab caller và event-eligible fixture; một consumer không chứng minh exclusive entry.",
+      "runtime_verified": false,
+      "scope": "recovered_native_0.0.3063_only"
+    },
+    {
+      "id": "MS-CORE-BODY-13",
+      "gap_ids": [
+        "MS-Snitch-G001"
+      ],
+      "title": "Snitch count lấy list động",
+      "conclusion": "OnLevelStart lưu externalSnitches và levelSnitchInfo; GetRedSnitchMoveTargetByIndex/GetNormalSnitchMoveTargetForIndex lọc/duyệt nguồn external+level lists. Không có literal max2/max3 trong các body target/entrance đã đọc; count phụ thuộc input, filtering và số target hợp lệ.",
+      "evidence": [
+        {
+          "file": "../com.grandgames.magicsort_Unity_20260909_112501/RecoveredNative/PseudoC/Assembly-CSharp/Modules/Contexts/GamePlay/Snitch/Scripts/SnitchInGameManager.c",
+          "line": 751,
+          "end_line": 794,
+          "method": "// ===== SnitchInGameManager :: public void OnLevelStart(",
+          "sha256": "be84bb8bc8491db8a9c65d62e0d2656e147c96766217ab7d78f2d3a328d22441",
+          "body_checked": true,
+          "build": "0.0.3063 ARMv7",
+          "required_body_tokens": []
+        },
+        {
+          "file": "../com.grandgames.magicsort_Unity_20260909_112501/RecoveredNative/PseudoC/Assembly-CSharp/Modules/Contexts/GamePlay/Snitch/Scripts/SnitchInGameManager.c",
+          "line": 795,
+          "end_line": 1151,
+          "method": "// ===== SnitchInGameManager :: public RedSnitchMoveTarget GetRedSnitchMoveTargetByIndex(",
+          "sha256": "be84bb8bc8491db8a9c65d62e0d2656e147c96766217ab7d78f2d3a328d22441",
+          "body_checked": true,
+          "build": "0.0.3063 ARMv7",
+          "required_body_tokens": []
+        },
+        {
+          "file": "../com.grandgames.magicsort_Unity_20260909_112501/RecoveredNative/PseudoC/Assembly-CSharp/Modules/Contexts/GamePlay/Snitch/Scripts/SnitchInGameManager.c",
+          "line": 1152,
+          "end_line": 1440,
+          "method": "// ===== SnitchInGameManager :: public NormalSnitchMoveTarget GetNormalSnitchMoveTargetForIndex(",
+          "sha256": "be84bb8bc8491db8a9c65d62e0d2656e147c96766217ab7d78f2d3a328d22441",
+          "body_checked": true,
+          "build": "0.0.3063 ARMv7",
+          "required_body_tokens": []
+        }
+      ],
+      "status": "partial_static_code_unresolved",
+      "remaining": "Max thiết kế/global cap chưa được chứng minh; cần external grant consumer/config và stress board, không đổi thành unlimited.",
+      "runtime_verified": false,
+      "scope": "recovered_native_0.0.3063_only"
+    },
+    {
+      "id": "MS-CORE-BODY-14",
+      "gap_ids": [
+        "MS-Snitch-G005"
+      ],
+      "title": "Snitch có entrance và cell-top callback",
+      "conclusion": "OnLevelStart reset box state rồi state1. Box Update chờ new-blocker intro, entry animation, tutorial, rise/move red, rise/move normal theo states1..8. SnitchItem.OnBottleWatersUpdated chỉ complete khi belongingCell.WaterItem==topWaterItem; đánh dấu completed, lock bottle, tạo tween callback <Complete>b__18_0 dispatch normal/red manager effect. Không phải mỗi move bất kỳ đều tự kích Snitch.",
+      "evidence": [
+        {
+          "file": "../com.grandgames.magicsort_Unity_20260909_112501/RecoveredNative/PseudoC/Assembly-CSharp/Modules/Contexts/GamePlay/Snitch/Scripts/SnitchBoxView.c",
+          "line": 650,
+          "end_line": 819,
+          "method": "// ===== SnitchBoxView :: private void Update(",
+          "sha256": "46b8af5166fe18541ebb0a87b48440329fc61538660e7a57123efcd0a05b1f44",
+          "body_checked": true,
+          "build": "0.0.3063 ARMv7",
+          "required_body_tokens": []
+        },
+        {
+          "file": "../com.grandgames.magicsort_Unity_20260909_112501/RecoveredNative/PseudoC/Assembly-CSharp/Modules/Contexts/GamePlay/Board/Items/Scripts/Snitch/SnitchItem.c",
+          "line": 460,
+          "end_line": 593,
+          "method": "// ===== SnitchItem :: public override void OnBottleWatersUpdated(",
+          "sha256": "032f9aca3f62ef23834ba9538e81e7e9d8af05d059aa0e4f0fdae354e56f7889",
+          "body_checked": true,
+          "build": "0.0.3063 ARMv7",
+          "required_body_tokens": []
+        },
+        {
+          "file": "../com.grandgames.magicsort_Unity_20260909_112501/RecoveredNative/PseudoC/Assembly-CSharp/Modules/Contexts/GamePlay/Board/Items/Scripts/Snitch/SnitchItem.c",
+          "line": 1311,
+          "end_line": 1507,
+          "method": "// ===== SnitchItem :: private void <Complete>b__18_0(",
+          "sha256": "032f9aca3f62ef23834ba9538e81e7e9d8af05d059aa0e4f0fdae354e56f7889",
+          "body_checked": true,
+          "build": "0.0.3063 ARMv7",
+          "required_body_tokens": []
+        }
+      ],
+      "status": "resolved_static_code_historical_build",
+      "remaining": "Đối chiếu nhánh này trên app0.0.3129 ARM64; chưa là runtime pass.",
+      "runtime_verified": false,
+      "scope": "recovered_native_0.0.3063_only"
+    },
+    {
+      "id": "MS-CORE-BODY-15",
+      "gap_ids": [
+        "MS-SuperCharger-G005"
+      ],
+      "title": "Repetitive không đọc history",
+      "conclusion": "CheckMoveIsRepetitive chỉ đọc state hiện tại: reject khi (origin water list.Count==1 && target empty && !origin.HasBlocker(9)) OR (origin.Height==1 && !origin.HasBlocker(9)) OR target.EmptyCellCount<origin.TopWaterHeight. Không đọc SelectionSystem/history và không có history-depth N trong body; không được diễn giải thành undo/qua-lại filter.",
+      "evidence": [
+        {
+          "file": "../com.grandgames.magicsort_Unity_20260909_112501/RecoveredNative/PseudoC/Assembly-CSharp/Modules/Contexts/GamePlay/SuperCharger/SuperChargerInGameManager.c",
+          "line": 1539,
+          "end_line": 1610,
+          "method": "// ===== SuperChargerInGameManager :: private bool CheckMoveIsRepetitive(",
+          "sha256": "eae335811190de5379ecfb05a379e4fc78858e93e0a6e5cc50b7c1e09f34a275",
+          "body_checked": true,
+          "build": "0.0.3063 ARMv7",
+          "required_body_tokens": []
+        }
+      ],
+      "status": "resolved_static_code_historical_build",
+      "remaining": "Đối chiếu nhánh này trên app0.0.3129 ARM64; chưa là runtime pass.",
+      "runtime_verified": false,
+      "scope": "recovered_native_0.0.3063_only"
+    },
+    {
+      "id": "MS-CORE-BODY-16",
+      "gap_ids": [
+        "MS-Tutorial-G003"
+      ],
+      "title": "Reveal/Mega guard đầy đủ",
+      "conclusion": "Reveal: InGameBoosterVariant2, !player.IsRevealIntroduced, !SnitchService.ShouldShowLevelTutorial, !levelManager.HasNewBlockerToIntroduce, player.GetLevel()>9. Mega: cùng gates nhưng variant1 và !IsMegaShuffleIntroduced. Không đọc inventory count trong hai predicates. Offset config0x34 đối chiếu metadata InGameBoosterVariant, interface slots player59/60 và level12.",
+      "evidence": [
+        {
+          "file": "../com.grandgames.magicsort_Unity_20260909_112501/RecoveredNative/PseudoC/Assembly-CSharp/Modules/Contexts/GamePlay/Boosters/Scripts/BoosterManager.c",
+          "line": 5848,
+          "end_line": 6046,
+          "method": "// ===== BoosterManager :: private bool ShouldShowRevealTutorial(",
+          "sha256": "04ad36da41aaaf64fb299feb299c6512668cd1d3d0f1cb3d1139d2b234618daf",
+          "body_checked": true,
+          "build": "0.0.3063 ARMv7",
+          "required_body_tokens": []
+        },
+        {
+          "file": "../com.grandgames.magicsort_Unity_20260909_112501/RecoveredNative/PseudoC/Assembly-CSharp/Modules/Contexts/GamePlay/Boosters/Scripts/BoosterManager.c",
+          "line": 6203,
+          "end_line": 6401,
+          "method": "// ===== BoosterManager :: private bool ShouldShowMegaShuffleTutorial(",
+          "sha256": "04ad36da41aaaf64fb299feb299c6512668cd1d3d0f1cb3d1139d2b234618daf",
+          "body_checked": true,
+          "build": "0.0.3063 ARMv7",
+          "required_body_tokens": []
+        }
+      ],
+      "status": "resolved_static_code_historical_build",
+      "remaining": "Đối chiếu nhánh này trên app0.0.3129 ARM64; chưa là runtime pass.",
+      "runtime_verified": false,
+      "scope": "recovered_native_0.0.3063_only"
+    },
+    {
+      "id": "MS-CORE-BODY-17",
+      "gap_ids": [
+        "MS-Tutorial-G004"
+      ],
+      "title": "English literals được truyền trực tiếp",
+      "conclusion": "StartFirstTutorial truyền literal Tap the left bottle to pick up; StartSecondTutorial truyền Only pour water into the same color. InLevelTextDisplayer.ShowText gọi text setter với input; không lookup localization trong body này.",
+      "evidence": [
+        {
+          "file": "../com.grandgames.magicsort_Unity_20260909_112501/RecoveredNative/PseudoC/Assembly-CSharp/Modules/Contexts/GamePlay/Tutorial/Scripts/TutorialSystem.c",
+          "line": 834,
+          "end_line": 996,
+          "method": "// ===== TutorialSystem :: private void StartFirstTutorial(",
+          "sha256": "fbe1bc31609e6e85759b341d4332a0db3f3bd9d9deb1795c8bd6bcf9833dfbc7",
+          "body_checked": true,
+          "build": "0.0.3063 ARMv7",
+          "required_body_tokens": []
+        },
+        {
+          "file": "../com.grandgames.magicsort_Unity_20260909_112501/RecoveredNative/PseudoC/Assembly-CSharp/Modules/Contexts/GamePlay/Tutorial/Scripts/TutorialSystem.c",
+          "line": 1284,
+          "end_line": 1434,
+          "method": "// ===== TutorialSystem :: private void StartSecondTutorialAsync(",
+          "sha256": "fbe1bc31609e6e85759b341d4332a0db3f3bd9d9deb1795c8bd6bcf9833dfbc7",
+          "body_checked": true,
+          "build": "0.0.3063 ARMv7",
+          "required_body_tokens": []
+        },
+        {
+          "file": "../com.grandgames.magicsort_Unity_20260909_112501/RecoveredNative/PseudoC/Assembly-CSharp/Modules/Contexts/GamePlay/Tutorial/Scripts/InLevelTextDisplayer.c",
+          "line": 6,
+          "end_line": 33,
+          "method": "// ===== InLevelTextDisplayer :: public void ShowText(",
+          "sha256": "d04e6115ec8539e848263355d6f6fcceab308f3ae0025ccb351e1de7b8d58a78",
+          "body_checked": true,
+          "build": "0.0.3063 ARMv7",
+          "required_body_tokens": []
+        }
+      ],
+      "status": "partial_static_code_unresolved",
+      "remaining": "Chứng minh codepath tiếng Anh của build0.0.3063, chưa xác nhận app0.0.3129/locale khác hoặc toàn bộ tutorial đều không localize.",
+      "runtime_verified": false,
+      "scope": "recovered_native_0.0.3063_only"
+    }
+  ],
+  "decisions": {
+    "MS-Boosters-G001": {
+      "status": "partial_static_code_unresolved",
+      "conclusion": "PreBoosterWinStreakService chỉ có constructor return; không chứa threshold, increment/reset hoặc grant. Không được suy từ empty class rằng feature bị tắt.",
+      "evidence": [
+        "../com.grandgames.magicsort_Unity_20260909_112501/RecoveredNative/PseudoC/Assembly-CSharp/Modules/Contexts/Home/PreBoosterWinStreak/Scripts/PreBoosterWinStreakService.c:6"
+      ],
+      "next_action": "Cần implementation khác/build hiện hành hoặc config consumer thực; export này không cung cấp rule streak.",
+      "reviewed": "2026-11-15",
+      "mode": "file_only_recovered_native_0.0.3063",
+      "finding_id": "MS-CORE-BODY-01"
+    },
+    "MS-Boosters-G002": {
+      "status": "partial_static_code_unresolved",
+      "conclusion": "Đã đọc Show/ShowAsync: lấy gameObject, SetActive(true); async trả completed task. Không có chọn booster, spend inventory hoặc streak consumer trong các body này.",
+      "evidence": [
+        "../com.grandgames.magicsort_Unity_20260909_112501/RecoveredNative/PseudoC/Assembly-CSharp/Modules/Contexts/GamePlay/UI/PreLevelPopUpNS/Scripts/Home/PreLevelPopUp.c:6",
+        "../com.grandgames.magicsort_Unity_20260909_112501/RecoveredNative/PseudoC/Assembly-CSharp/Modules/Contexts/GamePlay/UI/PreLevelPopUpNS/Scripts/Home/PreLevelPopUp.c:33"
+      ],
+      "next_action": "Cần prefab listener/caller của picker hoặc runtime build có entry; lifecycle không chứng minh không tồn tại picker toàn game.",
+      "reviewed": "2026-11-15",
+      "mode": "file_only_recovered_native_0.0.3063",
+      "finding_id": "MS-CORE-BODY-02"
+    },
+    "MS-BottleSortMechanics-G002": {
+      "status": "resolved_static_code_historical_build",
+      "conclusion": "Base = isCompletable && !IsCompleted && !IsEmpty && topWater.Height==Height && IsAllWatersVisible. Không có long bottle trên board→base. Có long bottle→base && (collection.GetColorCount(topColor)==Height || IsLongBottle). Không có nhánh hoàn thành chai chưa đầy chỉ vì màu còn ít.",
+      "evidence": [
+        "../com.grandgames.magicsort_Unity_20260909_112501/RecoveredNative/PseudoC/Assembly-CSharp/Modules/Contexts/GamePlay/BoardItems/Scripts/Bottle/BottleItem.c:5650"
+      ],
+      "next_action": "Đối chiếu nhánh này trên app0.0.3129 ARM64; chưa là runtime pass.",
+      "reviewed": "2026-11-15",
+      "mode": "file_only_recovered_native_0.0.3063",
+      "finding_id": "MS-CORE-BODY-03"
+    },
+    "MS-BottleSortMechanics-G004": {
+      "status": "partial_static_code_unresolved",
+      "conclusion": "HasNoMove chỉ scan khi !EditorMode,!IsOgPlayStyle và state1/7. Scan origin/target qua IsSelectable...ExceptAnimation, bỏ chuyển một màu sang chai trống có chiều cao đủ chứa origin; cộng empty-cell capacity của target hợp lệ. Có target và topWaterHeight<=capacity→false; topcell MagicSeal(raw17) dùng height1. Scan tiếp empty completable targets và chai all-visible-same-color-not-full trước true. TrySolveSpecialStuck chỉ chạy khi AreBottlesWithoutBlockersSingleColored, duyệt blockers, dispatch ISpecialStuckResolver interface khi blocker implement.",
+      "evidence": [
+        "../com.grandgames.magicsort_Unity_20260909_112501/RecoveredNative/PseudoC/Assembly-CSharp/Modules/Contexts/GamePlay/Systems/Scripts/WinOrStuck/LevelWinOrStuckSystem.c:1091",
+        "../com.grandgames.magicsort_Unity_20260909_112501/RecoveredNative/PseudoC/Assembly-CSharp/Modules/Contexts/GamePlay/Systems/Scripts/WinOrStuck/LevelWinOrStuckSystem.c:1788"
+      ],
+      "next_action": "Đã đọc predicate đầy đủ; từng resolver/blocker và race animation cần board fixture/runtime, chưa chứng minh mọi stuck recovery thành công.",
+      "reviewed": "2026-11-15",
+      "mode": "file_only_recovered_native_0.0.3063",
+      "finding_id": "MS-CORE-BODY-04"
+    },
+    "MS-DailyLevel-G003": {
+      "status": "partial_static_code_unresolved",
+      "conclusion": "StartLevel dựng daily model/attempt và ShowBanner. LoseLevel/QuitLevel chỉ set state2/6 rồi kiểm adService; WinLevel set3. Daily LoseState.Enter chạy analytics/sync/return-home; không có lời gọi Inventory life debit trong các body đã đọc. Không dùng sự vắng mặt ở manager để kết luận Daily miễn phí vô hạn.",
+      "evidence": [
+        "../com.grandgames.magicsort_Unity_20260909_112501/RecoveredNative/PseudoC/Assembly-CSharp/Modules/Contexts/GamePlay/Levels/Scripts/DailyLevels/DailyLevelManager.c:75",
+        "../com.grandgames.magicsort_Unity_20260909_112501/RecoveredNative/PseudoC/Assembly-CSharp/Modules/Contexts/GamePlay/Levels/Scripts/DailyLevels/DailyLevelManager.c:398",
+        "../com.grandgames.magicsort_Unity_20260909_112501/RecoveredNative/PseudoC/Assembly-CSharp/Modules/Contexts/GamePlay/Levels/Scripts/DailyLevels/DailyLevelManager.c:415"
+      ],
+      "next_action": "Cần finite-life fixture và theo dõi inventory trước/sau Start/quit/lose; chưa trace mọi signal listener/remote sync debit.",
+      "reviewed": "2026-11-15",
+      "mode": "file_only_recovered_native_0.0.3063",
+      "finding_id": "MS-CORE-BODY-05"
+    },
+    "MS-DailyLevel-G004": {
+      "status": "partial_static_code_unresolved",
+      "conclusion": "Shared DailyStuckPopUp.Show đọc HasFreePlayOn: freeView=value,priceView=!value; khi trả coin, lấy ILevelManager.GetLevel rồi ALevel.GetCurrentPlayOnPrice và render số. A/C OnEntrance/PlayEnter/PlayPlayOn là animation subclass; không có bảng giá riêng chỉ từ tên A/C.",
+      "evidence": [
+        "../com.grandgames.magicsort_Unity_20260909_112501/RecoveredNative/PseudoC/Assembly-CSharp/Modules/Contexts/Home/Daily/Scripts/UI/DailyStuckPopUp.c:6",
+        "../com.grandgames.magicsort_Unity_20260909_112501/RecoveredNative/PseudoC/Assembly-CSharp/Modules/Contexts/Home/Daily/Scripts/UI/DailyStuckPopUpVariantA.c:6",
+        "../com.grandgames.magicsort_Unity_20260909_112501/RecoveredNative/PseudoC/Assembly-CSharp/Modules/Contexts/Home/Daily/Scripts/UI/DailyStuckPopUpVariantC.c:6"
+      ],
+      "next_action": "Cần selected prefab/variant và play-on count fixture; giá effective lấy level/config, không gán giá A khác C từ view.",
+      "reviewed": "2026-11-15",
+      "mode": "file_only_recovered_native_0.0.3063",
+      "finding_id": "MS-CORE-BODY-06"
+    },
+    "MS-LevelFlow-G002": {
+      "status": "resolved_static_code_historical_build",
+      "conclusion": "Constructor ReturnToHomeSequenceService dựng 4 danh sách có số phần tử9 regularLose,57 regularWin,2 dailyLose,6 dailyWin; ordered type rows đã lưu tại local_code_gap_results.supporting_tables.return_home_sequences. Đây là queue command count, không phải57 popup đều xuất hiện.",
+      "evidence": [
+        "../com.grandgames.magicsort_Unity_20260909_112501/RecoveredNative/PseudoC/Assembly-CSharp/Modules/Contexts/GamePlay/Loop/Scripts/ReturnToHomeSequenceService.c:1015"
+      ],
+      "next_action": "Đối chiếu nhánh này trên app0.0.3129 ARM64; chưa là runtime pass.",
+      "reviewed": "2026-11-15",
+      "mode": "file_only_recovered_native_0.0.3063",
+      "finding_id": "MS-CORE-BODY-07"
+    },
+    "MS-LevelFlow-G003": {
+      "status": "resolved_static_code_historical_build",
+      "conclusion": "GetDefaultPlayOnBehaviour: variant0/out-of-range→ExtraBottle0; table variant1..9=[Tiny1,Extra0,Extra0,Tiny1,Tiny1,Tiny1,Tiny1,Undo3,Mega4]. GetPlayOnBehaviours special variant3: watchedCount1→[Undo3],<2→[],>=2→[Undo3,Extra0]. Các variant khác dùng table. Disabled99 default0 trong helper này không chứng minh offer enabled; eligibility nằm caller khác.",
+      "evidence": [
+        "../com.grandgames.magicsort_Unity_20260909_112501/RecoveredNative/PseudoC/Assembly-CSharp/Modules/Contexts/GamePlay/PlayOn/Scripts/PlayOnWithRewarded/PlayOnWithRewardedService.c:687",
+        "../com.grandgames.magicsort_Unity_20260909_112501/RecoveredNative/PseudoC/Assembly-CSharp/Modules/Contexts/GamePlay/PlayOn/Scripts/PlayOnWithRewarded/PlayOnWithRewardedService.c:824"
+      ],
+      "next_action": "Đối chiếu nhánh này trên app0.0.3129 ARM64; chưa là runtime pass.",
+      "reviewed": "2026-11-15",
+      "mode": "file_only_recovered_native_0.0.3063",
+      "finding_id": "MS-CORE-BODY-08"
+    },
+    "MS-MagicBottle-G004": {
+      "status": "partial_static_code_unresolved",
+      "conclusion": "AddMagicBottleAndHide gọi AddBottleAsMagicBottle và hide sprite. AddBottleAsMagicBottle gọi AddBottle(x,0,1); tham số thứ3 có signature bottleHeight, AddBottle chọn config bằng height và gọi ItemFactory.GetBottleItem→BottleItem.Prepare. Không có bước add water trong AddMagicBottleAndHide. Vì vậy không được mặc định magic bottle cao4 như chai thường.",
+      "evidence": [
+        "../com.grandgames.magicsort_Unity_20260909_112501/RecoveredNative/PseudoC/Assembly-CSharp/Modules/Contexts/GamePlay/MagicBottle/Scripts/MagicBottleInGameManager.c:78",
+        "../com.grandgames.magicsort_Unity_20260909_112501/RecoveredNative/PseudoC/Assembly-CSharp/Modules/Contexts/GamePlay/Board/Common/Scripts/BottleCollection.c:10112",
+        "../com.grandgames.magicsort_Unity_20260909_112501/RecoveredNative/PseudoC/Assembly-CSharp/Modules/Contexts/GamePlay/Board/Common/Scripts/BottleCollection.c:10913",
+        "../com.grandgames.magicsort_Unity_20260909_112501/RecoveredNative/PseudoC/Assembly-CSharp/Modules/Contexts/GamePlay/BoardItems/Scripts/Generation/ItemFactory.c:281"
+      ],
+      "next_action": "Native GetBottleItem có ABI struct bị decompiler gán sai tên tham số và halt_baddata ở nhánh lỗi; height argument1 rõ tại caller, empty/full effective cần runtime/pool reset trace.",
+      "reviewed": "2026-11-15",
+      "mode": "file_only_recovered_native_0.0.3063",
+      "finding_id": "MS-CORE-BODY-09"
+    },
+    "MS-MiniGame-G004": {
+      "status": "resolved_static_code_historical_build",
+      "conclusion": "TryActivateBoosterDynamically gate: chưa activated stage, hitCell destroyed, boosterItems.Count>0,collectedBoosterCount==0. Đọc P=GetCurrentStageBoosterHitPercentage, draw=RandomUtil.GetRandomFromTo(1,100). P<draw→IncreaseCurrentStageBoosterHitPercentage và false; ngược lại lấy boosterItems[0],SetBoosterCell(hitCell),add collectedItems,MarkAsCurrentStageDynamicBoosterActivated. RandomUtil dùng System.Random.Next(from,to), upper exclusive nên draw1..99. Không phải chờ thanh100%; P>=99 đảm bảo vượt draw khi mọi gate khác đúng.",
+      "evidence": [
+        "../com.grandgames.magicsort_Unity_20260909_112501/RecoveredNative/PseudoC/Assembly-CSharp/Modules/Contexts/Home/MiniGame/Scripts/Board/MiniGameController.c:6747",
+        "../com.grandgames.magicsort_Unity_20260909_112501/RecoveredNative/PseudoC/Assembly-CSharp/Modules/Infrastructure/Common/Scripts/RandomUtil.c:162"
+      ],
+      "next_action": "Đối chiếu nhánh này trên app0.0.3129 ARM64; chưa là runtime pass.",
+      "reviewed": "2026-11-15",
+      "mode": "file_only_recovered_native_0.0.3063",
+      "finding_id": "MS-CORE-BODY-10"
+    },
+    "MS-Obstacles-G001": {
+      "status": "partial_static_code_unresolved",
+      "conclusion": "Icicle: pour target là belongingBottle, nước đúng màu belongingCell, chưa complete→pendingBreak; OnAnyMoveFinished phá. Ivy Prepare state4; move đúng _colorId và target không overlay blocker→state--, remove cell blockers theo state, <1 complete. Frog OnAnyMoveStarted gỡ blocker/outitem chai cũ, tăng index theo direction, đảo tại hai đầu belongingBottles rồi add blocker/outitem chai mới; không test waterColorId. Frog IsSelectableAsOrigin/Target đều false. Không có health-N chung cho cả3.",
+      "evidence": [
+        "../com.grandgames.magicsort_Unity_20260909_112501/RecoveredNative/PseudoC/Assembly-CSharp/Modules/Contexts/GamePlay/Board/Items/Scripts/Icicle/IcicleItem.c:268",
+        "../com.grandgames.magicsort_Unity_20260909_112501/RecoveredNative/PseudoC/Assembly-CSharp/Modules/Contexts/GamePlay/Board/Items/Scripts/Icicle/IcicleItem.c:322",
+        "../com.grandgames.magicsort_Unity_20260909_112501/RecoveredNative/PseudoC/Assembly-CSharp/Modules/Contexts/GamePlay/Board/Items/Scripts/Ivy/IvyItem.c:105",
+        "../com.grandgames.magicsort_Unity_20260909_112501/RecoveredNative/PseudoC/Assembly-CSharp/Modules/Contexts/GamePlay/Board/Items/Scripts/Ivy/IvyItem.c:157",
+        "../com.grandgames.magicsort_Unity_20260909_112501/RecoveredNative/PseudoC/Assembly-CSharp/Modules/Contexts/GamePlay/Board/Items/Scripts/Frog/FrogItem.c:169",
+        "../com.grandgames.magicsort_Unity_20260909_112501/RecoveredNative/PseudoC/Assembly-CSharp/Modules/Contexts/GamePlay/Board/Items/Scripts/Frog/FrogItem.c:284",
+        "../com.grandgames.magicsort_Unity_20260909_112501/RecoveredNative/PseudoC/Assembly-CSharp/Modules/Contexts/GamePlay/Board/Items/Scripts/Frog/FrogItem.c:297"
+      ],
+      "next_action": "Cần runtime board fixtures cho animation, selection timing và tương tác Snitch; rule body đã có, không suy mọi level chỉ dùng state4.",
+      "reviewed": "2026-11-15",
+      "mode": "file_only_recovered_native_0.0.3063",
+      "finding_id": "MS-CORE-BODY-11"
+    },
+    "MS-PawTouchOffer-G004": {
+      "status": "partial_static_code_unresolved",
+      "conclusion": "StuckAreYouSurePopup gọi PawTouchOfferService.ShouldShowPlayOnContainer, OnPlayOnContainerShowed và PawTouchOfferContainerView.Show. Đây là entry confirmation AreYouSure đã có consumer body, không chỉ một nhãn PlayOn trong dossier.",
+      "evidence": [
+        "../com.grandgames.magicsort_Unity_20260909_112501/RecoveredNative/PseudoC/Assembly-CSharp/Modules/Contexts/GamePlay/UI/StuckAreYouSurePopUpNs/Scripts/StuckAreYouSurePopup.c:1717"
+      ],
+      "next_action": "Cần enumerate toàn bộ popup/prefab caller và event-eligible fixture; một consumer không chứng minh exclusive entry.",
+      "reviewed": "2026-11-15",
+      "mode": "file_only_recovered_native_0.0.3063",
+      "finding_id": "MS-CORE-BODY-12"
+    },
+    "MS-Snitch-G001": {
+      "status": "partial_static_code_unresolved",
+      "conclusion": "OnLevelStart lưu externalSnitches và levelSnitchInfo; GetRedSnitchMoveTargetByIndex/GetNormalSnitchMoveTargetForIndex lọc/duyệt nguồn external+level lists. Không có literal max2/max3 trong các body target/entrance đã đọc; count phụ thuộc input, filtering và số target hợp lệ.",
+      "evidence": [
+        "../com.grandgames.magicsort_Unity_20260909_112501/RecoveredNative/PseudoC/Assembly-CSharp/Modules/Contexts/GamePlay/Snitch/Scripts/SnitchInGameManager.c:751",
+        "../com.grandgames.magicsort_Unity_20260909_112501/RecoveredNative/PseudoC/Assembly-CSharp/Modules/Contexts/GamePlay/Snitch/Scripts/SnitchInGameManager.c:795",
+        "../com.grandgames.magicsort_Unity_20260909_112501/RecoveredNative/PseudoC/Assembly-CSharp/Modules/Contexts/GamePlay/Snitch/Scripts/SnitchInGameManager.c:1152"
+      ],
+      "next_action": "Max thiết kế/global cap chưa được chứng minh; cần external grant consumer/config và stress board, không đổi thành unlimited.",
+      "reviewed": "2026-11-15",
+      "mode": "file_only_recovered_native_0.0.3063",
+      "finding_id": "MS-CORE-BODY-13"
+    },
+    "MS-Snitch-G005": {
+      "status": "resolved_static_code_historical_build",
+      "conclusion": "OnLevelStart reset box state rồi state1. Box Update chờ new-blocker intro, entry animation, tutorial, rise/move red, rise/move normal theo states1..8. SnitchItem.OnBottleWatersUpdated chỉ complete khi belongingCell.WaterItem==topWaterItem; đánh dấu completed, lock bottle, tạo tween callback <Complete>b__18_0 dispatch normal/red manager effect. Không phải mỗi move bất kỳ đều tự kích Snitch.",
+      "evidence": [
+        "../com.grandgames.magicsort_Unity_20260909_112501/RecoveredNative/PseudoC/Assembly-CSharp/Modules/Contexts/GamePlay/Snitch/Scripts/SnitchBoxView.c:650",
+        "../com.grandgames.magicsort_Unity_20260909_112501/RecoveredNative/PseudoC/Assembly-CSharp/Modules/Contexts/GamePlay/Board/Items/Scripts/Snitch/SnitchItem.c:460",
+        "../com.grandgames.magicsort_Unity_20260909_112501/RecoveredNative/PseudoC/Assembly-CSharp/Modules/Contexts/GamePlay/Board/Items/Scripts/Snitch/SnitchItem.c:1311"
+      ],
+      "next_action": "Đối chiếu nhánh này trên app0.0.3129 ARM64; chưa là runtime pass.",
+      "reviewed": "2026-11-15",
+      "mode": "file_only_recovered_native_0.0.3063",
+      "finding_id": "MS-CORE-BODY-14"
+    },
+    "MS-SuperCharger-G005": {
+      "status": "resolved_static_code_historical_build",
+      "conclusion": "CheckMoveIsRepetitive chỉ đọc state hiện tại: reject khi (origin water list.Count==1 && target empty && !origin.HasBlocker(9)) OR (origin.Height==1 && !origin.HasBlocker(9)) OR target.EmptyCellCount<origin.TopWaterHeight. Không đọc SelectionSystem/history và không có history-depth N trong body; không được diễn giải thành undo/qua-lại filter.",
+      "evidence": [
+        "../com.grandgames.magicsort_Unity_20260909_112501/RecoveredNative/PseudoC/Assembly-CSharp/Modules/Contexts/GamePlay/SuperCharger/SuperChargerInGameManager.c:1539"
+      ],
+      "next_action": "Đối chiếu nhánh này trên app0.0.3129 ARM64; chưa là runtime pass.",
+      "reviewed": "2026-11-15",
+      "mode": "file_only_recovered_native_0.0.3063",
+      "finding_id": "MS-CORE-BODY-15"
+    },
+    "MS-Tutorial-G003": {
+      "status": "resolved_static_code_historical_build",
+      "conclusion": "Reveal: InGameBoosterVariant2, !player.IsRevealIntroduced, !SnitchService.ShouldShowLevelTutorial, !levelManager.HasNewBlockerToIntroduce, player.GetLevel()>9. Mega: cùng gates nhưng variant1 và !IsMegaShuffleIntroduced. Không đọc inventory count trong hai predicates. Offset config0x34 đối chiếu metadata InGameBoosterVariant, interface slots player59/60 và level12.",
+      "evidence": [
+        "../com.grandgames.magicsort_Unity_20260909_112501/RecoveredNative/PseudoC/Assembly-CSharp/Modules/Contexts/GamePlay/Boosters/Scripts/BoosterManager.c:5848",
+        "../com.grandgames.magicsort_Unity_20260909_112501/RecoveredNative/PseudoC/Assembly-CSharp/Modules/Contexts/GamePlay/Boosters/Scripts/BoosterManager.c:6203"
+      ],
+      "next_action": "Đối chiếu nhánh này trên app0.0.3129 ARM64; chưa là runtime pass.",
+      "reviewed": "2026-11-15",
+      "mode": "file_only_recovered_native_0.0.3063",
+      "finding_id": "MS-CORE-BODY-16"
+    },
+    "MS-Tutorial-G004": {
+      "status": "partial_static_code_unresolved",
+      "conclusion": "StartFirstTutorial truyền literal Tap the left bottle to pick up; StartSecondTutorial truyền Only pour water into the same color. InLevelTextDisplayer.ShowText gọi text setter với input; không lookup localization trong body này.",
+      "evidence": [
+        "../com.grandgames.magicsort_Unity_20260909_112501/RecoveredNative/PseudoC/Assembly-CSharp/Modules/Contexts/GamePlay/Tutorial/Scripts/TutorialSystem.c:834",
+        "../com.grandgames.magicsort_Unity_20260909_112501/RecoveredNative/PseudoC/Assembly-CSharp/Modules/Contexts/GamePlay/Tutorial/Scripts/TutorialSystem.c:1284",
+        "../com.grandgames.magicsort_Unity_20260909_112501/RecoveredNative/PseudoC/Assembly-CSharp/Modules/Contexts/GamePlay/Tutorial/Scripts/InLevelTextDisplayer.c:6"
+      ],
+      "next_action": "Chứng minh codepath tiếng Anh của build0.0.3063, chưa xác nhận app0.0.3129/locale khác hoặc toàn bộ tutorial đều không localize.",
+      "reviewed": "2026-11-15",
+      "mode": "file_only_recovered_native_0.0.3063",
+      "finding_id": "MS-CORE-BODY-17"
+    }
+  },
+  "patches": [
+    {
+      "id": "MS-CORE-EDITORIAL-001",
+      "file": "gdd/SuperCharger.json",
+      "absolute_file": "E:/APKExport/MagicSort_HExport/GameDesign/gdd/SuperCharger.json",
+      "format": "json_pointer_replace",
+      "pointer": "/use_cases/6/steps/1",
+      "old": "CheckMoveIsRepetitive(origin, target) loại nước đi lặp (đổ đi rồi đổ lại) dựa trên lịch sử SelectionSystem",
+      "new": "CheckMoveIsRepetitive chỉ đọc state hiện tại: reject khi (origin water list.Count==1 && target empty && !origin.HasBlocker(9)) OR (origin.Height==1 && !origin.HasBlocker(9)) OR target.EmptyCellCount<origin.TopWaterHeight. Không đọc SelectionSystem/history và không có history-depth N trong body; không được diễn giải thành undo/qua-lại filter. (Mã0.0.3063; chưa xác nhận runtime0.0.3129.)",
+      "finding_id": "MS-CORE-BODY-15",
+      "gap_id": "MS-SuperCharger-G005",
+      "source": [
+        {
+          "file": "../com.grandgames.magicsort_Unity_20260909_112501/RecoveredNative/PseudoC/Assembly-CSharp/Modules/Contexts/GamePlay/SuperCharger/SuperChargerInGameManager.c",
+          "line": 1539,
+          "end_line": 1610,
+          "method": "// ===== SuperChargerInGameManager :: private bool CheckMoveIsRepetitive(",
+          "sha256": "eae335811190de5379ecfb05a379e4fc78858e93e0a6e5cc50b7c1e09f34a275",
+          "body_checked": true,
+          "build": "0.0.3063 ARMv7",
+          "required_body_tokens": []
+        }
+      ],
+      "source_build": "0.0.3063 ARMv7",
+      "runtime_confirmation": "not_claimed",
+      "target_current_sha256": "5b2b68eaee0e439f70cca775ed2620863eb7503decf22111925624b3770fcd23",
+      "original_target_sha256": null,
+      "hash_note": "Original target pre-apply hash unavailable after coordinated root application; sourcebody hashes retained; current target hash recorded explicitly.",
+      "already_applied": true,
+      "apply_rule": "Replace only current==old; skip current==new; conflict otherwise."
+    },
+    {
+      "id": "MS-CORE-EDITORIAL-002",
+      "file": "gdd/SuperCharger.json",
+      "absolute_file": "E:/APKExport/MagicSort_HExport/GameDesign/gdd/SuperCharger.json",
+      "format": "json_pointer_replace",
+      "pointer": "/use_cases/6/rules",
+      "old": "ResetSelectionHistory dọn lịch sử chọn khi cần; nước đi lặp không tính",
+      "new": "CheckMoveIsRepetitive chỉ đọc state hiện tại: reject khi (origin water list.Count==1 && target empty && !origin.HasBlocker(9)) OR (origin.Height==1 && !origin.HasBlocker(9)) OR target.EmptyCellCount<origin.TopWaterHeight. Không đọc SelectionSystem/history và không có history-depth N trong body; không được diễn giải thành undo/qua-lại filter. (Mã0.0.3063; chưa xác nhận runtime0.0.3129.)",
+      "finding_id": "MS-CORE-BODY-15",
+      "gap_id": "MS-SuperCharger-G005",
+      "source": [
+        {
+          "file": "../com.grandgames.magicsort_Unity_20260909_112501/RecoveredNative/PseudoC/Assembly-CSharp/Modules/Contexts/GamePlay/SuperCharger/SuperChargerInGameManager.c",
+          "line": 1539,
+          "end_line": 1610,
+          "method": "// ===== SuperChargerInGameManager :: private bool CheckMoveIsRepetitive(",
+          "sha256": "eae335811190de5379ecfb05a379e4fc78858e93e0a6e5cc50b7c1e09f34a275",
+          "body_checked": true,
+          "build": "0.0.3063 ARMv7",
+          "required_body_tokens": []
+        }
+      ],
+      "source_build": "0.0.3063 ARMv7",
+      "runtime_confirmation": "not_claimed",
+      "target_current_sha256": "5b2b68eaee0e439f70cca775ed2620863eb7503decf22111925624b3770fcd23",
+      "original_target_sha256": null,
+      "hash_note": "Original target pre-apply hash unavailable after coordinated root application; sourcebody hashes retained; current target hash recorded explicitly.",
+      "already_applied": true,
+      "apply_rule": "Replace only current==old; skip current==new; conflict otherwise."
+    },
+    {
+      "id": "MS-CORE-EDITORIAL-003",
+      "file": "site_meta/SuperCharger.json",
+      "absolute_file": "E:/APKExport/MagicSort_HExport/GameDesign/site_meta/SuperCharger.json",
+      "format": "json_pointer_replace",
+      "pointer": "/notes/2",
+      "old": "Lưu ý: Khi ChargeWithMove = true, CheckMoveIsRepetitive lọc nước đi lặp lại (đổ qua đổ lại) để chống cày tiến độ.",
+      "new": "CheckMoveIsRepetitive chỉ đọc state hiện tại: reject khi (origin water list.Count==1 && target empty && !origin.HasBlocker(9)) OR (origin.Height==1 && !origin.HasBlocker(9)) OR target.EmptyCellCount<origin.TopWaterHeight. Không đọc SelectionSystem/history và không có history-depth N trong body; không được diễn giải thành undo/qua-lại filter. (Mã0.0.3063; chưa xác nhận runtime0.0.3129.)",
+      "finding_id": "MS-CORE-BODY-15",
+      "gap_id": "MS-SuperCharger-G005",
+      "source": [
+        {
+          "file": "../com.grandgames.magicsort_Unity_20260909_112501/RecoveredNative/PseudoC/Assembly-CSharp/Modules/Contexts/GamePlay/SuperCharger/SuperChargerInGameManager.c",
+          "line": 1539,
+          "end_line": 1610,
+          "method": "// ===== SuperChargerInGameManager :: private bool CheckMoveIsRepetitive(",
+          "sha256": "eae335811190de5379ecfb05a379e4fc78858e93e0a6e5cc50b7c1e09f34a275",
+          "body_checked": true,
+          "build": "0.0.3063 ARMv7",
+          "required_body_tokens": []
+        }
+      ],
+      "source_build": "0.0.3063 ARMv7",
+      "runtime_confirmation": "not_claimed",
+      "target_current_sha256": "06bbc7401892500872494eba34030a94e822c0e00f275a436197c3809ecbe98c",
+      "original_target_sha256": null,
+      "hash_note": "Original target pre-apply hash unavailable after coordinated root application; sourcebody hashes retained; current target hash recorded explicitly.",
+      "already_applied": true,
+      "apply_rule": "Replace only current==old; skip current==new; conflict otherwise."
+    },
+    {
+      "id": "MS-CORE-EDITORIAL-004",
+      "file": "site_meta/SuperCharger.json",
+      "absolute_file": "E:/APKExport/MagicSort_HExport/GameDesign/site_meta/SuperCharger.json",
+      "format": "json_pointer_replace",
+      "pointer": "/how_it_works/7",
+      "old": "Nạp theo nước đi (ChargeWithMove = true): mỗi OnAnyMoveStarted trừ 1 vào _remainingGoal, bỏ qua nước đi lặp lại.",
+      "new": "CheckMoveIsRepetitive chỉ đọc state hiện tại: reject khi (origin water list.Count==1 && target empty && !origin.HasBlocker(9)) OR (origin.Height==1 && !origin.HasBlocker(9)) OR target.EmptyCellCount<origin.TopWaterHeight. Không đọc SelectionSystem/history và không có history-depth N trong body; không được diễn giải thành undo/qua-lại filter. (Mã0.0.3063; chưa xác nhận runtime0.0.3129.)",
+      "finding_id": "MS-CORE-BODY-15",
+      "gap_id": "MS-SuperCharger-G005",
+      "source": [
+        {
+          "file": "../com.grandgames.magicsort_Unity_20260909_112501/RecoveredNative/PseudoC/Assembly-CSharp/Modules/Contexts/GamePlay/SuperCharger/SuperChargerInGameManager.c",
+          "line": 1539,
+          "end_line": 1610,
+          "method": "// ===== SuperChargerInGameManager :: private bool CheckMoveIsRepetitive(",
+          "sha256": "eae335811190de5379ecfb05a379e4fc78858e93e0a6e5cc50b7c1e09f34a275",
+          "body_checked": true,
+          "build": "0.0.3063 ARMv7",
+          "required_body_tokens": []
+        }
+      ],
+      "source_build": "0.0.3063 ARMv7",
+      "runtime_confirmation": "not_claimed",
+      "target_current_sha256": "06bbc7401892500872494eba34030a94e822c0e00f275a436197c3809ecbe98c",
+      "original_target_sha256": null,
+      "hash_note": "Original target pre-apply hash unavailable after coordinated root application; sourcebody hashes retained; current target hash recorded explicitly.",
+      "already_applied": true,
+      "apply_rule": "Replace only current==old; skip current==new; conflict otherwise."
+    },
+    {
+      "id": "MS-CORE-EDITORIAL-005",
+      "file": "site_meta/SuperCharger.json",
+      "absolute_file": "E:/APKExport/MagicSort_HExport/GameDesign/site_meta/SuperCharger.json",
+      "format": "json_pointer_replace",
+      "pointer": "/tips/1",
+      "old": "Lọc nước đi lặp lại và chặn màu trùng ngăn người chơi cày thanh nạp bằng thao tác vô nghĩa.",
+      "new": "CheckMoveIsRepetitive chỉ đọc state hiện tại: reject khi (origin water list.Count==1 && target empty && !origin.HasBlocker(9)) OR (origin.Height==1 && !origin.HasBlocker(9)) OR target.EmptyCellCount<origin.TopWaterHeight. Không đọc SelectionSystem/history và không có history-depth N trong body; không được diễn giải thành undo/qua-lại filter. (Mã0.0.3063; chưa xác nhận runtime0.0.3129.)",
+      "finding_id": "MS-CORE-BODY-15",
+      "gap_id": "MS-SuperCharger-G005",
+      "source": [
+        {
+          "file": "../com.grandgames.magicsort_Unity_20260909_112501/RecoveredNative/PseudoC/Assembly-CSharp/Modules/Contexts/GamePlay/SuperCharger/SuperChargerInGameManager.c",
+          "line": 1539,
+          "end_line": 1610,
+          "method": "// ===== SuperChargerInGameManager :: private bool CheckMoveIsRepetitive(",
+          "sha256": "eae335811190de5379ecfb05a379e4fc78858e93e0a6e5cc50b7c1e09f34a275",
+          "body_checked": true,
+          "build": "0.0.3063 ARMv7",
+          "required_body_tokens": []
+        }
+      ],
+      "source_build": "0.0.3063 ARMv7",
+      "runtime_confirmation": "not_claimed",
+      "target_current_sha256": "06bbc7401892500872494eba34030a94e822c0e00f275a436197c3809ecbe98c",
+      "original_target_sha256": null,
+      "hash_note": "Original target pre-apply hash unavailable after coordinated root application; sourcebody hashes retained; current target hash recorded explicitly.",
+      "already_applied": true,
+      "apply_rule": "Replace only current==old; skip current==new; conflict otherwise."
+    },
+    {
+      "id": "MS-CORE-EDITORIAL-006",
+      "file": "gdd/MiniGame.json",
+      "absolute_file": "E:/APKExport/MagicSort_HExport/GameDesign/gdd/MiniGame.json",
+      "format": "json_pointer_replace",
+      "pointer": "/use_cases/5/trigger",
+      "old": "Thanh booster đạt 100%",
+      "new": "TryActivateBoosterDynamically gate: chưa activated stage, hitCell destroyed, boosterItems.Count>0,collectedBoosterCount==0. Đọc P=GetCurrentStageBoosterHitPercentage, draw=RandomUtil.GetRandomFromTo(1,100). P<draw→IncreaseCurrentStageBoosterHitPercentage và false; ngược lại lấy boosterItems[0],SetBoosterCell(hitCell),add collectedItems,MarkAsCurrentStageDynamicBoosterActivated. RandomUtil dùng System.Random.Next(from,to), upper exclusive nên draw1..99. Không phải chờ thanh100%; P>=99 đảm bảo vượt draw khi mọi gate khác đúng. (Mã0.0.3063; chưa xác nhận runtime0.0.3129.)",
+      "finding_id": "MS-CORE-BODY-10",
+      "gap_id": "MS-MiniGame-G004",
+      "source": [
+        {
+          "file": "../com.grandgames.magicsort_Unity_20260909_112501/RecoveredNative/PseudoC/Assembly-CSharp/Modules/Contexts/Home/MiniGame/Scripts/Board/MiniGameController.c",
+          "line": 6747,
+          "end_line": 6875,
+          "method": "// ===== MiniGameController :: private bool TryActivateBoosterDynamically(",
+          "sha256": "4c250ddc2b84710ab8573572f3bbc72ba631478f50b93cbe5c48535905b4e340",
+          "body_checked": true,
+          "build": "0.0.3063 ARMv7",
+          "required_body_tokens": []
+        },
+        {
+          "file": "../com.grandgames.magicsort_Unity_20260909_112501/RecoveredNative/PseudoC/Assembly-CSharp/Modules/Infrastructure/Common/Scripts/RandomUtil.c",
+          "line": 162,
+          "end_line": 191,
+          "method": "// ===== RandomUtil :: public static int GetRandomFromTo(",
+          "sha256": "66126c501e9a70fb19886b5215c066f339e2c30375dba5fb13429487ee92eb05",
+          "body_checked": true,
+          "build": "0.0.3063 ARMv7",
+          "required_body_tokens": []
+        }
+      ],
+      "source_build": "0.0.3063 ARMv7",
+      "runtime_confirmation": "not_claimed",
+      "target_current_sha256": "d1473b5d2d40a00878d4d28438cabaa5685ab386f2faeb066af6c5d9ed99c34e",
+      "original_target_sha256": null,
+      "hash_note": "Original target pre-apply hash unavailable after coordinated root application; sourcebody hashes retained; current target hash recorded explicitly.",
+      "already_applied": true,
+      "apply_rule": "Replace only current==old; skip current==new; conflict otherwise."
+    },
+    {
+      "id": "MS-CORE-EDITORIAL-007",
+      "file": "site_meta/MiniGame.json",
+      "absolute_file": "E:/APKExport/MagicSort_HExport/GameDesign/site_meta/MiniGame.json",
+      "format": "json_pointer_replace",
+      "pointer": "/description/6",
+      "old": "Booster JellyFish tích 5% mỗi nước đi; đầy thanh thì được một lượt đập diện rộng miễn phí.",
+      "new": "TryActivateBoosterDynamically gate: chưa activated stage, hitCell destroyed, boosterItems.Count>0,collectedBoosterCount==0. Đọc P=GetCurrentStageBoosterHitPercentage, draw=RandomUtil.GetRandomFromTo(1,100). P<draw→IncreaseCurrentStageBoosterHitPercentage và false; ngược lại lấy boosterItems[0],SetBoosterCell(hitCell),add collectedItems,MarkAsCurrentStageDynamicBoosterActivated. RandomUtil dùng System.Random.Next(from,to), upper exclusive nên draw1..99. Không phải chờ thanh100%; P>=99 đảm bảo vượt draw khi mọi gate khác đúng. (Mã0.0.3063; chưa xác nhận runtime0.0.3129.)",
+      "finding_id": "MS-CORE-BODY-10",
+      "gap_id": "MS-MiniGame-G004",
+      "source": [
+        {
+          "file": "../com.grandgames.magicsort_Unity_20260909_112501/RecoveredNative/PseudoC/Assembly-CSharp/Modules/Contexts/Home/MiniGame/Scripts/Board/MiniGameController.c",
+          "line": 6747,
+          "end_line": 6875,
+          "method": "// ===== MiniGameController :: private bool TryActivateBoosterDynamically(",
+          "sha256": "4c250ddc2b84710ab8573572f3bbc72ba631478f50b93cbe5c48535905b4e340",
+          "body_checked": true,
+          "build": "0.0.3063 ARMv7",
+          "required_body_tokens": []
+        },
+        {
+          "file": "../com.grandgames.magicsort_Unity_20260909_112501/RecoveredNative/PseudoC/Assembly-CSharp/Modules/Infrastructure/Common/Scripts/RandomUtil.c",
+          "line": 162,
+          "end_line": 191,
+          "method": "// ===== RandomUtil :: public static int GetRandomFromTo(",
+          "sha256": "66126c501e9a70fb19886b5215c066f339e2c30375dba5fb13429487ee92eb05",
+          "body_checked": true,
+          "build": "0.0.3063 ARMv7",
+          "required_body_tokens": []
+        }
+      ],
+      "source_build": "0.0.3063 ARMv7",
+      "runtime_confirmation": "not_claimed",
+      "target_current_sha256": "97f938fc3f1a6934e6119a01b712e9d0cf0573337c5ff38bce675c2b2a6c574e",
+      "original_target_sha256": null,
+      "hash_note": "Original target pre-apply hash unavailable after coordinated root application; sourcebody hashes retained; current target hash recorded explicitly.",
+      "already_applied": true,
+      "apply_rule": "Replace only current==old; skip current==new; conflict otherwise."
+    },
+    {
+      "id": "MS-CORE-EDITORIAL-008",
+      "file": "site_meta/MiniGame.json",
+      "absolute_file": "E:/APKExport/MagicSort_HExport/GameDesign/site_meta/MiniGame.json",
+      "format": "json_pointer_replace",
+      "pointer": "/notes/4",
+      "old": "Lưu ý: ngưỡng kích hoạt JellyFish giả định là 100% — so sánh nằm trong MiniGameController đã bị tối ưu (suy luận).",
+      "new": "TryActivateBoosterDynamically gate: chưa activated stage, hitCell destroyed, boosterItems.Count>0,collectedBoosterCount==0. Đọc P=GetCurrentStageBoosterHitPercentage, draw=RandomUtil.GetRandomFromTo(1,100). P<draw→IncreaseCurrentStageBoosterHitPercentage và false; ngược lại lấy boosterItems[0],SetBoosterCell(hitCell),add collectedItems,MarkAsCurrentStageDynamicBoosterActivated. RandomUtil dùng System.Random.Next(from,to), upper exclusive nên draw1..99. Không phải chờ thanh100%; P>=99 đảm bảo vượt draw khi mọi gate khác đúng. (Mã0.0.3063; chưa xác nhận runtime0.0.3129.)",
+      "finding_id": "MS-CORE-BODY-10",
+      "gap_id": "MS-MiniGame-G004",
+      "source": [
+        {
+          "file": "../com.grandgames.magicsort_Unity_20260909_112501/RecoveredNative/PseudoC/Assembly-CSharp/Modules/Contexts/Home/MiniGame/Scripts/Board/MiniGameController.c",
+          "line": 6747,
+          "end_line": 6875,
+          "method": "// ===== MiniGameController :: private bool TryActivateBoosterDynamically(",
+          "sha256": "4c250ddc2b84710ab8573572f3bbc72ba631478f50b93cbe5c48535905b4e340",
+          "body_checked": true,
+          "build": "0.0.3063 ARMv7",
+          "required_body_tokens": []
+        },
+        {
+          "file": "../com.grandgames.magicsort_Unity_20260909_112501/RecoveredNative/PseudoC/Assembly-CSharp/Modules/Infrastructure/Common/Scripts/RandomUtil.c",
+          "line": 162,
+          "end_line": 191,
+          "method": "// ===== RandomUtil :: public static int GetRandomFromTo(",
+          "sha256": "66126c501e9a70fb19886b5215c066f339e2c30375dba5fb13429487ee92eb05",
+          "body_checked": true,
+          "build": "0.0.3063 ARMv7",
+          "required_body_tokens": []
+        }
+      ],
+      "source_build": "0.0.3063 ARMv7",
+      "runtime_confirmation": "not_claimed",
+      "target_current_sha256": "97f938fc3f1a6934e6119a01b712e9d0cf0573337c5ff38bce675c2b2a6c574e",
+      "original_target_sha256": null,
+      "hash_note": "Original target pre-apply hash unavailable after coordinated root application; sourcebody hashes retained; current target hash recorded explicitly.",
+      "already_applied": true,
+      "apply_rule": "Replace only current==old; skip current==new; conflict otherwise."
+    },
+    {
+      "id": "MS-CORE-EDITORIAL-009",
+      "file": "site_meta/MiniGame.json",
+      "absolute_file": "E:/APKExport/MagicSort_HExport/GameDesign/site_meta/MiniGame.json",
+      "format": "json_pointer_replace",
+      "pointer": "/how_it_works/10",
+      "old": "Mỗi nước đi cộng 5% vào thanh JellyFish; đầy thanh thì MarkAsCurrentStageDynamicBoosterActivated() cho một lượt đập diện rộng, dùng xong thì reset.",
+      "new": "TryActivateBoosterDynamically gate: chưa activated stage, hitCell destroyed, boosterItems.Count>0,collectedBoosterCount==0. Đọc P=GetCurrentStageBoosterHitPercentage, draw=RandomUtil.GetRandomFromTo(1,100). P<draw→IncreaseCurrentStageBoosterHitPercentage và false; ngược lại lấy boosterItems[0],SetBoosterCell(hitCell),add collectedItems,MarkAsCurrentStageDynamicBoosterActivated. RandomUtil dùng System.Random.Next(from,to), upper exclusive nên draw1..99. Không phải chờ thanh100%; P>=99 đảm bảo vượt draw khi mọi gate khác đúng. (Mã0.0.3063; chưa xác nhận runtime0.0.3129.)",
+      "finding_id": "MS-CORE-BODY-10",
+      "gap_id": "MS-MiniGame-G004",
+      "source": [
+        {
+          "file": "../com.grandgames.magicsort_Unity_20260909_112501/RecoveredNative/PseudoC/Assembly-CSharp/Modules/Contexts/Home/MiniGame/Scripts/Board/MiniGameController.c",
+          "line": 6747,
+          "end_line": 6875,
+          "method": "// ===== MiniGameController :: private bool TryActivateBoosterDynamically(",
+          "sha256": "4c250ddc2b84710ab8573572f3bbc72ba631478f50b93cbe5c48535905b4e340",
+          "body_checked": true,
+          "build": "0.0.3063 ARMv7",
+          "required_body_tokens": []
+        },
+        {
+          "file": "../com.grandgames.magicsort_Unity_20260909_112501/RecoveredNative/PseudoC/Assembly-CSharp/Modules/Infrastructure/Common/Scripts/RandomUtil.c",
+          "line": 162,
+          "end_line": 191,
+          "method": "// ===== RandomUtil :: public static int GetRandomFromTo(",
+          "sha256": "66126c501e9a70fb19886b5215c066f339e2c30375dba5fb13429487ee92eb05",
+          "body_checked": true,
+          "build": "0.0.3063 ARMv7",
+          "required_body_tokens": []
+        }
+      ],
+      "source_build": "0.0.3063 ARMv7",
+      "runtime_confirmation": "not_claimed",
+      "target_current_sha256": "97f938fc3f1a6934e6119a01b712e9d0cf0573337c5ff38bce675c2b2a6c574e",
+      "original_target_sha256": null,
+      "hash_note": "Original target pre-apply hash unavailable after coordinated root application; sourcebody hashes retained; current target hash recorded explicitly.",
+      "already_applied": true,
+      "apply_rule": "Replace only current==old; skip current==new; conflict otherwise."
+    },
+    {
+      "id": "MS-CORE-EDITORIAL-010",
+      "file": "site_meta/MiniGame.json",
+      "absolute_file": "E:/APKExport/MagicSort_HExport/GameDesign/site_meta/MiniGame.json",
+      "format": "json_pointer_replace",
+      "pointer": "/key_numbers/11/value",
+      "old": "20 (suy luận từ 5% mỗi nước, ngưỡng 100%)",
+      "new": "Không có số nước cố định20; draw1..99 và P tăng khi roll thất bại, kèm điều kiện board/stage (mã0.0.3063).",
+      "finding_id": "MS-CORE-BODY-10",
+      "gap_id": "MS-MiniGame-G004",
+      "source": [
+        {
+          "file": "../com.grandgames.magicsort_Unity_20260909_112501/RecoveredNative/PseudoC/Assembly-CSharp/Modules/Contexts/Home/MiniGame/Scripts/Board/MiniGameController.c",
+          "line": 6747,
+          "end_line": 6875,
+          "method": "// ===== MiniGameController :: private bool TryActivateBoosterDynamically(",
+          "sha256": "4c250ddc2b84710ab8573572f3bbc72ba631478f50b93cbe5c48535905b4e340",
+          "body_checked": true,
+          "build": "0.0.3063 ARMv7",
+          "required_body_tokens": []
+        },
+        {
+          "file": "../com.grandgames.magicsort_Unity_20260909_112501/RecoveredNative/PseudoC/Assembly-CSharp/Modules/Infrastructure/Common/Scripts/RandomUtil.c",
+          "line": 162,
+          "end_line": 191,
+          "method": "// ===== RandomUtil :: public static int GetRandomFromTo(",
+          "sha256": "66126c501e9a70fb19886b5215c066f339e2c30375dba5fb13429487ee92eb05",
+          "body_checked": true,
+          "build": "0.0.3063 ARMv7",
+          "required_body_tokens": []
+        }
+      ],
+      "source_build": "0.0.3063 ARMv7",
+      "runtime_confirmation": "not_claimed",
+      "target_current_sha256": "97f938fc3f1a6934e6119a01b712e9d0cf0573337c5ff38bce675c2b2a6c574e",
+      "original_target_sha256": null,
+      "hash_note": "Original target pre-apply hash unavailable after coordinated root application; sourcebody hashes retained; current target hash recorded explicitly.",
+      "already_applied": true,
+      "apply_rule": "Replace only current==old; skip current==new; conflict otherwise."
+    },
+    {
+      "id": "MS-CORE-EDITORIAL-011",
+      "file": "site_meta/MiniGame.json",
+      "absolute_file": "E:/APKExport/MagicSort_HExport/GameDesign/site_meta/MiniGame.json",
+      "format": "json_pointer_replace",
+      "pointer": "/key_numbers/11/label",
+      "old": "Số nước đi để đầy thanh JellyFish",
+      "new": "JellyFish: số nước đến lần kích hoạt",
+      "finding_id": "MS-CORE-BODY-10",
+      "gap_id": "MS-MiniGame-G004",
+      "source": [
+        {
+          "file": "../com.grandgames.magicsort_Unity_20260909_112501/RecoveredNative/PseudoC/Assembly-CSharp/Modules/Contexts/Home/MiniGame/Scripts/Board/MiniGameController.c",
+          "line": 6747,
+          "end_line": 6875,
+          "method": "// ===== MiniGameController :: private bool TryActivateBoosterDynamically(",
+          "sha256": "4c250ddc2b84710ab8573572f3bbc72ba631478f50b93cbe5c48535905b4e340",
+          "body_checked": true,
+          "build": "0.0.3063 ARMv7",
+          "required_body_tokens": []
+        },
+        {
+          "file": "../com.grandgames.magicsort_Unity_20260909_112501/RecoveredNative/PseudoC/Assembly-CSharp/Modules/Infrastructure/Common/Scripts/RandomUtil.c",
+          "line": 162,
+          "end_line": 191,
+          "method": "// ===== RandomUtil :: public static int GetRandomFromTo(",
+          "sha256": "66126c501e9a70fb19886b5215c066f339e2c30375dba5fb13429487ee92eb05",
+          "body_checked": true,
+          "build": "0.0.3063 ARMv7",
+          "required_body_tokens": []
+        }
+      ],
+      "source_build": "0.0.3063 ARMv7",
+      "runtime_confirmation": "not_claimed",
+      "target_current_sha256": "97f938fc3f1a6934e6119a01b712e9d0cf0573337c5ff38bce675c2b2a6c574e",
+      "original_target_sha256": null,
+      "hash_note": "Original target pre-apply hash unavailable after coordinated root application; sourcebody hashes retained; current target hash recorded explicitly.",
+      "already_applied": true,
+      "apply_rule": "Replace only current==old; skip current==new; conflict otherwise."
+    },
+    {
+      "id": "MS-CORE-EDITORIAL-012",
+      "file": "gdd/BottleSortMechanics.json",
+      "absolute_file": "E:/APKExport/MagicSort_HExport/GameDesign/gdd/BottleSortMechanics.json",
+      "format": "json_pointer_replace",
+      "pointer": "/use_cases/5/steps/1",
+      "old": "Trường hợp đặc biệt: nếu số khối còn lại của màu đó trên toàn bàn (BottleCollection.GetColorCount(colorId)) khớp với lượng trong chai thì vẫn tính hoàn thành dù chưa đầy; chai dài (IsLongBottle) có nhánh riêng",
+      "new": "Base = isCompletable && !IsCompleted && !IsEmpty && topWater.Height==Height && IsAllWatersVisible. Không có long bottle trên board→base. Có long bottle→base && (collection.GetColorCount(topColor)==Height || IsLongBottle). Không có nhánh hoàn thành chai chưa đầy chỉ vì màu còn ít.",
+      "finding_id": "MS-CORE-BODY-03",
+      "gap_id": "MS-BottleSortMechanics-G002",
+      "source": [
+        {
+          "file": "../com.grandgames.magicsort_Unity_20260909_112501/RecoveredNative/PseudoC/Assembly-CSharp/Modules/Contexts/GamePlay/BoardItems/Scripts/Bottle/BottleItem.c",
+          "line": 5650,
+          "end_line": 5715,
+          "method": "// ===== BottleItem :: private bool ShouldComplete()   [RVA 0x174A924, ok]",
+          "sha256": "e4fb405af0fe63ffe36bf9962b8dcc383461779d50d702a035481df96f08635a",
+          "body_checked": true,
+          "build": "0.0.3063 ARMv7",
+          "required_body_tokens": []
+        }
+      ],
+      "source_build": "0.0.3063 ARMv7",
+      "runtime_confirmation": "not_claimed",
+      "target_current_sha256": "410398264f5c4fc5ebc74033ead065c0a5946eb6f559bf4b5568366cd13d34a5",
+      "original_target_sha256": null,
+      "hash_note": "Original target pre-apply hash unavailable after coordinated root application; sourcebody hashes retained; current target hash recorded explicitly.",
+      "already_applied": true,
+      "apply_rule": "Replace only current==old; skip current==new; conflict otherwise."
+    },
+    {
+      "id": "MS-CORE-EDITORIAL-013",
+      "file": "site_meta/MagicBottle.json",
+      "absolute_file": "E:/APKExport/MagicSort_HExport/GameDesign/site_meta/MagicBottle.json",
+      "format": "json_pointer_replace",
+      "pointer": "/notes/7",
+      "old": "Lưu ý: chưa xác định được Magic Bottle là chai trống hoàn toàn hay có dung tích riêng — MagicBottleInGameManager chỉ thêm một BottleItem (gaps).",
+      "new": "AddMagicBottleAndHide gọi AddBottleAsMagicBottle và hide sprite. AddBottleAsMagicBottle gọi AddBottle(x,0,1); tham số thứ3 có signature bottleHeight, AddBottle chọn config bằng height và gọi ItemFactory.GetBottleItem→BottleItem.Prepare. Không có bước add water trong AddMagicBottleAndHide. Vì vậy không được mặc định magic bottle cao4 như chai thường. Giữ partial: cần pool/reset trace và runtime để xác nhận trạng thái nước effective.",
+      "finding_id": "MS-CORE-BODY-09",
+      "gap_id": "MS-MagicBottle-G004",
+      "source": [
+        {
+          "file": "../com.grandgames.magicsort_Unity_20260909_112501/RecoveredNative/PseudoC/Assembly-CSharp/Modules/Contexts/GamePlay/MagicBottle/Scripts/MagicBottleInGameManager.c",
+          "line": 78,
+          "end_line": 165,
+          "method": "// ===== MagicBottleInGameManager :: public void AddMagicBottleAndHide(",
+          "sha256": "c3cf4fafb00006c993e28b73b9d44963e751e467a4073f4c206a52665ea1c7e9",
+          "body_checked": true,
+          "build": "0.0.3063 ARMv7",
+          "required_body_tokens": []
+        },
+        {
+          "file": "../com.grandgames.magicsort_Unity_20260909_112501/RecoveredNative/PseudoC/Assembly-CSharp/Modules/Contexts/GamePlay/Board/Common/Scripts/BottleCollection.c",
+          "line": 10112,
+          "end_line": 10269,
+          "method": "// ===== BottleCollection :: public BottleItem AddBottleAsMagicBottle(",
+          "sha256": "63a000c895d1bea54297896e5fde02f69b55f1759e9889f6b88e0ccf36794387",
+          "body_checked": true,
+          "build": "0.0.3063 ARMv7",
+          "required_body_tokens": []
+        },
+        {
+          "file": "../com.grandgames.magicsort_Unity_20260909_112501/RecoveredNative/PseudoC/Assembly-CSharp/Modules/Contexts/GamePlay/Board/Common/Scripts/BottleCollection.c",
+          "line": 10913,
+          "end_line": 11289,
+          "method": "// ===== BottleCollection :: private BottleItem AddBottle(",
+          "sha256": "63a000c895d1bea54297896e5fde02f69b55f1759e9889f6b88e0ccf36794387",
+          "body_checked": true,
+          "build": "0.0.3063 ARMv7",
+          "required_body_tokens": []
+        },
+        {
+          "file": "../com.grandgames.magicsort_Unity_20260909_112501/RecoveredNative/PseudoC/Assembly-CSharp/Modules/Contexts/GamePlay/BoardItems/Scripts/Generation/ItemFactory.c",
+          "line": 281,
+          "end_line": 356,
+          "method": "// ===== ItemFactory :: public BottleItem GetBottleItem(",
+          "sha256": "5084765a0cfbfdda4b98d5689fbc5efc6db13d35069a65c37f771cea80c00d62",
+          "body_checked": true,
+          "build": "0.0.3063 ARMv7",
+          "required_body_tokens": []
+        }
+      ],
+      "source_build": "0.0.3063 ARMv7",
+      "runtime_confirmation": "not_claimed",
+      "target_current_sha256": "0a7c5bc2fd5805bdd9c2b42b25dbc622b9bb8351600e045108cb57be1c624bf5",
+      "original_target_sha256": null,
+      "hash_note": "Original target pre-apply hash unavailable after coordinated root application; sourcebody hashes retained; current target hash recorded explicitly.",
+      "already_applied": true,
+      "apply_rule": "Replace only current==old; skip current==new; conflict otherwise."
+    },
+    {
+      "id": "MS-CORE-EDITORIAL-014",
+      "file": "gdd/SuperCharger.json",
+      "absolute_file": "E:/APKExport/MagicSort_HExport/GameDesign/gdd/SuperCharger.json",
+      "format": "json_pointer_replace",
+      "pointer": "/flow",
+      "old": "Ở Home: mỗi lần thắng level, SuperChargerService.TryIncreaseProgress() tăng SuperChargerModel.Progress thêm 1 (chỉ khi EventShownInLifeTime đã bật và Progress chưa chạm TargetLevelProgress). Khi Progress == TargetLevelProgress, service bật cờ ShouldShowInLevelActivationPopUp để lần vào level kế tiếp sẽ mở popup thông báo 'Super Charger đã sẵn sàng'. SuperChargerService.IsActive() = IsEligible() && Progress ≥ TargetLevelProgress. Popup: lần đầu đủ điều kiện, ShouldAutoOpenPopUp() trả true vì EventShownInLifeTime còn false → mở SuperChargerJoinPopUp (reason lấy từ GetJoinPopupShowReason: Activate nếu đã đủ tiến độ, Tutorial nếu chưa, Lose sau khi mất); popup gọi MarkEventShownInLifeTime và MarkJoinPopUpShown. SuperChargerProgressView vẽ thanh tiến độ với các vạch ngăn, chữ SuperChargerJoinProgressText khi chưa xong và SuperChargerIsActiveText khi đã kích hoạt. Trong level: SuperChargerInGameManager.Initialize(bottleCollections) đọc config, đặt _moveCount = _bottleCompleted = _superChargerUseCount = 0, _remainingGoal = ChargeMatchCount[0]; sau mỗi lần dùng, IncreaseSuperChargerUseCount tăng index rồi kẹp vào Count−1 và lấy goal ở index đó (mã0.0.3063), chọn view theo SuperChargerType (SuperChargerButtonUI.Initialize) và tạo chiến lược qua SuperChargerStrategyFactory.Create(configModel). Nếu ShouldHaveInitialCharge = true thì TryApplyInitialCharge đặt _remainingGoal = 0 ngay từ đầu (nút đầy sẵn). Nạp: nếu ChargeWithMove = true thì mỗi nước đi (OnAnyMoveStarted) trừ 1 vào _remainingGoal, nhưng CheckMoveIsRepetitive lọc nước đi lặp lại (đổ qua đổ lại) để chống cày; nếu ChargeWithMove = false thì mỗi chai hoàn thành (OnAnyBottleCompleted) trừ 1, và CountsTowardCharge chặn màu đã tính rồi (danh sách _completedColors) để mỗi màu chỉ tính một lần. Khi _remainingGoal ≤ 0 nút chuyển trạng thái Ready (SuperChargerButtonInnerView.OnReady, hoạt ảnh readyClip + particle). Dùng: với type ChargeableBottle, ShouldUseAutomatically() trả true nên hệ thống tự kích hoạt (tạo/nạp ChargeableBottleItem trên bàn); với type BestSort, người chơi phải bấm nút (OnUseChargerButtonClicked) → UseSuperCharger() → strategy.Use(source). BestSortSuperChargerStrategy: BestSortTargetFinder.FindSuitableTargets chọn tập chai ứng viên (giới hạn theo BestSortBottleCapByCandidateCount / BestSortMaxEffectedBottleCap), BestSortSolver.Solve chạy 5 pha (TagBottom → CompleteFill → TopColor → BestFit → RandomReverse) để dựng BestSortSolution gồm danh sách BottleSolution; sau đó PlaySuperChargerSequence chạy trail particle từ nút tới các chai (SuperChargerTrailAnimationController), ApplySolutions ghi lại nội dung chai, UnlockCompletedBottles mở khoá chai đã hoàn thành, CompleteOverBoardItemsOnEmptiedCells xử lý vật thể phủ trên ô vừa trống. FinishCharge kiểm tra IsBoardStuck; nếu bàn kẹt sau khi dùng thì TryRescueFromStuck thêm một chai (cờ _addedBottleForStuck) — số liệu này được gửi trong analytics supercharger_used. Kết thúc ván: SuperChargerService.CompleteSuperChargerTargetProgress khi thắng; thua thì trạng thái Lost (ChargerStatus.Lost) và tiến độ bị reset qua TryResetProgress. Mở app: InitializeData → TryResetProgress(onAppLaunch: true) dọn tiến độ nếu người chơi không còn đủ điều kiện.",
+      "new": "Ở Home: mỗi lần thắng level, SuperChargerService.TryIncreaseProgress() tăng SuperChargerModel.Progress thêm 1 (chỉ khi EventShownInLifeTime đã bật và Progress chưa chạm TargetLevelProgress). Khi Progress == TargetLevelProgress, service bật cờ ShouldShowInLevelActivationPopUp để lần vào level kế tiếp sẽ mở popup thông báo 'Super Charger đã sẵn sàng'. SuperChargerService.IsActive() = IsEligible() && Progress ≥ TargetLevelProgress. Popup: lần đầu đủ điều kiện, ShouldAutoOpenPopUp() trả true vì EventShownInLifeTime còn false → mở SuperChargerJoinPopUp (reason lấy từ GetJoinPopupShowReason: Activate nếu đã đủ tiến độ, Tutorial nếu chưa, Lose sau khi mất); popup gọi MarkEventShownInLifeTime và MarkJoinPopUpShown. SuperChargerProgressView vẽ thanh tiến độ với các vạch ngăn, chữ SuperChargerJoinProgressText khi chưa xong và SuperChargerIsActiveText khi đã kích hoạt. Trong level: SuperChargerInGameManager.Initialize(bottleCollections) đọc config, đặt _moveCount = _bottleCompleted = _superChargerUseCount = 0, _remainingGoal = ChargeMatchCount[0]; sau mỗi lần dùng, IncreaseSuperChargerUseCount tăng index rồi kẹp vào Count−1 và lấy goal ở index đó (mã0.0.3063), chọn view theo SuperChargerType (SuperChargerButtonUI.Initialize) và tạo chiến lược qua SuperChargerStrategyFactory.Create(configModel). Nếu ShouldHaveInitialCharge = true thì TryApplyInitialCharge đặt _remainingGoal = 0 ngay từ đầu (nút đầy sẵn). Nạp: nếu ChargeWithMove = true thì mỗi nước đi (OnAnyMoveStarted) trừ 1 vào _remainingGoal, nhưng CheckMoveIsRepetitive lọc theo state chai hiện tại (nguồn1màu sang chai trống, nguồnheight1 trừ blocker9, hoặc target không đủ top-water); không đọc lịch sử SelectionSystem (mã0.0.3063); nếu ChargeWithMove = false thì mỗi chai hoàn thành (OnAnyBottleCompleted) trừ 1, và CountsTowardCharge chặn màu đã tính rồi (danh sách _completedColors) để mỗi màu chỉ tính một lần. Khi _remainingGoal ≤ 0 nút chuyển trạng thái Ready (SuperChargerButtonInnerView.OnReady, hoạt ảnh readyClip + particle). Dùng: với type ChargeableBottle, ShouldUseAutomatically() trả true nên hệ thống tự kích hoạt (tạo/nạp ChargeableBottleItem trên bàn); với type BestSort, người chơi phải bấm nút (OnUseChargerButtonClicked) → UseSuperCharger() → strategy.Use(source). BestSortSuperChargerStrategy: BestSortTargetFinder.FindSuitableTargets chọn tập chai ứng viên (giới hạn theo BestSortBottleCapByCandidateCount / BestSortMaxEffectedBottleCap), BestSortSolver.Solve chạy 5 pha (TagBottom → CompleteFill → TopColor → BestFit → RandomReverse) để dựng BestSortSolution gồm danh sách BottleSolution; sau đó PlaySuperChargerSequence chạy trail particle từ nút tới các chai (SuperChargerTrailAnimationController), ApplySolutions ghi lại nội dung chai, UnlockCompletedBottles mở khoá chai đã hoàn thành, CompleteOverBoardItemsOnEmptiedCells xử lý vật thể phủ trên ô vừa trống. FinishCharge kiểm tra IsBoardStuck; nếu bàn kẹt sau khi dùng thì TryRescueFromStuck thêm một chai (cờ _addedBottleForStuck) — số liệu này được gửi trong analytics supercharger_used. Kết thúc ván: SuperChargerService.CompleteSuperChargerTargetProgress khi thắng; thua thì trạng thái Lost (ChargerStatus.Lost) và tiến độ bị reset qua TryResetProgress. Mở app: InitializeData → TryResetProgress(onAppLaunch: true) dọn tiến độ nếu người chơi không còn đủ điều kiện.",
+      "finding_id": "MS-CORE-BODY-15",
+      "gap_id": "MS-SuperCharger-G005",
+      "source": [
+        {
+          "file": "../com.grandgames.magicsort_Unity_20260909_112501/RecoveredNative/PseudoC/Assembly-CSharp/Modules/Contexts/GamePlay/SuperCharger/SuperChargerInGameManager.c",
+          "line": 1539,
+          "end_line": 1610,
+          "method": "// ===== SuperChargerInGameManager :: private bool CheckMoveIsRepetitive(",
+          "sha256": "eae335811190de5379ecfb05a379e4fc78858e93e0a6e5cc50b7c1e09f34a275",
+          "body_checked": true,
+          "build": "0.0.3063 ARMv7",
+          "required_body_tokens": []
+        }
+      ],
+      "source_build": "0.0.3063 ARMv7",
+      "runtime_confirmation": "not_claimed",
+      "target_current_sha256": "5b2b68eaee0e439f70cca775ed2620863eb7503decf22111925624b3770fcd23",
+      "original_target_sha256": null,
+      "hash_note": "Original target pre-apply hash unavailable after coordinated root application; sourcebody hashes retained; current target hash recorded explicitly.",
+      "already_applied": true,
+      "apply_rule": "Replace only current==old; skip current==new; conflict otherwise."
+    },
+    {
+      "id": "MS-CORE-EDITORIAL-015",
+      "file": "gdd/MiniGame.json",
+      "absolute_file": "E:/APKExport/MagicSort_HExport/GameDesign/gdd/MiniGame.json",
+      "format": "json_pointer_replace",
+      "pointer": "/flow",
+      "old": "MiniGameStateService.GetEventState() cho ra MiniGameStateType: NoCachedEvent(0) → NotIntroduced(1) → InProgress(2) → TimeIsUp(3) → Claimed(4) → ClaimedAndTimeIsUp(5) → InsufficientLevel(6) → Disable(7) → AssetsNotReady(8). Khi ShouldFetchCurrentEvent(), MiniGameService.TryFetchCurrentEvent() → MiniGameRemoteService.GetEventInfo(config.EventType) trả MiniGameEventInfoResponse; TryStartNewEvent() → MiniGameDataService.StartNewEvent() dựng MiniGameCacheModel mới với TridentCount = MiniGameConfigModel.InitialTridentCount và bắn underwater_treasures_started. Kiếm Trident: sau mỗi level thắng, MiniGameService.TryIncreaseTridentCount(LevelDifficultyType difficulty, bool isFirstTry) → GetTridentIncreaseCountByLevelDifficulty chọn NormalLevelTridentCount / HardLevelTridentCount / SuperHardLevelTridentCount rồi nhân FirstTryMultiplier nếu thắng ngay lần đầu; AddTrident(amount) → MiniGameDataService.ChangeTridentCount(+n), SetLastTridentIncreaseCount(count) để phát animation khi về Home. Chơi: mở MiniGamePopUp → MiniGameController dựng bàn từ MiniGameLevelsConfig.GetStageLevelsData(stage).Levels[CurrentStageSeedIndex]; MiniGameBoardConfig.GetBoardPrefabBySize(boardSize) chọn prefab lưới và BoardItemScale; MiniGameItemDataConfig.GetItemData(itemType) cho Width/Height/Sprite của từng báu vật. Mỗi lần bấm ô: SpendTrident() trừ 1 Trident, AddCurrentStageHitCell(cellId) ghi ô đã đập, MiniGameCellHitResult báo trúng/trượt; IncreaseCurrentStageBoosterHitPercentage() cộng JellyFishHitPercentagePerMove vào thanh booster JellyFish, đủ 100 thì MarkAsCurrentStageDynamicBoosterActivated() cho một lượt đập diện rộng. Tìm hết báu vật của chặng → CompleteCurrentStage() → ClaimStage(stageIndex) trao GetStageReward(stageIndex) (MiniGameConfigModel.Rewards hoặc RewardsWithCollection) với CurrencyEarnReason.MiniGameUnderwaterTreasures (49), analytics underwater_treasures_step_completed (kèm used_trident_count), rồi IncreaseCurrentStage() và reset ô đã đập/booster/seed. Hoàn thành cả 10 chặng: AllStagesCompleted() → ClaimEvent(); nếu MiniGameConfigModel.AutoOpenEnabledOnFinish thì TryClaimEventAutomatically() tự nhận. Offer: MiniGameOfferConfigModel bật gói Trident Deal (DefaultIAPConfigModel hoặc SegmentedIAPConfigModels theo segment, có IAPProductDiscountAmount); mua → TridentOfferPurchased() cộng Trident + thưởng kèm (OfferRewards / OfferRewardsWithCollection), tăng OfferPurchasedCount, chặn khi đạt OfferPurchaseLimit; IAPOrigin.MiniGameOffer (10), IAPReason.MiniGameOffer (12), IAPContext.MiniGame (8), CurrencyEarnReason.MiniGameOffer (53).",
+      "new": "MiniGameStateService.GetEventState() cho ra MiniGameStateType: NoCachedEvent(0) → NotIntroduced(1) → InProgress(2) → TimeIsUp(3) → Claimed(4) → ClaimedAndTimeIsUp(5) → InsufficientLevel(6) → Disable(7) → AssetsNotReady(8). Khi ShouldFetchCurrentEvent(), MiniGameService.TryFetchCurrentEvent() → MiniGameRemoteService.GetEventInfo(config.EventType) trả MiniGameEventInfoResponse; TryStartNewEvent() → MiniGameDataService.StartNewEvent() dựng MiniGameCacheModel mới với TridentCount = MiniGameConfigModel.InitialTridentCount và bắn underwater_treasures_started. Kiếm Trident: sau mỗi level thắng, MiniGameService.TryIncreaseTridentCount(LevelDifficultyType difficulty, bool isFirstTry) → GetTridentIncreaseCountByLevelDifficulty chọn NormalLevelTridentCount / HardLevelTridentCount / SuperHardLevelTridentCount rồi nhân FirstTryMultiplier nếu thắng ngay lần đầu; AddTrident(amount) → MiniGameDataService.ChangeTridentCount(+n), SetLastTridentIncreaseCount(count) để phát animation khi về Home. Chơi: mở MiniGamePopUp → MiniGameController dựng bàn từ MiniGameLevelsConfig.GetStageLevelsData(stage).Levels[CurrentStageSeedIndex]; MiniGameBoardConfig.GetBoardPrefabBySize(boardSize) chọn prefab lưới và BoardItemScale; MiniGameItemDataConfig.GetItemData(itemType) cho Width/Height/Sprite của từng báu vật. Mỗi lần bấm ô: SpendTrident() trừ 1 Trident, AddCurrentStageHitCell(cellId) ghi ô đã đập, MiniGameCellHitResult báo trúng/trượt; TryActivateBoosterDynamically so P với draw System.Random.Next(1,100), tức1..99; roll thất bại mới cộng JellyFishHitPercentagePerMove; roll thành công cùng các gate board/stage sẽ MarkAsCurrentStageDynamicBoosterActivated, không đợi ngưỡng100 (mã0.0.3063). Tìm hết báu vật của chặng → CompleteCurrentStage() → ClaimStage(stageIndex) trao GetStageReward(stageIndex) (MiniGameConfigModel.Rewards hoặc RewardsWithCollection) với CurrencyEarnReason.MiniGameUnderwaterTreasures (49), analytics underwater_treasures_step_completed (kèm used_trident_count), rồi IncreaseCurrentStage() và reset ô đã đập/booster/seed. Hoàn thành cả 10 chặng: AllStagesCompleted() → ClaimEvent(); nếu MiniGameConfigModel.AutoOpenEnabledOnFinish thì TryClaimEventAutomatically() tự nhận. Offer: MiniGameOfferConfigModel bật gói Trident Deal (DefaultIAPConfigModel hoặc SegmentedIAPConfigModels theo segment, có IAPProductDiscountAmount); mua → TridentOfferPurchased() cộng Trident + thưởng kèm (OfferRewards / OfferRewardsWithCollection), tăng OfferPurchasedCount, chặn khi đạt OfferPurchaseLimit; IAPOrigin.MiniGameOffer (10), IAPReason.MiniGameOffer (12), IAPContext.MiniGame (8), CurrencyEarnReason.MiniGameOffer (53).",
+      "finding_id": "MS-CORE-BODY-10",
+      "gap_id": "MS-MiniGame-G004",
+      "source": [
+        {
+          "file": "../com.grandgames.magicsort_Unity_20260909_112501/RecoveredNative/PseudoC/Assembly-CSharp/Modules/Contexts/Home/MiniGame/Scripts/Board/MiniGameController.c",
+          "line": 6747,
+          "end_line": 6875,
+          "method": "// ===== MiniGameController :: private bool TryActivateBoosterDynamically(",
+          "sha256": "4c250ddc2b84710ab8573572f3bbc72ba631478f50b93cbe5c48535905b4e340",
+          "body_checked": true,
+          "build": "0.0.3063 ARMv7",
+          "required_body_tokens": []
+        },
+        {
+          "file": "../com.grandgames.magicsort_Unity_20260909_112501/RecoveredNative/PseudoC/Assembly-CSharp/Modules/Infrastructure/Common/Scripts/RandomUtil.c",
+          "line": 162,
+          "end_line": 191,
+          "method": "// ===== RandomUtil :: public static int GetRandomFromTo(",
+          "sha256": "66126c501e9a70fb19886b5215c066f339e2c30375dba5fb13429487ee92eb05",
+          "body_checked": true,
+          "build": "0.0.3063 ARMv7",
+          "required_body_tokens": []
+        }
+      ],
+      "source_build": "0.0.3063 ARMv7",
+      "runtime_confirmation": "not_claimed",
+      "target_current_sha256": "d1473b5d2d40a00878d4d28438cabaa5685ab386f2faeb066af6c5d9ed99c34e",
+      "original_target_sha256": null,
+      "hash_note": "Original target pre-apply hash unavailable after coordinated root application; sourcebody hashes retained; current target hash recorded explicitly.",
+      "already_applied": true,
+      "apply_rule": "Replace only current==old; skip current==new; conflict otherwise."
+    },
+    {
+      "id": "MS-CORE-EDITORIAL-016",
+      "file": "analysis/02-core-loop.md",
+      "absolute_file": "E:/APKExport/MagicSort_HExport/GameDesign/analysis/02-core-loop.md",
+      "format": "text_exact_replace",
+      "old": "# MagicSort — Cơ chế lõi, booster và trạng thái màn chơi",
+      "new": "# MagicSort — Cơ chế lõi, booster và trạng thái màn chơi\n\n> Cập nhật actual-body15/11/2026 — xem [31-core-body-findings-20261115.md](31-core-body-findings-20261115.md), nguồn native0.0.3063, chưa runtime0.0.3129: ShouldComplete vẫn yêu cầu top-water đầy Height; board có long bottle thêm điều kiện tổng màu==Height hoặc IsLongBottle. SuperCharger.CheckMoveIsRepetitive xét state hiện tại, không đọc SelectionSystem/history. JellyFish dùng probability draw1..99, không có ngưỡng cứng100%/20nước. PlayOn variant1..9 có default behaviour[1,0,0,1,1,1,1,3,4]; variant3 có nhánh riêng watchedCount. Những diễn giải cũ khác các luật này được thay thế bằng report31.\n",
+      "expected_occurrences": 1,
+      "already_applied": true,
+      "source": [
+        {
+          "file": "../com.grandgames.magicsort_Unity_20260909_112501/RecoveredNative/PseudoC/Assembly-CSharp/Modules/Contexts/GamePlay/BoardItems/Scripts/Bottle/BottleItem.c",
+          "line": 5650,
+          "end_line": 5715,
+          "method": "// ===== BottleItem :: private bool ShouldComplete()   [RVA 0x174A924, ok]",
+          "sha256": "e4fb405af0fe63ffe36bf9962b8dcc383461779d50d702a035481df96f08635a",
+          "body_checked": true,
+          "build": "0.0.3063 ARMv7",
+          "required_body_tokens": []
+        },
+        {
+          "file": "../com.grandgames.magicsort_Unity_20260909_112501/RecoveredNative/PseudoC/Assembly-CSharp/Modules/Contexts/GamePlay/PlayOn/Scripts/PlayOnWithRewarded/PlayOnWithRewardedService.c",
+          "line": 687,
+          "end_line": 823,
+          "method": "// ===== PlayOnWithRewardedService :: public List<PlayOnBehaviourType> GetPlayOnBehaviours(",
+          "sha256": "76a2d9193b57c1c0685bba2736edf412b16df608b9c1c5821da3567487cf342d",
+          "body_checked": true,
+          "build": "0.0.3063 ARMv7",
+          "required_body_tokens": []
+        },
+        {
+          "file": "../com.grandgames.magicsort_Unity_20260909_112501/RecoveredNative/PseudoC/Assembly-CSharp/Modules/Contexts/GamePlay/PlayOn/Scripts/PlayOnWithRewarded/PlayOnWithRewardedService.c",
+          "line": 824,
+          "end_line": 848,
+          "method": "// ===== PlayOnWithRewardedService :: public PlayOnBehaviourType GetDefaultPlayOnBehaviour(",
+          "sha256": "76a2d9193b57c1c0685bba2736edf412b16df608b9c1c5821da3567487cf342d",
+          "body_checked": true,
+          "build": "0.0.3063 ARMv7",
+          "required_body_tokens": []
+        },
+        {
+          "file": "../com.grandgames.magicsort_Unity_20260909_112501/RecoveredNative/PseudoC/Assembly-CSharp/Modules/Contexts/Home/MiniGame/Scripts/Board/MiniGameController.c",
+          "line": 6747,
+          "end_line": 6875,
+          "method": "// ===== MiniGameController :: private bool TryActivateBoosterDynamically(",
+          "sha256": "4c250ddc2b84710ab8573572f3bbc72ba631478f50b93cbe5c48535905b4e340",
+          "body_checked": true,
+          "build": "0.0.3063 ARMv7",
+          "required_body_tokens": []
+        },
+        {
+          "file": "../com.grandgames.magicsort_Unity_20260909_112501/RecoveredNative/PseudoC/Assembly-CSharp/Modules/Infrastructure/Common/Scripts/RandomUtil.c",
+          "line": 162,
+          "end_line": 191,
+          "method": "// ===== RandomUtil :: public static int GetRandomFromTo(",
+          "sha256": "66126c501e9a70fb19886b5215c066f339e2c30375dba5fb13429487ee92eb05",
+          "body_checked": true,
+          "build": "0.0.3063 ARMv7",
+          "required_body_tokens": []
+        },
+        {
+          "file": "../com.grandgames.magicsort_Unity_20260909_112501/RecoveredNative/PseudoC/Assembly-CSharp/Modules/Contexts/GamePlay/SuperCharger/SuperChargerInGameManager.c",
+          "line": 1539,
+          "end_line": 1610,
+          "method": "// ===== SuperChargerInGameManager :: private bool CheckMoveIsRepetitive(",
+          "sha256": "eae335811190de5379ecfb05a379e4fc78858e93e0a6e5cc50b7c1e09f34a275",
+          "body_checked": true,
+          "build": "0.0.3063 ARMv7",
+          "required_body_tokens": []
+        }
+      ],
+      "source_build": "0.0.3063 ARMv7",
+      "runtime_confirmation": "not_claimed",
+      "target_current_sha256": "96445b708b5ce980888a201dd9b00277923050f88f89cebca961970d6988359e",
+      "original_target_sha256": null,
+      "hash_note": "Pre-apply target hash unavailable; current hash only. Sourcebody hashes retained.",
+      "apply_rule": "Skip if notice present; otherwise require exact heading occurrence1."
+    },
+    {
+      "id": "MS-CORE-EDITORIAL-017",
+      "file": "analysis/03-level-difficulty.md",
+      "absolute_file": "E:/APKExport/MagicSort_HExport/GameDesign/analysis/03-level-difficulty.md",
+      "format": "text_exact_replace",
+      "old": "# MagicSort — Level, độ khó, tutorial và DLB",
+      "new": "# MagicSort — Level, độ khó, tutorial và DLB\n\n> Cập nhật actual-body15/11/2026 — xem [31-core-body-findings-20261115.md](31-core-body-findings-20261115.md), nguồn native0.0.3063, chưa runtime0.0.3129: ShouldComplete vẫn yêu cầu top-water đầy Height; board có long bottle thêm điều kiện tổng màu==Height hoặc IsLongBottle. SuperCharger.CheckMoveIsRepetitive xét state hiện tại, không đọc SelectionSystem/history. JellyFish dùng probability draw1..99, không có ngưỡng cứng100%/20nước. PlayOn variant1..9 có default behaviour[1,0,0,1,1,1,1,3,4]; variant3 có nhánh riêng watchedCount. Những diễn giải cũ khác các luật này được thay thế bằng report31.\n",
+      "expected_occurrences": 1,
+      "already_applied": true,
+      "source": [
+        {
+          "file": "../com.grandgames.magicsort_Unity_20260909_112501/RecoveredNative/PseudoC/Assembly-CSharp/Modules/Contexts/GamePlay/BoardItems/Scripts/Bottle/BottleItem.c",
+          "line": 5650,
+          "end_line": 5715,
+          "method": "// ===== BottleItem :: private bool ShouldComplete()   [RVA 0x174A924, ok]",
+          "sha256": "e4fb405af0fe63ffe36bf9962b8dcc383461779d50d702a035481df96f08635a",
+          "body_checked": true,
+          "build": "0.0.3063 ARMv7",
+          "required_body_tokens": []
+        },
+        {
+          "file": "../com.grandgames.magicsort_Unity_20260909_112501/RecoveredNative/PseudoC/Assembly-CSharp/Modules/Contexts/GamePlay/PlayOn/Scripts/PlayOnWithRewarded/PlayOnWithRewardedService.c",
+          "line": 687,
+          "end_line": 823,
+          "method": "// ===== PlayOnWithRewardedService :: public List<PlayOnBehaviourType> GetPlayOnBehaviours(",
+          "sha256": "76a2d9193b57c1c0685bba2736edf412b16df608b9c1c5821da3567487cf342d",
+          "body_checked": true,
+          "build": "0.0.3063 ARMv7",
+          "required_body_tokens": []
+        },
+        {
+          "file": "../com.grandgames.magicsort_Unity_20260909_112501/RecoveredNative/PseudoC/Assembly-CSharp/Modules/Contexts/GamePlay/PlayOn/Scripts/PlayOnWithRewarded/PlayOnWithRewardedService.c",
+          "line": 824,
+          "end_line": 848,
+          "method": "// ===== PlayOnWithRewardedService :: public PlayOnBehaviourType GetDefaultPlayOnBehaviour(",
+          "sha256": "76a2d9193b57c1c0685bba2736edf412b16df608b9c1c5821da3567487cf342d",
+          "body_checked": true,
+          "build": "0.0.3063 ARMv7",
+          "required_body_tokens": []
+        },
+        {
+          "file": "../com.grandgames.magicsort_Unity_20260909_112501/RecoveredNative/PseudoC/Assembly-CSharp/Modules/Contexts/Home/MiniGame/Scripts/Board/MiniGameController.c",
+          "line": 6747,
+          "end_line": 6875,
+          "method": "// ===== MiniGameController :: private bool TryActivateBoosterDynamically(",
+          "sha256": "4c250ddc2b84710ab8573572f3bbc72ba631478f50b93cbe5c48535905b4e340",
+          "body_checked": true,
+          "build": "0.0.3063 ARMv7",
+          "required_body_tokens": []
+        },
+        {
+          "file": "../com.grandgames.magicsort_Unity_20260909_112501/RecoveredNative/PseudoC/Assembly-CSharp/Modules/Infrastructure/Common/Scripts/RandomUtil.c",
+          "line": 162,
+          "end_line": 191,
+          "method": "// ===== RandomUtil :: public static int GetRandomFromTo(",
+          "sha256": "66126c501e9a70fb19886b5215c066f339e2c30375dba5fb13429487ee92eb05",
+          "body_checked": true,
+          "build": "0.0.3063 ARMv7",
+          "required_body_tokens": []
+        },
+        {
+          "file": "../com.grandgames.magicsort_Unity_20260909_112501/RecoveredNative/PseudoC/Assembly-CSharp/Modules/Contexts/GamePlay/SuperCharger/SuperChargerInGameManager.c",
+          "line": 1539,
+          "end_line": 1610,
+          "method": "// ===== SuperChargerInGameManager :: private bool CheckMoveIsRepetitive(",
+          "sha256": "eae335811190de5379ecfb05a379e4fc78858e93e0a6e5cc50b7c1e09f34a275",
+          "body_checked": true,
+          "build": "0.0.3063 ARMv7",
+          "required_body_tokens": []
+        }
+      ],
+      "source_build": "0.0.3063 ARMv7",
+      "runtime_confirmation": "not_claimed",
+      "target_current_sha256": "e1f26b129bf4c50f216d6fca3cb1921023f98a9bfb58f85d4103cc179667ba68",
+      "original_target_sha256": null,
+      "hash_note": "Pre-apply target hash unavailable; current hash only. Sourcebody hashes retained.",
+      "apply_rule": "Skip if notice present; otherwise require exact heading occurrence1."
+    },
+    {
+      "id": "MS-CORE-EDITORIAL-018",
+      "file": "analysis/12-gameplay-casebook.md",
+      "absolute_file": "E:/APKExport/MagicSort_HExport/GameDesign/analysis/12-gameplay-casebook.md",
+      "format": "text_exact_replace",
+      "old": "# MagicSort — Từ một nước đổ đến một lần cứu ván: cơ chế, ví dụ và casebook",
+      "new": "# MagicSort — Từ một nước đổ đến một lần cứu ván: cơ chế, ví dụ và casebook\n\n> Cập nhật actual-body15/11/2026 — xem [31-core-body-findings-20261115.md](31-core-body-findings-20261115.md), nguồn native0.0.3063, chưa runtime0.0.3129: ShouldComplete vẫn yêu cầu top-water đầy Height; board có long bottle thêm điều kiện tổng màu==Height hoặc IsLongBottle. SuperCharger.CheckMoveIsRepetitive xét state hiện tại, không đọc SelectionSystem/history. JellyFish dùng probability draw1..99, không có ngưỡng cứng100%/20nước. PlayOn variant1..9 có default behaviour[1,0,0,1,1,1,1,3,4]; variant3 có nhánh riêng watchedCount. Những diễn giải cũ khác các luật này được thay thế bằng report31.\n",
+      "expected_occurrences": 1,
+      "already_applied": true,
+      "source": [
+        {
+          "file": "../com.grandgames.magicsort_Unity_20260909_112501/RecoveredNative/PseudoC/Assembly-CSharp/Modules/Contexts/GamePlay/BoardItems/Scripts/Bottle/BottleItem.c",
+          "line": 5650,
+          "end_line": 5715,
+          "method": "// ===== BottleItem :: private bool ShouldComplete()   [RVA 0x174A924, ok]",
+          "sha256": "e4fb405af0fe63ffe36bf9962b8dcc383461779d50d702a035481df96f08635a",
+          "body_checked": true,
+          "build": "0.0.3063 ARMv7",
+          "required_body_tokens": []
+        },
+        {
+          "file": "../com.grandgames.magicsort_Unity_20260909_112501/RecoveredNative/PseudoC/Assembly-CSharp/Modules/Contexts/GamePlay/PlayOn/Scripts/PlayOnWithRewarded/PlayOnWithRewardedService.c",
+          "line": 687,
+          "end_line": 823,
+          "method": "// ===== PlayOnWithRewardedService :: public List<PlayOnBehaviourType> GetPlayOnBehaviours(",
+          "sha256": "76a2d9193b57c1c0685bba2736edf412b16df608b9c1c5821da3567487cf342d",
+          "body_checked": true,
+          "build": "0.0.3063 ARMv7",
+          "required_body_tokens": []
+        },
+        {
+          "file": "../com.grandgames.magicsort_Unity_20260909_112501/RecoveredNative/PseudoC/Assembly-CSharp/Modules/Contexts/GamePlay/PlayOn/Scripts/PlayOnWithRewarded/PlayOnWithRewardedService.c",
+          "line": 824,
+          "end_line": 848,
+          "method": "// ===== PlayOnWithRewardedService :: public PlayOnBehaviourType GetDefaultPlayOnBehaviour(",
+          "sha256": "76a2d9193b57c1c0685bba2736edf412b16df608b9c1c5821da3567487cf342d",
+          "body_checked": true,
+          "build": "0.0.3063 ARMv7",
+          "required_body_tokens": []
+        },
+        {
+          "file": "../com.grandgames.magicsort_Unity_20260909_112501/RecoveredNative/PseudoC/Assembly-CSharp/Modules/Contexts/Home/MiniGame/Scripts/Board/MiniGameController.c",
+          "line": 6747,
+          "end_line": 6875,
+          "method": "// ===== MiniGameController :: private bool TryActivateBoosterDynamically(",
+          "sha256": "4c250ddc2b84710ab8573572f3bbc72ba631478f50b93cbe5c48535905b4e340",
+          "body_checked": true,
+          "build": "0.0.3063 ARMv7",
+          "required_body_tokens": []
+        },
+        {
+          "file": "../com.grandgames.magicsort_Unity_20260909_112501/RecoveredNative/PseudoC/Assembly-CSharp/Modules/Infrastructure/Common/Scripts/RandomUtil.c",
+          "line": 162,
+          "end_line": 191,
+          "method": "// ===== RandomUtil :: public static int GetRandomFromTo(",
+          "sha256": "66126c501e9a70fb19886b5215c066f339e2c30375dba5fb13429487ee92eb05",
+          "body_checked": true,
+          "build": "0.0.3063 ARMv7",
+          "required_body_tokens": []
+        },
+        {
+          "file": "../com.grandgames.magicsort_Unity_20260909_112501/RecoveredNative/PseudoC/Assembly-CSharp/Modules/Contexts/GamePlay/SuperCharger/SuperChargerInGameManager.c",
+          "line": 1539,
+          "end_line": 1610,
+          "method": "// ===== SuperChargerInGameManager :: private bool CheckMoveIsRepetitive(",
+          "sha256": "eae335811190de5379ecfb05a379e4fc78858e93e0a6e5cc50b7c1e09f34a275",
+          "body_checked": true,
+          "build": "0.0.3063 ARMv7",
+          "required_body_tokens": []
+        }
+      ],
+      "source_build": "0.0.3063 ARMv7",
+      "runtime_confirmation": "not_claimed",
+      "target_current_sha256": "e1a47fd6b30643d5a725f887e46d1379a27aa4e0744d56ed4463bf0bd6ce6525",
+      "original_target_sha256": null,
+      "hash_note": "Pre-apply target hash unavailable; current hash only. Sourcebody hashes retained.",
+      "apply_rule": "Skip if notice present; otherwise require exact heading occurrence1."
+    },
+    {
+      "id": "MS-CORE-EDITORIAL-019",
+      "file": "analysis/14-implementation-design.md",
+      "absolute_file": "E:/APKExport/MagicSort_HExport/GameDesign/analysis/14-implementation-design.md",
+      "format": "text_exact_replace",
+      "old": "# MagicSort — Đặc tả hành vi để triển khai và kiểm thử: state, config, reward và phục hồi",
+      "new": "# MagicSort — Đặc tả hành vi để triển khai và kiểm thử: state, config, reward và phục hồi\n\n> Cập nhật actual-body15/11/2026 — xem [31-core-body-findings-20261115.md](31-core-body-findings-20261115.md), nguồn native0.0.3063, chưa runtime0.0.3129: ShouldComplete vẫn yêu cầu top-water đầy Height; board có long bottle thêm điều kiện tổng màu==Height hoặc IsLongBottle. SuperCharger.CheckMoveIsRepetitive xét state hiện tại, không đọc SelectionSystem/history. JellyFish dùng probability draw1..99, không có ngưỡng cứng100%/20nước. PlayOn variant1..9 có default behaviour[1,0,0,1,1,1,1,3,4]; variant3 có nhánh riêng watchedCount. Những diễn giải cũ khác các luật này được thay thế bằng report31.\n",
+      "expected_occurrences": 1,
+      "already_applied": true,
+      "source": [
+        {
+          "file": "../com.grandgames.magicsort_Unity_20260909_112501/RecoveredNative/PseudoC/Assembly-CSharp/Modules/Contexts/GamePlay/BoardItems/Scripts/Bottle/BottleItem.c",
+          "line": 5650,
+          "end_line": 5715,
+          "method": "// ===== BottleItem :: private bool ShouldComplete()   [RVA 0x174A924, ok]",
+          "sha256": "e4fb405af0fe63ffe36bf9962b8dcc383461779d50d702a035481df96f08635a",
+          "body_checked": true,
+          "build": "0.0.3063 ARMv7",
+          "required_body_tokens": []
+        },
+        {
+          "file": "../com.grandgames.magicsort_Unity_20260909_112501/RecoveredNative/PseudoC/Assembly-CSharp/Modules/Contexts/GamePlay/PlayOn/Scripts/PlayOnWithRewarded/PlayOnWithRewardedService.c",
+          "line": 687,
+          "end_line": 823,
+          "method": "// ===== PlayOnWithRewardedService :: public List<PlayOnBehaviourType> GetPlayOnBehaviours(",
+          "sha256": "76a2d9193b57c1c0685bba2736edf412b16df608b9c1c5821da3567487cf342d",
+          "body_checked": true,
+          "build": "0.0.3063 ARMv7",
+          "required_body_tokens": []
+        },
+        {
+          "file": "../com.grandgames.magicsort_Unity_20260909_112501/RecoveredNative/PseudoC/Assembly-CSharp/Modules/Contexts/GamePlay/PlayOn/Scripts/PlayOnWithRewarded/PlayOnWithRewardedService.c",
+          "line": 824,
+          "end_line": 848,
+          "method": "// ===== PlayOnWithRewardedService :: public PlayOnBehaviourType GetDefaultPlayOnBehaviour(",
+          "sha256": "76a2d9193b57c1c0685bba2736edf412b16df608b9c1c5821da3567487cf342d",
+          "body_checked": true,
+          "build": "0.0.3063 ARMv7",
+          "required_body_tokens": []
+        },
+        {
+          "file": "../com.grandgames.magicsort_Unity_20260909_112501/RecoveredNative/PseudoC/Assembly-CSharp/Modules/Contexts/Home/MiniGame/Scripts/Board/MiniGameController.c",
+          "line": 6747,
+          "end_line": 6875,
+          "method": "// ===== MiniGameController :: private bool TryActivateBoosterDynamically(",
+          "sha256": "4c250ddc2b84710ab8573572f3bbc72ba631478f50b93cbe5c48535905b4e340",
+          "body_checked": true,
+          "build": "0.0.3063 ARMv7",
+          "required_body_tokens": []
+        },
+        {
+          "file": "../com.grandgames.magicsort_Unity_20260909_112501/RecoveredNative/PseudoC/Assembly-CSharp/Modules/Infrastructure/Common/Scripts/RandomUtil.c",
+          "line": 162,
+          "end_line": 191,
+          "method": "// ===== RandomUtil :: public static int GetRandomFromTo(",
+          "sha256": "66126c501e9a70fb19886b5215c066f339e2c30375dba5fb13429487ee92eb05",
+          "body_checked": true,
+          "build": "0.0.3063 ARMv7",
+          "required_body_tokens": []
+        },
+        {
+          "file": "../com.grandgames.magicsort_Unity_20260909_112501/RecoveredNative/PseudoC/Assembly-CSharp/Modules/Contexts/GamePlay/SuperCharger/SuperChargerInGameManager.c",
+          "line": 1539,
+          "end_line": 1610,
+          "method": "// ===== SuperChargerInGameManager :: private bool CheckMoveIsRepetitive(",
+          "sha256": "eae335811190de5379ecfb05a379e4fc78858e93e0a6e5cc50b7c1e09f34a275",
+          "body_checked": true,
+          "build": "0.0.3063 ARMv7",
+          "required_body_tokens": []
+        }
+      ],
+      "source_build": "0.0.3063 ARMv7",
+      "runtime_confirmation": "not_claimed",
+      "target_current_sha256": "1bad01fb476a33c1ed7aead03664ba361b8fdb10d489cd5fc6bc2fded7ce768f",
+      "original_target_sha256": null,
+      "hash_note": "Pre-apply target hash unavailable; current hash only. Sourcebody hashes retained.",
+      "apply_rule": "Skip if notice present; otherwise require exact heading occurrence1."
+    },
+    {
+      "id": "MS-CORE-EDITORIAL-020",
+      "file": "analysis/15-demo-walkthrough.md",
+      "absolute_file": "E:/APKExport/MagicSort_HExport/GameDesign/analysis/15-demo-walkthrough.md",
+      "format": "text_exact_replace",
+      "old": "# MagicSort — Demo có ảnh: chọn mục tiêu, Shuffle, Undo và thoát màn",
+      "new": "# MagicSort — Demo có ảnh: chọn mục tiêu, Shuffle, Undo và thoát màn\n\n> Cập nhật actual-body15/11/2026 — xem [31-core-body-findings-20261115.md](31-core-body-findings-20261115.md), nguồn native0.0.3063, chưa runtime0.0.3129: ShouldComplete vẫn yêu cầu top-water đầy Height; board có long bottle thêm điều kiện tổng màu==Height hoặc IsLongBottle. SuperCharger.CheckMoveIsRepetitive xét state hiện tại, không đọc SelectionSystem/history. JellyFish dùng probability draw1..99, không có ngưỡng cứng100%/20nước. PlayOn variant1..9 có default behaviour[1,0,0,1,1,1,1,3,4]; variant3 có nhánh riêng watchedCount. Những diễn giải cũ khác các luật này được thay thế bằng report31.\n",
+      "expected_occurrences": 1,
+      "already_applied": true,
+      "source": [
+        {
+          "file": "../com.grandgames.magicsort_Unity_20260909_112501/RecoveredNative/PseudoC/Assembly-CSharp/Modules/Contexts/GamePlay/BoardItems/Scripts/Bottle/BottleItem.c",
+          "line": 5650,
+          "end_line": 5715,
+          "method": "// ===== BottleItem :: private bool ShouldComplete()   [RVA 0x174A924, ok]",
+          "sha256": "e4fb405af0fe63ffe36bf9962b8dcc383461779d50d702a035481df96f08635a",
+          "body_checked": true,
+          "build": "0.0.3063 ARMv7",
+          "required_body_tokens": []
+        },
+        {
+          "file": "../com.grandgames.magicsort_Unity_20260909_112501/RecoveredNative/PseudoC/Assembly-CSharp/Modules/Contexts/GamePlay/PlayOn/Scripts/PlayOnWithRewarded/PlayOnWithRewardedService.c",
+          "line": 687,
+          "end_line": 823,
+          "method": "// ===== PlayOnWithRewardedService :: public List<PlayOnBehaviourType> GetPlayOnBehaviours(",
+          "sha256": "76a2d9193b57c1c0685bba2736edf412b16df608b9c1c5821da3567487cf342d",
+          "body_checked": true,
+          "build": "0.0.3063 ARMv7",
+          "required_body_tokens": []
+        },
+        {
+          "file": "../com.grandgames.magicsort_Unity_20260909_112501/RecoveredNative/PseudoC/Assembly-CSharp/Modules/Contexts/GamePlay/PlayOn/Scripts/PlayOnWithRewarded/PlayOnWithRewardedService.c",
+          "line": 824,
+          "end_line": 848,
+          "method": "// ===== PlayOnWithRewardedService :: public PlayOnBehaviourType GetDefaultPlayOnBehaviour(",
+          "sha256": "76a2d9193b57c1c0685bba2736edf412b16df608b9c1c5821da3567487cf342d",
+          "body_checked": true,
+          "build": "0.0.3063 ARMv7",
+          "required_body_tokens": []
+        },
+        {
+          "file": "../com.grandgames.magicsort_Unity_20260909_112501/RecoveredNative/PseudoC/Assembly-CSharp/Modules/Contexts/Home/MiniGame/Scripts/Board/MiniGameController.c",
+          "line": 6747,
+          "end_line": 6875,
+          "method": "// ===== MiniGameController :: private bool TryActivateBoosterDynamically(",
+          "sha256": "4c250ddc2b84710ab8573572f3bbc72ba631478f50b93cbe5c48535905b4e340",
+          "body_checked": true,
+          "build": "0.0.3063 ARMv7",
+          "required_body_tokens": []
+        },
+        {
+          "file": "../com.grandgames.magicsort_Unity_20260909_112501/RecoveredNative/PseudoC/Assembly-CSharp/Modules/Infrastructure/Common/Scripts/RandomUtil.c",
+          "line": 162,
+          "end_line": 191,
+          "method": "// ===== RandomUtil :: public static int GetRandomFromTo(",
+          "sha256": "66126c501e9a70fb19886b5215c066f339e2c30375dba5fb13429487ee92eb05",
+          "body_checked": true,
+          "build": "0.0.3063 ARMv7",
+          "required_body_tokens": []
+        },
+        {
+          "file": "../com.grandgames.magicsort_Unity_20260909_112501/RecoveredNative/PseudoC/Assembly-CSharp/Modules/Contexts/GamePlay/SuperCharger/SuperChargerInGameManager.c",
+          "line": 1539,
+          "end_line": 1610,
+          "method": "// ===== SuperChargerInGameManager :: private bool CheckMoveIsRepetitive(",
+          "sha256": "eae335811190de5379ecfb05a379e4fc78858e93e0a6e5cc50b7c1e09f34a275",
+          "body_checked": true,
+          "build": "0.0.3063 ARMv7",
+          "required_body_tokens": []
+        }
+      ],
+      "source_build": "0.0.3063 ARMv7",
+      "runtime_confirmation": "not_claimed",
+      "target_current_sha256": "996989379e3b3225bd53599de085793ef62e42b289cc749610313453c38c6674",
+      "original_target_sha256": null,
+      "hash_note": "Pre-apply target hash unavailable; current hash only. Sourcebody hashes retained.",
+      "apply_rule": "Skip if notice present; otherwise require exact heading occurrence1."
+    }
+  ],
+  "supporting_tables": {
+    "playon": {
+      "ghidra_address": "0x0434aa6c",
+      "ghidra_base": "0x10000",
+      "elf_virtual_address": "0x0433aa6c",
+      "file_offset": "0x0433aa6c",
+      "elf_sha256": "6bda83a090997fcb74b302ecbfbdee3f2c57e7bbafb18eaf5b7ff6532685aa7e",
+      "variant_1_to_9_raw": [
+        1,
+        0,
+        0,
+        1,
+        1,
+        1,
+        1,
+        3,
+        4
+      ],
+      "method": "ELF32 PT_LOAD VA-to-offset; little-endian uint32[9]",
+      "binary": "../com.grandgames.magicsort_Unity_20260909_112501/MergedAndroid/lib/armeabi-v7a/libil2cpp.so"
+    }
+  }
+}

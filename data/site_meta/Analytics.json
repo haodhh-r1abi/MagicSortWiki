@@ -1,0 +1,718 @@
+{
+  "id": "Analytics",
+  "title": "Analytics & Tracking (đo lường)",
+  "tagline": "Hai đường ống sự kiện song song: Firebase có tham số và backend Grand chỉ có tên sự kiện.",
+  "infobox": [
+    [
+      "Loại",
+      "Live-ops"
+    ],
+    [
+      "Mở khóa",
+      "Luôn bật từ chuỗi bootstrap"
+    ],
+    [
+      "Tham gia",
+      "Cá nhân (không có UI)"
+    ],
+    [
+      "Điều kiện / phụ thuộc",
+      "FirebaseInitializer.IsInitializedSucesfully; AdjustInitializer.InitializeAdjust"
+    ],
+    [
+      "Manager",
+      "EventSender, FirebaseEventSender, GrandEventSender, SessionTracker, FpsTracker, AdjustStatSender, ApplovinStatSender"
+    ]
+  ],
+  "description": [
+    "Đường ống chính là EventSender (singleton): mọi tính năng gọi một hàm Send*Event dựng đối tượng Event gồm tên và Dictionary<string,object>.",
+    "Trước khi gửi, EventSender tự chèn 6 tham số kho đồ và tham số tiến độ (progress, segment) vào mọi sự kiện.",
+    "Danh sách người nhận là IEventSender; hiện chỉ có FirebaseEventSender đẩy lên Firebase Analytics.",
+    "Đường ống thứ hai là GrandEventSender: gửi mốc kỹ thuật dạng chỉ tên sự kiện (không tham số) tới endpoint be-event của backend Grand Games.",
+    "Vì payload chỉ có ClientId và EventName, GrandEventSender nhét dữ liệu thẳng vào tên sự kiện bằng các hậu tố động.",
+    "Khi cần chẩn đoán lỗi, client chụp màn hình và gửi bytes qua endpoint be-event-image-send.",
+    "Adjust lo attribution cài đặt, event token theo 35 mốc level và event token doanh thu theo khoảng 145 sản phẩm IAP.",
+    "AppLovin MAX nhận bộ sự kiện chuẩn hóa để tối ưu quảng cáo: level_start, level_complete, virtual_resource_transaction, tutorial_complete, energy_depleted, use_prop, game_shop_enter.",
+    "SessionTracker đếm phiên chơi và FpsTracker đo FPS trung bình cùng số spike trong cửa sổ 30 giây.",
+    "Tổng cộng client phát khoảng 300 tên sự kiện khác nhau, phủ toàn bộ live-ops, kinh tế, xã hội và chẩn đoán."
+  ],
+  "notes": [
+    "Lưu ý: bản SendEventWithoutExtraParameter bỏ qua bước gộp tham số kho đồ, dùng cho sự kiện tần suất cao hoặc sự kiện kỹ thuật.",
+    "Lưu ý: FirebaseEventSender chỉ nhận string, long và double; kiểu khác bị log 'FirebaseEventSender not supported data type {0}'.",
+    "Lưu ý: nhóm sự kiện chẩn đoán (invalid_config_fetched, firebase_cfg_faulted, persistent_seed_load_failed…) không gắn tham số kho đồ.",
+    "Lưu ý: level_event nén tiến độ nhiều sự kiện vào một chuỗi JSON khóa ngắn {MLS, MLR, MLT, SjSc, SjSs, JrSc, JrSs, JrR} để khỏi phải join nhiều bảng khi phân tích.",
+    "Lưu ý: ConsentStatus của UMP được ghép thẳng vào tên sự kiện (ump_gathered_{0}, ump_already_gathered_{0}).",
+    "Lưu ý: các sự kiện _d14 (ad_impression_d14, in_app_purchase_d14_v2) dành riêng cho cửa sổ 14 ngày đầu sau cài đặt.",
+    "Lưu ý: MeticaInterstitial gửi EventSender revenue/impression/ad_* và TrackAdRevenue còn dựng AdjustAdRevenue→Adjust.TrackAdRevenue (mã0.0.3063). Không mô tả toàn bộ doanh thu Metica chỉ đi ad_*.",
+    "Lưu ý: không chép Adjust event token, Adjust app token, Facebook App Id hay khóa Firebase/AppLovin vào tài liệu.",
+    "Đã giải bằng native0.0.3129ARM64: SessionTracker constructor gán SessionTimeout=TimeSpan.FromMinutes(30). Chưa là runtime session/focus test."
+  ],
+  "how_it_works": [
+    "EventSender.Initialize(firebaseInitializer) tạo singleton và một FirebaseEventSender; SetInventoryService(inventoryService) gắn InventoryParametersProvider.",
+    "Tính năng gọi EventSender.Instance.Send<X>Event(...); hàm dựng new Event(name) rồi AddData/AddDatas các tham số riêng.",
+    "SendEvent gộp thêm 6 tham số kho đồ từ GetInventoryParameters (coin_inventory, life_inventory, limitless_life_duration_inventory, undo_inventory, shuffle_inventory, extra_bottle_inventory).",
+    "Duyệt danh sách _eventSenders và gọi IEventSender.SendEvent; FirebaseEventSender chuyển Dictionary thành mảng Firebase Parameter qua AddParameter.",
+    "Song song, GrandEventSender.SendEvent POST GrandEventSenderRequestModel {ClientId, EventName} tới be-event.",
+    "Tên sự kiện của GrandEventSender ghép hậu tố động: '_{0}' cho số level, 'tutorial_split_{0}', 'ump_gathered_{0}', '_fps{0}_spikes{1}', '_moves{0}_lcd{1}'.",
+    "Timeline khởi động được đo bằng chuỗi mốc riêng: application_context_installer_started → sdk_init_started → init_firebase_started/end → grand_config_fetch_end → login_end → ad_service_initialization_started/end → sdk_init_completed → sync_and_init_end → bootstrap_home_context_started.",
+    "SessionTracker.Awake đọc PlayerPrefs grand_session_counter, last_application_quit, last_session_duration; CheckAndStartSession so thời gian rời app với SessionTimeout.",
+    "Quá hạn thì StartNewSession tăng bộ đếm; GetSession() và GetSessionDurationInSeconds() cung cấp session_count và session_durations cho các event khác.",
+    "FpsTracker.Update đẩy mẫu FPS vào hàng đợi cửa sổ TimeWindow = 30 giây và đếm số frame dưới FpsSpikeThreshold = 25 fps.",
+    "OnApplicationFocus(false) bắn app_focus_lost kèm chuỗi '_fps{0}_spikes{1}'; OnApplicationQuit gọi SaveLastData.",
+    "AdjustInitializer.InitializeAdjust khởi động SDK, OnGetAdid nhận adid, OnGetAttribution gom vào AdjustAttributionModel rồi bắn on_adjust_attribution với 12 tham số.",
+    "AdjustStatSender.TrySendLevelReachedStat(level) tra GetEventTokenByLevel trong 35 mốc từ level 5 tới 4000 và gửi token tương ứng cho Adjust.",
+    "AdjustStatSender.SendIAPStat(productId) quy đổi về USD, tra GetEventTokenByIAPId trong bảng khoảng 145 sản phẩm rồi gửi sự kiện doanh thu.",
+    "Khi cần chẩn đoán, GrandEventSender.SendScreenShotToServer chụp màn hình thành byte[] và gửi qua GrandScreenShotRemoteService.SendScreenShot tới be-event-image-send."
+  ],
+  "reward_tables": [
+    {
+      "title": "35 MỐC LEVEL BÁO CHO ADJUST (AdjustStatConfigModel.LevelStatModels)",
+      "columns": [
+        "Mốc",
+        "Điều kiện",
+        "Phần thưởng"
+      ],
+      "rows": [
+        [
+          "Mốc 1–10",
+          "Level 5, 10, 15, 20, 25, 30, 35, 40, 45, 50",
+          "Mỗi mốc bắn một EventToken riêng cho Adjust"
+        ],
+        [
+          "Mốc 11–15",
+          "Level 60, 70, 80, 90, 100",
+          "Mỗi mốc bắn một EventToken riêng cho Adjust"
+        ],
+        [
+          "Mốc 16–20",
+          "Level 125, 150, 175, 200, 250",
+          "Mỗi mốc bắn một EventToken riêng cho Adjust"
+        ],
+        [
+          "Mốc 21–25",
+          "Level 300, 400, 500, 750, 1000",
+          "Mỗi mốc bắn một EventToken riêng cho Adjust"
+        ],
+        [
+          "Mốc 26–30",
+          "Level 1250, 1500, 1750, 2000, 2250",
+          "Mỗi mốc bắn một EventToken riêng cho Adjust"
+        ],
+        [
+          "Mốc 31–35",
+          "Level 2500, 2750, 3000, 3500, 4000",
+          "Mỗi mốc bắn một EventToken riêng cho Adjust"
+        ]
+      ]
+    },
+    {
+      "title": "SẢN PHẨM IAP CÓ EVENT TOKEN ADJUST (40 mục đầu, tổng ≈145)",
+      "columns": [
+        "Mốc",
+        "Điều kiện",
+        "Phần thưởng"
+      ],
+      "rows": [
+        [
+          "1",
+          "sort.starterbundle1",
+          "EventToken doanh thu Adjust (không chép giá trị)"
+        ],
+        [
+          "2",
+          "sort.apprenticebundle5",
+          "EventToken doanh thu Adjust"
+        ],
+        [
+          "3",
+          "sort.magicianbundle10",
+          "EventToken doanh thu Adjust"
+        ],
+        [
+          "4",
+          "sort.sorcererbundle20",
+          "EventToken doanh thu Adjust"
+        ],
+        [
+          "5",
+          "sort.magebundle50",
+          "EventToken doanh thu Adjust"
+        ],
+        [
+          "6",
+          "sort.wizardbundle100",
+          "EventToken doanh thu Adjust"
+        ],
+        [
+          "7",
+          "sort.coins2",
+          "EventToken doanh thu Adjust"
+        ],
+        [
+          "8",
+          "sort.coins8",
+          "EventToken doanh thu Adjust"
+        ],
+        [
+          "9",
+          "sort.coins15",
+          "EventToken doanh thu Adjust"
+        ],
+        [
+          "10",
+          "sort.coins30",
+          "EventToken doanh thu Adjust"
+        ],
+        [
+          "11",
+          "sort.coins55",
+          "EventToken doanh thu Adjust"
+        ],
+        [
+          "12",
+          "sort.coins100",
+          "EventToken doanh thu Adjust"
+        ],
+        [
+          "13",
+          "sort.endless2",
+          "EventToken doanh thu Adjust"
+        ],
+        [
+          "14",
+          "sort.endless3",
+          "EventToken doanh thu Adjust"
+        ],
+        [
+          "15",
+          "sort.endless5",
+          "EventToken doanh thu Adjust"
+        ],
+        [
+          "16",
+          "sort.endless10",
+          "EventToken doanh thu Adjust"
+        ],
+        [
+          "17",
+          "sort.endless12",
+          "EventToken doanh thu Adjust"
+        ],
+        [
+          "18",
+          "sort.endless15",
+          "EventToken doanh thu Adjust"
+        ],
+        [
+          "19",
+          "sort.endless20",
+          "EventToken doanh thu Adjust"
+        ],
+        [
+          "20",
+          "sort.endless25",
+          "EventToken doanh thu Adjust"
+        ],
+        [
+          "21",
+          "sort.endless50",
+          "EventToken doanh thu Adjust"
+        ],
+        [
+          "22",
+          "sort.endless100",
+          "EventToken doanh thu Adjust"
+        ],
+        [
+          "23",
+          "sort.special0.8",
+          "EventToken doanh thu Adjust"
+        ],
+        [
+          "24",
+          "sort.special1",
+          "EventToken doanh thu Adjust"
+        ],
+        [
+          "25",
+          "sort.special3",
+          "EventToken doanh thu Adjust"
+        ],
+        [
+          "26",
+          "sort.special4",
+          "EventToken doanh thu Adjust"
+        ],
+        [
+          "27",
+          "sort.special4.99",
+          "EventToken doanh thu Adjust"
+        ],
+        [
+          "28",
+          "sort.special5",
+          "EventToken doanh thu Adjust"
+        ],
+        [
+          "29",
+          "sort.special8.5",
+          "EventToken doanh thu Adjust"
+        ],
+        [
+          "30",
+          "sort.special10",
+          "EventToken doanh thu Adjust"
+        ],
+        [
+          "31",
+          "sort.special18",
+          "EventToken doanh thu Adjust"
+        ],
+        [
+          "32",
+          "sort.special20",
+          "EventToken doanh thu Adjust"
+        ],
+        [
+          "33",
+          "sort.special40",
+          "EventToken doanh thu Adjust"
+        ],
+        [
+          "34",
+          "sort.special45",
+          "EventToken doanh thu Adjust"
+        ],
+        [
+          "35",
+          "sort.special50",
+          "EventToken doanh thu Adjust"
+        ],
+        [
+          "36",
+          "sort.special80",
+          "EventToken doanh thu Adjust"
+        ],
+        [
+          "37",
+          "sort.special100",
+          "EventToken doanh thu Adjust"
+        ],
+        [
+          "38",
+          "sort.pawtouch1",
+          "EventToken doanh thu Adjust"
+        ],
+        [
+          "39",
+          "sort.pawtouch3",
+          "EventToken doanh thu Adjust"
+        ],
+        [
+          "40",
+          "sort.pawtouch10",
+          "EventToken doanh thu Adjust"
+        ],
+        [
+          "41–145",
+          "Các nhóm còn lại: sort.endlessnv*, sort.chooseone*, sort.treasuredrill*, sort.magicpass*, sort.underwater*, sort.noads*, các gói bundle và bản web shop w.sort.*",
+          "EventToken doanh thu Adjust (danh sách đầy đủ trong AdjustStatConfigModel.json)"
+        ]
+      ]
+    },
+    {
+      "title": "SỰ KIỆN CHUẨN GỬI CHO APPLOVIN MAX (ApplovinStatSender)",
+      "columns": [
+        "Mốc",
+        "Điều kiện",
+        "Phần thưởng"
+      ],
+      "rows": [
+        [
+          "level_start",
+          "Bắt đầu một level",
+          "Tham số value"
+        ],
+        [
+          "level_complete",
+          "Hoàn thành một level",
+          "Tham số value (số level)"
+        ],
+        [
+          "virtual_resource_transaction",
+          "Nhận hoặc tiêu tài nguyên ảo",
+          "Tham số value (amount)"
+        ],
+        [
+          "tutorial_complete",
+          "Hoàn thành tutorial",
+          "Tham số value"
+        ],
+        [
+          "energy_depleted",
+          "Hết mạng (SendNoMoreLifeEvent)",
+          "Tham số value"
+        ],
+        [
+          "use_prop",
+          "Dùng booster (SendUsedBoostersEvent)",
+          "Tham số value"
+        ],
+        [
+          "game_shop_enter",
+          "Mở cửa hàng (SendShopOpenedEvent)",
+          "Tham số value"
+        ]
+      ]
+    },
+    {
+      "title": "MỐC TĂNG TRƯỞNG THEO CỬA SỔ THỜI GIAN",
+      "columns": [
+        "Mốc",
+        "Điều kiện",
+        "Phần thưởng"
+      ],
+      "rows": [
+        [
+          "level_reach_45_24h",
+          "Đạt level 45 trong 24 giờ đầu sau cài đặt",
+          "Bắn kèm seconds_since_first_open, progress"
+        ],
+        [
+          "level_reach_45_72h",
+          "Đạt level 45 trong 72 giờ đầu",
+          "Bắn kèm seconds_since_first_open, progress"
+        ],
+        [
+          "level_reach_100_72h",
+          "Đạt level 100 trong 72 giờ đầu",
+          "Bắn kèm seconds_since_first_open, progress"
+        ],
+        [
+          "ad_impression_d14",
+          "Hiển thị quảng cáo trong 14 ngày đầu",
+          "Đo doanh thu quảng cáo sớm"
+        ],
+        [
+          "in_app_purchase_d14_v2",
+          "Mua hàng trong 14 ngày đầu",
+          "Đo doanh thu IAP sớm"
+        ]
+      ]
+    }
+  ],
+  "key_numbers": [
+    {
+      "label": "Số tên sự kiện client phát ra",
+      "value": "khoảng 300",
+      "source": "gdd/Analytics.json summary"
+    },
+    {
+      "label": "Số tham số kho đồ chèn tự động",
+      "value": "6",
+      "source": "InventoryParametersProvider.GetInventoryParameters"
+    },
+    {
+      "label": "Cửa sổ tính FPS trung bình",
+      "value": "30 giây",
+      "source": "FpsTracker.TimeWindow"
+    },
+    {
+      "label": "Ngưỡng tính spike giật",
+      "value": "25 fps",
+      "source": "FpsTracker.FpsSpikeThreshold"
+    },
+    {
+      "label": "Số mốc level báo cho Adjust",
+      "value": "35 mốc (level 5 → 4000)",
+      "source": "AdjustStatConfigModel.LevelStatModels"
+    },
+    {
+      "label": "Số sản phẩm IAP có event token Adjust",
+      "value": "khoảng 145",
+      "source": "AdjustStatConfigModel.IAPStatModels"
+    },
+    {
+      "label": "Mốc level đầu tiên báo Adjust",
+      "value": "level 5",
+      "source": "AdjustStatConfigModel.LevelStatModels"
+    },
+    {
+      "label": "Mốc level cuối cùng báo Adjust",
+      "value": "level 4000",
+      "source": "AdjustStatConfigModel.LevelStatModels"
+    },
+    {
+      "label": "Số tham số của on_adjust_attribution",
+      "value": "12 tham số",
+      "source": "AdjustInitializer / on_adjust_attribution"
+    },
+    {
+      "label": "Cửa sổ đo doanh thu sớm",
+      "value": "14 ngày (ad_impression_d14, in_app_purchase_d14_v2)",
+      "source": "EventSender"
+    },
+    {
+      "label": "IEventSender được thêm trong constructor đã đọc",
+      "value": "1 (FirebaseEventSender, constructor0.0.3063; chưa phủ mutation sau đó)",
+      "source": "EventSender._eventSenders"
+    },
+    {
+      "label": "Payload gửi lên be-event",
+      "value": "2 trường (ClientId, EventName)",
+      "source": "GrandEventSenderRequestModel"
+    },
+    {
+      "label": "Endpoint sự kiện kỹ thuật",
+      "value": "/v1/be-event",
+      "source": "BackendEnvironmentConfig.asset sendEventUrl"
+    },
+    {
+      "label": "Endpoint gửi ảnh chẩn đoán",
+      "value": "/v1/be-event-image-send",
+      "source": "BackendEnvironmentConfig.asset sendImageUrl"
+    },
+    {
+      "label": "Số khóa PlayerPrefs của SessionTracker",
+      "value": "3 (grand_session_counter, last_application_quit, last_session_duration)",
+      "source": "SessionTracker"
+    },
+    {
+      "label": "Số khóa nén trong liveOps_stats",
+      "value": "8 (MLS, MLR, MLT, SjSc, SjSs, JrSc, JrSs, JrR)",
+      "source": "EventSender.GetLiveOpsStats"
+    },
+    {
+      "label": "Số sự kiện chuẩn gửi AppLovin MAX",
+      "value": "7",
+      "source": "ApplovinStatSender"
+    },
+    {
+      "label": "Số SDK đo lường bên thứ ba",
+      "value": "3 (Adjust, AppLovin MAX, adapter Metica)",
+      "source": "gdd/Analytics.json summary"
+    },
+    {
+      "label": "Đơn vị tiền tệ mặc định của total_revenue_v2",
+      "value": "USD",
+      "source": "EventSender.SendRevenueEvent"
+    },
+    {
+      "label": "Token Adjust cố định ngoài bảng config",
+      "value": "2 (level đầu tiên và tiêu coin)",
+      "source": "AdjustStatSender.SendLevelStart1Event, SendCoinSpendEvent"
+    },
+    {
+      "label": "Ngưỡng thời gian tính phiên mới",
+      "value": "(chưa xác định, gán trong constructor)",
+      "source": "SessionTracker.SessionTimeout"
+    }
+  ],
+  "config_highlights": [
+    {
+      "key": "SessionTracker.SessionCounterKey",
+      "value": "grand_session_counter",
+      "meaning": "PlayerPrefs đếm số phiên chơi"
+    },
+    {
+      "key": "SessionTracker.LastApplicationQuitTimeKey",
+      "value": "last_application_quit",
+      "meaning": "Thời điểm rời app lần cuối"
+    },
+    {
+      "key": "SessionTracker.LastSessionDurationKey",
+      "value": "last_session_duration",
+      "meaning": "Thời lượng phiên trước"
+    },
+    {
+      "key": "SessionTracker.SessionTimeout",
+      "value": "30 phút — TimeSpan.FromMinutes(30), native hostAPK0.0.3129ARM64; chưa runtime mới16/11",
+      "meaning": "Rời app quá lâu thì tính là phiên mới"
+    },
+    {
+      "key": "FpsTracker.TimeWindow",
+      "value": "30 (giây)",
+      "meaning": "Cửa sổ tính FPS trung bình"
+    },
+    {
+      "key": "FpsTracker.FpsSpikeThreshold",
+      "value": "25",
+      "meaning": "Dưới ngưỡng này tính là một spike giật"
+    },
+    {
+      "key": "InventoryParametersProvider",
+      "value": "coin_inventory, life_inventory, limitless_life_duration_inventory, undo_inventory, shuffle_inventory, extra_bottle_inventory",
+      "meaning": "6 tham số kho đồ chèn vào mọi event gửi qua SendEvent"
+    },
+    {
+      "key": "AdjustInitializer.AdjustAppToken / FacebookAppId",
+      "value": "(không chép — nằm trong constructor)",
+      "meaning": "Khóa SDK Adjust và Facebook App ID"
+    },
+    {
+      "key": "AdjustStatConfigModel.LevelStatModels",
+      "value": "35 mốc: 5, 10, 15, 20, 25, 30, 35, 40, 45, 50, 60, 70, 80, 90, 100, 125, 150, 175, 200, 250, 300, 400, 500, 750, 1000, 1250, 1500, 1750, 2000, 2250, 2500, 2750, 3000, 3500, 4000",
+      "meaning": "Mốc level báo cho Adjust, mỗi mốc một EventToken"
+    },
+    {
+      "key": "AdjustStatConfigModel.IAPStatModels",
+      "value": "≈145 mục ProductId → EventToken",
+      "meaning": "Ánh xạ sản phẩm IAP sang event token doanh thu của Adjust"
+    },
+    {
+      "key": "GrandEventSenderRequestModel",
+      "value": "{ClientId, EventName}",
+      "meaning": "Payload duy nhất gửi lên be-event"
+    },
+    {
+      "key": "GrandEventSender._lowMemoryEventCount",
+      "value": "runtime (int)",
+      "meaning": "Đếm số lần thiếu bộ nhớ (app_low_memory)"
+    },
+    {
+      "key": "GrandEventSender._firstInstallAppV",
+      "value": "runtime (string)",
+      "meaning": "Phiên bản app lúc cài lần đầu"
+    },
+    {
+      "key": "sendEventUrl",
+      "value": "/v1/be-event",
+      "meaning": "Endpoint nhận sự kiện dạng tên"
+    },
+    {
+      "key": "sendImageUrl",
+      "value": "/v1/be-event-image-send",
+      "meaning": "Endpoint nhận ảnh chụp màn hình chẩn đoán"
+    },
+    {
+      "key": "Hậu tố tên sự kiện động",
+      "value": "\"_{0}\" (số level), tutorial_split_{0}, ump_gathered_{0}, ump_already_gathered_{0}",
+      "meaning": "Nhét dữ liệu vào tên vì payload chỉ có EventName"
+    },
+    {
+      "key": "Hậu tố hiệu năng của app_focus_lost",
+      "value": "\"_fps{0}_spikes{1}\" và \"_moves{0}_lcd{1}\"",
+      "meaning": "Gắn FPS trung bình, số spike, số nước đi vào tên sự kiện"
+    },
+    {
+      "key": "EventSender.GetLiveOpsStats",
+      "value": "{MLS, MLR, MLT, SjSc, SjSs, JrSc, JrSs, JrR}",
+      "meaning": "Chuỗi nén tiến độ Magic Lab / Sky Jump / Jetpack Race gắn vào level_event"
+    },
+    {
+      "key": "EventSender.GetStreakStats",
+      "value": "current_hat_count, current_multiplier, multiplier_step, in_streak_tournament",
+      "meaning": "Tiến độ Magic Streak gắn kèm level_event"
+    },
+    {
+      "key": "AdjustStatSender token cố định",
+      "value": "2 token hardcode (không chép giá trị)",
+      "meaning": "Sự kiện bắt đầu level đầu tiên và sự kiện tiêu coin"
+    },
+    {
+      "key": "level_duration",
+      "value": "level_duration, level_start_time, level_end_time, level_end_type, finish_status, average_move_duration, first_move_duration, progress",
+      "meaning": "Đo thời lượng và chất lượng một lượt chơi"
+    },
+    {
+      "key": "iap_purchase",
+      "value": "product_id, product_type, product_rank, currency, price, origin, source, context, from_web, web_product_id, ml_joined, ml_rank, ml_remaining_duration, progress",
+      "meaning": "Sự kiện mua hàng thành công"
+    },
+    {
+      "key": "earned",
+      "value": "coin, life, life_in_seconds, undo, shuffle, extra_bottle, merge_energy, duck_x2_in_seconds, collection_pack_1..5, additional_life_inventory",
+      "meaning": "Tách phần thưởng theo từng loại tài nguyên, kèm reason"
+    },
+    {
+      "key": "coin_spent",
+      "value": "amount, reason, progress",
+      "meaning": "Đo tiêu coin theo enum CurrencySpendReason"
+    },
+    {
+      "key": "startup_network_info / startup_battery_info",
+      "value": "network info, battery_status, battery_level",
+      "meaning": "Chẩn đoán thiết bị lúc khởi động"
+    },
+    {
+      "key": "time_spent_in_operation",
+      "value": "operation_name, time_spent_in_seconds",
+      "meaning": "Đo thao tác nặng"
+    },
+    {
+      "key": "AppStartCount",
+      "value": "PlayerPrefs",
+      "meaning": "Đếm số lần mở app"
+    },
+    {
+      "key": "Nhóm sự kiện lỗi cấu hình",
+      "value": "invalid_config_fetched, firebase_cfg_faulted, leaderboard_faulted, persistent_seed_load_failed, persistent_seed_parse_failed, default_backend_config",
+      "meaning": "Báo remote config hoặc seed level hỏng"
+    },
+    {
+      "key": "Nhóm sự kiện quyền riêng tư",
+      "value": "ump_flow_started, ump_timeout, ump_initialization_skipped, idfa_request_start/end, terms_and_conditions_asked/accepted",
+      "meaning": "Theo dõi luồng đồng ý UMP, IDFA và điều khoản"
+    },
+    {
+      "key": "ApplovinStatSender",
+      "value": "level_start, level_complete, virtual_resource_transaction, tutorial_complete, energy_depleted, use_prop, game_shop_enter",
+      "meaning": "7 sự kiện chuẩn cho tối ưu quảng cáo MAX"
+    }
+  ],
+  "tips": [
+    "Chèn sẵn kho đồ vào mọi sự kiện cho phép phân tích hành vi theo trạng thái tài nguyên mà không cần join bảng.",
+    "Đường ống be-event chỉ nhận tên nên nhẹ và bền, phù hợp cho mốc kỹ thuật lúc khởi động khi chưa có Firebase.",
+    "Gắn FPS và số spike vào tên app_focus_lost cho phép phát hiện thiết bị yếu ngay từ dữ liệu tên sự kiện.",
+    "Bộ sự kiện _d14 tách riêng giúp đo LTV sớm — chỉ số quyết định trong tối ưu chiến dịch quảng cáo."
+  ],
+  "categories": [
+    "Live-ops",
+    "Meta",
+    "Kinh tế"
+  ],
+  "current_native_review_20261116": {
+    "reviewed": "2026-11-16",
+    "scope": "file_only_host_APK_0.0.3129_ARM64_matches_last_observed_installed_version_2026-11-15",
+    "live_installed_20261116_verified": false,
+    "installed_binary_identity_verified": false,
+    "runtime_cases_new": 0,
+    "source_facts": "facts/review_20261116/code_findings.json",
+    "source_facts_sha256": "7adb0ab760cea248de7baaa76671082aff9231708782bc0bbcdadff38e2564ea",
+    "native_sha256": "d901f86380bdecae3a8ec5cf9a9b60acc5132d50dfcf7ec1f606de807e22b2d5",
+    "metadata_sha256": "d019f1787d94bcaf0e31508eea72a86dae8df2f422454f6263a2df7d56e3786a",
+    "findings": [
+      {
+        "id": "MS-CURRENT-20261116-02",
+        "gap_ids": [
+          "MS-Analytics-G004"
+        ],
+        "status": "resolved_static_code_current_build",
+        "conclusion": "Constructor SessionTracker ởVA0x38FE248: FMOV D0,#30.0 tại0x38FE2C0; BL System.TimeSpan.FromMinutes tại0x38FE2C8; STR X0,[X19,#0x28] tại0x38FE2CC. Metadata current đặt SessionTimeout ở0x28. Chốt hằng constructor30phút, giải missing scalar; không gọi session thực luôn đúng30phút vì còn focus/time comparison.",
+        "remaining": "Runtime clock/focus/session emission vẫn cần case riêng; không phải runtime pass.",
+        "evidence": [
+          {
+            "file": "facts/review_20261116/current_build_dump/dump.cs",
+            "line": 210332,
+            "end_line": 210377,
+            "sha256": "47edf53b3a3e0e82dd81316c145d0cebde72ad2bc5d2dfe3a35492e9cfbd2df2",
+            "text": "public class SessionTracker : MonoBehaviour // TypeDefIndex: 4964\n{\n\t// Fields\n\tprivate float _sessionDuration; // 0x18\n\tprivate int _session; // 0x1C\n\tprivate DateTime _lastQuitTime; // 0x20\n\tprivate const string LastApplicationQuitTimeKey = \"last_application_quit\";\n\tprivate const string LastSessionDurationKey = \"last_session_duration\";\n\tprivate readonly TimeSpan SessionTimeout; // 0x28\n\tprivate const string SessionCounterKey = \"grand_session_counter\";\n\n\t// Methods\n\n\t// RVA: 0x38FDD78 Offset: 0x38FDD78 VA: 0x38FDD78\n\tprivate void Awake() { }\n\n\t// RVA: 0x38FDF04 Offset: 0x38FDF04 VA: 0x38FDF04\n\tpublic void Update() { }\n\n\t// RVA: 0x38FDF30 Offset: 0x38FDF30 VA: 0x38FDF30\n\tprivate void OnApplicationFocus(bool hasFocus) { }\n\n\t// RVA: 0x38FE17C Offset: 0x38FE17C VA: 0x38FE17C\n\tprivate void OnApplicationQuit() { }\n\n\t// RVA: 0x38FDF88 Offset: 0x38FDF88 VA: 0x38FDF88\n\tprivate void CheckAndStartSession() { }\n\n\t// RVA: 0x38FE180 Offset: 0x38FE180 VA: 0x38FE180\n\tprivate void StartNewSession() { }\n\n\t// RVA: 0x38FE088 Offset: 0x38FE088 VA: 0x38FE088\n\tprivate void SaveLastData() { }\n\n\t// RVA: 0x38FDDEC Offset: 0x38FDDEC VA: 0x38FDDEC\n\tprivate void LoadLastData() { }\n\n\t// RVA: 0x38FE220 Offset: 0x38FE220 VA: 0x38FE220\n\tpublic int GetSessionDurationInSeconds() { }\n\n\t// RVA: 0x38FE240 Offset: 0x38FE240 VA: 0x38FE240\n\tpublic int GetSession() { }\n\n\t// RVA: 0x38FE248 Offset: 0x38FE248 VA: 0x38FE248\n\tpublic void .ctor() { }\n}",
+            "build": "0.0.3129 ARM64",
+            "kind": "metadata_declaration_not_method_body"
+          },
+          {
+            "file": "facts/review_20261116/current_build_inputs/libil2cpp.so",
+            "sha256": "d901f86380bdecae3a8ec5cf9a9b60acc5132d50dfcf7ec1f606de807e22b2d5",
+            "build": "0.0.3129 ARM64",
+            "kind": "native_instruction_bytes",
+            "start_va": "0x38fe248",
+            "end_va_exclusive": "0x38fe2e4",
+            "file_offset": "0x38fe248",
+            "bytes_sha256": "a168770cc15a1033f5fcdffc98666002becbd4dc261a64dab092e4e8db67b57c"
+          }
+        ]
+      }
+    ],
+    "historical_review_policy": "Existing15Nov fields/gap decisions retained unchanged. Current native review is independent; static evidence is not device acceptance."
+  }
+}

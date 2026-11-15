@@ -1,0 +1,414 @@
+{
+  "id": "SkyJumpWithStage",
+  "title": "Sky Jump 3 chặng (Sky Jump With Stage)",
+  "tagline": "Bản Sky Jump chia thành 3 chặng, mỗi chặng có giải thưởng coin riêng tăng dần từ 5.000 lên 10.000.",
+  "infobox": [
+    [
+      "Loại",
+      "Sự kiện solo"
+    ],
+    [
+      "Mở khóa",
+      "Level 120 (SkyJumpWithStageConfigModel.FirstLevelToShow, client default)"
+    ],
+    [
+      "Thời lượng",
+      "Theo start_time / finish_time do server đặt"
+    ],
+    [
+      "Chu kỳ / lịch",
+      "Giải nối tiếp; lịch giải kế lấy qua /v1/get-staged-sky-jump-starttime"
+    ],
+    [
+      "Tham gia",
+      "Cá nhân, ghép nhóm sau khi Join"
+    ],
+    [
+      "Vật phẩm thu thập",
+      "Bậc thang (Score) theo từng chặng; chặng cuối kết thúc ở bậc 10"
+    ],
+    [
+      "Tiền tệ",
+      "Coin (CurrencyType 1)"
+    ],
+    [
+      "Thưởng chính",
+      "5.000 coin (chặng 1), 7.000 coin (chặng 2), 10.000 coin (chặng 3) — chia đều cho người thắng"
+    ],
+    [
+      "Điều kiện / phụ thuộc",
+      "IsEnabled bật, level >= 120; liên quan SkyJump, JetpackRaceWithStage, JetpackRace, LobbyEventsService"
+    ],
+    [
+      "Manager",
+      "SkyJumpWithStageService, SkyJumpWithStageDataService, SkyJumpWithStageStateService, SkyJumpWithStageRemoteService, SkyJumpWithStageConfigModel"
+    ]
+  ],
+  "description": [
+    "Sky Jump With Stage là bản nâng cấp của Sky Jump: thay vì một thang 10 bậc duy nhất, giải chia thành 3 chặng (stage 0, 1, 2).",
+    "Người chơi leo hết số bậc của chặng hiện tại thì được đẩy sang chặng kế; server trả trường 'stage' trong response.",
+    "Mỗi chặng có giải thưởng coin riêng: 5.000 (chặng 1), 7.000 (chặng 2), 10.000 (chặng 3) theo client default.",
+    "Chặng cuối (index 2) yêu cầu đạt bậc 10 — điều kiện stage == 2 && score == 10 trong IsNextStageIsAvailable.",
+    "Luật cốt lõi giống Sky Jump: thắng level là leo 1 bậc, thua level là rơi khỏi giải với Score = -1.",
+    "Thưởng của chặng được chia đều cho những người cùng về đích (GetPlayerReward chia cho GetWinnerCount).",
+    "Cấu trúc code là bản sao gần như 1:1 của SkyJump với tiền tố SkyJumpWithStage, chỉ thêm khái niệm chặng và bảng thưởng theo chặng.",
+    "Backend dùng bộ endpoint riêng /v1/*-staged-sky-jump-*, tách khỏi endpoint lava của Sky Jump thường.",
+    "Cache thêm trường CurrentStage để nhớ chặng người chơi đang ở."
+  ],
+  "notes": [
+    "Lưu ý: mã0.0.3063 có GetStageStepCount(0/1/2)=5/7/10; đã đọc ELF bằng Ghidra base0x10000 và PT_LOAD mapping. Ngoài index0..2 trả0; chưa xác minh runtime0.0.3129.",
+    "Lưu ý: Chỉ biết chắc chặng cuối kết thúc ở bậc 10; một số nhánh GetMaxReachableScore trả stepCount − 1.",
+    "Lưu ý: GetStageRewardAmount chỉ nhận stageIndex 0/1/2, giá trị khác trả về 0.",
+    "Lưu ý: Không rõ SkyJump và SkyJumpWithStage chạy song song hay loại trừ nhau (cả hai đều EventType = 1 nhưng khác endpoint).",
+    "Lưu ý: Bản staged chỉ có analytics screen/info impression, không có sự kiện join/lost riêng — có thể dùng chung với SkyJump.",
+    "Lưu ý: Không có asset ScriptableObject riêng cho bản staged trong Assets/MonoBehaviour.",
+    "Lưu ý: Khi thiếu dữ liệu chặng, GetCurrentStage trả 0 kèm log lỗi 'CachedEventInfo and SkyJumpWithStageGetNextTournamentStartTimeResponseModel is null'."
+  ],
+  "how_it_works": [
+    "InitializeData() nạp cache và CacheProfileImages() để chuẩn bị avatar.",
+    "IntervalUpdate → ShouldSendGetRequest() → SendGetRequest()/GetRequest() gọi Get(eventType, tournamentId, score) tới /v1/get-staged-sky-jump-tournament.",
+    "Payload SkyJumpWithStageGetRequestModel{tournament_id, tournament_type, score} vừa lấy trạng thái vừa đẩy điểm lên server.",
+    "Response SkyJumpWithStageResponseModel trả thêm trường 'stage' và user_max_step_reached so với bản Sky Jump thường.",
+    "ChangeTournamentCache(response) ghi SkyJumpWithStageCacheModel, trong đó có CurrentStage.",
+    "SkyJumpWithStageStateService.GetEventState() phân trạng thái: Disable(0), ProgressNotEnough(1) khi level < 120, NoCache(2), Join(3), InProgress(4), FinishedByLocal(5), FinishedByRemote(6), ClaimedLocally(8).",
+    "Người chơi Join: CanJoinTournament() → Join() gọi /v1/join-staged-sky-jump-tournament với SkyJumpWithStageJoinRequestModel{tournament_type}.",
+    "Thắng một level: TryIncreaseScore() → SkyJumpWithStageDataService.IncreaseScore() tăng Score và cập nhật MaxScoreReached.",
+    "Thua một level: TryFall() → Fall() đặt Score = -1, người chơi bị loại khỏi giải.",
+    "Số bậc mỗi chặng lấy từ GetStageStepCount(stageIndex) = mảng tĩnh[stageIndex] (chỉ hợp lệ khi stageIndex < 3).",
+    "GetCurrentStageStepCount() / GetMaxReachableScore() trả số bậc của chặng hiện tại để UI vẽ thang đúng độ cao.",
+    "IsNextStageIsAvailable(response) kiểm tra có chặng kế hay không, so sánh stage == 2 và score == 10 kết hợp mốc thời gian UTC.",
+    "Khi leo hết chặng, server đẩy người chơi sang chặng kế và giá trị thưởng đổi theo GetCurrentStageRewardAmount().",
+    "GetStageRewardAmount(stageIndex) ánh xạ 0 → Stage1RewardsAsCoin (5.000), 1 → Stage2RewardsAsCoin (7.000), 2 → Stage3RewardsAsCoin (10.000).",
+    "GetPlayerReward() chia số coin của chặng cho GetWinnerCount() để ra phần thưởng cá nhân.",
+    "Nhận thưởng: ShouldSendClaimRequest() → SendClaimRequest() gọi /v1/claim-staged-sky-jump-tournament; ClaimLocally(didWin) và IncreaseWinRecord() nếu thắng.",
+    "Cuối cùng SendGetNextTournamentStartTimeRequest() gọi /v1/get-staged-sky-jump-starttime lấy lịch và chặng của giải kế tiếp."
+  ],
+  "reward_tables": [
+    {
+      "title": "PHẦN THƯỞNG THEO CHẶNG (SkyJumpWithStageConfigModel.json, client default)",
+      "columns": [
+        "Mốc",
+        "Điều kiện",
+        "Phần thưởng"
+      ],
+      "rows": [
+        [
+          "Chặng 1 (stageIndex 0)",
+          "Về đích chặng 1",
+          "5.000 coin chia đều cho người thắng"
+        ],
+        [
+          "Chặng 2 (stageIndex 1)",
+          "Về đích chặng 2",
+          "7.000 coin chia đều cho người thắng"
+        ],
+        [
+          "Chặng 3 (stageIndex 2)",
+          "Về đích chặng 3, đạt bậc 10",
+          "10.000 coin chia đều cho người thắng"
+        ],
+        [
+          "stageIndex khác",
+          "Giá trị chặng không hợp lệ",
+          "0 coin (GetStageRewardAmount trả 0)"
+        ],
+        [
+          "Bị loại",
+          "Thua 1 level (Score = -1)",
+          "Không có thưởng"
+        ]
+      ]
+    },
+    {
+      "title": "CẤU TRÚC CHẶNG VÀ BẬC",
+      "columns": [
+        "Chặng",
+        "Số bậc",
+        "Ghi chú"
+      ],
+      "rows": [
+        [
+          "Chặng 1 (stage 0)",
+          "5 (mã0.0.3063)",
+          "GetStageStepCount(0)"
+        ],
+        [
+          "Chặng 2 (stage 1)",
+          "7 (mã0.0.3063)",
+          "GetStageStepCount(1)"
+        ],
+        [
+          "Chặng 3 (stage 2)",
+          "10 (mã0.0.3063)",
+          "Điều kiện stage == 2 && score == 10"
+        ],
+        [
+          "Rơi",
+          "Score = -1",
+          "Bị loại vĩnh viễn trong giải đó"
+        ]
+      ]
+    },
+    {
+      "title": "TRẠNG THÁI VÀ ENUM",
+      "columns": [
+        "Enum",
+        "Giá trị",
+        "Ý nghĩa"
+      ],
+      "rows": [
+        [
+          "SkyJumpWithStageStateType",
+          "Disable=0, ProgressNotEnough=1, NoCache=2, Join=3, InProgress=4, FinishedByLocal=5, FinishedByRemote=6, ClaimedLocally=8",
+          "Trạng thái sự kiện (không có giá trị 7)"
+        ],
+        [
+          "SkyJumpWithStagePopUpState",
+          "Disabled=0, Join=1, FirstShowEver=2, FirstShow=3, InProgress=4, Result=5, JoinIntroduced=6",
+          "Layout popup theo giai đoạn"
+        ],
+        [
+          "SkyJumpWithStageImpressionSource",
+          "None=0, LobbyIcon=1, EventJoin=2, EventEnd=3, ScoreIncreased=4",
+          "Nguồn mở popup, gửi kèm analytics"
+        ]
+      ]
+    }
+  ],
+  "key_numbers": [
+    {
+      "label": "Bật mặc định (client)",
+      "value": "false",
+      "source": "SkyJumpWithStageConfigModel.json: IsEnabled"
+    },
+    {
+      "label": "EventType (tournament_type)",
+      "value": "1",
+      "source": "SkyJumpWithStageConfigModel.json: EventType"
+    },
+    {
+      "label": "Level tối thiểu",
+      "value": "120",
+      "source": "SkyJumpWithStageConfigModel.json: FirstLevelToShow"
+    },
+    {
+      "label": "Thưởng chặng 1",
+      "value": "5.000 coin",
+      "source": "SkyJumpWithStageConfigModel.json: Stage1RewardsAsCoin"
+    },
+    {
+      "label": "Thưởng chặng 2",
+      "value": "7.000 coin",
+      "source": "SkyJumpWithStageConfigModel.json: Stage2RewardsAsCoin"
+    },
+    {
+      "label": "Thưởng chặng 3",
+      "value": "10.000 coin",
+      "source": "SkyJumpWithStageConfigModel.json: Stage3RewardsAsCoin"
+    },
+    {
+      "label": "Số chặng",
+      "value": "3 (stageIndex 0, 1, 2)",
+      "source": "SkyJumpWithStageService.GetStageRewardAmount"
+    },
+    {
+      "label": "Bậc kết thúc chặng cuối",
+      "value": "10",
+      "source": "SkyJumpWithStageService.IsNextStageIsAvailable"
+    },
+    {
+      "label": "Điểm khi rơi",
+      "value": "-1",
+      "source": "SkyJumpWithStageService.TryFall / Fall"
+    },
+    {
+      "label": "Số bậc mỗi chặng",
+      "value": "5 / 7 / 10 (stageIndex0 / 1 / 2, mã0.0.3063)",
+      "source": "SkyJumpWithStageService.GetStageStepCount"
+    },
+    {
+      "label": "Số trạng thái sự kiện",
+      "value": "8 giá trị (0–6 và 8)",
+      "source": "SkyJumpWithStageStateType"
+    },
+    {
+      "label": "Số trạng thái popup",
+      "value": "7",
+      "source": "SkyJumpWithStagePopUpState"
+    },
+    {
+      "label": "Số nguồn mở popup",
+      "value": "5",
+      "source": "SkyJumpWithStageImpressionSource"
+    },
+    {
+      "label": "Endpoint lấy trạng thái giải",
+      "value": "/v1/get-staged-sky-jump-tournament",
+      "source": "skyJumpWithStageGetUrl"
+    },
+    {
+      "label": "Endpoint tham gia",
+      "value": "/v1/join-staged-sky-jump-tournament",
+      "source": "skyJumpWithStageJoinUrl"
+    },
+    {
+      "label": "Endpoint nhận thưởng",
+      "value": "/v1/claim-staged-sky-jump-tournament",
+      "source": "skyJumpWithStageClaimUrl"
+    },
+    {
+      "label": "Endpoint lịch giải kế",
+      "value": "/v1/get-staged-sky-jump-starttime",
+      "source": "skyJumpWithStageGetNextTournamentStartTimeUrl"
+    },
+    {
+      "label": "Tên khối đồng bộ",
+      "value": "SkyJumpWithStageSyncModel",
+      "source": "SkyJumpWithStageDataService.GetSyncName"
+    },
+    {
+      "label": "Số điểm vào tính năng",
+      "value": "6",
+      "source": "SkyJumpWithStage.entry_points"
+    },
+    {
+      "label": "Số sự kiện analytics",
+      "value": "2 (screen impression, info impression)",
+      "source": "SkyJumpWithStage.analytics"
+    }
+  ],
+  "config_highlights": [
+    {
+      "key": "SkyJumpWithStageConfigModel.json: IsEnabled",
+      "value": "false",
+      "meaning": "Bật/tắt sự kiện (client default, remote config ghi đè)"
+    },
+    {
+      "key": "SkyJumpWithStageConfigModel.json: EventType",
+      "value": "1",
+      "meaning": "tournament_type gửi backend"
+    },
+    {
+      "key": "SkyJumpWithStageConfigModel.json: FirstLevelToShow",
+      "value": "120",
+      "meaning": "Level tối thiểu để thấy sự kiện"
+    },
+    {
+      "key": "SkyJumpWithStageConfigModel.json: Stage1RewardsAsCoin",
+      "value": "5000",
+      "meaning": "Tổng thưởng coin của chặng 1 (stageIndex 0)"
+    },
+    {
+      "key": "SkyJumpWithStageConfigModel.json: Stage2RewardsAsCoin",
+      "value": "7000",
+      "meaning": "Tổng thưởng coin của chặng 2 (stageIndex 1)"
+    },
+    {
+      "key": "SkyJumpWithStageConfigModel.json: Stage3RewardsAsCoin",
+      "value": "10000",
+      "meaning": "Tổng thưởng coin của chặng 3 (stageIndex 2)"
+    },
+    {
+      "key": "SkyJumpWithStageService.GetStageStepCount",
+      "value": "[5, 7, 10] (mã0.0.3063)",
+      "meaning": "Số bậc mỗi chặng, hợp lệ khi stageIndex < 3"
+    },
+    {
+      "key": "SkyJumpWithStageService.IsNextStageIsAvailable",
+      "value": "stage == 2 && score == 10",
+      "meaning": "Chặng cuối kết thúc ở bậc 10"
+    },
+    {
+      "key": "SkyJumpWithStageService.GetStageRewardAmount",
+      "value": "0→Stage1, 1→Stage2, 2→Stage3, khác→0",
+      "meaning": "Ánh xạ chặng sang tổng thưởng coin"
+    },
+    {
+      "key": "SkyJumpWithStageStateType",
+      "value": "Disable=0 … ClaimedLocally=8",
+      "meaning": "Trạng thái sự kiện"
+    },
+    {
+      "key": "SkyJumpWithStagePopUpState",
+      "value": "Disabled=0, Join=1, FirstShowEver=2, FirstShow=3, InProgress=4, Result=5, JoinIntroduced=6",
+      "meaning": "Layout popup"
+    },
+    {
+      "key": "SkyJumpWithStageImpressionSource",
+      "value": "None=0, LobbyIcon=1, EventJoin=2, EventEnd=3, ScoreIncreased=4",
+      "meaning": "Nguồn mở popup"
+    },
+    {
+      "key": "SkyJumpWithStageResponseModel",
+      "value": "tournament_id, tournament_type, start_time, finish_time, is_finished, is_claimed, user_score, user_max_step_reached, user_details_by_steps, players_images, stage",
+      "meaning": "Trạng thái giải và chặng hiện tại"
+    },
+    {
+      "key": "SkyJumpWithStageGetRequestModel / ClaimRequestModel",
+      "value": "tournament_id, tournament_type, score",
+      "meaning": "Payload Get và Claim"
+    },
+    {
+      "key": "SkyJumpWithStageJoinRequestModel",
+      "value": "tournament_type",
+      "meaning": "Payload Join"
+    },
+    {
+      "key": "SkyJumpWithStageGetNextTournamentStartTimeResponseModel",
+      "value": "tournament_type, tournament_start_time, tournament_end_time (+ CurrentStage)",
+      "meaning": "Lịch và chặng của giải kế"
+    },
+    {
+      "key": "SkyJumpWithStageSyncModel",
+      "value": "IsEventIntroducedEverInLifeTime, WinRecord",
+      "meaning": "Dữ liệu đồng bộ xuyên thiết bị"
+    },
+    {
+      "key": "SkyJumpWithStageCacheModel",
+      "value": "TournamentId, TournamentType, StartTime, FinishTime, IsFinished, IsClaimed, IsClaimedLocally, Score, MaxScoreReached, LastSeenScore, IsIntroduced, SkyJumpWithStageUserDetailsBySteps, PlayerImages, CurrentStage",
+      "meaning": "Cache giải hiện tại"
+    },
+    {
+      "key": "SkyJumpWithStageModel.IsJoinPopupIntroduced",
+      "value": "bool",
+      "meaning": "Đã giới thiệu popup Join hay chưa"
+    },
+    {
+      "key": "SkyJumpWithStageService.GetCurrentStage — log lỗi",
+      "value": "'CachedEventInfo and SkyJumpWithStageGetNextTournamentStartTimeResponseModel is null'",
+      "meaning": "Trả chặng 0 kèm Debug.LogError khi thiếu dữ liệu"
+    },
+    {
+      "key": "Endpoint /v1/get-staged-sky-jump-tournament",
+      "value": "client→server",
+      "meaning": "Lấy trạng thái giải và chặng, đẩy kèm điểm"
+    },
+    {
+      "key": "Endpoint /v1/join-staged-sky-jump-tournament",
+      "value": "client→server",
+      "meaning": "Tham gia giải"
+    },
+    {
+      "key": "Endpoint /v1/claim-staged-sky-jump-tournament",
+      "value": "client→server",
+      "meaning": "Nhận thưởng"
+    },
+    {
+      "key": "Endpoint /v1/get-staged-sky-jump-starttime",
+      "value": "client→server",
+      "meaning": "Lấy lịch giải kế"
+    }
+  ],
+  "tips": [
+    "Chia 3 chặng làm giảm cảm giác 'mất trắng' của bản Sky Jump gốc: người chơi vẫn nhận thưởng ở chặng sớm.",
+    "Thưởng tăng dần 5.000 → 7.000 → 10.000 giữ động lực leo tiếp thay vì dừng ở chặng đầu.",
+    "Dùng chung mã nguồn với Sky Jump giúp vận hành A/B test hai biến thể mà không phải viết lại logic.",
+    "Endpoint riêng cho bản staged cho phép chạy song song hai giải mà không đụng dữ liệu của nhau."
+  ],
+  "categories": [
+    "Sự kiện",
+    "Có bảng xếp hạng",
+    "Live-ops",
+    "Kinh tế"
+  ]
+}

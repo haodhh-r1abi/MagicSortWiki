@@ -1,0 +1,740 @@
+{
+  "id": "LiveOps",
+  "title": "LiveOps & Remote Config",
+  "tagline": "Lớp hạ tầng cho phép vận hành đổi gần như mọi thông số Magic Sort mà không cần build lại app.",
+  "infobox": [
+    [
+      "Loại",
+      "Live-ops"
+    ],
+    [
+      "Mở khóa",
+      "Luôn chạy, khởi tạo ngay khi mở app"
+    ],
+    [
+      "Chu kỳ / lịch",
+      "Fetch mỗi lần mở app; ServerCommunicationModel gọi backend định kỳ mỗi 60 giây"
+    ],
+    [
+      "Tham gia",
+      "Toàn bộ người chơi (không có UI trực tiếp)"
+    ],
+    [
+      "Điều kiện / phụ thuộc",
+      "Firebase Remote Config (82 khoá) + backend Grand Games (get-level-config-v2, get-daily-level-config)"
+    ],
+    [
+      "Manager",
+      "RemoteConfigHandler (kèm FirebaseRemoteConfigResolver, FirebaseRemoteConfigFetcher, GrandRemoteConfigFetcher, UpdateService, HttpProxy, AssetManager)"
+    ]
+  ],
+  "description": [
+    "Hai nguồn config chạy song song: Firebase Remote Config (khoảng 82 khoá, mỗi khoá là chuỗi JSON thành một *ConfigModel) và backend riêng của Grand Games cho cấu hình level.",
+    "Cả hai đều có ba tầng dự phòng: giá trị từ mạng → bản cache trên đĩa → bản mặc định đóng gói trong Resources/DefaultConfigs (56 file JSON).",
+    "Config nào không hợp lệ (IsValid() = false) bị thay bằng cache/mặc định và bắn analytics invalid_config_fetched, tránh config rác làm crash game.",
+    "LiveOps còn quản lý ép cập nhật app: Force Update chặn cứng, Soft Update chỉ nhắc theo giới hạn số lần mỗi phiên.",
+    "Lớp HTTP dùng chung (HttpProxy + BestHTTP + policy Polly) gắn header xác thực Bearer và bảy header thông tin thiết bị cho mọi request.",
+    "WebSocket giữ kênh realtime cho tính năng team/chat, tự ping mỗi 10 giây và tự kết nối lại với delay tăng dần.",
+    "AssetManager tải asset bundle từ xa theo version trong AssetBundleVersions.asset, cho phép đẩy nội dung sự kiện mới xuống mà không cần update store.",
+    "BackendEnvironmentConfig.asset chứa khoảng 150 URL cho hai môi trường stage và production, đổi toàn bộ backend chỉ bằng một asset.",
+    "Màn loading có vòng chờ, mèo hoạt ảnh, chữ cảnh báo tuỳ biến và chữ báo mất mạng; trong game có NoInternetConnectionPopUp.",
+    "AppStartCounterService đếm số lần mở app trong PlayerPrefs khoá \"AppStartCount\", dùng làm điều kiện hiện offer/popup."
+  ],
+  "notes": [
+    "Lưu ý: RootLevelConfigModel.json rỗng, nên toàn bộ cờ A/B mức toàn game chỉ có giá trị đến từ server (server).",
+    "Lưu ý: giá trị thật của các khoá Firebase trên production không nằm trong client — bản mặc định trong Resources/defaultconfigs đa số có IsEnabled = false.",
+    "Lưu ý: fetch Firebase Remote Config có timeout 2,5 giây; quá hạn thì cờ _cancelFetch bật và client dùng bản cũ.",
+    "Lưu ý: bộ đếm _softUpdateShownCount reset mỗi phiên vì UpdateService sống theo vòng đời app.",
+    "Lưu ý: giá trị header thiết bị bị cắt còn tối đa 90 ký tự; thiếu thì ghi \"unknown\".",
+    "Lưu ý: mọi ngoại lệ mạng được quy về ClientStatusCode 900–904 trong ApiResponse thay vì ném exception ra caller.",
+    "Native0.0.3129ARM64: HttpProxyFactoryParams defaults RetryCount3/TimeOut50/GlobalTimeOut50; ProxyFactoryParams defaults Retry3/TimeOut5.0s. Policy delay=0.75*n giây và outertimeout50s. Caller overrides và selectedrequest effective còn partial; không đồng nhất các lớp timeout."
+  ],
+  "how_it_works": [
+    "Mở app: FirebaseInitializer.InitializeFirebase kiểm tra dependency Firebase với timeout 2,5 giây và App Check thử lại tối đa 3 lần.",
+    "Trạng thái khởi tạo được ghi thành chuỗi (_firebaseinitializing_, _firebaseinited_, _fbfailed_, _fbcanceled_) để gắn vào analytics.",
+    "Song song, FirebaseRemoteConfigFetcher chạy InitializeDefaults → FetchRemoteConfig → ActivateRetrievedRemoteConfigValues với timeout 2,5 giây.",
+    "FirebaseRemoteConfigResolver.ResolveAndGetConfigService đọc lần lượt 82 khoá qua FirebaseConfigValueParser.Deserialize<T>.",
+    "ValidateAndFallbackConfigs duyệt các model IRemoteConfigValidatable, gọi IsValid(); model hỏng bị thay và bắn invalid_config_fetched kèm config_name.",
+    "FirebaseConfigPersistenceService.CacheConfigs ghi bản vừa lấy vào file Configs/CachedRemoteConfigs cho lần mở app sau.",
+    "Không có mạng: IsCached → GetRemoteConfigs; không có cache → LoadDefaultConfigs đọc 56 file JSON trong Resources/DefaultConfigs, kèm event SendFirebaseConfigFaultedEvent.",
+    "Sau login, GrandRemoteRegularLevelsConfigResolver.FetchAndResolveConfig(progress) gọi POST get-level-config-v2 với ConfigName, ConfigType, Progress; timeout 2500 ms, retry tối đa 10 lần.",
+    "Kết quả (LevelsConfig, LoopLevelsConfig, BlockerIntroConfigModel) được cache vào GrandConfigs/GrandCachedRemoteConfigs; hỏng hết thì dùng LevelsConfigv2.json và bắn default_backend_config.",
+    "Cấu hình Daily đi đường tương tự qua POST get-daily-level-config, fallback bắn default_backend_daily_config.",
+    "Nếu AppUpdateConfigModel.ForceUpdate = true, UpdateService chặn cứng và mở AppStoreUrl/PlayStoreUrl; nếu SoftUpdate = true thì TryShowSoftUpdateCommand hiện nhắc tối đa SoftUpdateShowPerSession lần (mặc định 1).",
+    "Mọi request đi qua HttpProxy: gắn Authorization Bearer, Content-Type application/json, và khi cần bảy header X-Client-ID, X-Device-Model, X-Device-Name, X-Device-OS, X-Device-Platform, X-Device-Type, X-Game-Build.",
+    "BestHttpRequestService thêm X-Request-ViewId, chọn JSON hoặc protobuf theo cờ IsFlatBuffer, nén gzip khi cần, và bọc bằng policy Polly do HttpRequestPolicyFactory.Get tạo.",
+    "AssetManager phân loại asset (IsRemoteBundle / IsExistInResources), tải tối đa 3 bundle cùng lúc, lưu thành \"{bundleName}_v{version}\" và xoá bản version cũ.",
+    "WebSocketManager.Start(uri) mở kênh teamsChat (wss), WebSocketHearthBeat ping mỗi 10 giây; mất kết nối thì TryReconnect với delay từ 5 giây tới tối đa 120 giây."
+  ],
+  "reward_tables": [
+    {
+      "title": "GIÁ VÀ MỐC KINH TẾ ĐỔI ĐƯỢC TỪ XA (GameEconomyModel)",
+      "columns": [
+        "Khoá",
+        "Giá trị mặc định",
+        "Ý nghĩa"
+      ],
+      "rows": [
+        [
+          "refillPrice",
+          "900 coin",
+          "Giá nạp đầy mạng"
+        ],
+        [
+          "refillDurationAsMinutes",
+          "30 phút",
+          "Thời gian hồi một mạng"
+        ],
+        [
+          "maxLifeAmount",
+          "5 mạng",
+          "Số mạng tối đa"
+        ],
+        [
+          "PlayOnPrice",
+          "900 coin",
+          "Giá Play On lần 1"
+        ],
+        [
+          "SecondPlayOnPrice",
+          "1900 coin",
+          "Giá Play On lần 2"
+        ],
+        [
+          "ThirdSecondPlayOnPrice",
+          "2300 coin",
+          "Giá Play On lần 3"
+        ],
+        [
+          "IsFirstPlayOnFree",
+          "false",
+          "Lần Play On đầu không miễn phí"
+        ],
+        [
+          "initialCoin",
+          "1000 coin",
+          "Coin khởi điểm"
+        ],
+        [
+          "initialUndoAmount",
+          "3 Undo",
+          "Undo khởi điểm"
+        ],
+        [
+          "initialShuffleAmount",
+          "3 Shuffle",
+          "Shuffle khởi điểm"
+        ],
+        [
+          "initialExtraBottleAmount",
+          "3 Extra Bottle",
+          "Extra Bottle khởi điểm"
+        ],
+        [
+          "initialFourthBoosterAmount",
+          "3",
+          "Booster thứ tư khởi điểm"
+        ],
+        [
+          "undoUnlockAtLevel",
+          "Level 15",
+          "Mốc mở khoá Undo"
+        ],
+        [
+          "shuffleUnlockAtLevel",
+          "Level 15",
+          "Mốc mở khoá Shuffle"
+        ],
+        [
+          "extraBottleUnlockAtLevel",
+          "Level 15",
+          "Mốc mở khoá Extra Bottle"
+        ],
+        [
+          "UndoPrice",
+          "300 coin",
+          "Giá mua Undo"
+        ],
+        [
+          "ShufflePrice",
+          "300 coin",
+          "Giá mua Shuffle"
+        ],
+        [
+          "ExtraBottlePrice",
+          "900 coin",
+          "Giá mua Extra Bottle"
+        ],
+        [
+          "MegaShufflePrice",
+          "900 coin",
+          "Giá mua Mega Shuffle"
+        ],
+        [
+          "RevealPrice",
+          "900 coin",
+          "Giá mua Reveal"
+        ],
+        [
+          "RegularLevelWinCoinReward",
+          "20 coin",
+          "Thưởng thắng level thường"
+        ],
+        [
+          "HardLevelWinCoinReward",
+          "60 coin",
+          "Thưởng thắng level Hard"
+        ],
+        [
+          "SuperHardLevelWinCoinReward",
+          "100 coin",
+          "Thưởng thắng level Super Hard"
+        ]
+      ]
+    },
+    {
+      "title": "MỐC HIỆN POPUP ĐÁNH GIÁ (RateUsConfig)",
+      "columns": [
+        "Mốc",
+        "Điều kiện",
+        "Ghi chú"
+      ],
+      "rows": [
+        [
+          "Mốc 1",
+          "Level 20",
+          "RateUsLevels[0]"
+        ],
+        [
+          "Mốc 2",
+          "Level 60",
+          "RateUsLevels[1]"
+        ],
+        [
+          "Mốc 3",
+          "Level 150",
+          "RateUsLevels[2]"
+        ],
+        [
+          "Mốc 4",
+          "Level 300",
+          "RateUsLevels[3]"
+        ],
+        [
+          "LevelToShowRateUs",
+          "Level 35",
+          "Mốc riêng cấu hình cùng file"
+        ]
+      ]
+    },
+    {
+      "title": "CẤU HÌNH CẬP NHẬT APP (AppUpdateConfigModel)",
+      "columns": [
+        "Khoá",
+        "Giá trị mặc định",
+        "Ý nghĩa"
+      ],
+      "rows": [
+        [
+          "SoftUpdate",
+          "false",
+          "Bật nhắc cập nhật mềm"
+        ],
+        [
+          "SoftUpdateShowPerSession",
+          "1",
+          "Số lần hiện nhắc mỗi phiên"
+        ],
+        [
+          "ForceUpdate",
+          "false",
+          "Chặn cứng, buộc cập nhật"
+        ],
+        [
+          "AppStoreUrl",
+          "https://apps.apple.com/us/app/magic-sort/id6499209744",
+          "Nút cập nhật iOS"
+        ],
+        [
+          "PlayStoreUrl",
+          "https://play.google.com/store/apps/details?id=com.grandgames.magicsort",
+          "Nút cập nhật Android"
+        ]
+      ]
+    },
+    {
+      "title": "MÃ LỖI NỘI BỘ CỦA LỚP HTTP (ClientStatusCode)",
+      "columns": [
+        "Mã",
+        "Tên",
+        "Ý nghĩa"
+      ],
+      "rows": [
+        [
+          "900",
+          "RequestBlockedDueToUnauthorized",
+          "Chặn vì chưa xác thực"
+        ],
+        [
+          "901",
+          "RequestException",
+          "Lỗi khi gửi request"
+        ],
+        [
+          "902",
+          "UnexpectedRequestException",
+          "Lỗi không lường trước"
+        ],
+        [
+          "903",
+          "RequestCreationException",
+          "Lỗi khi dựng request"
+        ],
+        [
+          "904",
+          "RequestCancelledException",
+          "Request bị huỷ"
+        ]
+      ]
+    },
+    {
+      "title": "TIMEOUT VÀ RETRY CỦA HẠ TẦNG",
+      "columns": [
+        "Tham số",
+        "Giá trị",
+        "Nơi dùng"
+      ],
+      "rows": [
+        [
+          "FirebaseRemoteConfigFetcher._timeOut",
+          "2,5 giây",
+          "Fetch remote config Firebase"
+        ],
+        [
+          "FirebaseInitializer._cancelInitializationTimeout",
+          "2,5 giây",
+          "Khởi tạo Firebase"
+        ],
+        [
+          "FirebaseInitializer._appCheckMaxRetryCount",
+          "3 lần",
+          "App Check"
+        ],
+        [
+          "GrandRemoteConfigFetcher.FetchTimeoutMilliseconds",
+          "2500 ms",
+          "Lấy config level"
+        ],
+        [
+          "GrandRemoteConfigFetcher.MaxAttemptCount",
+          "10 lần",
+          "Retry config level"
+        ],
+        [
+          "HttpProxy timeoutInSeconds",
+          "5 giây",
+          "Mặc định mọi request"
+        ],
+        [
+          "HttpProxy connectionTimeOutInSeconds",
+          "2 giây",
+          "Mặc định mọi request"
+        ],
+        [
+          "HttpProxy retryCount",
+          "0",
+          "Mặc định mọi request"
+        ],
+        [
+          "WebSocketManager.ReconnectAttemptDelay",
+          "5 giây",
+          "Delay kết nối lại"
+        ],
+        [
+          "WebSocketManager.MaxReconnectDelay",
+          "120 giây",
+          "Delay tối đa"
+        ],
+        [
+          "WebSocketHearthBeat.PingInterval",
+          "10 giây",
+          "Nhịp ping"
+        ],
+        [
+          "AssetManager.ConcurrentDownloadLimit",
+          "3 bundle",
+          "Tải song song"
+        ],
+        [
+          "ServerCommunicationModel.CommunicationIntervalInSeconds",
+          "60 giây",
+          "Chu kỳ gọi backend định kỳ"
+        ]
+      ]
+    }
+  ],
+  "key_numbers": [
+    {
+      "label": "Số khoá Firebase Remote Config",
+      "value": "82 khoá",
+      "source": "FirebaseRemoteConfigResolver.AddRootLevelConfigService"
+    },
+    {
+      "label": "Số file config mặc định đóng gói",
+      "value": "56 file JSON",
+      "source": "FirebaseConfigPersistenceService.LoadDefaultConfigs"
+    },
+    {
+      "label": "Timeout fetch remote config",
+      "value": "2,5 giây",
+      "source": "FirebaseRemoteConfigFetcher._timeOut"
+    },
+    {
+      "label": "Timeout khởi tạo Firebase",
+      "value": "2,5 giây",
+      "source": "FirebaseInitializer._cancelInitializationTimeout"
+    },
+    {
+      "label": "Số lần thử App Check",
+      "value": "3",
+      "source": "FirebaseInitializer._appCheckMaxRetryCount"
+    },
+    {
+      "label": "Timeout lấy config level",
+      "value": "2500 ms",
+      "source": "GrandRemoteConfigFetcher.FetchTimeoutMilliseconds"
+    },
+    {
+      "label": "Số lần retry config level",
+      "value": "10",
+      "source": "GrandRemoteConfigFetcher.MaxAttemptCount"
+    },
+    {
+      "label": "Chu kỳ gọi backend định kỳ",
+      "value": "60 giây",
+      "source": "ServerCommunicationModel.CommunicationIntervalInSeconds"
+    },
+    {
+      "label": "Số lần hiện Soft Update mỗi phiên",
+      "value": "1 (mặc định client)",
+      "source": "AppUpdateConfigModel.SoftUpdateShowPerSession"
+    },
+    {
+      "label": "Timeout mặc định mỗi request",
+      "value": "5 giây (kết nối 2 giây)",
+      "source": "HttpProxy.Post"
+    },
+    {
+      "label": "Retry mặc định mỗi request",
+      "value": "0",
+      "source": "HttpProxy.Post"
+    },
+    {
+      "label": "Độ dài tối đa header thiết bị",
+      "value": "90 ký tự",
+      "source": "HttpProxy.LimitLength"
+    },
+    {
+      "label": "Số header thiết bị gắn kèm",
+      "value": "7 (X-Client-ID, X-Device-Model, X-Device-Name, X-Device-OS, X-Device-Platform, X-Device-Type, X-Game-Build)",
+      "source": "HttpProxy.CacheDeviceInfoHeaders"
+    },
+    {
+      "label": "Dải mã lỗi nội bộ",
+      "value": "900–904",
+      "source": "ClientStatusCode"
+    },
+    {
+      "label": "Số bundle tải song song",
+      "value": "3",
+      "source": "AssetManager.ConcurrentDownloadLimit"
+    },
+    {
+      "label": "Nhịp ping WebSocket",
+      "value": "10 giây",
+      "source": "WebSocketHearthBeat.PingInterval"
+    },
+    {
+      "label": "Delay kết nối lại WebSocket",
+      "value": "từ 5 giây tới tối đa 120 giây",
+      "source": "WebSocketManager.ReconnectAttemptDelay / MaxReconnectDelay"
+    },
+    {
+      "label": "Số URL trong cấu hình backend",
+      "value": "khoảng 150 URL cho stage và production",
+      "source": "BackendEnvironmentConfig.asset"
+    },
+    {
+      "label": "Host stage",
+      "value": "grand-water-sort-stage.grandgamesbe.com",
+      "source": "BackendEnvironmentConfig.get_CurrentSettings"
+    },
+    {
+      "label": "Host production",
+      "value": "api.grandgamestech.com",
+      "source": "BackendEnvironmentConfig.get_CurrentSettings"
+    },
+    {
+      "label": "Cache config Firebase",
+      "value": "Configs/CachedRemoteConfigs",
+      "source": "FirebaseConfigPersistenceService.CachedDirectoryName / CachedFileName"
+    },
+    {
+      "label": "Cache config level",
+      "value": "GrandConfigs/GrandCachedRemoteConfigs",
+      "source": "GrandConfigPersistenceService"
+    },
+    {
+      "label": "Khoá đếm số lần mở app",
+      "value": "\"AppStartCount\" (PlayerPrefs)",
+      "source": "AppStartCounterService.CacheAppStartCount"
+    }
+  ],
+  "config_highlights": [
+    {
+      "key": "Danh sách khoá Firebase Remote Config",
+      "value": "82 khoá (AdConfigModel, AppUpdateConfigModel, BELevelConfig, GameEconomyModel, MagicPassConfigModel, StoreConfigModelV2, …)",
+      "meaning": "Toàn bộ mặt bằng điều khiển từ xa của game"
+    },
+    {
+      "key": "Danh sách file mặc định (LoadDefaultConfigs)",
+      "value": "56 file trong Resources/defaultconfigs",
+      "meaning": "Bản mặc định đóng gói khi không lấy được từ server"
+    },
+    {
+      "key": "AppUpdateConfigModel",
+      "value": "SoftUpdate false, SoftUpdateShowPerSession 1, ForceUpdate false, AppStoreUrl, PlayStoreUrl",
+      "meaning": "Điều khiển ép cập nhật app"
+    },
+    {
+      "key": "HttpConfig.UsePermanentLeaderboardV2",
+      "value": "false",
+      "meaning": "Cờ chuyển sang leaderboard V2"
+    },
+    {
+      "key": "ServerCommunicationModel.CommunicationIntervalInSeconds",
+      "value": "60",
+      "meaning": "Chu kỳ gọi backend định kỳ"
+    },
+    {
+      "key": "GameEconomyModel",
+      "value": "refillPrice 900, maxLifeAmount 5, initialCoin 1000, UndoPrice 300, ShufflePrice 300, ExtraBottlePrice 900, …",
+      "meaning": "Toàn bộ giá và mốc mở khoá kinh tế, đổi được từ xa"
+    },
+    {
+      "key": "RateUsConfig",
+      "value": "RateUsLevels [20, 60, 150, 300], LevelToShowRateUs 35",
+      "meaning": "Mốc level hiện popup đánh giá"
+    },
+    {
+      "key": "RootLevelConfigModel (cờ root-level)",
+      "value": "IsVibrationOn, IsOgPlayStyle, ColorVariant, LevelEndPopupsAbGroup, IsFlatBuffer, InGameBoosterVariant, MegaShuffleRetryCount, … (server)",
+      "meaning": "Cờ A/B và bật/tắt hệ thống ở mức toàn game; file mặc định rỗng"
+    },
+    {
+      "key": "FirebaseRemoteConfigFetcher._timeOut",
+      "value": "2.5",
+      "meaning": "Timeout fetch remote config"
+    },
+    {
+      "key": "FirebaseInitializer._cancelInitializationTimeout / _appCheckMaxRetryCount",
+      "value": "2.5 / 3",
+      "meaning": "Timeout khởi tạo Firebase và số lần thử App Check"
+    },
+    {
+      "key": "GrandRemoteConfigFetcher.FetchTimeoutMilliseconds / MaxAttemptCount",
+      "value": "2500 / 10",
+      "meaning": "Timeout và số lần retry lấy config level"
+    },
+    {
+      "key": "GrandConfigPersistenceService.CachedDirectoryName / CachedRegularLevelsFileName / CachedDailyLevelsFileName",
+      "value": "\"GrandConfigs\" / \"GrandCachedRemoteConfigs\" / \"GrandCachedDailyLevelsRemoteConfigs\"",
+      "meaning": "Đường dẫn cache config level"
+    },
+    {
+      "key": "FirebaseConfigPersistenceService.CachedDirectoryName / CachedFileName / ResourcesDirectoryName",
+      "value": "\"Configs\" / \"CachedRemoteConfigs\" / \"DefaultConfigs\"",
+      "meaning": "Đường dẫn cache config Firebase"
+    },
+    {
+      "key": "ClientStatusCode",
+      "value": "900 / 901 / 902 / 903 / 904",
+      "meaning": "Mã lỗi nội bộ trả trong ApiResponse"
+    },
+    {
+      "key": "HttpProxy.Post/Get tham số mặc định",
+      "value": "timeoutInSeconds=5, connectionTimeOutInSeconds=2, retryCount=0, preventRequestIfNotAuthorized=true, addDeviceInfoHeaders=false",
+      "meaning": "Mặc định cho mọi lời gọi backend"
+    },
+    {
+      "key": "HttpProxy.LimitLength maxLength",
+      "value": "90",
+      "meaning": "Độ dài tối đa của giá trị header thiết bị"
+    },
+    {
+      "key": "AssetManager.ConcurrentDownloadLimit",
+      "value": "3",
+      "meaning": "Số bundle tải song song"
+    },
+    {
+      "key": "WebSocketManager.ReconnectAttemptDelay / MaxReconnectDelay; WebSocketHearthBeat.PingInterval",
+      "value": "5 / 120 / 10",
+      "meaning": "Tham số giữ kết nối realtime"
+    },
+    {
+      "key": "AppStartCount",
+      "value": "PlayerPrefs int, tăng mỗi lần mở app",
+      "meaning": "Số phiên mở app, dùng cho điều kiện hiện offer và analytics"
+    },
+    {
+      "key": "AssetBundleVersions.asset",
+      "value": "androidVersionInfo[], iosVersionInfo[] (tên bundle, version, bucket folder)",
+      "meaning": "Phiên bản bundle từ xa"
+    },
+    {
+      "key": "BackendEnvironmentConfig.asset",
+      "value": "~150 URL cho stage và production",
+      "meaning": "Toàn bộ endpoint backend"
+    },
+    {
+      "key": "LoadingAnimationConfig",
+      "value": "tham số tween cho chữ loading/cảnh báo",
+      "meaning": "Cấu hình hoạt ảnh màn loading"
+    },
+    {
+      "key": "AssetBundles/{platform}/{bundle}_v{version}",
+      "value": "file trong persistent path",
+      "meaning": "Nơi lưu bundle tải về, bản version cũ bị xoá"
+    },
+    {
+      "key": "resources_assets_manifest",
+      "value": "manifest trong Resources",
+      "meaning": "Danh sách asset có sẵn trong build"
+    }
+  ],
+  "tips": [
+    "Vận hành có thể tắt gần như mọi sự kiện bằng cách đặt IsEnabled trong *ConfigModel tương ứng — bản đóng gói đa số để false.",
+    "Chuỗi trạng thái Firebase (_fbfailed_, _fbcanceled_) được gắn vào tên event analytics để đo tỉ lệ khởi tạo hỏng.",
+    "Các mốc khởi động (bootstrap_application_context_started/end, application_scene_to_home_scene_started) cho phép đo thời gian vào game.",
+    "Đổi BackendEnvironmentConfig là cách duy nhất chuyển toàn bộ backend giữa stage và production.",
+    "AssetManager kết hợp RemoteAssetController cho phép popup sự kiện hiện hình đúng dù prefab gốc không nhúng ảnh."
+  ],
+  "categories": [
+    "Live-ops",
+    "Meta",
+    "Kinh tế"
+  ],
+  "current_native_review_20261116": {
+    "reviewed": "2026-11-16",
+    "scope": "file_only_host_APK_0.0.3129_ARM64_matches_last_observed_installed_version_2026-11-15",
+    "live_installed_20261116_verified": false,
+    "installed_binary_identity_verified": false,
+    "runtime_cases_new": 0,
+    "source_facts": "facts/review_20261116/code_findings.json",
+    "source_facts_sha256": "7adb0ab760cea248de7baaa76671082aff9231708782bc0bbcdadff38e2564ea",
+    "native_sha256": "d901f86380bdecae3a8ec5cf9a9b60acc5132d50dfcf7ec1f606de807e22b2d5",
+    "metadata_sha256": "d019f1787d94bcaf0e31508eea72a86dae8df2f422454f6263a2df7d56e3786a",
+    "findings": [
+      {
+        "id": "MS-CURRENT-20261116-03",
+        "gap_ids": [
+          "MS-LiveOps-G004"
+        ],
+        "status": "partial_static_code_current_build",
+        "conclusion": "Constructor VA0x38C782C: literal pair int32[3,50] tạiVA0x3D94C18 được LDR D0 rồi STR D0 vào self+0x10 (RetryCount3,TimeOut50); MOV W8,#50 rồi STR W8 vào+0x18(GlobalTimeOut50). Metadata current xác nhận offsets. Đây là defaults của parameter object, chưa phải mọi request effective hoặc đơn vị timeout đã trace qua consumer.",
+        "remaining": "Còn CreateForLogin/Create caller overrides và Get policy units/context; không thay một request default5s/2s bằng factory50 một cách toàn cục.",
+        "evidence": [
+          {
+            "file": "facts/review_20261116/current_build_dump/dump.cs",
+            "line": 15061,
+            "end_line": 15116,
+            "sha256": "47edf53b3a3e0e82dd81316c145d0cebde72ad2bc5d2dfe3a35492e9cfbd2df2",
+            "text": "public class HttpProxyFactoryParams // TypeDefIndex: 421\n{\n\t// Fields\n\t[CompilerGenerated]\n\tprivate int <RetryCount>k__BackingField; // 0x10\n\t[CompilerGenerated]\n\tprivate int <TimeOut>k__BackingField; // 0x14\n\t[CompilerGenerated]\n\tprivate int <GlobalTimeOut>k__BackingField; // 0x18\n\t[CompilerGenerated]\n\tprivate JsonSerializerSettings <JsonSerializerSettings>k__BackingField; // 0x20\n\tpublic TokenService TokenService; // 0x28\n\n\t// Properties\n\tpublic int RetryCount { get; set; }\n\tpublic int TimeOut { get; set; }\n\tpublic int GlobalTimeOut { get; set; }\n\tpublic JsonSerializerSettings JsonSerializerSettings { get; set; }\n\n\t// Methods\n\n\t[CompilerGenerated]\n\t// RVA: 0x38C77EC Offset: 0x38C77EC VA: 0x38C77EC\n\tpublic int get_RetryCount() { }\n\n\t[CompilerGenerated]\n\t// RVA: 0x38C77F4 Offset: 0x38C77F4 VA: 0x38C77F4\n\tpublic void set_RetryCount(int value) { }\n\n\t[CompilerGenerated]\n\t// RVA: 0x38C77FC Offset: 0x38C77FC VA: 0x38C77FC\n\tpublic int get_TimeOut() { }\n\n\t[CompilerGenerated]\n\t// RVA: 0x38C7804 Offset: 0x38C7804 VA: 0x38C7804\n\tpublic void set_TimeOut(int value) { }\n\n\t[CompilerGenerated]\n\t// RVA: 0x38C780C Offset: 0x38C780C VA: 0x38C780C\n\tpublic int get_GlobalTimeOut() { }\n\n\t[CompilerGenerated]\n\t// RVA: 0x38C7814 Offset: 0x38C7814 VA: 0x38C7814\n\tpublic void set_GlobalTimeOut(int value) { }\n\n\t[CompilerGenerated]\n\t// RVA: 0x38C781C Offset: 0x38C781C VA: 0x38C781C\n\tpublic JsonSerializerSettings get_JsonSerializerSettings() { }\n\n\t[CompilerGenerated]\n\t// RVA: 0x38C7824 Offset: 0x38C7824 VA: 0x38C7824\n\tpublic void set_JsonSerializerSettings(JsonSerializerSettings value) { }\n\n\t// RVA: 0x38C782C Offset: 0x38C782C VA: 0x38C782C\n\tpublic void .ctor() { }\n}",
+            "build": "0.0.3129 ARM64",
+            "kind": "metadata_declaration_not_method_body"
+          },
+          {
+            "file": "facts/review_20261116/current_build_inputs/libil2cpp.so",
+            "sha256": "d901f86380bdecae3a8ec5cf9a9b60acc5132d50dfcf7ec1f606de807e22b2d5",
+            "build": "0.0.3129 ARM64",
+            "kind": "native_instruction_bytes",
+            "start_va": "0x38c782c",
+            "end_va_exclusive": "0x38c7848",
+            "file_offset": "0x38c782c",
+            "bytes_sha256": "07d1e0fecca938b24026859d6f160f4c18e617da8d43338b381c37207bae76e8"
+          },
+          {
+            "file": "facts/review_20261116/current_build_inputs/libil2cpp.so",
+            "sha256": "d901f86380bdecae3a8ec5cf9a9b60acc5132d50dfcf7ec1f606de807e22b2d5",
+            "build": "0.0.3129 ARM64",
+            "kind": "native_instruction_bytes",
+            "start_va": "0x3d94c18",
+            "end_va_exclusive": "0x3d94c20",
+            "file_offset": "0x3d94c18",
+            "bytes_sha256": "e7a282d897df827f145713dac7693e466127bfae4a6cbdd9a23aa32f25ade3a9"
+          }
+        ]
+      },
+      {
+        "id": "MS-CURRENT-20261116-06",
+        "gap_ids": [
+          "MS-LiveOps-G003"
+        ],
+        "status": "partial_static_code_current_build",
+        "conclusion": "ProxyFactoryParams constructor0x38C7B94 ghi packed64bit0x40A0000000000003 vào self+0x18: Retry3 và float TimeOut5.0(+0x1C). PolicyGet đọc TimeOut, gọi TimeSpan.FromSeconds→TimeoutAsync; Retry>=1 vào WaitAndRetryAsync, nhỏ hơn dùng NoOp. Retry lambda0x38C7FA4 đổi sleepduration(int) sang float, nhân FMOV S1,#0.75, đổi double và gọi FromSeconds: delay=0.75*n giây. Outer timeout tạo double50.0 qua MOVZ X8,#0x4049,LSL48 rồi FromSeconds/TimeoutAsync; không phải global scalar mất ABI nữa. Những hằng này chỉ thuộc policy method đã chỉ định.",
+        "remaining": "Scalar/units/backoff đã giải. Exception/result predicate và mọi caller override/selectedrequest runtime còn cần review; không gọi full network policy matrix runtime pass.",
+        "evidence": [
+          {
+            "file": "facts/review_20261116/current_build_dump/dump.cs",
+            "line": 15140,
+            "end_line": 15183,
+            "sha256": "47edf53b3a3e0e82dd81316c145d0cebde72ad2bc5d2dfe3a35492e9cfbd2df2",
+            "text": "public class ProxyFactoryParams // TypeDefIndex: 423\n{\n\t// Fields\n\t[CompilerGenerated]\n\tprivate AsyncTimeoutPolicy<HTTPResponse> <TimeoutPolicy>k__BackingField; // 0x10\n\t[CompilerGenerated]\n\tprivate int <Retry>k__BackingField; // 0x18\n\t[CompilerGenerated]\n\tprivate float <TimeOut>k__BackingField; // 0x1C\n\n\t// Properties\n\tpublic AsyncTimeoutPolicy<HTTPResponse> TimeoutPolicy { get; set; }\n\tpublic int Retry { get; set; }\n\tpublic float TimeOut { get; set; }\n\n\t// Methods\n\n\t[CompilerGenerated]\n\t// RVA: 0x38C7B64 Offset: 0x38C7B64 VA: 0x38C7B64\n\tpublic AsyncTimeoutPolicy<HTTPResponse> get_TimeoutPolicy() { }\n\n\t[CompilerGenerated]\n\t// RVA: 0x38C7B6C Offset: 0x38C7B6C VA: 0x38C7B6C\n\tpublic void set_TimeoutPolicy(AsyncTimeoutPolicy<HTTPResponse> value) { }\n\n\t[CompilerGenerated]\n\t// RVA: 0x38C7B74 Offset: 0x38C7B74 VA: 0x38C7B74\n\tpublic int get_Retry() { }\n\n\t[CompilerGenerated]\n\t// RVA: 0x38C7B7C Offset: 0x38C7B7C VA: 0x38C7B7C\n\tpublic void set_Retry(int value) { }\n\n\t[CompilerGenerated]\n\t// RVA: 0x38C7B84 Offset: 0x38C7B84 VA: 0x38C7B84\n\tpublic float get_TimeOut() { }\n\n\t[CompilerGenerated]\n\t// RVA: 0x38C7B8C Offset: 0x38C7B8C VA: 0x38C7B8C\n\tpublic void set_TimeOut(float value) { }\n\n\t// RVA: 0x38C7B94 Offset: 0x38C7B94 VA: 0x38C7B94\n\tpublic void .ctor() { }\n}",
+            "build": "0.0.3129 ARM64",
+            "kind": "metadata_declaration_not_method_body"
+          },
+          {
+            "file": "facts/review_20261116/current_build_dump/dump.cs",
+            "line": 15211,
+            "end_line": 15217,
+            "sha256": "47edf53b3a3e0e82dd81316c145d0cebde72ad2bc5d2dfe3a35492e9cfbd2df2",
+            "text": "public static class HttpRequestPolicyFactory // TypeDefIndex: 425\n{\n\t// Methods\n\n\t// RVA: 0x38C7BA8 Offset: 0x38C7BA8 VA: 0x38C7BA8\n\tpublic static IAsyncPolicy<HTTPResponse> Get(ProxyFactoryParams proxyFactoryParams) { }\n}",
+            "build": "0.0.3129 ARM64",
+            "kind": "metadata_declaration_not_method_body"
+          },
+          {
+            "file": "facts/review_20261116/current_build_inputs/libil2cpp.so",
+            "sha256": "d901f86380bdecae3a8ec5cf9a9b60acc5132d50dfcf7ec1f606de807e22b2d5",
+            "build": "0.0.3129 ARM64",
+            "kind": "native_instruction_bytes",
+            "start_va": "0x38c7b94",
+            "end_va_exclusive": "0x38c7ba8",
+            "file_offset": "0x38c7b94",
+            "bytes_sha256": "ce915129499aa9bf0b99b571b92b3e533105af1f7f526eab42564fc51d021c9b"
+          },
+          {
+            "file": "facts/review_20261116/current_build_inputs/libil2cpp.so",
+            "sha256": "d901f86380bdecae3a8ec5cf9a9b60acc5132d50dfcf7ec1f606de807e22b2d5",
+            "build": "0.0.3129 ARM64",
+            "kind": "native_instruction_bytes",
+            "start_va": "0x38c7ba8",
+            "end_va_exclusive": "0x38c7f0c",
+            "file_offset": "0x38c7ba8",
+            "bytes_sha256": "96f5818f30f94ded37a9438a036f6deb83779fb9315f0a658e2d10f12d625674"
+          },
+          {
+            "file": "facts/review_20261116/current_build_inputs/libil2cpp.so",
+            "sha256": "d901f86380bdecae3a8ec5cf9a9b60acc5132d50dfcf7ec1f606de807e22b2d5",
+            "build": "0.0.3129 ARM64",
+            "kind": "native_instruction_bytes",
+            "start_va": "0x38c7fa4",
+            "end_va_exclusive": "0x38c8008",
+            "file_offset": "0x38c7fa4",
+            "bytes_sha256": "73062ada8c768c58ea099a39857bdcfe2c1958ddeb242838431e7a559ada3c2f"
+          }
+        ]
+      }
+    ],
+    "historical_review_policy": "Existing15Nov fields/gap decisions retained unchanged. Current native review is independent; static evidence is not device acceptance."
+  }
+}

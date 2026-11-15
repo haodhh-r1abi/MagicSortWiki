@@ -1,0 +1,3591 @@
+{
+  "id": "Collection",
+  "name": "Collection (bộ sưu tập thẻ)",
+  "category": "Event",
+  "managers": [
+    "Modules.Contexts.Home.Collection.Scripts.CollectionService",
+    "Modules.Contexts.Home.Collection.Scripts.CollectionDataService",
+    "Modules.Contexts.Home.Collection.Scripts.CollectionStateService",
+    "Modules.Contexts.Home.Collection.Scripts.CollectionRemoteService",
+    "Modules.Contexts.Home.Collection.Scripts.CollectionConfigModel"
+  ],
+  "summary": "Collection là sự kiện sưu tập thẻ theo mùa. Dữ liệu collection_4 và collection_5 trong export có15theme, mỗi theme9thẻ, tổng135thẻ; chưa có full data collection_1/2/3 để khái quát. Trong hai bộ đã có nguồn, thẻ có 1–5 sao và một số thẻ Gold ở các theme cuối. Người chơi mở gói thẻ (CollectionPack, 5 loại chứa 2/3/4/5/6 thẻ) nhận được từ level, sự kiện, rương, offer; thẻ trùng biến thành sao dư dùng để mở Bonus Chest theo mốc sao. Hoàn thành đủ 9 thẻ của một theme được thưởng theme; hoàn thành cả 15 theme được token (ví dụ 'Summer Badge') và mở lượt chơi Gold Collection — vòng thứ hai với thẻ vàng và token vàng ('Grand Summer Badge'). Trong team, người chơi có thể tặng thẻ trùng và xin thẻ thiếu (giới hạn theo ngày). Token nhận được có thể trang bị lên hồ sơ.",
+  "unlock": "CollectionService.IsEligible() dùng CollectionStateService.IsEligible(): CollectionConfigModel.IsEnabled && level >= CollectionConfigModel.FirstLevelToShow (GetCollectionUnlockLevel() trả thẳng FirstLevelToShow; UI hiển thị 'Unlock Collection at Level {0}!' — localization CollectionUnlock). Ngoài ra asset bundle của bộ sưu tập phải tải xong: IsPlayerLevelEnoughForBundleDownload() so level với CollectionConfigModel.MinBundleDownloadLevel, IsCollectionAssetsDownloadedAndLoaded(bundleName).",
+  "entry_points": [
+    "Icon Collection ở Home (CollectionController / CollectionView)",
+    "CollectionThemesPopUp — danh sách 15 theme, CollectionCardView cho từng thẻ",
+    "CollectionCardReceivedPopUp — tự bật khi mở gói thẻ (CollectionService.ShouldShowCardReceivedPopUp)",
+    "CollectionThemeCompletedPopUp — hoàn thành một theme (ShouldShowThemeCompletedPopup)",
+    "CollectionCompletedPopUp — hoàn thành cả bộ",
+    "CollectionBonusChestPopUp — mở rương bằng sao dư",
+    "CollectionTokenPopUp — trang bị token",
+    "TryShowCollectionActivationCommand — popup khi bộ sưu tập mới bắt đầu (ShouldShowCollectionActivationPopUp)",
+    "Team chat: gửi/xin thẻ (CollectionCardSendRequestView)",
+    "CollectionInfoPopUp / CollectionMoreInformationPopUp — luật và xác suất"
+  ],
+  "flow": "CollectionStateService.GetEventState() cho ra CollectionStateType: NoCachedEvent(0) → NotIntroduced(1) → InProgress(2) → TimeIsUp(3) → Claimed(4) → ClaimedAndTimeIsUp(5) → InsufficientLevel(6) → Disable(7). Khi ShouldFetchCurrentEvent(), CollectionService.TryFetchCurrentEvent() → CollectionRemoteService.GetEventInfo(config.EventType) trả CollectionResponseModel{EventId, EventType, StartTime, FinishTime, Segment, CollectionId}. CollectionId trỏ tới file dữ liệu tĩnh trong Resources (collection_4.json / collection_5.json); InitializeCollectionDataMaps(TextAsset) nạp CollectionData{Id, Name, GoldName, TokenId, GoldTokenId, TokenName, GoldTokenName, Themes[], Packs[]} rồi dựng _cardIdDataMap, _cardIdThemeMap, _packIdCardCountMap và _cardPoolMultiplierMap. Song song, TryLoadCollectionBundleAssets() tải hai bundle: '<collectionId>_theme_icons' và các bundle icon thẻ. Nhận gói thẻ: CollectionService.OpenPack(packId, CurrencyEarnReason source) dispatch theo packId — 1,2,3 → OpenBasicPack; 4 → OpenMiddlePack; 5 → OpenPremiumPack — trả OpenedCardPackData{PackId, Cards}. AddOpenedPackCardsToInventory() cộng thẻ vào CardInventory (CardInventoryDataModel{CardId, CardCount, IsNewCard}) và bắn card_received. Thẻ trùng cộng vào sao dư: GetExtraStarCount() = tổng (CardCount − 1) × StarCount trên toàn kho. Rương thưởng: CollectionConfigModel.BonusChests là danh sách CollectionBonusChestModel{StarCount, ChestReward, ChestRewardWithoutCollection}; đủ mốc sao thì OpenBonusChest(chestIndex) → GiveBonusChestReward() với CurrencyEarnReason.CollectionChest (33) và analytics star_chest_opened. Hoàn thành theme: IsThemeCompleted(themeData) kiểm tra đủ 9 thẻ → AddCompletedTheme(), thưởng CollectionThemeRewardModel.ThemeReward với CurrencyEarnReason.CollectionThemeCompleted (34), analytics theme_completed. Hoàn thành cả bộ: IsCollectionCompleted() → OnCollectionCompleted(): trao CollectionConfigModel.CollectionReward (hoặc GoldCollectionReward) + token (GetActiveTokenReward), CurrencyEarnReason.CollectionCompleted (35), analytics collection_completed, rồi CollectionDataService.ResetInventory() và SetGoldCollectionActive(true) để bắt đầu vòng Gold. Team: SendCard(cardId) / RequestCard(cardId) qua TeamChatService; GetCardSendRequestState(cardData) trả CardSendRequestState quyết định nút hiện gì; SyncInventoryWithBackend() và CollectionRemoteService.GetCardHelps() đối chiếu thẻ đã gửi/nhận (CompareAndSyncSentCards / CompareAndSyncReceivedCards).",
+  "use_cases": [
+    {
+      "id": "UC-01",
+      "title": "Mở khoá và tải dữ liệu bộ sưu tập",
+      "actor": "System",
+      "trigger": "Vào Home / InitializeData",
+      "precondition": "CollectionConfigModel.IsEnabled == true",
+      "steps": [
+        "CollectionStateService.IsEligible() so level với CollectionConfigModel.FirstLevelToShow",
+        "CollectionService.TryFetchCurrentEvent() → CollectionRemoteService.GetEventInfo(eventType) trả CollectionResponseModel{EventId, EventType, StartTime, FinishTime, Segment, CollectionId}",
+        "TryInitializeCollectionDataMaps() → InitializeCollectionDataMaps(TextAsset) đọc Resources/<CollectionId>.json",
+        "HasCollectionExistInLocal(collectionId) kiểm tra file có trong build không",
+        "IsPlayerLevelEnoughForBundleDownload() so với MinBundleDownloadLevel; DownloadAndLoadCollectionAssets('<collectionId>_theme_icons') và các bundle icon thẻ",
+        "EventSender.SendCollectionStarted() với collection_id, collection_name, start_time, remaining_duration, segment"
+      ],
+      "result": "CollectionData sẵn sàng: 15 theme × 9 thẻ + 5 loại pack; UI hiện icon Collection",
+      "rules": "Chưa đủ level: text CollectionUnlock 'Unlock Collection at Level {0}!'. Chưa có bộ mới: CollectionNewComingSoon 'New Collection will be coming soon!'",
+      "evidence": "CollectionService.TryFetchCurrentEvent; CollectionService.InitializeCollectionDataMaps; CollectionService.HasCollectionExistInLocal; CollectionService.IsPlayerLevelEnoughForBundleDownload; CollectionService.DownloadAndLoadCollectionAssets; EventSender.SendCollectionStarted"
+    },
+    {
+      "id": "UC-02",
+      "title": "Mở gói thẻ cơ bản (pack 1/2/3)",
+      "actor": "Player",
+      "trigger": "Nhận CurrencyType.CollectionPack từ thưởng và mở",
+      "precondition": "Bộ sưu tập đang chạy",
+      "steps": [
+        "CollectionService.OpenPack(packId, source) → switch: packId 1,2,3 gọi OpenBasicPack(packId)",
+        "GetAllCardsPool() dựng pool mọi thẻ; GetCardPoolMultiplier(card) nhân số lần thẻ xuất hiện trong pool theo CollectionCardMultiplierModel{StarCount, IsGoldCard, Multiplier}",
+        "GetRandomCardsFromPool(pool, count) rút số thẻ = Packs[packId].CardCount (pack 1 = 2 thẻ, pack 2 = 3 thẻ, pack 3 = 4 thẻ)",
+        "AddOpenedPackCardsToInventory(openedPack, source) → AddCardToInventory(cardId) cho từng thẻ",
+        "EventSender.SendCardReceived(cardCount, packType, source) với total_card_count, total_unique_card_count, received_count, package_type"
+      ],
+      "result": "Thẻ vào kho, CollectionCardReceivedPopUp mở với animation CollectionPackOpeningAnimationHandler",
+      "rules": "Xác suất rút phụ thuộc CardMultipliers do server đặt: thẻ ít sao có Multiplier cao hơn (suy luận từ cấu trúc StarCount+IsGoldCard→Multiplier)",
+      "evidence": "CollectionService.OpenPack; CollectionService.OpenBasicPack; CollectionService.GetAllCardsPool; CollectionService.GetCardPoolMultiplier; CollectionService.GetRandomCardsFromPool; CollectionService.AddOpenedPackCardsToInventory"
+    },
+    {
+      "id": "UC-03",
+      "title": "Mở gói thẻ trung (pack 4) với cơ chế pity thẻ mới",
+      "actor": "Player",
+      "trigger": "Mở CollectionPack loại 4 (5 thẻ)",
+      "precondition": "-",
+      "steps": [
+        "OpenPack(4) → OpenMiddlePack(4)",
+        "Đọc CollectionCacheModel.NewCardOpeningBoost: nếu boost >= 100 thì chắc chắn ép một thẻ mới; nếu boost == 50 thì Random.value > 0.5 mới ép; nếu boost == 0 thì rút bình thường",
+        "Khi ép, lấy GetMissingCardsPool() (thẻ chưa có) và rút một thẻ từ đó, các slot còn lại rút từ pool chung",
+        "Sau khi mở, UpdateNewCardOpeningBoost(openedPack, openedNewCard): nếu PackId != 4 thì bỏ qua; nếu mở trúng thẻ mới thì boost = 0; nếu không thì boost += 50",
+        "CollectionDataService.SetNewCardOpeningBoost(boost) lưu vào cache"
+      ],
+      "result": "Người chơi mở pack 4 nhiều lần liên tiếp không trúng thẻ mới sẽ được ưu tiên dần: 0% → 50% → chắc chắn",
+      "rules": "Giá trị 50 và ngưỡng 100 là hằng số trong pseudo-C của OpenMiddlePack/UpdateNewCardOpeningBoost (0x32 = 50). Chỉ áp dụng cho pack 4",
+      "evidence": "CollectionService.OpenMiddlePack; CollectionService.UpdateNewCardOpeningBoost; CollectionService.ShouldOpenNewCard; CollectionDataService.SetNewCardOpeningBoost; CollectionService.GetMissingCardsPool"
+    },
+    {
+      "id": "UC-04",
+      "title": "Mở gói thẻ cao cấp (pack 5)",
+      "actor": "Player",
+      "trigger": "Mở CollectionPack loại 5 (6 thẻ)",
+      "precondition": "-",
+      "steps": [
+        "OpenPack(5) → OpenPremiumPack(5)",
+        "Lọc pool bằng các predicate: thẻ chưa có trong kho (b__65_0), thẻ có StarCount > 2 (b__65_1 — Get3PlusStarCardsPool), thẻ IsGold (b__65_2), thẻ có StarCount == maxStar (b__65_5)",
+        "Rút thẻ đảm bảo ít nhất một thẻ 3+ sao / gold; các slot còn lại lấy từ pool chung",
+        "AddOpenedPackCardsToInventory với CurrencyEarnReason của nguồn"
+      ],
+      "result": "Pack 5 luôn cho thẻ chất lượng cao, thường là thẻ còn thiếu",
+      "rules": "Ngưỡng '3+ sao' là hằng số trong code (`if (2 < obj.StarCount)`), không phải config",
+      "evidence": "CollectionService.OpenPremiumPack; CollectionService.Get3PlusStarCardsPool; CollectionService.GetMissingCardsPool; CollectionService.GetCardsPoolByData"
+    },
+    {
+      "id": "UC-05",
+      "title": "Hoàn thành một theme",
+      "actor": "System",
+      "trigger": "Nhận đủ 9 thẻ của một theme",
+      "precondition": "Theme chưa nằm trong CompletedThemeIds",
+      "steps": [
+        "CollectionService.IsThemeCompleted(themeData) duyệt Cards, kiểm tra IsCardInInventory cho từng thẻ",
+        "AddCompletedTheme(theme) → CollectionDataService.AddCompletedTheme(themeId)",
+        "GetThemeReward(themeId) tra CollectionConfigModel.ThemeRewards (CollectionThemeRewardModel{ThemeId, ThemeReward})",
+        "RewardService trao với CurrencyEarnReason.CollectionThemeCompleted (34)",
+        "CollectionThemeCompletedPopUp / CollectionThemeCompletedHomeWelcomingCommand hiển thị khi về Home",
+        "EventSender.SendCollectionThemeCompleted(themeData) với theme_id, collection_id, start_chest_star_count"
+      ],
+      "result": "Theme đóng khung hoàn thành, nhận thưởng riêng; GetCompletedThemeCount() tăng",
+      "rules": "Mỗi theme trong collection_4/collection_5 có đúng 9 thẻ; GetThemeProgress(theme) đếm số thẻ đã có, GetThemeNewCardCount(theme) đếm thẻ mới chưa xem",
+      "evidence": "CollectionService.IsThemeCompleted; CollectionService.AddCompletedTheme; CollectionService.GetThemeReward; CollectionDataService.AddCompletedTheme; EventSender.SendCollectionThemeCompleted"
+    },
+    {
+      "id": "UC-06",
+      "title": "Mở Bonus Chest bằng sao dư",
+      "actor": "Player",
+      "trigger": "Bấm rương trong CollectionBonusChestPopUp",
+      "precondition": "GetExtraStarCount() >= CollectionBonusChestModel.StarCount của rương",
+      "steps": [
+        "CollectionService.GetBonusChestModels() lấy CollectionConfigModel.BonusChests",
+        "GetExtraStarCount() cộng (CardCount − 1) × StarCount trên toàn CardInventory",
+        "OpenBonusChest(chestIndex) → GiveBonusChestReward(chest): chọn ChestReward hoặc ChestRewardWithoutCollection",
+        "RewardService trao với CurrencyEarnReason.CollectionChest (33)",
+        "EventSender.SendStarChestOpened(openedPackId) với start_chest_remaining_star_count, opened_pack_no"
+      ],
+      "result": "Thẻ trùng không lãng phí; localization CollectionOpenChest 'Open chests with your extra cards!'",
+      "rules": "CollectionBonusChestModel có hai biến thể thưởng: ChestReward (khi bộ sưu tập đang chạy) và ChestRewardWithoutCollection",
+      "evidence": "CollectionService.OpenBonusChest; CollectionService.GetBonusChestModels; CollectionService.GiveBonusChestReward; CollectionService.GetExtraStarCount; EventSender.SendStarChestOpened"
+    },
+    {
+      "id": "UC-07",
+      "title": "Hoàn thành cả bộ sưu tập và nhận token",
+      "actor": "Player",
+      "trigger": "Hoàn thành đủ 15 theme",
+      "precondition": "CollectionService.IsCollectionCompleted() == true",
+      "steps": [
+        "OnCollectionCompleted(): GetActiveCollectionReward() (CollectionConfigModel.CollectionReward hoặc GoldCollectionReward) và GetActiveCollectionRewardWithToken()",
+        "GetActiveTokenReward() tạo RewardModel CurrencyType.ProfileToken (15) với TokenId = CollectionData.TokenId (ví dụ 'collection_4_token') hoặc GoldTokenId ('collection_4_token_gold')",
+        "AddCollectionTokenToPlayerData() và EquipCollectionToken(tokenId)",
+        "CurrencyEarnReason.CollectionCompleted (35)",
+        "CollectionDataService.ResetInventory() xoá kho thẻ, SetGoldCollectionActive(true) mở vòng Gold Collection",
+        "CollectionCompletedPopUp (text CollectionCompleted '{0}\\nCompleted!', CollectionYouGotToken 'You got\\n{0}!')",
+        "EventSender.SendCollectionCompleted()"
+      ],
+      "result": "Nhận token trưng bày hồ sơ và mở vòng thứ hai với tên Gold ('Grand Summer Collection', token 'Grand Summer Badge')",
+      "rules": "GetReadableEventId() = <collectionId> + '_' + ('1' nếu Gold, '0' nếu thường); GetLocalizedActiveTokenName dùng key '<tokenId>' hoặc '<tokenId>_gold'",
+      "evidence": "CollectionService.OnCollectionCompleted; CollectionService.GetActiveTokenReward; CollectionService.AddCollectionTokenToPlayerData; CollectionService.EquipCollectionToken; CollectionService.SetGoldCollectionActive; CollectionService.GetReadableEventId; EventSender.SendCollectionCompleted"
+    },
+    {
+      "id": "UC-08",
+      "title": "Tặng thẻ trùng cho đồng đội",
+      "actor": "Player, Team member",
+      "trigger": "Bấm gửi thẻ trong CollectionCardSendRequestView hoặc trả lời yêu cầu trong chat team",
+      "precondition": "CollectionService.CanSendCard(cardId) == true",
+      "steps": [
+        "GetCardSendRequestState(cardData) trả CardSendRequestState",
+        "Kiểm tra TeamsService.IsEnabled(); thẻ phải là thẻ trùng (GetDuplicatedCardCount > 0) và không phải thẻ Gold",
+        "GetRemainedDailyCardSendCount() = TeamsService.GetCardNumberUserCansSendPerDay() − TeamsService.GetDailySentCardsCount(), kẹp ở 0",
+        "CollectionService.SendCard(cardId) → TeamChatService gửi; RemoveCardFromInventory(cardId, 1)",
+        "OnCardSent(messageId, cardId) → CollectionDataService.AddSentCard(CardHelpDataModel)",
+        "EventSender.SendCardSent() (teams_card_sent) và SendCardSent(source) (card_sent)"
+      ],
+      "result": "Đồng đội nhận thẻ; kho người gửi bớt 1 thẻ trùng",
+      "rules": "CardSendRequestState: SendActive=0, SendNotActiveDailyLimit=1, SendNotActiveNoDuplicate=2, SendNotActiveGoldCard=3, RequestActive=4, RequestNotActiveDailyLimit=5, RequestNotActiveGoldCard=6, TeamsNotEnabled=7. Text: CollectionYouCanSend 'You can send {0} card in a day!', CollectionSendDuplicate, CollectionGoldCardsSend 'Gold cards can`t be sent!', CollectionDailyCardLimit, CollectionNeedJoinTeam",
+      "evidence": "CollectionService.SendCard; CollectionService.CanSendCard; CollectionService.GetCardSendRequestState; CollectionService.GetDailyCardSendLimit; CollectionService.GetRemainedDailyCardSendCount; CollectionService.OnCardSent"
+    },
+    {
+      "id": "UC-09",
+      "title": "Xin thẻ còn thiếu từ team",
+      "actor": "Player",
+      "trigger": "Bấm xin thẻ trong CollectionThemesPopUp / chat team",
+      "precondition": "Có team, chưa xin thẻ hôm nay",
+      "steps": [
+        "CollectionService.GetDailyCardRequestLimit() trả hằng số 1 (client)",
+        "GetRemainedDailyCardRequestCount() dùng TeamsService.CanRequestCard",
+        "GetMissingCards() dựng List<TeamsAskCardThemeViewModel> các thẻ còn thiếu",
+        "RequestCard(cardId) đăng yêu cầu vào chat team (IsTeamChatCardRequestActive() kiểm tra tính năng bật)",
+        "EventSender.SendCardRequested() (teams_card_requested)"
+      ],
+      "result": "Yêu cầu hiện trong chat, đồng đội có thể gửi thẻ",
+      "rules": "Giới hạn 1 lần/ngày (hằng số trong GetDailyCardRequestLimit). Không xin được thẻ Gold (CollectionGoldCardWarning 'Gold cards cannot be requested.'); đã xin rồi: CollectionAlreadyRequested",
+      "evidence": "CollectionService.RequestCard; CollectionService.GetDailyCardRequestLimit; CollectionService.GetRemainedDailyCardRequestCount; CollectionService.GetMissingCards; CollectionService.IsTeamChatCardRequestActive; EventSender.SendCardRequested"
+    },
+    {
+      "id": "UC-10",
+      "title": "Nhận thẻ do đồng đội gửi",
+      "actor": "Player",
+      "trigger": "Về Home sau khi có thẻ được gửi",
+      "precondition": "GetNotClaimedReceivedCards() không rỗng",
+      "steps": [
+        "CollectionRemoteService.GetCardHelps() trả GetCardHelpsResponseModel{SentHelps, ReceivedHelps} (TeamCardHelpResponse)",
+        "SyncInventoryWithBackend() → CompareAndSyncReceivedCards(local, backend) và CompareAndSyncSentCards",
+        "GetNotClaimedReceivedCards() trả List<CardHelpDataModel> (CardId, MessageId, SenderImageId/Url/UserName/UserId/FrameId/NameStyleId, IsClaimed)",
+        "CollectionCardReceivedPopUp / CollectionCardReceivedHomeWelcomingCommand hiện thẻ + ReceivedCardInfoView người gửi",
+        "AddCardToInventory(cardId) với CurrencyEarnReason.TeamCardHelp (37); MarkAllReceivedCardsAsClaimed()"
+      ],
+      "result": "Thẻ vào kho, tin nhắn đánh dấu đã nhận",
+      "rules": "Đồng bộ hai chiều để tránh nhận trùng khi đổi thiết bị; text CollectionCardReceived 'Card Received!'",
+      "evidence": "CollectionRemoteService.GetCardHelps; CollectionService.SyncInventoryWithBackend; CollectionService.CompareAndSyncReceivedCards; CollectionService.GetNotClaimedReceivedCards; CollectionService.MarkAllReceivedCardsAsClaimed"
+    },
+    {
+      "id": "UC-11",
+      "title": "Popup kích hoạt bộ sưu tập mới",
+      "actor": "System",
+      "trigger": "Bộ sưu tập mới bắt đầu",
+      "precondition": "CollectionService.ShouldShowCollectionActivationPopUp() == true và IsClaimedActivationReward() == false",
+      "steps": [
+        "TryShowCollectionActivationCommand mở popup giới thiệu (CollectionInfoPopUp: CollectionCollectCards, CollectionWinCardPacks, CollectionFinishAllSets)",
+        "GetCollectionActivatedReward() trả danh sách thưởng khởi động",
+        "RewardService trao với CurrencyEarnReason.CollectionActivated (36)",
+        "MarkAsActivationRewardClaimed() → CollectionCacheModel.IsClaimedActivationReward = true",
+        "MarkEventIntroducedEverInLifeTime() / CollectionDataService.MarkIntroducedInLifeTime()"
+      ],
+      "result": "Người chơi nhận gói thẻ khởi động và biết luật; localization CollectionStarted 'New Collection Started!'",
+      "rules": "IsIntroducedInLifeTime là cờ lifetime; MarkAsActivationRewardUnclaimed() dùng cho debug/reset",
+      "evidence": "CollectionService.ShouldShowCollectionActivationPopUp; CollectionService.GetCollectionActivatedReward; CollectionService.MarkAsActivationRewardClaimed; CollectionDataService.MarkIntroducedInLifeTime"
+    },
+    {
+      "id": "UC-12",
+      "title": "Đánh dấu thẻ mới đã xem",
+      "actor": "Player",
+      "trigger": "Mở CollectionThemesPopUp và xem một theme",
+      "precondition": "Có thẻ với IsNewCard == true",
+      "steps": [
+        "GetThemeNewCardCount(theme) đếm thẻ mới để hiện badge trên CollectionThemeView",
+        "CollectionService.MarkThemeCardsAsSeen(theme) → CollectionDataService.MarkCardAsSeen(cardId) cho từng thẻ",
+        "CardInventoryDataModel.IsNewCard = false",
+        "EventSender.SendCollectionPageImpression() với total_unique_card_count, completed_theme_count, start_chest_star_count"
+      ],
+      "result": "Badge 'mới' tắt sau khi xem",
+      "rules": "IsCardNew(cardId) dùng cho hiệu ứng nhấp nháy trên thẻ",
+      "evidence": "CollectionService.MarkThemeCardsAsSeen; CollectionDataService.MarkCardAsSeen; CollectionService.GetThemeNewCardCount; EventSender.SendCollectionPageImpression"
+    },
+    {
+      "id": "UC-13",
+      "title": "Chọn và trang bị token lên hồ sơ",
+      "actor": "Player",
+      "trigger": "Mở CollectionTokenPopUp",
+      "precondition": "Đã có ít nhất một token",
+      "steps": [
+        "CollectionTokenPopUp hiển thị token đã sở hữu (CollectionTokenRotator xoay 3D)",
+        "GetActiveCollectionTokenId() trả token đang hoạt động",
+        "EquipCollectionToken(tokenId) gắn lên hồ sơ",
+        "EventSender.SendTokenSelected(tokenId) với token_code, collection_id"
+      ],
+      "result": "Token hiện cạnh tên người chơi trong leaderboard/team",
+      "rules": "Token id theo mẫu 'collection_N_token' và 'collection_N_token_gold'; tên hiển thị lấy từ localization cùng key (Phoenix Token, Snow Globe, Acorn Token, Summer Badge, Wonderland Badge)",
+      "evidence": "CollectionService.EquipCollectionToken; CollectionService.GetActiveCollectionTokenId; CollectionService.GetLocalizedActiveTokenName; EventSender.SendTokenSelected"
+    },
+    {
+      "id": "UC-14",
+      "title": "Bộ sưu tập hết hạn",
+      "actor": "System",
+      "trigger": "Quá CollectionCacheModel.FinishTime",
+      "precondition": "-",
+      "steps": [
+        "CollectionStateService.IsTimeUp() → CollectionStateType.TimeIsUp / ClaimedAndTimeIsUp",
+        "CollectionService.ClaimEvent() → CollectionDataService.ClaimEvent() đặt IsClaimed = true",
+        "Icon Collection chuyển sang trạng thái chờ bộ mới (CollectionNewComingSoon / CollectionUpdate)",
+        "Các hệ thống khác kiểm tra IsEventActive() để chọn biến thể thưởng 'WithCollection' hay không"
+      ],
+      "result": "Ngừng phát gói thẻ; các sự kiện khác (MagicPass, MagicLab, ChampionsLeague, WheelOfFortune) quay lại bảng thưởng không có collection_pack",
+      "rules": "CollectionService.IsAvailableForWheelOfFortune() và IsCollectionActiveForTeam() là hai cổng riêng cho Wheel Of Fortune và Teams",
+      "evidence": "CollectionStateService.IsTimeUp; CollectionService.ClaimEvent; CollectionService.IsEventActive; CollectionService.IsAvailableForWheelOfFortune; CollectionService.IsCollectionActiveForTeam"
+    },
+    {
+      "id": "UC-15",
+      "title": "Gói thẻ nhận khi bộ sưu tập chưa/không chạy",
+      "actor": "System",
+      "trigger": "Nhận CurrencyType.CollectionPack trong lúc không có bộ sưu tập hoạt động",
+      "precondition": "-",
+      "steps": [
+        "Gói được giữ lại chờ; CollectionService.ApplyPendingCollectionPacks() mở khi bộ sưu tập bật lại",
+        "CollectionBonusChestModel.ChestRewardWithoutCollection dùng cho rương khi không có collection",
+        "MagicPass/MagicLab/ChampionsLeague chọn bảng thưởng 'WithCollection' hay bản thường tuỳ IsEventActive()"
+      ],
+      "result": "Không mất gói thẻ khi rơi vào khoảng giữa hai mùa",
+      "rules": "Cơ chế pending là lý do các cấu hình khác đều có cặp reward 'có/không có Collection'",
+      "evidence": "CollectionService.ApplyPendingCollectionPacks; CollectionBonusChestModel.ChestRewardWithoutCollection; CollectionService.IsEventActive"
+    },
+    {
+      "id": "UC-16",
+      "title": "Đồng bộ, offline và reset debug",
+      "actor": "System",
+      "trigger": "SyncService / mất mạng / QA",
+      "precondition": "-",
+      "steps": [
+        "CollectionDataService.GetSyncName() = 'CollectionModel'; SerializeModelForSync() / OverwriteModelFromSync(data)",
+        "LateUpdate() lưu khi IsDataChangedSinceLastSave(); DeleteData() xoá toàn bộ",
+        "Mất mạng: dữ liệu thẻ nằm trong Resources nên vẫn mở gói và xem bộ sưu tập bình thường; chỉ chức năng team (GetCardHelps, SendCard) bị chặn",
+        "Debug: CollectionService.ResetCollectionForDebug() và CollectionDataService.ClearCacheForDebug(), ResetInventory()"
+      ],
+      "result": "Kho thẻ đồng bộ giữa thiết bị; chơi offline không mất tiến độ sưu tập",
+      "rules": "CollectionDataService implement ISyncable, IDeletable, ILateUpdate",
+      "evidence": "CollectionDataService.GetSyncName; CollectionDataService.SerializeModelForSync; CollectionDataService.OverwriteModelFromSync; CollectionService.ResetCollectionForDebug; CollectionDataService.ClearCacheForDebug"
+    }
+  ],
+  "configs": [
+    {
+      "source": "json default",
+      "key": "collection_4.json",
+      "type": "Resources",
+      "value": "Id='collection_4', Name='Summer Collection', GoldName='Grand Summer Collection', TokenId='collection_4_token', TokenName='Summer Badge', GoldTokenId='collection_4_token_gold', GoldTokenName='Grand Summer Badge'",
+      "meaning": "Bộ sưu tập mùa hè",
+      "where": "Assets/Resources/collection_4.json"
+    },
+    {
+      "source": "json default",
+      "key": "collection_4.json Themes (15 theme × 9 thẻ = 135 thẻ)",
+      "type": "array",
+      "value": "theme_1 Camp (9 thẻ, 1 sao); theme_2 Road Trip (1-2 sao); theme_3 Souvenir Shop (1-2); theme_4 Travel (1-2); theme_5 Gelato Delights (1-3); theme_6 Festival (1-3); theme_7 Fresh Food (2-4); theme_8 Barbecue (2-4); theme_9 Summer Spa (2-5); theme_10 Starlit Cinema (2-5, 1 gold); theme_11 Deep Sea (2-5, 1 gold); theme_12 Cruise (2-5, 2 gold); theme_13 Ocean (3-5, 3 gold); theme_14 Pool (4-5, 4 gold); theme_15 Tropical (toàn 5 sao, 7 gold)",
+      "meaning": "Độ khó tăng dần: sao và số thẻ Gold tăng theo theme",
+      "where": "Assets/Resources/collection_4.json"
+    },
+    {
+      "source": "json default",
+      "key": "collection_5.json",
+      "type": "Resources",
+      "value": "Id='collection_5', Name='Wonderland Collection', GoldName='Grand Wonderland Collection', TokenId='collection_5_token', TokenName='Wonderland Badge', GoldTokenId='collection_5_token_gold', GoldTokenName='Grand Wonderland Badge'",
+      "meaning": "Bộ sưu tập Wonderland",
+      "where": "Assets/Resources/collection_5.json"
+    },
+    {
+      "source": "json default",
+      "key": "collection_5.json Themes (15 theme × 9 thẻ)",
+      "type": "array",
+      "value": "theme_1 Snacks (1 sao); theme_2 Cinema; theme_3 Souvenir; theme_4 Wonderland; theme_5 Garden; theme_6 Water Play; theme_7 Playland; theme_8 Carnival; theme_9 Race Track; theme_10 Concert (1 gold); theme_11 Parkour (1 gold); theme_12 Amusement (2 gold); theme_13 Haunted (3 gold); theme_14 Magic Show (4 gold); theme_15 Games (5 sao, 7 gold)",
+      "meaning": "Cùng cấu trúc với collection_4",
+      "where": "Assets/Resources/collection_5.json"
+    },
+    {
+      "source": "json default",
+      "key": "Packs[]",
+      "type": "array",
+      "value": "Id 1 → CardCount 2; Id 2 → 3; Id 3 → 4; Id 4 → 5; Id 5 → 6",
+      "meaning": "5 loại gói thẻ, ứng với CurrencyType.CollectionPack và analytics collection_pack_1..collection_pack_5",
+      "where": "collection_4.json / collection_5.json (Packs)"
+    },
+    {
+      "source": "code const",
+      "key": "OpenPack dispatch",
+      "type": "switch",
+      "value": "packId 1,2,3 → OpenBasicPack; 4 → OpenMiddlePack; 5 → OpenPremiumPack",
+      "meaning": "Ba thuật toán rút thẻ khác nhau",
+      "where": "CollectionService.OpenPack (pseudo-C switch)"
+    },
+    {
+      "source": "code const",
+      "key": "NewCardOpeningBoost (pity pack 4)",
+      "type": "int",
+      "value": "bước tăng 50 (0x32), ngưỡng chắc chắn 100; boost=50 → Random.value > 0.5 mới ép thẻ mới; mở trúng thẻ mới → reset 0",
+      "meaning": "Cơ chế bù may cho gói thẻ loại 4",
+      "where": "CollectionService.OpenMiddlePack; CollectionService.UpdateNewCardOpeningBoost"
+    },
+    {
+      "source": "code const",
+      "key": "Ngưỡng thẻ cao cấp",
+      "type": "int",
+      "value": "StarCount > 2 (tức 3 sao trở lên)",
+      "meaning": "Bộ lọc Get3PlusStarCardsPool dùng trong OpenPremiumPack",
+      "where": "CollectionService.Get3PlusStarCardsPool"
+    },
+    {
+      "source": "code const",
+      "key": "GetDailyCardRequestLimit",
+      "type": "int",
+      "value": "1",
+      "meaning": "Chỉ xin được 1 thẻ mỗi ngày (hằng số client)",
+      "where": "CollectionService.GetDailyCardRequestLimit"
+    },
+    {
+      "source": "server info",
+      "key": "GetDailyCardSendLimit",
+      "type": "int",
+      "value": "TeamsService.GetCardNumberUserCansSendPerDay() (server)",
+      "meaning": "Số thẻ được tặng mỗi ngày",
+      "where": "CollectionService.GetDailyCardSendLimit"
+    },
+    {
+      "source": "server info",
+      "key": "CollectionConfigModel.IsEnabled / EventType / FirstLevelToShow / MinBundleDownloadLevel",
+      "type": "bool/int",
+      "value": "server",
+      "meaning": "Bật tắt, loại sự kiện, level mở khoá, level bắt đầu tải bundle",
+      "where": "RemoteConfigs → CollectionConfigModel"
+    },
+    {
+      "source": "server info",
+      "key": "CollectionConfigModel.CardMultipliers",
+      "type": "List<CollectionCardMultiplierModel{StarCount, IsGoldCard, Multiplier}>",
+      "value": "server",
+      "meaning": "Trọng số xuất hiện của thẻ trong pool theo số sao và thẻ vàng",
+      "where": "CollectionService.GetCardPoolMultiplier"
+    },
+    {
+      "source": "server info",
+      "key": "CollectionConfigModel.BonusChests",
+      "type": "List<CollectionBonusChestModel{StarCount, ChestReward, ChestRewardWithoutCollection}>",
+      "value": "server",
+      "meaning": "Mốc sao dư và thưởng rương",
+      "where": "CollectionService.GetBonusChestModels"
+    },
+    {
+      "source": "server info",
+      "key": "CollectionConfigModel.ThemeRewards",
+      "type": "List<CollectionThemeRewardModel{ThemeId, ThemeReward}>",
+      "value": "server",
+      "meaning": "Thưởng khi hoàn thành từng theme",
+      "where": "CollectionService.GetThemeReward"
+    },
+    {
+      "source": "server info",
+      "key": "CollectionConfigModel.CollectionReward / GoldCollectionReward",
+      "type": "RewardModel",
+      "value": "server",
+      "meaning": "Thưởng hoàn thành bộ thường / bộ Gold",
+      "where": "CollectionService.GetActiveCollectionReward"
+    },
+    {
+      "source": "server info",
+      "key": "CollectionResponseModel.EventId / EventType / StartTime / FinishTime / Segment / CollectionId",
+      "type": "response",
+      "value": "server",
+      "meaning": "Phiên sự kiện và bộ sưu tập nào được dùng",
+      "where": "CollectionRemoteService.GetEventInfo"
+    },
+    {
+      "source": "code const",
+      "key": "CollectionStateType",
+      "type": "enum",
+      "value": "NoCachedEvent=0, NotIntroduced=1, InProgress=2, TimeIsUp=3, Claimed=4, ClaimedAndTimeIsUp=5, InsufficientLevel=6, Disable=7",
+      "meaning": "Máy trạng thái",
+      "where": "CollectionStateService.GetEventState"
+    },
+    {
+      "source": "code const",
+      "key": "CardSendRequestState",
+      "type": "enum",
+      "value": "SendActive=0, SendNotActiveDailyLimit=1, SendNotActiveNoDuplicate=2, SendNotActiveGoldCard=3, RequestActive=4, RequestNotActiveDailyLimit=5, RequestNotActiveGoldCard=6, TeamsNotEnabled=7",
+      "meaning": "Trạng thái nút gửi/xin thẻ",
+      "where": "CollectionService.GetCardSendRequestState"
+    },
+    {
+      "source": "code const",
+      "key": "CurrencyEarnReason liên quan",
+      "type": "enum",
+      "value": "CollectionChest=33, CollectionThemeCompleted=34, CollectionCompleted=35, CollectionActivated=36, TeamCardHelp=37",
+      "meaning": "Phân loại nguồn thẻ/thưởng trong analytics 'earned'",
+      "where": "Modules.Contexts.Application.Inventory.Scripts.CurrencyEarnReason"
+    },
+    {
+      "source": "code const",
+      "key": "CurrencyType.CollectionPack / ProfileToken",
+      "type": "enum",
+      "value": "14 / 15",
+      "meaning": "Gói thẻ và token hồ sơ",
+      "where": "Modules.Contexts.Application.Inventory.Scripts.CurrencyType"
+    },
+    {
+      "source": "code const",
+      "key": "Bundle name",
+      "type": "string",
+      "value": "'<collectionId>_theme_icons' cho icon theme; '<collectionId>_<index>' cho icon thẻ",
+      "meaning": "Tên asset bundle tải về",
+      "where": "CollectionService.TryLoadCollectionThemeIconsBundle / TryLoadCollectionCardIconsBundles"
+    },
+    {
+      "source": "code const",
+      "key": "GetReadableEventId",
+      "type": "string",
+      "value": "'<collectionId>_0' (thường) hoặc '<collectionId>_1' (Gold)",
+      "meaning": "Id dễ đọc cho analytics",
+      "where": "CollectionService.GetReadableEventId"
+    },
+    {
+      "source": "code const",
+      "key": "Localization term trong code",
+      "type": "string",
+      "value": "CollectionCardSendRequestView: CollectionDailyLimit, CardSent, CardRequested, CollectionYouCanSend, CollectionSendDuplicate, CollectionAlreadyRequested, CollectionNeedJoinTeam. CollectionCompletedPopUp: CollectionCompleted, CollectionYouGotToken, TapToContinue, TaptoOpen. CollectionController: CollectionNewComingSoon, CollectionUnlock, CollectionCollectCardsToComplete. CollectionThemesPopUp: CollectionCollectCardsToSet. CollectionTokenPopUp: CollectionCompleteThemes",
+      "meaning": "Text UI được tham chiếu trực tiếp trong code",
+      "where": "Modules.Contexts.Home.Collection.Scripts.UI (consts)"
+    },
+    {
+      "source": "storage key",
+      "key": "CollectionModel",
+      "type": "sync name",
+      "value": "\"CollectionModel\"",
+      "meaning": "Tên bản ghi lưu/đồng bộ",
+      "where": "CollectionDataService.GetSyncName"
+    },
+    {
+      "source": "storage key",
+      "key": "CollectionCacheModel.EventId / Segment / StartTime / FinishTime / CollectionId / IsClaimed / IsClaimedActivationReward / IsGoldCollectionActive",
+      "type": "object",
+      "value": "client cache",
+      "meaning": "Trạng thái mùa hiện tại",
+      "where": "CollectionCacheModel"
+    },
+    {
+      "source": "storage key",
+      "key": "CollectionCacheModel.CardInventory (CardInventoryDataModel{CardId, CardCount, IsNewCard})",
+      "type": "list",
+      "value": "client",
+      "meaning": "Kho thẻ",
+      "where": "CollectionDataService.GetCardInventory"
+    },
+    {
+      "source": "storage key",
+      "key": "CollectionCacheModel.NewCardOpeningBoost / CompletedThemeIds / SentCards / ReceivedCards",
+      "type": "object",
+      "value": "client",
+      "meaning": "Pity, theme đã xong, lịch sử gửi/nhận thẻ",
+      "where": "CollectionCacheModel"
+    },
+    {
+      "source": "storage key",
+      "key": "CollectionModel.IsIntroducedInLifeTime",
+      "type": "bool",
+      "value": "client",
+      "meaning": "Đã từng xem Collection chưa",
+      "where": "CollectionModel"
+    },
+    {
+      "source": "asset",
+      "key": "CollectionAnimationConfig (88 field)",
+      "type": "ScriptableObject",
+      "value": "asset",
+      "meaning": "Toàn bộ tham số hoạt ảnh mở gói, lật thẻ, hoàn thành theme",
+      "where": "Assets/MonoBehaviour — CollectionAnimationConfig"
+    },
+    {
+      "source": "asset",
+      "key": "CollectionCardPackVisualsConfig (Visuals, _visualMap)",
+      "type": "ScriptableObject",
+      "value": "asset",
+      "meaning": "Hình ảnh cho từng loại gói thẻ (pack 1..5)",
+      "where": "Modules.Contexts.Home.Collection.Scripts.UI.CollectionCardPackVisualsConfig"
+    },
+    {
+      "source": "asset",
+      "key": "CollectionThemeVisualsConfig (Visuals, _visualMap) + CollectionThemeVisual",
+      "type": "ScriptableObject",
+      "value": "asset",
+      "meaning": "Hình nền/màu cho từng theme",
+      "where": "Modules.Contexts.Home.Collection.Scripts.UI.CollectionThemeVisualsConfig"
+    },
+    {
+      "source": "asset",
+      "key": "CollectionThemeSpriteLibrary (35 field) / CollectionThemeDatabase",
+      "type": "ScriptableObject",
+      "value": "asset",
+      "meaning": "Thư viện sprite theme và tra cứu",
+      "where": "Modules.Contexts.Home.Collection.Scripts.UI"
+    },
+    {
+      "source": "json default",
+      "key": "CollectionConfigModel.json: IsEnabled",
+      "type": "",
+      "value": "false",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/CollectionConfigModel.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "CollectionConfigModel.json: EventType",
+      "type": "",
+      "value": "1",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/CollectionConfigModel.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "CollectionConfigModel.json: FirstLevelToShow",
+      "type": "",
+      "value": "95",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/CollectionConfigModel.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "CollectionConfigModel.json: MinBundleDownloadLevel",
+      "type": "",
+      "value": "20",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/CollectionConfigModel.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "CollectionConfigModel.json: CardMultipliers[0].StarCount",
+      "type": "",
+      "value": "1",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/CollectionConfigModel.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "CollectionConfigModel.json: CardMultipliers[0].IsGoldCard",
+      "type": "",
+      "value": "false",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/CollectionConfigModel.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "CollectionConfigModel.json: CardMultipliers[0].Multiplier",
+      "type": "",
+      "value": "32",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/CollectionConfigModel.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "CollectionConfigModel.json: CardMultipliers[1].StarCount",
+      "type": "",
+      "value": "2",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/CollectionConfigModel.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "CollectionConfigModel.json: CardMultipliers[1].IsGoldCard",
+      "type": "",
+      "value": "false",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/CollectionConfigModel.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "CollectionConfigModel.json: CardMultipliers[1].Multiplier",
+      "type": "",
+      "value": "24",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/CollectionConfigModel.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "CollectionConfigModel.json: CardMultipliers[2].StarCount",
+      "type": "",
+      "value": "3",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/CollectionConfigModel.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "CollectionConfigModel.json: CardMultipliers[2].IsGoldCard",
+      "type": "",
+      "value": "false",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/CollectionConfigModel.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "CollectionConfigModel.json: CardMultipliers[2].Multiplier",
+      "type": "",
+      "value": "24",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/CollectionConfigModel.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "CollectionConfigModel.json: CardMultipliers[3].StarCount",
+      "type": "",
+      "value": "4",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/CollectionConfigModel.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "CollectionConfigModel.json: CardMultipliers[3].IsGoldCard",
+      "type": "",
+      "value": "false",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/CollectionConfigModel.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "CollectionConfigModel.json: CardMultipliers[3].Multiplier",
+      "type": "",
+      "value": "16",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/CollectionConfigModel.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "CollectionConfigModel.json: CardMultipliers[4].StarCount",
+      "type": "",
+      "value": "5",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/CollectionConfigModel.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "CollectionConfigModel.json: CardMultipliers[4].IsGoldCard",
+      "type": "",
+      "value": "false",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/CollectionConfigModel.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "CollectionConfigModel.json: CardMultipliers[4].Multiplier",
+      "type": "",
+      "value": "16",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/CollectionConfigModel.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "CollectionConfigModel.json: CardMultipliers[5].StarCount",
+      "type": "",
+      "value": "5",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/CollectionConfigModel.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "CollectionConfigModel.json: CardMultipliers[5].IsGoldCard",
+      "type": "",
+      "value": "true",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/CollectionConfigModel.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "CollectionConfigModel.json: CardMultipliers[5].Multiplier",
+      "type": "",
+      "value": "8",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/CollectionConfigModel.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "CollectionConfigModel.json: BonusChests[0].StarCount",
+      "type": "",
+      "value": "100",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/CollectionConfigModel.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "CollectionConfigModel.json: BonusChests[0].ChestReward.CurrencyType",
+      "type": "",
+      "value": "13",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/CollectionConfigModel.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "CollectionConfigModel.json: BonusChests[0].ChestReward.Amount",
+      "type": "",
+      "value": "1",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/CollectionConfigModel.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "CollectionConfigModel.json: BonusChests[0].ChestReward.Rewards[0].CurrencyType",
+      "type": "",
+      "value": "4",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/CollectionConfigModel.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "CollectionConfigModel.json: BonusChests[0].ChestReward.Rewards[0].Amount",
+      "type": "",
+      "value": "1",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/CollectionConfigModel.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "CollectionConfigModel.json: BonusChests[0].ChestReward.Rewards[1].CurrencyType",
+      "type": "",
+      "value": "5",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/CollectionConfigModel.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "CollectionConfigModel.json: BonusChests[0].ChestReward.Rewards[1].Amount",
+      "type": "",
+      "value": "1",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/CollectionConfigModel.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "CollectionConfigModel.json: BonusChests[0].ChestReward.Rewards[2].CurrencyType",
+      "type": "",
+      "value": "14",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/CollectionConfigModel.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "CollectionConfigModel.json: BonusChests[0].ChestReward.Rewards[2].Amount",
+      "type": "",
+      "value": "1",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/CollectionConfigModel.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "CollectionConfigModel.json: BonusChests[0].ChestReward.Rewards[2].CollectionPackType",
+      "type": "",
+      "value": "1",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/CollectionConfigModel.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "CollectionConfigModel.json: BonusChests[0].ChestRewardWithoutCollection.CurrencyType",
+      "type": "",
+      "value": "13",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/CollectionConfigModel.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "CollectionConfigModel.json: BonusChests[0].ChestRewardWithoutCollection.Amount",
+      "type": "",
+      "value": "1",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/CollectionConfigModel.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "CollectionConfigModel.json: BonusChests[0].ChestRewardWithoutCollection.Rewards[0].CurrencyType",
+      "type": "",
+      "value": "4",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/CollectionConfigModel.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "CollectionConfigModel.json: BonusChests[0].ChestRewardWithoutCollection.Rewards[0].Amount",
+      "type": "",
+      "value": "1",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/CollectionConfigModel.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "CollectionConfigModel.json: BonusChests[0].ChestRewardWithoutCollection.Rewards[1].CurrencyType",
+      "type": "",
+      "value": "5",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/CollectionConfigModel.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "CollectionConfigModel.json: BonusChests[0].ChestRewardWithoutCollection.Rewards[1].Amount",
+      "type": "",
+      "value": "1",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/CollectionConfigModel.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "CollectionConfigModel.json: BonusChests[1].StarCount",
+      "type": "",
+      "value": "250",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/CollectionConfigModel.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "CollectionConfigModel.json: BonusChests[1].ChestReward.CurrencyType",
+      "type": "",
+      "value": "13",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/CollectionConfigModel.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "CollectionConfigModel.json: BonusChests[1].ChestReward.Amount",
+      "type": "",
+      "value": "1",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/CollectionConfigModel.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "CollectionConfigModel.json: BonusChests[1].ChestReward.Rewards[0].CurrencyType",
+      "type": "",
+      "value": "5",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/CollectionConfigModel.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "CollectionConfigModel.json: BonusChests[1].ChestReward.Rewards[0].Amount",
+      "type": "",
+      "value": "1",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/CollectionConfigModel.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "CollectionConfigModel.json: BonusChests[1].ChestReward.Rewards[1].CurrencyType",
+      "type": "",
+      "value": "14",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/CollectionConfigModel.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "CollectionConfigModel.json: BonusChests[1].ChestReward.Rewards[1].Amount",
+      "type": "",
+      "value": "1",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/CollectionConfigModel.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "CollectionConfigModel.json: BonusChests[1].ChestReward.Rewards[1].CollectionPackType",
+      "type": "",
+      "value": "1",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/CollectionConfigModel.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "CollectionConfigModel.json: BonusChests[1].ChestReward.Rewards[2].CurrencyType",
+      "type": "",
+      "value": "14",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/CollectionConfigModel.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "CollectionConfigModel.json: BonusChests[1].ChestReward.Rewards[2].Amount",
+      "type": "",
+      "value": "1",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/CollectionConfigModel.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "CollectionConfigModel.json: BonusChests[1].ChestReward.Rewards[2].CollectionPackType",
+      "type": "",
+      "value": "2",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/CollectionConfigModel.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "CollectionConfigModel.json: BonusChests[1].ChestReward.Rewards[3].CurrencyType",
+      "type": "",
+      "value": "14",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/CollectionConfigModel.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "CollectionConfigModel.json: BonusChests[1].ChestReward.Rewards[3].Amount",
+      "type": "",
+      "value": "1",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/CollectionConfigModel.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "CollectionConfigModel.json: BonusChests[1].ChestReward.Rewards[3].CollectionPackType",
+      "type": "",
+      "value": "3",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/CollectionConfigModel.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "CollectionConfigModel.json: BonusChests[1].ChestRewardWithoutCollection.CurrencyType",
+      "type": "",
+      "value": "13",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/CollectionConfigModel.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "CollectionConfigModel.json: BonusChests[1].ChestRewardWithoutCollection.Amount",
+      "type": "",
+      "value": "1",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/CollectionConfigModel.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "CollectionConfigModel.json: BonusChests[1].ChestRewardWithoutCollection.Rewards[0].CurrencyType",
+      "type": "",
+      "value": "4",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/CollectionConfigModel.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "CollectionConfigModel.json: BonusChests[1].ChestRewardWithoutCollection.Rewards[0].Amount",
+      "type": "",
+      "value": "2",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/CollectionConfigModel.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "CollectionConfigModel.json: BonusChests[1].ChestRewardWithoutCollection.Rewards[1].CurrencyType",
+      "type": "",
+      "value": "5",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/CollectionConfigModel.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "CollectionConfigModel.json: BonusChests[1].ChestRewardWithoutCollection.Rewards[1].Amount",
+      "type": "",
+      "value": "2",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/CollectionConfigModel.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "CollectionConfigModel.json: BonusChests[2].StarCount",
+      "type": "",
+      "value": "500",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/CollectionConfigModel.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "CollectionConfigModel.json: BonusChests[2].ChestReward.CurrencyType",
+      "type": "",
+      "value": "13",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/CollectionConfigModel.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "CollectionConfigModel.json: BonusChests[2].ChestReward.Amount",
+      "type": "",
+      "value": "1",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/CollectionConfigModel.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "CollectionConfigModel.json: BonusChests[2].ChestReward.Rewards[0].CurrencyType",
+      "type": "",
+      "value": "6",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/CollectionConfigModel.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "CollectionConfigModel.json: BonusChests[2].ChestReward.Rewards[0].Amount",
+      "type": "",
+      "value": "1",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/CollectionConfigModel.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "CollectionConfigModel.json: BonusChests[2].ChestReward.Rewards[1].CurrencyType",
+      "type": "",
+      "value": "14",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/CollectionConfigModel.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "CollectionConfigModel.json: BonusChests[2].ChestReward.Rewards[1].Amount",
+      "type": "",
+      "value": "1",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/CollectionConfigModel.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "CollectionConfigModel.json: BonusChests[2].ChestReward.Rewards[1].CollectionPackType",
+      "type": "",
+      "value": "3",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/CollectionConfigModel.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "CollectionConfigModel.json: BonusChests[2].ChestReward.Rewards[2].CurrencyType",
+      "type": "",
+      "value": "14",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/CollectionConfigModel.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "CollectionConfigModel.json: BonusChests[2].ChestReward.Rewards[2].Amount",
+      "type": "",
+      "value": "1",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/CollectionConfigModel.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "CollectionConfigModel.json: BonusChests[2].ChestReward.Rewards[2].CollectionPackType",
+      "type": "",
+      "value": "4",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/CollectionConfigModel.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "CollectionConfigModel.json: BonusChests[2].ChestReward.Rewards[3].CurrencyType",
+      "type": "",
+      "value": "14",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/CollectionConfigModel.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "CollectionConfigModel.json: BonusChests[2].ChestReward.Rewards[3].Amount",
+      "type": "",
+      "value": "1",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/CollectionConfigModel.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "CollectionConfigModel.json: BonusChests[2].ChestReward.Rewards[3].CollectionPackType",
+      "type": "",
+      "value": "5",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/CollectionConfigModel.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "CollectionConfigModel.json: BonusChests[2].ChestRewardWithoutCollection.CurrencyType",
+      "type": "",
+      "value": "13",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/CollectionConfigModel.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "CollectionConfigModel.json: BonusChests[2].ChestRewardWithoutCollection.Amount",
+      "type": "",
+      "value": "1",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/CollectionConfigModel.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "CollectionConfigModel.json: BonusChests[2].ChestRewardWithoutCollection.Rewards[0].CurrencyType",
+      "type": "",
+      "value": "6",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/CollectionConfigModel.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "CollectionConfigModel.json: BonusChests[2].ChestRewardWithoutCollection.Rewards[0].Amount",
+      "type": "",
+      "value": "2",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/CollectionConfigModel.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "CollectionConfigModel.json: BonusChests[2].ChestRewardWithoutCollection.Rewards[1].CurrencyType",
+      "type": "",
+      "value": "5",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/CollectionConfigModel.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "CollectionConfigModel.json: BonusChests[2].ChestRewardWithoutCollection.Rewards[1].Amount",
+      "type": "",
+      "value": "2",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/CollectionConfigModel.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "CollectionConfigModel.json: ThemeRewards[0].ThemeId",
+      "type": "",
+      "value": "theme_1",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/CollectionConfigModel.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "CollectionConfigModel.json: ThemeRewards[0].ThemeReward.CurrencyType",
+      "type": "",
+      "value": "2",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/CollectionConfigModel.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "CollectionConfigModel.json: ThemeRewards[0].ThemeReward.TimeSpan",
+      "type": "",
+      "value": "02:00:00",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/CollectionConfigModel.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "CollectionConfigModel.json: ThemeRewards[1].ThemeId",
+      "type": "",
+      "value": "theme_2",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/CollectionConfigModel.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "CollectionConfigModel.json: ThemeRewards[1].ThemeReward.CurrencyType",
+      "type": "",
+      "value": "5",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/CollectionConfigModel.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "CollectionConfigModel.json: ThemeRewards[1].ThemeReward.Amount",
+      "type": "",
+      "value": "1",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/CollectionConfigModel.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "CollectionConfigModel.json: ThemeRewards[2].ThemeId",
+      "type": "",
+      "value": "theme_3",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/CollectionConfigModel.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "CollectionConfigModel.json: ThemeRewards[2].ThemeReward.CurrencyType",
+      "type": "",
+      "value": "1",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/CollectionConfigModel.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "CollectionConfigModel.json: ThemeRewards[2].ThemeReward.Amount",
+      "type": "",
+      "value": "200",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/CollectionConfigModel.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "CollectionConfigModel.json: ThemeRewards[3].ThemeId",
+      "type": "",
+      "value": "theme_4",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/CollectionConfigModel.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "CollectionConfigModel.json: ThemeRewards[3].ThemeReward.CurrencyType",
+      "type": "",
+      "value": "4",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/CollectionConfigModel.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "CollectionConfigModel.json: ThemeRewards[3].ThemeReward.Amount",
+      "type": "",
+      "value": "2",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/CollectionConfigModel.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "CollectionConfigModel.json: ThemeRewards[4].ThemeId",
+      "type": "",
+      "value": "theme_5",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/CollectionConfigModel.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "CollectionConfigModel.json: ThemeRewards[4].ThemeReward.CurrencyType",
+      "type": "",
+      "value": "5",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/CollectionConfigModel.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "CollectionConfigModel.json: ThemeRewards[4].ThemeReward.Amount",
+      "type": "",
+      "value": "2",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/CollectionConfigModel.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "CollectionConfigModel.json: ThemeRewards[5].ThemeId",
+      "type": "",
+      "value": "theme_6",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/CollectionConfigModel.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "CollectionConfigModel.json: ThemeRewards[5].ThemeReward.CurrencyType",
+      "type": "",
+      "value": "1",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/CollectionConfigModel.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "CollectionConfigModel.json: ThemeRewards[5].ThemeReward.Amount",
+      "type": "",
+      "value": "400",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/CollectionConfigModel.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "CollectionConfigModel.json: ThemeRewards[6].ThemeId",
+      "type": "",
+      "value": "theme_7",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/CollectionConfigModel.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "CollectionConfigModel.json: ThemeRewards[6].ThemeReward.CurrencyType",
+      "type": "",
+      "value": "6",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/CollectionConfigModel.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "CollectionConfigModel.json: ThemeRewards[6].ThemeReward.Amount",
+      "type": "",
+      "value": "1",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/CollectionConfigModel.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "CollectionConfigModel.json: ThemeRewards[7].ThemeId",
+      "type": "",
+      "value": "theme_8",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/CollectionConfigModel.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "CollectionConfigModel.json: ThemeRewards[7].ThemeReward.CurrencyType",
+      "type": "",
+      "value": "1",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/CollectionConfigModel.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "CollectionConfigModel.json: ThemeRewards[7].ThemeReward.Amount",
+      "type": "",
+      "value": "600",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/CollectionConfigModel.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "CollectionConfigModel.json: ThemeRewards[8].ThemeId",
+      "type": "",
+      "value": "theme_9",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/CollectionConfigModel.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "CollectionConfigModel.json: ThemeRewards[8].ThemeReward.CurrencyType",
+      "type": "",
+      "value": "5",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/CollectionConfigModel.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "CollectionConfigModel.json: ThemeRewards[8].ThemeReward.Amount",
+      "type": "",
+      "value": "4",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/CollectionConfigModel.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "CollectionConfigModel.json: ThemeRewards[9].ThemeId",
+      "type": "",
+      "value": "theme_10",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/CollectionConfigModel.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "CollectionConfigModel.json: ThemeRewards[9].ThemeReward.CurrencyType",
+      "type": "",
+      "value": "6",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/CollectionConfigModel.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "CollectionConfigModel.json: ThemeRewards[9].ThemeReward.Amount",
+      "type": "",
+      "value": "2",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/CollectionConfigModel.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "CollectionConfigModel.json: ThemeRewards[10].ThemeId",
+      "type": "",
+      "value": "theme_11",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/CollectionConfigModel.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "CollectionConfigModel.json: ThemeRewards[10].ThemeReward.CurrencyType",
+      "type": "",
+      "value": "1",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/CollectionConfigModel.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "CollectionConfigModel.json: ThemeRewards[10].ThemeReward.Amount",
+      "type": "",
+      "value": "800",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/CollectionConfigModel.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "CollectionConfigModel.json: ThemeRewards[11].ThemeId",
+      "type": "",
+      "value": "theme_12",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/CollectionConfigModel.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "CollectionConfigModel.json: ThemeRewards[11].ThemeReward.CurrencyType",
+      "type": "",
+      "value": "5",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/CollectionConfigModel.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "CollectionConfigModel.json: ThemeRewards[11].ThemeReward.Amount",
+      "type": "",
+      "value": "5",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/CollectionConfigModel.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "CollectionConfigModel.json: ThemeRewards[12].ThemeId",
+      "type": "",
+      "value": "theme_13",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/CollectionConfigModel.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "CollectionConfigModel.json: ThemeRewards[12].ThemeReward.CurrencyType",
+      "type": "",
+      "value": "1",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/CollectionConfigModel.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "CollectionConfigModel.json: ThemeRewards[12].ThemeReward.Amount",
+      "type": "",
+      "value": "1000",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/CollectionConfigModel.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "CollectionConfigModel.json: ThemeRewards[13].ThemeId",
+      "type": "",
+      "value": "theme_14",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/CollectionConfigModel.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "CollectionConfigModel.json: ThemeRewards[13].ThemeReward.CurrencyType",
+      "type": "",
+      "value": "6",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/CollectionConfigModel.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "CollectionConfigModel.json: ThemeRewards[13].ThemeReward.Amount",
+      "type": "",
+      "value": "3",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/CollectionConfigModel.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "CollectionConfigModel.json: ThemeRewards[14].ThemeId",
+      "type": "",
+      "value": "theme_15",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/CollectionConfigModel.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "CollectionConfigModel.json: ThemeRewards[14].ThemeReward.CurrencyType",
+      "type": "",
+      "value": "1",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/CollectionConfigModel.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "CollectionConfigModel.json: ThemeRewards[14].ThemeReward.Amount",
+      "type": "",
+      "value": "1500",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/CollectionConfigModel.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "CollectionConfigModel.json: CollectionReward.CurrencyType",
+      "type": "",
+      "value": "13",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/CollectionConfigModel.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "CollectionConfigModel.json: CollectionReward.ChestType",
+      "type": "",
+      "value": "8",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/CollectionConfigModel.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "CollectionConfigModel.json: CollectionReward.Amount",
+      "type": "",
+      "value": "1",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/CollectionConfigModel.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "CollectionConfigModel.json: CollectionReward.Rewards[0].CurrencyType",
+      "type": "",
+      "value": "1",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/CollectionConfigModel.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "CollectionConfigModel.json: CollectionReward.Rewards[0].Amount",
+      "type": "",
+      "value": "10000",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/CollectionConfigModel.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "CollectionConfigModel.json: CollectionReward.Rewards[1].CurrencyType",
+      "type": "",
+      "value": "6",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/CollectionConfigModel.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "CollectionConfigModel.json: CollectionReward.Rewards[1].Amount",
+      "type": "",
+      "value": "5",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/CollectionConfigModel.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "CollectionConfigModel.json: CollectionReward.Rewards[2].CurrencyType",
+      "type": "",
+      "value": "5",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/CollectionConfigModel.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "CollectionConfigModel.json: CollectionReward.Rewards[2].Amount",
+      "type": "",
+      "value": "5",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/CollectionConfigModel.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "CollectionConfigModel.json: CollectionReward.Rewards[3].CurrencyType",
+      "type": "",
+      "value": "4",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/CollectionConfigModel.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "CollectionConfigModel.json: CollectionReward.Rewards[3].Amount",
+      "type": "",
+      "value": "5",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/CollectionConfigModel.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "CollectionConfigModel.json: GoldCollectionReward.CurrencyType",
+      "type": "",
+      "value": "13",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/CollectionConfigModel.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "CollectionConfigModel.json: GoldCollectionReward.ChestType",
+      "type": "",
+      "value": "8",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/CollectionConfigModel.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "CollectionConfigModel.json: GoldCollectionReward.Amount",
+      "type": "",
+      "value": "1",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/CollectionConfigModel.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "CollectionConfigModel.json: GoldCollectionReward.Rewards[0].CurrencyType",
+      "type": "",
+      "value": "1",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/CollectionConfigModel.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "CollectionConfigModel.json: GoldCollectionReward.Rewards[0].Amount",
+      "type": "",
+      "value": "15000",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/CollectionConfigModel.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "CollectionConfigModel.json: GoldCollectionReward.Rewards[1].CurrencyType",
+      "type": "",
+      "value": "6",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/CollectionConfigModel.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "CollectionConfigModel.json: GoldCollectionReward.Rewards[1].Amount",
+      "type": "",
+      "value": "8",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/CollectionConfigModel.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "CollectionConfigModel.json: GoldCollectionReward.Rewards[2].CurrencyType",
+      "type": "",
+      "value": "5",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/CollectionConfigModel.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "CollectionConfigModel.json: GoldCollectionReward.Rewards[2].Amount",
+      "type": "",
+      "value": "8",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/CollectionConfigModel.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "CollectionConfigModel.json: GoldCollectionReward.Rewards[3].CurrencyType",
+      "type": "",
+      "value": "4",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/CollectionConfigModel.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "CollectionConfigModel.json: GoldCollectionReward.Rewards[3].Amount",
+      "type": "",
+      "value": "8",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/CollectionConfigModel.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "server cache (historical)",
+      "key": "CollectionConfigModel (live) = default?",
+      "type": "",
+      "value": "125/236 key trùng default, 111 key khác/thêm",
+      "meaning": "Đối chiếu config server thật (CachedRemoteConfigs) với CollectionConfigModel.json",
+      "where": "Configs/CachedRemoteConfigs + Firebase RC template 3197 — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server cache (historical)",
+      "key": "CollectionConfigModel: isEnabled",
+      "type": "",
+      "value": "true",
+      "meaning": "server ghi đè (default = false)",
+      "where": "Configs/CachedRemoteConfigs + Firebase RC template 3197 — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server cache (historical)",
+      "key": "CollectionConfigModel: minBundleDownloadLevel",
+      "type": "",
+      "value": "60",
+      "meaning": "server ghi đè (default = 20)",
+      "where": "Configs/CachedRemoteConfigs + Firebase RC template 3197 — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server cache (historical)",
+      "key": "CollectionConfigModel: additionalCompleteCollectionCount",
+      "type": "",
+      "value": "0",
+      "meaning": "server-only (không có trong default)",
+      "where": "Configs/CachedRemoteConfigs + Firebase RC template 3197 — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server cache (historical)",
+      "key": "CollectionConfigModel: bonusChests[0].chestReward.timeSpan",
+      "type": "",
+      "value": "00:00:00",
+      "meaning": "server-only (không có trong default)",
+      "where": "Configs/CachedRemoteConfigs + Firebase RC template 3197 — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server cache (historical)",
+      "key": "CollectionConfigModel: bonusChests[0].chestReward.rewards[0].timeSpan",
+      "type": "",
+      "value": "00:00:00",
+      "meaning": "server-only (không có trong default)",
+      "where": "Configs/CachedRemoteConfigs + Firebase RC template 3197 — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server cache (historical)",
+      "key": "CollectionConfigModel: bonusChests[0].chestReward.rewards[0].chestType",
+      "type": "",
+      "value": "0",
+      "meaning": "server-only (không có trong default)",
+      "where": "Configs/CachedRemoteConfigs + Firebase RC template 3197 — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server cache (historical)",
+      "key": "CollectionConfigModel: bonusChests[0].chestReward.rewards[0].collectionPackType",
+      "type": "",
+      "value": "0",
+      "meaning": "server-only (không có trong default)",
+      "where": "Configs/CachedRemoteConfigs + Firebase RC template 3197 — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server cache (historical)",
+      "key": "CollectionConfigModel: bonusChests[0].chestReward.rewards[1].timeSpan",
+      "type": "",
+      "value": "00:00:00",
+      "meaning": "server-only (không có trong default)",
+      "where": "Configs/CachedRemoteConfigs + Firebase RC template 3197 — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server cache (historical)",
+      "key": "CollectionConfigModel: bonusChests[0].chestReward.rewards[1].chestType",
+      "type": "",
+      "value": "0",
+      "meaning": "server-only (không có trong default)",
+      "where": "Configs/CachedRemoteConfigs + Firebase RC template 3197 — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server cache (historical)",
+      "key": "CollectionConfigModel: bonusChests[0].chestReward.rewards[1].collectionPackType",
+      "type": "",
+      "value": "0",
+      "meaning": "server-only (không có trong default)",
+      "where": "Configs/CachedRemoteConfigs + Firebase RC template 3197 — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server cache (historical)",
+      "key": "CollectionConfigModel: bonusChests[0].chestReward.rewards[2].timeSpan",
+      "type": "",
+      "value": "00:00:00",
+      "meaning": "server-only (không có trong default)",
+      "where": "Configs/CachedRemoteConfigs + Firebase RC template 3197 — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server cache (historical)",
+      "key": "CollectionConfigModel: bonusChests[0].chestReward.rewards[2].chestType",
+      "type": "",
+      "value": "0",
+      "meaning": "server-only (không có trong default)",
+      "where": "Configs/CachedRemoteConfigs + Firebase RC template 3197 — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server cache (historical)",
+      "key": "CollectionConfigModel: bonusChests[0].chestReward.chestType",
+      "type": "",
+      "value": "0",
+      "meaning": "server-only (không có trong default)",
+      "where": "Configs/CachedRemoteConfigs + Firebase RC template 3197 — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server cache (historical)",
+      "key": "CollectionConfigModel: bonusChests[0].chestReward.collectionPackType",
+      "type": "",
+      "value": "0",
+      "meaning": "server-only (không có trong default)",
+      "where": "Configs/CachedRemoteConfigs + Firebase RC template 3197 — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server cache (historical)",
+      "key": "CollectionConfigModel: bonusChests[1].chestReward.timeSpan",
+      "type": "",
+      "value": "00:00:00",
+      "meaning": "server-only (không có trong default)",
+      "where": "Configs/CachedRemoteConfigs + Firebase RC template 3197 — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server cache (historical)",
+      "key": "CollectionConfigModel: bonusChests[1].chestReward.rewards[0].timeSpan",
+      "type": "",
+      "value": "00:00:00",
+      "meaning": "server-only (không có trong default)",
+      "where": "Configs/CachedRemoteConfigs + Firebase RC template 3197 — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server cache (historical)",
+      "key": "CollectionConfigModel: bonusChests[1].chestReward.rewards[0].chestType",
+      "type": "",
+      "value": "0",
+      "meaning": "server-only (không có trong default)",
+      "where": "Configs/CachedRemoteConfigs + Firebase RC template 3197 — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server cache (historical)",
+      "key": "CollectionConfigModel: bonusChests[1].chestReward.rewards[0].collectionPackType",
+      "type": "",
+      "value": "0",
+      "meaning": "server-only (không có trong default)",
+      "where": "Configs/CachedRemoteConfigs + Firebase RC template 3197 — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server cache (historical)",
+      "key": "CollectionConfigModel: bonusChests[1].chestReward.rewards[1].timeSpan",
+      "type": "",
+      "value": "00:00:00",
+      "meaning": "server-only (không có trong default)",
+      "where": "Configs/CachedRemoteConfigs + Firebase RC template 3197 — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server cache (historical)",
+      "key": "CollectionConfigModel: bonusChests[1].chestReward.rewards[1].chestType",
+      "type": "",
+      "value": "0",
+      "meaning": "server-only (không có trong default)",
+      "where": "Configs/CachedRemoteConfigs + Firebase RC template 3197 — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server cache (historical)",
+      "key": "CollectionConfigModel: bonusChests[1].chestReward.rewards[2].timeSpan",
+      "type": "",
+      "value": "00:00:00",
+      "meaning": "server-only (không có trong default)",
+      "where": "Configs/CachedRemoteConfigs + Firebase RC template 3197 — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server cache (historical)",
+      "key": "CollectionConfigModel: bonusChests[1].chestReward.rewards[2].chestType",
+      "type": "",
+      "value": "0",
+      "meaning": "server-only (không có trong default)",
+      "where": "Configs/CachedRemoteConfigs + Firebase RC template 3197 — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server cache (historical)",
+      "key": "CollectionConfigModel: bonusChests[1].chestReward.rewards[3].timeSpan",
+      "type": "",
+      "value": "00:00:00",
+      "meaning": "server-only (không có trong default)",
+      "where": "Configs/CachedRemoteConfigs + Firebase RC template 3197 — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server cache (historical)",
+      "key": "CollectionConfigModel: bonusChests[1].chestReward.rewards[3].chestType",
+      "type": "",
+      "value": "0",
+      "meaning": "server-only (không có trong default)",
+      "where": "Configs/CachedRemoteConfigs + Firebase RC template 3197 — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server cache (historical)",
+      "key": "CollectionConfigModel: bonusChests[1].chestReward.chestType",
+      "type": "",
+      "value": "0",
+      "meaning": "server-only (không có trong default)",
+      "where": "Configs/CachedRemoteConfigs + Firebase RC template 3197 — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server cache (historical)",
+      "key": "CollectionConfigModel: bonusChests[1].chestReward.collectionPackType",
+      "type": "",
+      "value": "0",
+      "meaning": "server-only (không có trong default)",
+      "where": "Configs/CachedRemoteConfigs + Firebase RC template 3197 — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server cache (historical)",
+      "key": "CollectionConfigModel: bonusChests[2].chestReward.timeSpan",
+      "type": "",
+      "value": "00:00:00",
+      "meaning": "server-only (không có trong default)",
+      "where": "Configs/CachedRemoteConfigs + Firebase RC template 3197 — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server cache (historical)",
+      "key": "CollectionConfigModel: bonusChests[2].chestReward.rewards[0].timeSpan",
+      "type": "",
+      "value": "00:00:00",
+      "meaning": "server-only (không có trong default)",
+      "where": "Configs/CachedRemoteConfigs + Firebase RC template 3197 — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server cache (historical)",
+      "key": "CollectionConfigModel: bonusChests[2].chestReward.rewards[0].chestType",
+      "type": "",
+      "value": "0",
+      "meaning": "server-only (không có trong default)",
+      "where": "Configs/CachedRemoteConfigs + Firebase RC template 3197 — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server cache (historical)",
+      "key": "CollectionConfigModel: bonusChests[2].chestReward.rewards[0].collectionPackType",
+      "type": "",
+      "value": "0",
+      "meaning": "server-only (không có trong default)",
+      "where": "Configs/CachedRemoteConfigs + Firebase RC template 3197 — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server cache (historical)",
+      "key": "CollectionConfigModel: bonusChests[2].chestReward.rewards[1].timeSpan",
+      "type": "",
+      "value": "00:00:00",
+      "meaning": "server-only (không có trong default)",
+      "where": "Configs/CachedRemoteConfigs + Firebase RC template 3197 — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server cache (historical)",
+      "key": "CollectionConfigModel: bonusChests[2].chestReward.rewards[1].chestType",
+      "type": "",
+      "value": "0",
+      "meaning": "server-only (không có trong default)",
+      "where": "Configs/CachedRemoteConfigs + Firebase RC template 3197 — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server cache (historical)",
+      "key": "CollectionConfigModel: bonusChests[2].chestReward.rewards[2].timeSpan",
+      "type": "",
+      "value": "00:00:00",
+      "meaning": "server-only (không có trong default)",
+      "where": "Configs/CachedRemoteConfigs + Firebase RC template 3197 — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server cache (historical)",
+      "key": "CollectionConfigModel: bonusChests[2].chestReward.rewards[2].chestType",
+      "type": "",
+      "value": "0",
+      "meaning": "server-only (không có trong default)",
+      "where": "Configs/CachedRemoteConfigs + Firebase RC template 3197 — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server cache (historical)",
+      "key": "CollectionConfigModel: bonusChests[2].chestReward.rewards[3].timeSpan",
+      "type": "",
+      "value": "00:00:00",
+      "meaning": "server-only (không có trong default)",
+      "where": "Configs/CachedRemoteConfigs + Firebase RC template 3197 — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server cache (historical)",
+      "key": "CollectionConfigModel: bonusChests[2].chestReward.rewards[3].chestType",
+      "type": "",
+      "value": "0",
+      "meaning": "server-only (không có trong default)",
+      "where": "Configs/CachedRemoteConfigs + Firebase RC template 3197 — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server cache (historical)",
+      "key": "CollectionConfigModel: bonusChests[2].chestReward.chestType",
+      "type": "",
+      "value": "0",
+      "meaning": "server-only (không có trong default)",
+      "where": "Configs/CachedRemoteConfigs + Firebase RC template 3197 — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server cache (historical)",
+      "key": "CollectionConfigModel: bonusChests[2].chestReward.collectionPackType",
+      "type": "",
+      "value": "0",
+      "meaning": "server-only (không có trong default)",
+      "where": "Configs/CachedRemoteConfigs + Firebase RC template 3197 — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server cache (historical)",
+      "key": "CollectionConfigModel: themeRewards[0].themeReward.amount",
+      "type": "",
+      "value": "0",
+      "meaning": "server-only (không có trong default)",
+      "where": "Configs/CachedRemoteConfigs + Firebase RC template 3197 — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server cache (historical)",
+      "key": "CollectionConfigModel: themeRewards[0].themeReward.chestType",
+      "type": "",
+      "value": "0",
+      "meaning": "server-only (không có trong default)",
+      "where": "Configs/CachedRemoteConfigs + Firebase RC template 3197 — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server cache (historical)",
+      "key": "CollectionConfigModel: themeRewards[0].themeReward.collectionPackType",
+      "type": "",
+      "value": "0",
+      "meaning": "server-only (không có trong default)",
+      "where": "Configs/CachedRemoteConfigs + Firebase RC template 3197 — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server cache (historical)",
+      "key": "CollectionConfigModel: themeRewards[1].themeReward.timeSpan",
+      "type": "",
+      "value": "00:00:00",
+      "meaning": "server-only (không có trong default)",
+      "where": "Configs/CachedRemoteConfigs + Firebase RC template 3197 — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server cache (historical)",
+      "key": "CollectionConfigModel: themeRewards[1].themeReward.chestType",
+      "type": "",
+      "value": "0",
+      "meaning": "server-only (không có trong default)",
+      "where": "Configs/CachedRemoteConfigs + Firebase RC template 3197 — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server cache (historical)",
+      "key": "CollectionConfigModel: themeRewards[1].themeReward.collectionPackType",
+      "type": "",
+      "value": "0",
+      "meaning": "server-only (không có trong default)",
+      "where": "Configs/CachedRemoteConfigs + Firebase RC template 3197 — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server cache (historical)",
+      "key": "CollectionConfigModel: themeRewards[2].themeReward.timeSpan",
+      "type": "",
+      "value": "00:00:00",
+      "meaning": "server-only (không có trong default)",
+      "where": "Configs/CachedRemoteConfigs + Firebase RC template 3197 — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server cache (historical)",
+      "key": "CollectionConfigModel: themeRewards[2].themeReward.chestType",
+      "type": "",
+      "value": "0",
+      "meaning": "server-only (không có trong default)",
+      "where": "Configs/CachedRemoteConfigs + Firebase RC template 3197 — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server cache (historical)",
+      "key": "CollectionConfigModel: themeRewards[2].themeReward.collectionPackType",
+      "type": "",
+      "value": "0",
+      "meaning": "server-only (không có trong default)",
+      "where": "Configs/CachedRemoteConfigs + Firebase RC template 3197 — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server cache (historical)",
+      "key": "CollectionConfigModel: themeRewards[3].themeReward.timeSpan",
+      "type": "",
+      "value": "00:00:00",
+      "meaning": "server-only (không có trong default)",
+      "where": "Configs/CachedRemoteConfigs + Firebase RC template 3197 — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server cache (historical)",
+      "key": "CollectionConfigModel: themeRewards[3].themeReward.chestType",
+      "type": "",
+      "value": "0",
+      "meaning": "server-only (không có trong default)",
+      "where": "Configs/CachedRemoteConfigs + Firebase RC template 3197 — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server cache (historical)",
+      "key": "CollectionConfigModel: themeRewards[3].themeReward.collectionPackType",
+      "type": "",
+      "value": "0",
+      "meaning": "server-only (không có trong default)",
+      "where": "Configs/CachedRemoteConfigs + Firebase RC template 3197 — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server cache (historical)",
+      "key": "CollectionConfigModel: themeRewards[4].themeReward.timeSpan",
+      "type": "",
+      "value": "00:00:00",
+      "meaning": "server-only (không có trong default)",
+      "where": "Configs/CachedRemoteConfigs + Firebase RC template 3197 — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server cache (historical)",
+      "key": "CollectionConfigModel: themeRewards[4].themeReward.chestType",
+      "type": "",
+      "value": "0",
+      "meaning": "server-only (không có trong default)",
+      "where": "Configs/CachedRemoteConfigs + Firebase RC template 3197 — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server cache (historical)",
+      "key": "CollectionConfigModel: themeRewards[4].themeReward.collectionPackType",
+      "type": "",
+      "value": "0",
+      "meaning": "server-only (không có trong default)",
+      "where": "Configs/CachedRemoteConfigs + Firebase RC template 3197 — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server cache (historical)",
+      "key": "CollectionConfigModel: themeRewards[5].themeReward.timeSpan",
+      "type": "",
+      "value": "00:00:00",
+      "meaning": "server-only (không có trong default)",
+      "where": "Configs/CachedRemoteConfigs + Firebase RC template 3197 — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server cache (historical)",
+      "key": "CollectionConfigModel: themeRewards[5].themeReward.chestType",
+      "type": "",
+      "value": "0",
+      "meaning": "server-only (không có trong default)",
+      "where": "Configs/CachedRemoteConfigs + Firebase RC template 3197 — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server cache (historical)",
+      "key": "CollectionConfigModel: themeRewards[5].themeReward.collectionPackType",
+      "type": "",
+      "value": "0",
+      "meaning": "server-only (không có trong default)",
+      "where": "Configs/CachedRemoteConfigs + Firebase RC template 3197 — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server cache (historical)",
+      "key": "CollectionConfigModel: themeRewards[6].themeReward.timeSpan",
+      "type": "",
+      "value": "00:00:00",
+      "meaning": "server-only (không có trong default)",
+      "where": "Configs/CachedRemoteConfigs + Firebase RC template 3197 — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server cache (historical)",
+      "key": "CollectionConfigModel: themeRewards[6].themeReward.chestType",
+      "type": "",
+      "value": "0",
+      "meaning": "server-only (không có trong default)",
+      "where": "Configs/CachedRemoteConfigs + Firebase RC template 3197 — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server cache (historical)",
+      "key": "CollectionConfigModel: themeRewards[6].themeReward.collectionPackType",
+      "type": "",
+      "value": "0",
+      "meaning": "server-only (không có trong default)",
+      "where": "Configs/CachedRemoteConfigs + Firebase RC template 3197 — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server cache (historical)",
+      "key": "CollectionConfigModel: themeRewards[7].themeReward.timeSpan",
+      "type": "",
+      "value": "00:00:00",
+      "meaning": "server-only (không có trong default)",
+      "where": "Configs/CachedRemoteConfigs + Firebase RC template 3197 — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server cache (historical)",
+      "key": "CollectionConfigModel: themeRewards[7].themeReward.chestType",
+      "type": "",
+      "value": "0",
+      "meaning": "server-only (không có trong default)",
+      "where": "Configs/CachedRemoteConfigs + Firebase RC template 3197 — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server cache (historical)",
+      "key": "CollectionConfigModel: themeRewards[7].themeReward.collectionPackType",
+      "type": "",
+      "value": "0",
+      "meaning": "server-only (không có trong default)",
+      "where": "Configs/CachedRemoteConfigs + Firebase RC template 3197 — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server cache (historical)",
+      "key": "CollectionConfigModel: themeRewards[8].themeReward.timeSpan",
+      "type": "",
+      "value": "00:00:00",
+      "meaning": "server-only (không có trong default)",
+      "where": "Configs/CachedRemoteConfigs + Firebase RC template 3197 — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server cache (historical)",
+      "key": "CollectionConfigModel: themeRewards[8].themeReward.chestType",
+      "type": "",
+      "value": "0",
+      "meaning": "server-only (không có trong default)",
+      "where": "Configs/CachedRemoteConfigs + Firebase RC template 3197 — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server cache (historical)",
+      "key": "CollectionConfigModel: themeRewards[8].themeReward.collectionPackType",
+      "type": "",
+      "value": "0",
+      "meaning": "server-only (không có trong default)",
+      "where": "Configs/CachedRemoteConfigs + Firebase RC template 3197 — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server cache (historical)",
+      "key": "CollectionConfigModel: themeRewards[9].themeReward.timeSpan",
+      "type": "",
+      "value": "00:00:00",
+      "meaning": "server-only (không có trong default)",
+      "where": "Configs/CachedRemoteConfigs + Firebase RC template 3197 — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server cache (historical)",
+      "key": "CollectionConfigModel: themeRewards[9].themeReward.chestType",
+      "type": "",
+      "value": "0",
+      "meaning": "server-only (không có trong default)",
+      "where": "Configs/CachedRemoteConfigs + Firebase RC template 3197 — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server cache (historical)",
+      "key": "CollectionConfigModel: themeRewards[9].themeReward.collectionPackType",
+      "type": "",
+      "value": "0",
+      "meaning": "server-only (không có trong default)",
+      "where": "Configs/CachedRemoteConfigs + Firebase RC template 3197 — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server cache (historical)",
+      "key": "CollectionConfigModel: themeRewards[10].themeReward.timeSpan",
+      "type": "",
+      "value": "00:00:00",
+      "meaning": "server-only (không có trong default)",
+      "where": "Configs/CachedRemoteConfigs + Firebase RC template 3197 — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server cache (historical)",
+      "key": "CollectionConfigModel: themeRewards[10].themeReward.chestType",
+      "type": "",
+      "value": "0",
+      "meaning": "server-only (không có trong default)",
+      "where": "Configs/CachedRemoteConfigs + Firebase RC template 3197 — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server cache (historical)",
+      "key": "CollectionConfigModel: themeRewards[10].themeReward.collectionPackType",
+      "type": "",
+      "value": "0",
+      "meaning": "server-only (không có trong default)",
+      "where": "Configs/CachedRemoteConfigs + Firebase RC template 3197 — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server cache (historical)",
+      "key": "CollectionConfigModel: themeRewards[11].themeReward.timeSpan",
+      "type": "",
+      "value": "00:00:00",
+      "meaning": "server-only (không có trong default)",
+      "where": "Configs/CachedRemoteConfigs + Firebase RC template 3197 — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server cache (historical)",
+      "key": "CollectionConfigModel: themeRewards[11].themeReward.chestType",
+      "type": "",
+      "value": "0",
+      "meaning": "server-only (không có trong default)",
+      "where": "Configs/CachedRemoteConfigs + Firebase RC template 3197 — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server cache (historical)",
+      "key": "CollectionConfigModel: themeRewards[11].themeReward.collectionPackType",
+      "type": "",
+      "value": "0",
+      "meaning": "server-only (không có trong default)",
+      "where": "Configs/CachedRemoteConfigs + Firebase RC template 3197 — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server cache (historical)",
+      "key": "CollectionConfigModel: themeRewards[12].themeReward.timeSpan",
+      "type": "",
+      "value": "00:00:00",
+      "meaning": "server-only (không có trong default)",
+      "where": "Configs/CachedRemoteConfigs + Firebase RC template 3197 — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server cache (historical)",
+      "key": "CollectionConfigModel: themeRewards[12].themeReward.chestType",
+      "type": "",
+      "value": "0",
+      "meaning": "server-only (không có trong default)",
+      "where": "Configs/CachedRemoteConfigs + Firebase RC template 3197 — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server cache (historical)",
+      "key": "CollectionConfigModel: themeRewards[12].themeReward.collectionPackType",
+      "type": "",
+      "value": "0",
+      "meaning": "server-only (không có trong default)",
+      "where": "Configs/CachedRemoteConfigs + Firebase RC template 3197 — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server cache (historical)",
+      "key": "CollectionConfigModel: themeRewards[13].themeReward.timeSpan",
+      "type": "",
+      "value": "00:00:00",
+      "meaning": "server-only (không có trong default)",
+      "where": "Configs/CachedRemoteConfigs + Firebase RC template 3197 — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server cache (historical)",
+      "key": "CollectionConfigModel: themeRewards[13].themeReward.chestType",
+      "type": "",
+      "value": "0",
+      "meaning": "server-only (không có trong default)",
+      "where": "Configs/CachedRemoteConfigs + Firebase RC template 3197 — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server cache (historical)",
+      "key": "CollectionConfigModel: themeRewards[13].themeReward.collectionPackType",
+      "type": "",
+      "value": "0",
+      "meaning": "server-only (không có trong default)",
+      "where": "Configs/CachedRemoteConfigs + Firebase RC template 3197 — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server cache (historical)",
+      "key": "CollectionConfigModel: themeRewards[14].themeReward.timeSpan",
+      "type": "",
+      "value": "00:00:00",
+      "meaning": "server-only (không có trong default)",
+      "where": "Configs/CachedRemoteConfigs + Firebase RC template 3197 — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server cache (historical)",
+      "key": "CollectionConfigModel: themeRewards[14].themeReward.chestType",
+      "type": "",
+      "value": "0",
+      "meaning": "server-only (không có trong default)",
+      "where": "Configs/CachedRemoteConfigs + Firebase RC template 3197 — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server cache (historical)",
+      "key": "CollectionConfigModel: themeRewards[14].themeReward.collectionPackType",
+      "type": "",
+      "value": "0",
+      "meaning": "server-only (không có trong default)",
+      "where": "Configs/CachedRemoteConfigs + Firebase RC template 3197 — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server cache (historical)",
+      "key": "CollectionConfigModel: collectionReward.timeSpan",
+      "type": "",
+      "value": "00:00:00",
+      "meaning": "server-only (không có trong default)",
+      "where": "Configs/CachedRemoteConfigs + Firebase RC template 3197 — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server cache (historical)",
+      "key": "CollectionConfigModel: collectionReward.rewards[0].timeSpan",
+      "type": "",
+      "value": "00:00:00",
+      "meaning": "server-only (không có trong default)",
+      "where": "Configs/CachedRemoteConfigs + Firebase RC template 3197 — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server cache (historical)",
+      "key": "CollectionConfigModel: collectionReward.rewards[0].chestType",
+      "type": "",
+      "value": "0",
+      "meaning": "server-only (không có trong default)",
+      "where": "Configs/CachedRemoteConfigs + Firebase RC template 3197 — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server cache (historical)",
+      "key": "CollectionConfigModel: collectionReward.rewards[0].collectionPackType",
+      "type": "",
+      "value": "0",
+      "meaning": "server-only (không có trong default)",
+      "where": "Configs/CachedRemoteConfigs + Firebase RC template 3197 — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server cache (historical)",
+      "key": "CollectionConfigModel: collectionReward.rewards[1].timeSpan",
+      "type": "",
+      "value": "00:00:00",
+      "meaning": "server-only (không có trong default)",
+      "where": "Configs/CachedRemoteConfigs + Firebase RC template 3197 — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server cache (historical)",
+      "key": "CollectionConfigModel: collectionReward.rewards[1].chestType",
+      "type": "",
+      "value": "0",
+      "meaning": "server-only (không có trong default)",
+      "where": "Configs/CachedRemoteConfigs + Firebase RC template 3197 — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server cache (historical)",
+      "key": "CollectionConfigModel: collectionReward.rewards[1].collectionPackType",
+      "type": "",
+      "value": "0",
+      "meaning": "server-only (không có trong default)",
+      "where": "Configs/CachedRemoteConfigs + Firebase RC template 3197 — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server cache (historical)",
+      "key": "CollectionConfigModel: collectionReward.rewards[2].timeSpan",
+      "type": "",
+      "value": "00:00:00",
+      "meaning": "server-only (không có trong default)",
+      "where": "Configs/CachedRemoteConfigs + Firebase RC template 3197 — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server cache (historical)",
+      "key": "CollectionConfigModel: collectionReward.rewards[2].chestType",
+      "type": "",
+      "value": "0",
+      "meaning": "server-only (không có trong default)",
+      "where": "Configs/CachedRemoteConfigs + Firebase RC template 3197 — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server cache (historical)",
+      "key": "CollectionConfigModel: collectionReward.rewards[2].collectionPackType",
+      "type": "",
+      "value": "0",
+      "meaning": "server-only (không có trong default)",
+      "where": "Configs/CachedRemoteConfigs + Firebase RC template 3197 — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server cache (historical)",
+      "key": "CollectionConfigModel: collectionReward.rewards[3].timeSpan",
+      "type": "",
+      "value": "00:00:00",
+      "meaning": "server-only (không có trong default)",
+      "where": "Configs/CachedRemoteConfigs + Firebase RC template 3197 — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server cache (historical)",
+      "key": "CollectionConfigModel: collectionReward.rewards[3].chestType",
+      "type": "",
+      "value": "0",
+      "meaning": "server-only (không có trong default)",
+      "where": "Configs/CachedRemoteConfigs + Firebase RC template 3197 — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server cache (historical)",
+      "key": "CollectionConfigModel: collectionReward.rewards[3].collectionPackType",
+      "type": "",
+      "value": "0",
+      "meaning": "server-only (không có trong default)",
+      "where": "Configs/CachedRemoteConfigs + Firebase RC template 3197 — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server cache (historical)",
+      "key": "CollectionConfigModel: collectionReward.collectionPackType",
+      "type": "",
+      "value": "0",
+      "meaning": "server-only (không có trong default)",
+      "where": "Configs/CachedRemoteConfigs + Firebase RC template 3197 — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server cache (historical)",
+      "key": "CollectionConfigModel: goldCollectionReward.timeSpan",
+      "type": "",
+      "value": "00:00:00",
+      "meaning": "server-only (không có trong default)",
+      "where": "Configs/CachedRemoteConfigs + Firebase RC template 3197 — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server cache (historical)",
+      "key": "CollectionConfigModel: goldCollectionReward.rewards[0].timeSpan",
+      "type": "",
+      "value": "00:00:00",
+      "meaning": "server-only (không có trong default)",
+      "where": "Configs/CachedRemoteConfigs + Firebase RC template 3197 — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server cache (historical)",
+      "key": "CollectionConfigModel: goldCollectionReward.rewards[0].chestType",
+      "type": "",
+      "value": "0",
+      "meaning": "server-only (không có trong default)",
+      "where": "Configs/CachedRemoteConfigs + Firebase RC template 3197 — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server cache (historical)",
+      "key": "CollectionConfigModel: goldCollectionReward.rewards[0].collectionPackType",
+      "type": "",
+      "value": "0",
+      "meaning": "server-only (không có trong default)",
+      "where": "Configs/CachedRemoteConfigs + Firebase RC template 3197 — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server cache (historical)",
+      "key": "CollectionConfigModel: goldCollectionReward.rewards[1].timeSpan",
+      "type": "",
+      "value": "00:00:00",
+      "meaning": "server-only (không có trong default)",
+      "where": "Configs/CachedRemoteConfigs + Firebase RC template 3197 — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server cache (historical)",
+      "key": "CollectionConfigModel: goldCollectionReward.rewards[1].chestType",
+      "type": "",
+      "value": "0",
+      "meaning": "server-only (không có trong default)",
+      "where": "Configs/CachedRemoteConfigs + Firebase RC template 3197 — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server cache (historical)",
+      "key": "CollectionConfigModel: goldCollectionReward.rewards[1].collectionPackType",
+      "type": "",
+      "value": "0",
+      "meaning": "server-only (không có trong default)",
+      "where": "Configs/CachedRemoteConfigs + Firebase RC template 3197 — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server cache (historical)",
+      "key": "CollectionConfigModel: goldCollectionReward.rewards[2].timeSpan",
+      "type": "",
+      "value": "00:00:00",
+      "meaning": "server-only (không có trong default)",
+      "where": "Configs/CachedRemoteConfigs + Firebase RC template 3197 — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server cache (historical)",
+      "key": "CollectionConfigModel: goldCollectionReward.rewards[2].chestType",
+      "type": "",
+      "value": "0",
+      "meaning": "server-only (không có trong default)",
+      "where": "Configs/CachedRemoteConfigs + Firebase RC template 3197 — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server cache (historical)",
+      "key": "CollectionConfigModel: goldCollectionReward.rewards[2].collectionPackType",
+      "type": "",
+      "value": "0",
+      "meaning": "server-only (không có trong default)",
+      "where": "Configs/CachedRemoteConfigs + Firebase RC template 3197 — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server cache (historical)",
+      "key": "CollectionConfigModel: goldCollectionReward.rewards[3].timeSpan",
+      "type": "",
+      "value": "00:00:00",
+      "meaning": "server-only (không có trong default)",
+      "where": "Configs/CachedRemoteConfigs + Firebase RC template 3197 — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server cache (historical)",
+      "key": "CollectionConfigModel: goldCollectionReward.rewards[3].chestType",
+      "type": "",
+      "value": "0",
+      "meaning": "server-only (không có trong default)",
+      "where": "Configs/CachedRemoteConfigs + Firebase RC template 3197 — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server cache (historical)",
+      "key": "CollectionConfigModel: goldCollectionReward.rewards[3].collectionPackType",
+      "type": "",
+      "value": "0",
+      "meaning": "server-only (không có trong default)",
+      "where": "Configs/CachedRemoteConfigs + Firebase RC template 3197 — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server cache (historical)",
+      "key": "CollectionConfigModel: goldCollectionReward.collectionPackType",
+      "type": "",
+      "value": "0",
+      "meaning": "server-only (không có trong default)",
+      "where": "Configs/CachedRemoteConfigs + Firebase RC template 3197 — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    }
+  ],
+  "rewards": [
+    {
+      "context": "Hoàn thành theme",
+      "reward": "CollectionThemeRewardModel.ThemeReward theo ThemeId — CurrencyEarnReason.CollectionThemeCompleted (34)",
+      "evidence": "CollectionService.GetThemeReward"
+    },
+    {
+      "context": "Bonus Chest theo sao dư",
+      "reward": "CollectionBonusChestModel.ChestReward (hoặc ChestRewardWithoutCollection) tại mốc StarCount — CurrencyEarnReason.CollectionChest (33)",
+      "evidence": "CollectionService.GiveBonusChestReward"
+    },
+    {
+      "context": "Hoàn thành cả bộ",
+      "reward": "CollectionConfigModel.CollectionReward / GoldCollectionReward + token (CurrencyType.ProfileToken với TokenId hoặc GoldTokenId) — CurrencyEarnReason.CollectionCompleted (35)",
+      "evidence": "CollectionService.OnCollectionCompleted; CollectionService.GetActiveTokenReward"
+    },
+    {
+      "context": "Kích hoạt bộ sưu tập",
+      "reward": "GetCollectionActivatedReward() — CurrencyEarnReason.CollectionActivated (36)",
+      "evidence": "CollectionService.GetCollectionActivatedReward"
+    },
+    {
+      "context": "Thẻ đồng đội tặng",
+      "reward": "1 thẻ — CurrencyEarnReason.TeamCardHelp (37)",
+      "evidence": "CollectionService.GetNotClaimedReceivedCards"
+    },
+    {
+      "context": "Token theo bộ",
+      "reward": "collection_1_token 'Phoenix Token' / collection_2_token 'Snow Globe' / collection_3_token 'Acorn Token' / collection_4_token 'Summer Badge' / collection_5_token 'Wonderland Badge' (+ bản _gold 'Grand …')",
+      "evidence": "appendix/localization.tsv; collection_4.json TokenId/GoldTokenId"
+    }
+  ],
+  "backend": [
+    {
+      "command": "CollectionRemoteService.GetEventInfo(eventType)",
+      "direction": "client→server",
+      "purpose": "lấy CollectionResponseModel (EventId, thời gian, Segment, CollectionId)"
+    },
+    {
+      "command": "CollectionRemoteService.GetCardHelps()",
+      "direction": "client→server",
+      "purpose": "lấy GetCardHelpsResponseModel{SentHelps, ReceivedHelps} để đối chiếu thẻ gửi/nhận trong team"
+    },
+    {
+      "command": "TeamChatService — gửi/xin thẻ",
+      "direction": "client→server",
+      "purpose": "đăng tin nhắn tặng thẻ và yêu cầu thẻ vào chat team"
+    },
+    {
+      "command": "TeamsService.GetCardNumberUserCansSendPerDay / GetDailySentCardsCount / CanRequestCard",
+      "direction": "server",
+      "purpose": "giới hạn tặng/xin thẻ mỗi ngày"
+    },
+    {
+      "command": "SyncService – SyncName 'CollectionModel'",
+      "direction": "hai chiều",
+      "purpose": "đồng bộ kho thẻ, theme đã xong, trạng thái Gold"
+    }
+  ],
+  "ui": [
+    {
+      "element": "Màn hình chính",
+      "class": "Modules.Contexts.Home.Collection.Scripts.UI.CollectionController / CollectionView / CollectionViewModel / CollectionProgressView / CollectionPopUpTitle",
+      "purpose": "tổng quan bộ sưu tập, tiến độ, sao dư"
+    },
+    {
+      "element": "Danh sách theme",
+      "class": "CollectionThemesPopUp (+Arguments) / CollectionThemeScrollViewAdapter / CollectionThemeScrollContainerView / CollectionThemeView",
+      "purpose": "cuộn qua 15 theme"
+    },
+    {
+      "element": "Thẻ",
+      "class": "CollectionCardView / CollectionCardViewFactory / CollectionCardStarView",
+      "purpose": "hiển thị thẻ, số sao, trạng thái mới/thiếu"
+    },
+    {
+      "element": "Mở gói",
+      "class": "CollectionCardReceivedPopUp (+Arguments) / CollectionPackOpeningAnimationHandler / CollectionCardPackToolbarInfoButton",
+      "purpose": "animation mở gói và khoe thẻ"
+    },
+    {
+      "element": "Hoàn thành",
+      "class": "CollectionThemeCompletedPopUp (+Arguments) / CollectionCompletedPopUp (+Arguments)",
+      "purpose": "màn ăn mừng theme và cả bộ"
+    },
+    {
+      "element": "Rương sao",
+      "class": "CollectionBonusChestPopUp (+Arguments) / CollectionBonusChestBuyButton",
+      "purpose": "đổi sao dư lấy thưởng"
+    },
+    {
+      "element": "Token",
+      "class": "CollectionTokenPopUp (+Arguments) / CollectionTokenRotator",
+      "purpose": "xem và trang bị token"
+    },
+    {
+      "element": "Team",
+      "class": "CollectionCardSendRequestView / ReceivedCardInfoView",
+      "purpose": "gửi/xin thẻ, xem người gửi"
+    },
+    {
+      "element": "Hướng dẫn",
+      "class": "CollectionInfoPopUp / CollectionMoreInformationPopUp",
+      "purpose": "luật chơi và link trang xác suất (CollectionVisitPage)"
+    },
+    {
+      "element": "Command tự mở",
+      "class": "TryShowCollectionActivationCommand / CollectionCardReceivedHomeWelcomingCommand / CollectionThemeCompletedHomeWelcomingCommand",
+      "purpose": "bật popup đúng thời điểm khi về Home"
+    }
+  ],
+  "analytics": [
+    {
+      "event": "collection_started",
+      "params": "collection_id, collection_name, start_time, remaining_duration, segment, progress",
+      "when": "bộ sưu tập mới bắt đầu"
+    },
+    {
+      "event": "collection_page_impression",
+      "params": "collection_id, collection_name, total_unique_card_count, completed_theme_count, start_chest_star_count, remaining_duration, progress, segment",
+      "when": "mở màn hình Collection"
+    },
+    {
+      "event": "card_received",
+      "params": "collection_id, collection_name, source, package_type, received_count, total_card_count, total_unique_card_count, start_chest_star_count, remaining_duration, start_time, progress, segment",
+      "when": "mở gói thẻ"
+    },
+    {
+      "event": "card_sent",
+      "params": "collection_id, collection_name, source, total_card_count, start_chest_star_count, remaining_duration, start_time, progress, segment",
+      "when": "tặng thẻ"
+    },
+    {
+      "event": "teams_card_sent / teams_card_requested",
+      "params": "collection_id, collection_name, event_id, progress, segment",
+      "when": "thao tác thẻ trong team"
+    },
+    {
+      "event": "theme_completed",
+      "params": "theme_id, collection_id, collection_name, start_chest_star_count, start_time, remaining_duration, progress, segment",
+      "when": "hoàn thành một theme"
+    },
+    {
+      "event": "star_chest_opened",
+      "params": "opened_pack_no, start_chest_remaining_star_count, collection_id, collection_name, start_time, remaining_duration, progress, segment",
+      "when": "mở Bonus Chest"
+    },
+    {
+      "event": "collection_completed",
+      "params": "collection_id, collection_name, start_chest_star_count, start_time, remaining_duration, progress, segment",
+      "when": "hoàn thành cả bộ"
+    },
+    {
+      "event": "token_selected",
+      "params": "token_code, collection_id, collection_name, start_time, progress, segment",
+      "when": "trang bị token"
+    },
+    {
+      "event": "earned",
+      "params": "reason=CollectionChest/CollectionThemeCompleted/CollectionCompleted/CollectionActivated/TeamCardHelp; collection_pack_1..collection_pack_5",
+      "when": "mọi lần nhận thưởng liên quan"
+    }
+  ],
+  "storage_keys": [
+    "CollectionModel (sync name)",
+    "CollectionModel.IsIntroducedInLifeTime",
+    "CollectionCacheModel.EventId / Segment / StartTime / FinishTime / CollectionId",
+    "CollectionCacheModel.CardInventory / NewCardOpeningBoost / CompletedThemeIds",
+    "CollectionCacheModel.IsClaimed / IsClaimedActivationReward / IsGoldCollectionActive",
+    "CollectionCacheModel.SentCards / ReceivedCards"
+  ],
+  "related_features": [
+    "Teams",
+    "MagicPass",
+    "MagicLab",
+    "ChampionsLeague",
+    "WheelOfFortune",
+    "Profile",
+    "Store"
+  ],
+  "gaps": [
+    "15/11 — partial_actual_evidence: Đã kiểm kê tên và hash các file định nghĩa Collection trong Resources. Cache có đủ gói hình của 15 theme và icon thuộc collection_5. Hình token của mùa 1–3 không thay thế cho định nghĩa card/theme của các mùa đó. Còn lại: Cần bản lưu trữ hợp lệ của đúng mùa và phiên bản 1–3; không điền bằng dữ liệu mùa 4/5.",
+    "15/11 — resolved_historical_snapshot: Đã trích toàn bộ field/value của CollectionConfigModel từ default0.0.3063 và cache lịch sử hiện có. Nhận định không có giá trị trong client đã được đối chiếu bằng file thật; không xác nhận effective runtime. Còn lại: Kiểm chứng effective config/asset và nhánh runtime trên đúng build nếu cần.",
+    "15/11 — resolved_historical_snapshot: Đã đọc các bundle collection_5_theme_1..15 và collection_5_theme_icons từ cache. Toàn bộ sprite, texture và object graph trong các gói này đã được xuất. Phạm vi xác minh là dữ liệu hình của mùa 5 trong cache, không phải mọi mùa Collection. Còn lại: Giữ rõ build và phiên bản cache của nguồn; kiểm nhánh runtime riêng khi cần.",
+    "15/11 — resolved_static_code_historical_build: OpenBasicPack lấy card-count theo packId (lookup trượt count0), tạo weighted pool bằng GetCardsPoolByData rồi GetRandomCardsFromPool. GetRandomCardFromPool chọn RandomUtil.GetRandom<string> và RemoveAll các string bằng selected cardId qua predicate; mọi bản sao trọng số của ID đó bị bỏ trước draw tiếp. Vì vậy cùng pack pool không trả cùng ID hai lần; thiếu pool/cardcount có thể làm count thực khác yêu cầu. Còn lại: Cần đối chiếu ARM64/current runtime và các nhánh caller còn chưa đủ bằng chứng.",
+    "Giới hạn tặng thẻ mỗi ngày do TeamsService/server quyết định, không có hằng số client.",
+    "[Runtime 2026-09-10] Config server LIVE đã đọc trực tiếp từ cache máy (không cần request); các hàng 'server live' là giá trị server ghi đè/thêm so với default."
+  ],
+  "sources": [
+    "features/CollectionService.md",
+    "features/CollectionDataService.md",
+    "features/CollectionStateService.md",
+    "features/CollectionRemoteService.md",
+    "features/CollectionConfigModel.md",
+    "features/CollectionCacheModel.md",
+    "features/CollectionBonusChestModel.md",
+    "features/CollectionCardMultiplierModel.md",
+    "features/CollectionThemeRewardModel.md",
+    "RecoveredNative/PseudoC/Assembly-CSharp/Modules/Contexts/Home/Collection/Scripts/CollectionService.c (OpenPack, OpenMiddlePack, UpdateNewCardOpeningBoost, GetDailyCardRequestLimit)",
+    "Assets/Resources/collection_4.json; Assets/Resources/collection_5.json (qua facts/facts.json defaults)",
+    "RecoveredNative/strings-by-type.tsv (EventSender.SendCard*/SendCollection*/SendStarChestOpened/SendTokenSelected)",
+    "GameDesign/appendix/localization.tsv (Collection*, collection_*_token, collection_card_*)"
+  ],
+  "audit_provenance": {
+    "review_date": "2026-11-15",
+    "mode": "offline_existing_files",
+    "code_build": "0.0.3063 ARMv7",
+    "runtime_build_observed_historically": "0.0.3129 ARM64 (audit 2026-10-18); not rechecked 2026-11-15",
+    "new_playtests": 2,
+    "uc_status": "See facts/audit_20261115/uc_registry.json; image reference is not pass",
+    "workbook_status": "Existing XLSX is historical; JSON and local web include 2026-11-15 corrections",
+    "static_review": "facts/local_code_gap_results_20261115.json; facts/local_asset_gap_results_20261115.json; facts/final_data_gap_decisions_20261115.json; facts/core_body_gap_decisions_20261115.json; facts/remaining_asset_gap_decisions_20261115.json"
+  },
+  "runtime_review_20261115": [
+    {
+      "id": "MS-R15-META02",
+      "feature": "Collection",
+      "uc": [
+        "UC-01",
+        "UC-06"
+      ],
+      "title": "Collection: tổng quan và Bonus Chest khi thiếu sao",
+      "precondition": "0.0.3129 ARM64, level351, offline UID MagicSort, tài nguyên fixture từ trước.",
+      "steps": [
+        "Mở Collection",
+        "Mở Bonus Chest",
+        "Bấm nút100 sao khi đang0"
+      ],
+      "expected": "Thiếu sao không cấp rương.",
+      "actual": "Wonderland Collection hiển thị8/135,15 set (Snacks1/15), grand prize10.000 coin/token/boosterx5. Bonus Chest có giá100/250/500; hiện0 sao, nút xám; bấm100 không mở rương, kho không đổi.",
+      "status": "observed_partial",
+      "limitations": "Đếm/timer từ cache; chưa xác minh instance mới, nguồn thẻ, điều kiện đủ sao hoặc nhận thưởng.",
+      "images": [
+        "META06_collection",
+        "META09_bonus_chest",
+        "META10_bonus_insufficient"
+      ],
+      "before": "META06_collection",
+      "after": "META10_bonus_insufficient",
+      "currency_unchanged": true,
+      "build": "0.0.3129 ARM64",
+      "mode": "offline_existing_fixture",
+      "date": "2026-11-15",
+      "ledger": {
+        "before": "META06_collection.json",
+        "after": "META10_bonus_insufficient.json"
+      }
+    },
+    {
+      "id": "MS-R15-META03",
+      "feature": "Collection",
+      "uc": [
+        "UC-12"
+      ],
+      "title": "Badge New trên set sau mở/đóng",
+      "precondition": "0.0.3129 ARM64, level351, offline UID MagicSort, tài nguyên fixture từ trước.",
+      "steps": [
+        "Mở Snacks có2 thẻ New",
+        "Xem Wafer Rolls",
+        "Đóng chi tiết và set",
+        "Mở lại Snacks"
+      ],
+      "expected": "Ghi nhận phạm vi badge được xóa khi xem set.",
+      "actual": "Lần đầu Wafer Rolls và Gelato đều New; chỉ mở chi tiết Wafer Rolls. Sau đóng/mở lại set cả hai badge New biến mất; tiến độ vẫn2/9.",
+      "status": "observed_partial",
+      "limitations": "Chỉ xác nhận UI của phiên; XML giữa2snapshot cuối không đổi, chưa xác định thời điểm ghi seen hoặc persistence sau restart.",
+      "images": [
+        "META11_snacks_set",
+        "META12_card_detail",
+        "META13_set_reopen"
+      ],
+      "before": "META11_snacks_set",
+      "after": "META13_set_reopen",
+      "currency_unchanged": true,
+      "build": "0.0.3129 ARM64",
+      "mode": "offline_existing_fixture",
+      "date": "2026-11-15",
+      "ledger": {
+        "before": "META11_snacks_set.json",
+        "after": "META13_set_reopen.json"
+      }
+    }
+  ],
+  "static_review_20261115": {
+    "date": "2026-11-15",
+    "scope": "Historical code/assets 0.0.3063, dated caches, device 0.0.3129 cached bundles and explicitly scoped runtime evidence. Not full runtime pass.",
+    "findings": [
+      {
+        "kind": "remaining_asset",
+        "source_report": "facts/remaining_asset_gap_decisions_20261115.json",
+        "id": "MS-RA-003",
+        "gap_ids": [
+          "MS-Collection-G001"
+        ],
+        "title": "collection_1.json, collection_2.json, collection_3.json không có trong Resources của build này — chỉ còn token name trong localization; chỉ collection_4 và collection_5 đọc được đầy đủ.",
+        "status": "partial_actual_evidence",
+        "conclusion": "Đã kiểm kê tên và hash các file định nghĩa Collection trong Resources. Cache có đủ gói hình của 15 theme và icon thuộc collection_5. Hình token của mùa 1–3 không thay thế cho định nghĩa card/theme của các mùa đó.",
+        "evidence": [
+          "facts/remaining_asset_review_20261115/collection_definition_inventory.json",
+          "facts/remaining_asset_review_20261115/bundle_manifest.json"
+        ],
+        "remaining": "Chưa tìm thấy định nghĩa collection_1/2/3 và đầy đủ payload card/theme tương ứng trong Resources hoặc danh sách bundle cache đã kiểm tra.",
+        "next_action": "Cần bản lưu trữ hợp lệ của đúng mùa và phiên bản 1–3; không điền bằng dữ liệu mùa 4/5.",
+        "scope": "Asset/native export 0.0.3063 và cache UnityFS đọc ngày 15/11 từ app 0.0.3129 được giữ riêng; ảnh render asset không phải ảnh chụp playtest.",
+        "reviewed": "2026-11-15",
+        "full_uc_pass": false
+      },
+      {
+        "kind": "remaining_asset",
+        "source_report": "facts/remaining_asset_gap_decisions_20261115.json",
+        "id": "MS-RA-004",
+        "gap_ids": [
+          "MS-Collection-G003"
+        ],
+        "title": "Icon theme và icon thẻ nằm trong asset bundle tải từ CDN, không có trong build đã export.",
+        "status": "resolved_historical_snapshot",
+        "conclusion": "Đã đọc các bundle collection_5_theme_1..15 và collection_5_theme_icons từ cache. Toàn bộ sprite, texture và object graph trong các gói này đã được xuất. Phạm vi xác minh là dữ liệu hình của mùa 5 trong cache, không phải mọi mùa Collection.",
+        "evidence": [
+          "facts/remaining_asset_review_20261115/bundle_manifest.json",
+          "facts/remaining_asset_review_20261115/bundle_images.json",
+          "facts/remaining_asset_review_20261115/gallery.html"
+        ],
+        "remaining": "",
+        "next_action": "Giữ rõ build và phiên bản cache của nguồn; kiểm nhánh runtime riêng khi cần.",
+        "scope": "Asset/native export 0.0.3063 và cache UnityFS đọc ngày 15/11 từ app 0.0.3129 được giữ riêng; ảnh render asset không phải ảnh chụp playtest.",
+        "reviewed": "2026-11-15",
+        "full_uc_pass": false
+      },
+      {
+        "kind": "final_data",
+        "source_report": "facts/final_data_gap_decisions_20261115.json",
+        "id": "MS-FDG-004",
+        "gap_ids": [
+          "MS-Collection-G002"
+        ],
+        "title": "Trọng số rút thẻ (CardMultipliers), mốc sao của Bonus Chest, thưởng theme và thưởng hoàn thành bộ đều nằm ở remote config, client không có giá trị mặc định.",
+        "status": "resolved_historical_snapshot",
+        "conclusion": "Đã trích toàn bộ field/value của CollectionConfigModel từ default0.0.3063 và cache lịch sử hiện có. Nhận định không có giá trị trong client đã được đối chiếu bằng file thật; không xác nhận effective runtime.",
+        "evidence": [
+          "facts/local_asset_review_20261115/config_catalog.json"
+        ],
+        "remaining": "Full historical data answered; current effective selection and full runtime remain unverified.",
+        "next_action": "Kiểm chứng effective config/asset và nhánh runtime trên đúng build nếu cần.",
+        "scope": "question-specific source/observed branch only; no full-UC or production claim",
+        "source_records": [
+          {
+            "snapshot": "default0.0.3063",
+            "model": "CollectionConfigModel",
+            "source": "Resources\\defaultconfigs\\CollectionConfigModel.json",
+            "root": "UnityExport Assets 0.0.3063",
+            "sha256": "03663b64ef74276190130800226cc8140ec221bf48fc035b99bce44ba558863f",
+            "line": 1,
+            "build": "0.0.3063 ARMv7"
+          },
+          {
+            "snapshot": "cache20260910",
+            "model": "CollectionConfigModel",
+            "source": "facts\\runtime\\server_configs\\collectionConfigModel.json",
+            "root": "GameDesign",
+            "sha256": "909c98e58b3e813c410ef086145a9d3effa829aaad0229379f67723586e0783c",
+            "line": 1,
+            "build": "snapshot provenance at path"
+          },
+          {
+            "snapshot": "cache20261010",
+            "model": "CollectionConfigModel",
+            "source": "facts\\runtime\\test_20261010\\before\\CachedRemoteConfigs",
+            "root": "GameDesign",
+            "sha256": "433164d4877b2dee55d2bbd79ef2fe83d3fe9519492fe15e3cb0926daf216050",
+            "line": 1,
+            "build": "snapshot provenance at path"
+          }
+        ]
+      },
+      {
+        "kind": "code",
+        "source_report": "facts/local_code_gap_results_20261115.json",
+        "id": "MS-CODE-30",
+        "gap_ids": [
+          "MS-Collection-G004"
+        ],
+        "title": "Basic pack không trùng ID trong một pool draw",
+        "status": "resolved_static_code",
+        "conclusion": "OpenBasicPack lấy card-count theo packId (lookup trượt count0), tạo weighted pool bằng GetCardsPoolByData rồi GetRandomCardsFromPool. GetRandomCardFromPool chọn RandomUtil.GetRandom<string> và RemoveAll các string bằng selected cardId qua predicate; mọi bản sao trọng số của ID đó bị bỏ trước draw tiếp. Vì vậy cùng pack pool không trả cùng ID hai lần; thiếu pool/cardcount có thể làm count thực khác yêu cầu.",
+        "evidence": [
+          {
+            "file": "../com.grandgames.magicsort_Unity_20260909_112501/RecoveredNative/PseudoC/Assembly-CSharp/Modules/Contexts/Home/Collection/Scripts/CollectionService.c",
+            "line": 8446,
+            "end_line": 8523,
+            "method": "// ===== CollectionService :: private string GetRandomCardFromPool(",
+            "sha256": "03f4b49d02ddb3d344fbecce83fdabaec396356bf0b1d1a02984ab7aedfdfdca",
+            "body_checked": true,
+            "build": "0.0.3063 ARMv7",
+            "required_body_tokens": [
+              "__GetRandom<object>",
+              "__RemoveAll"
+            ]
+          }
+        ],
+        "remaining": "Cần đối chiếu ARM64/current runtime và các nhánh caller còn chưa đủ bằng chứng.",
+        "scope": "recovered_native_0.0.3063_only",
+        "runtime_verified": false
+      },
+      {
+        "kind": "asset",
+        "source_report": "facts/local_asset_gap_results_20261115.json",
+        "id": "MS-Collection-G002",
+        "status": "resolved_static_snapshot",
+        "conclusion": "Đã trích toàn bộ field/value của CollectionConfigModel từ default0.0.3063 và cache lịch sử hiện có. Nhận định không có giá trị trong client đã được đối chiếu bằng file thật; không xác nhận effective runtime.",
+        "evidence": [
+          {
+            "snapshot": "default0.0.3063",
+            "model": "CollectionConfigModel",
+            "source": "Resources\\defaultconfigs\\CollectionConfigModel.json",
+            "root": "UnityExport Assets 0.0.3063",
+            "sha256": "03663b64ef74276190130800226cc8140ec221bf48fc035b99bce44ba558863f",
+            "line": 1,
+            "build": "0.0.3063 ARMv7"
+          },
+          {
+            "snapshot": "cache20260910",
+            "model": "CollectionConfigModel",
+            "source": "facts\\runtime\\server_configs\\collectionConfigModel.json",
+            "root": "GameDesign",
+            "sha256": "909c98e58b3e813c410ef086145a9d3effa829aaad0229379f67723586e0783c",
+            "line": 1,
+            "build": "snapshot provenance at path"
+          },
+          {
+            "snapshot": "cache20261010",
+            "model": "CollectionConfigModel",
+            "source": "facts\\runtime\\test_20261010\\before\\CachedRemoteConfigs",
+            "root": "GameDesign",
+            "sha256": "433164d4877b2dee55d2bbd79ef2fe83d3fe9519492fe15e3cb0926daf216050",
+            "line": 1,
+            "build": "snapshot provenance at path"
+          }
+        ],
+        "data": "config_catalog.json",
+        "scope": "static_export0.0.3063_or_historical_cache_not_runtime_pass",
+        "reviewed": "2026-11-15",
+        "next_action": "Kiểm chứng effective config/asset và nhánh runtime trên đúng build nếu cần.",
+        "superseded_or_refined_by": "MS-FDG-004"
+      }
+    ]
+  },
+  "acceptance_review_20261115": {
+    "source": "facts/feature_acceptance_20261115.json",
+    "feature_id": "Collection",
+    "scope": "All eleven dossier dimensions reviewed; full_feature_verified is not implied; read per-dimension gaps and actual runtime evidence."
+  },
+  "segment_ab_review_20261115": {
+    "status": "not_identified_in_sources",
+    "segment_ids": [],
+    "matching_basis": "explicit_gd_config_map_or_exact_model_token_in_gdd_configs_where_key_sources; rootfieldscoped",
+    "rows": [],
+    "classifications": {},
+    "assignment_verified": false,
+    "uplift_verified": false,
+    "note": "No matchingrow does not prove no segmentation/AB. Rewardbucketfalsepositives remain explicitly classified."
+  },
+  "continuation_review_20261116": {
+    "date": "2026-11-16",
+    "build": "0.0.3129 ARM64 host APK",
+    "build_scope": "Host APK version3129 matches LAST observed installed version15/11 only; installed bytes/live device16/11 not verified.",
+    "runtime_status": "device_unavailable",
+    "runtime_case_ids": [],
+    "current_apk_model_links": {
+      "feature": "Collection",
+      "models": [
+        {
+          "model": "CollectionConfigModel",
+          "current_default_file": "facts/review_20261116/public_current_config_3129/defaults/CollectionConfigModel.json",
+          "resource_path": "defaultconfigs/collectionconfigmodel",
+          "sha256": "9fd44a3648309115bbf8e98568a94446fd9a91dfe97f83b76b06bcde8eb474d5",
+          "matching_basis": [
+            "gdd/Collection.json#/configs",
+            "gdd/Collection.json#/sources",
+            "gdd/Collection.json#/flow",
+            "gdd/Collection.json#/managers"
+          ],
+          "scope": "Packaged default3129, not effective server config.",
+          "site_data_path": "data/current_config_3129/defaults/CollectionConfigModel.json",
+          "original_source_sha256": "9fd44a3648309115bbf8e98568a94446fd9a91dfe97f83b76b06bcde8eb474d5",
+          "public_artifact_sha256": "ae29f90e4bbc9f8df646f954be9f70ae526a3640cc45a14156d22a6049120b54",
+          "sha256_scope": "sha256 is original raw model; public_artifact_sha256 is the sanitized download"
+        }
+      ],
+      "status": "exact_model_source_association",
+      "distribution": "sanitized_public",
+      "public_mapping_pending": false
+    },
+    "current_packaged_defaults": [
+      {
+        "model": "CollectionConfigModel",
+        "source": "facts/review_20261116/public_current_config_3129/defaults/CollectionConfigModel.json",
+        "site_data_path": "data/current_config_3129/defaults/CollectionConfigModel.json",
+        "public_artifact_sha256": "ae29f90e4bbc9f8df646f954be9f70ae526a3640cc45a14156d22a6049120b54",
+        "original_source_sha256": "9fd44a3648309115bbf8e98568a94446fd9a91dfe97f83b76b06bcde8eb474d5",
+        "source_class": "static_asset",
+        "build": "0.0.3129 host APK",
+        "scope": "Sanitized packaged default fullvalues only; not effective remote/selected config or runtime.",
+        "values": {
+          "IsEnabled": false,
+          "EventType": 1,
+          "FirstLevelToShow": 95,
+          "MinBundleDownloadLevel": 20,
+          "AdditionalCompleteCollectionCount": 0,
+          "CardMultipliers": [
+            {
+              "StarCount": 1,
+              "IsGoldCard": false,
+              "Multiplier": 32
+            },
+            {
+              "StarCount": 2,
+              "IsGoldCard": false,
+              "Multiplier": 24
+            },
+            {
+              "StarCount": 3,
+              "IsGoldCard": false,
+              "Multiplier": 24
+            },
+            {
+              "StarCount": 4,
+              "IsGoldCard": false,
+              "Multiplier": 16
+            },
+            {
+              "StarCount": 5,
+              "IsGoldCard": false,
+              "Multiplier": 16
+            },
+            {
+              "StarCount": 5,
+              "IsGoldCard": true,
+              "Multiplier": 8
+            }
+          ],
+          "BonusChests": [
+            {
+              "StarCount": 100,
+              "ChestReward": {
+                "CurrencyType": 13,
+                "Amount": 1,
+                "Rewards": [
+                  {
+                    "CurrencyType": 4,
+                    "Amount": 1
+                  },
+                  {
+                    "CurrencyType": 5,
+                    "Amount": 1
+                  },
+                  {
+                    "CurrencyType": 14,
+                    "Amount": 1,
+                    "CollectionPackType": 1
+                  }
+                ]
+              },
+              "ChestRewardWithoutCollection": {
+                "CurrencyType": 13,
+                "Amount": 1,
+                "Rewards": [
+                  {
+                    "CurrencyType": 4,
+                    "Amount": 1
+                  },
+                  {
+                    "CurrencyType": 5,
+                    "Amount": 1
+                  }
+                ]
+              }
+            },
+            {
+              "StarCount": 250,
+              "ChestReward": {
+                "CurrencyType": 13,
+                "Amount": 1,
+                "Rewards": [
+                  {
+                    "CurrencyType": 5,
+                    "Amount": 1
+                  },
+                  {
+                    "CurrencyType": 14,
+                    "Amount": 1,
+                    "CollectionPackType": 1
+                  },
+                  {
+                    "CurrencyType": 14,
+                    "Amount": 1,
+                    "CollectionPackType": 2
+                  },
+                  {
+                    "CurrencyType": 14,
+                    "Amount": 1,
+                    "CollectionPackType": 3
+                  }
+                ]
+              },
+              "ChestRewardWithoutCollection": {
+                "CurrencyType": 13,
+                "Amount": 1,
+                "Rewards": [
+                  {
+                    "CurrencyType": 4,
+                    "Amount": 2
+                  },
+                  {
+                    "CurrencyType": 5,
+                    "Amount": 2
+                  }
+                ]
+              }
+            },
+            {
+              "StarCount": 500,
+              "ChestReward": {
+                "CurrencyType": 13,
+                "Amount": 1,
+                "Rewards": [
+                  {
+                    "CurrencyType": 6,
+                    "Amount": 1
+                  },
+                  {
+                    "CurrencyType": 14,
+                    "Amount": 1,
+                    "CollectionPackType": 3
+                  },
+                  {
+                    "CurrencyType": 14,
+                    "Amount": 1,
+                    "CollectionPackType": 4
+                  },
+                  {
+                    "CurrencyType": 14,
+                    "Amount": 1,
+                    "CollectionPackType": 5
+                  }
+                ]
+              },
+              "ChestRewardWithoutCollection": {
+                "CurrencyType": 13,
+                "Amount": 1,
+                "Rewards": [
+                  {
+                    "CurrencyType": 6,
+                    "Amount": 2
+                  },
+                  {
+                    "CurrencyType": 5,
+                    "Amount": 2
+                  }
+                ]
+              }
+            }
+          ],
+          "ThemeRewards": [
+            {
+              "ThemeId": "theme_1",
+              "ThemeReward": {
+                "CurrencyType": 2,
+                "TimeSpan": "02:00:00"
+              }
+            },
+            {
+              "ThemeId": "theme_2",
+              "ThemeReward": {
+                "CurrencyType": 5,
+                "Amount": 1
+              }
+            },
+            {
+              "ThemeId": "theme_3",
+              "ThemeReward": {
+                "CurrencyType": 1,
+                "Amount": 200
+              }
+            },
+            {
+              "ThemeId": "theme_4",
+              "ThemeReward": {
+                "CurrencyType": 4,
+                "Amount": 2
+              }
+            },
+            {
+              "ThemeId": "theme_5",
+              "ThemeReward": {
+                "CurrencyType": 5,
+                "Amount": 2
+              }
+            },
+            {
+              "ThemeId": "theme_6",
+              "ThemeReward": {
+                "CurrencyType": 1,
+                "Amount": 400
+              }
+            },
+            {
+              "ThemeId": "theme_7",
+              "ThemeReward": {
+                "CurrencyType": 6,
+                "Amount": 1
+              }
+            },
+            {
+              "ThemeId": "theme_8",
+              "ThemeReward": {
+                "CurrencyType": 1,
+                "Amount": 600
+              }
+            },
+            {
+              "ThemeId": "theme_9",
+              "ThemeReward": {
+                "CurrencyType": 5,
+                "Amount": 4
+              }
+            },
+            {
+              "ThemeId": "theme_10",
+              "ThemeReward": {
+                "CurrencyType": 6,
+                "Amount": 2
+              }
+            },
+            {
+              "ThemeId": "theme_11",
+              "ThemeReward": {
+                "CurrencyType": 1,
+                "Amount": 800
+              }
+            },
+            {
+              "ThemeId": "theme_12",
+              "ThemeReward": {
+                "CurrencyType": 5,
+                "Amount": 5
+              }
+            },
+            {
+              "ThemeId": "theme_13",
+              "ThemeReward": {
+                "CurrencyType": 1,
+                "Amount": 1000
+              }
+            },
+            {
+              "ThemeId": "theme_14",
+              "ThemeReward": {
+                "CurrencyType": 6,
+                "Amount": 3
+              }
+            },
+            {
+              "ThemeId": "theme_15",
+              "ThemeReward": {
+                "CurrencyType": 1,
+                "Amount": 1500
+              }
+            }
+          ],
+          "RepeatThemeRewards": [
+            {
+              "ThemeId": "theme_1",
+              "ThemeReward": {
+                "CurrencyType": 2,
+                "TimeSpan": "01:00:00"
+              }
+            },
+            {
+              "ThemeId": "theme_2",
+              "ThemeReward": {
+                "CurrencyType": 5,
+                "Amount": 1
+              }
+            },
+            {
+              "ThemeId": "theme_3",
+              "ThemeReward": {
+                "CurrencyType": 1,
+                "Amount": 100
+              }
+            },
+            {
+              "ThemeId": "theme_4",
+              "ThemeReward": {
+                "CurrencyType": 4,
+                "Amount": 1
+              }
+            },
+            {
+              "ThemeId": "theme_5",
+              "ThemeReward": {
+                "CurrencyType": 5,
+                "Amount": 1
+              }
+            },
+            {
+              "ThemeId": "theme_6",
+              "ThemeReward": {
+                "CurrencyType": 1,
+                "Amount": 200
+              }
+            },
+            {
+              "ThemeId": "theme_7",
+              "ThemeReward": {
+                "CurrencyType": 6,
+                "Amount": 1
+              }
+            },
+            {
+              "ThemeId": "theme_8",
+              "ThemeReward": {
+                "CurrencyType": 1,
+                "Amount": 300
+              }
+            },
+            {
+              "ThemeId": "theme_9",
+              "ThemeReward": {
+                "CurrencyType": 5,
+                "Amount": 2
+              }
+            },
+            {
+              "ThemeId": "theme_10",
+              "ThemeReward": {
+                "CurrencyType": 6,
+                "Amount": 1
+              }
+            },
+            {
+              "ThemeId": "theme_11",
+              "ThemeReward": {
+                "CurrencyType": 1,
+                "Amount": 400
+              }
+            },
+            {
+              "ThemeId": "theme_12",
+              "ThemeReward": {
+                "CurrencyType": 5,
+                "Amount": 2
+              }
+            },
+            {
+              "ThemeId": "theme_13",
+              "ThemeReward": {
+                "CurrencyType": 1,
+                "Amount": 500
+              }
+            },
+            {
+              "ThemeId": "theme_14",
+              "ThemeReward": {
+                "CurrencyType": 6,
+                "Amount": 2
+              }
+            },
+            {
+              "ThemeId": "theme_15",
+              "ThemeReward": {
+                "CurrencyType": 1,
+                "Amount": 750
+              }
+            }
+          ],
+          "CollectionReward": {
+            "CurrencyType": 13,
+            "ChestType": 8,
+            "Amount": 1,
+            "Rewards": [
+              {
+                "CurrencyType": 1,
+                "Amount": 10000
+              },
+              {
+                "CurrencyType": 6,
+                "Amount": 5
+              },
+              {
+                "CurrencyType": 5,
+                "Amount": 5
+              },
+              {
+                "CurrencyType": 4,
+                "Amount": 5
+              }
+            ]
+          },
+          "GoldCollectionReward": {
+            "CurrencyType": 13,
+            "ChestType": 8,
+            "Amount": 1,
+            "Rewards": [
+              {
+                "CurrencyType": 1,
+                "Amount": 15000
+              },
+              {
+                "CurrencyType": 6,
+                "Amount": 8
+              },
+              {
+                "CurrencyType": 5,
+                "Amount": 8
+              },
+              {
+                "CurrencyType": 4,
+                "Amount": 8
+              }
+            ]
+          },
+          "RepeatCollectionReward": {
+            "CurrencyType": 13,
+            "ChestType": 8,
+            "Amount": 1,
+            "Rewards": [
+              {
+                "CurrencyType": 1,
+                "Amount": 8000
+              },
+              {
+                "CurrencyType": 6,
+                "Amount": 4
+              },
+              {
+                "CurrencyType": 5,
+                "Amount": 4
+              },
+              {
+                "CurrencyType": 4,
+                "Amount": 4
+              }
+            ]
+          }
+        }
+      }
+    ],
+    "native_finding_ids": [],
+    "documentation_source_coverage": {
+      "dossier_present": true,
+      "use_case_catalog_count": 16,
+      "config_catalog_rows": 289,
+      "current_apk_default_model_links": 1,
+      "current_native_findings": 0,
+      "scope": "Documentation/source coverage only; not complete runtime verification."
+    },
+    "runtime_completion": {
+      "date": "2026-11-16",
+      "status": "device_unavailable",
+      "executed_case_count": 0,
+      "full_feature_runtime_verified": false
+    },
+    "planned_branch": "Mở info và More Information nếu có, chụp xác suất/pack rules; kiểm kê 15 set, card locked và duplicate; restart kiểm badge seen.",
+    "target_uc_ids": [
+      "UC-12",
+      "UC-13",
+      "UC-16"
+    ],
+    "execution_phase": "noncore_first",
+    "core_or_levels_last": false,
+    "actionability_full_json": "facts/continuation_20261116/current/feature_actionability.json",
+    "actionability_site_data_path": "data/continuation_20261116/feature_actionability.json",
+    "source_classes": [
+      "static_asset"
+    ],
+    "full_feature_verified": false
+  }
+}

@@ -1,0 +1,432 @@
+{
+  "id": "Account",
+  "feature": "Account",
+  "name": "Tài khoản & đồng bộ",
+  "category": "Meta",
+  "category_label": "Meta & UI",
+  "core_levels_last": false,
+  "acceptance_status": "documented_with_explicit_remaining_scope",
+  "full_feature_verified": false,
+  "checks": {
+    "purpose": {
+      "status": "documented_static_scope",
+      "source": "gdd/Account.json#/summary",
+      "claim_excerpt": "Tài khoản trong Magic Sort là tài khoản ẩn danh gắn với thiết bị (GrandUserId lưu trong PlayerPrefs) và có thể liên kết Facebook hoặc Apple để cứu tiến độ và chơi trên nhiều máy. Sau mỗi lần mở game, LoginService gọi /v1/login lấy LoginResponse (UserId, UserPublicId, UserName, Token, Progress, ForceFetch, CountryCode, DeleteStatus); token đi vào TokenService và được HttpProxy gắn vào mọi request. "
+    },
+    "unlock": {
+      "status": "described_historical_conditions_runtime_boundary_unverified",
+      "source": "gdd/Account.json#/unlock",
+      "content": "Có từ lần mở game đầu tiên. Các nhánh phụ bật/tắt bằng remote config: 'AccountDeleteEnabled' (AccountDeleteService.IsAccountDeleteEnabled), 'IsAppleSignInEnabled', 'IsGameCenterEnabled' (AppleGameCenterService.IsEnabled), 'IsAndroidIapVerificationEnabled', 'RestorePurchaseEnabled'; PlayerService.CanUsePlayIntegrityToken() quyết định có gửi token Play Integrity hay không. Môi trường backend chọn bằng BackendEnvironmentConfig.CurrentSettings (testEnvironmentSettings hoặc productionEnvironmentSettings)."
+    },
+    "entry_flow": {
+      "status": "documented_paths_not_all_executed",
+      "entry_points": [
+        "Splash/khởi động game (LoginService.TryLoginUserAsync)",
+        "Nút Sign in with Facebook / Sign in with Apple trong Settings và hồ sơ (localize 'FacebookSignIn', 'AppleSignIn')",
+        "Nút 'DeleteMyAccountText' (Delete My Account) trong Settings",
+        "Popup báo tài khoản đang bị xoá khi đăng nhập lại (TryShowAccountDeletionInProgressCommand)",
+        "Popup ban (TryShowBannedCommand → BanPopup)",
+        "Game Center dashboard trên iOS (AppleGameCenterService.OpenGameCenterDashboard)"
+      ],
+      "flow_source": "gdd/Account.json#/flow",
+      "acceptance_scope": "Anonymous/login/link/unlink/conflict/delete/ban; timer/header/save priority và đồng bộ hai thiết bị"
+    },
+    "config": {
+      "status": "source_bound_catalog_present",
+      "gdd_rows": 39,
+      "full_leaf_rows_associated": 16,
+      "snapshots": {
+        "default_0.0.3063": 2,
+        "cache_20260910": 2,
+        "cache_20261010": 2,
+        "firebase_20260910": 10
+      },
+      "models": [
+        {
+          "model": "AccountDeleteEnabled",
+          "matching_basis": [
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/Account.json#/configs/16/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/Account.json#/configs/35/key_where"
+            }
+          ]
+        },
+        {
+          "model": "httpConfig",
+          "matching_basis": [
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/Account.json#/sources/0"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/Account.json#/configs/20/key_where"
+            }
+          ]
+        },
+        {
+          "model": "IAPVerificationConfigModel",
+          "matching_basis": [
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/Account.json#/configs/33/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/Account.json#/configs/34/key_where"
+            }
+          ]
+        },
+        {
+          "model": "IsAndroidIapVerificationEnabled",
+          "matching_basis": [
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/Account.json#/configs/18/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/Account.json#/configs/36/key_where"
+            }
+          ]
+        },
+        {
+          "model": "IsAppleSignInEnabled",
+          "matching_basis": [
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/Account.json#/configs/17/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/Account.json#/configs/37/key_where"
+            }
+          ]
+        },
+        {
+          "model": "IsFlatBuffer",
+          "matching_basis": [
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/Account.json#/configs/19/key_where"
+            }
+          ]
+        },
+        {
+          "model": "IsGameCenterEnabled",
+          "matching_basis": [
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/Account.json#/configs/17/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/Account.json#/configs/38/key_where"
+            }
+          ]
+        },
+        {
+          "model": "RestorePurchaseEnabled",
+          "matching_basis": [
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/Account.json#/configs/18/key_where"
+            }
+          ]
+        },
+        {
+          "model": "serverCommunicationModel",
+          "matching_basis": [
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/Account.json#/sources/0"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/Account.json#/configs/15/key_where"
+            }
+          ]
+        }
+      ],
+      "declared_models_without_catalog_data": [],
+      "placeholder_rows_requiring_source_review": [
+        {
+          "index": 16,
+          "key": "AccountDeleteEnabled",
+          "value": "server",
+          "source": "remote config"
+        },
+        {
+          "index": 17,
+          "key": "IsAppleSignInEnabled / IsGameCenterEnabled",
+          "value": "server",
+          "source": "remote config"
+        },
+        {
+          "index": 18,
+          "key": "IsAndroidIapVerificationEnabled / RestorePurchaseEnabled",
+          "value": "server",
+          "source": "remote config"
+        },
+        {
+          "index": 19,
+          "key": "IsFlatBuffer",
+          "value": "server",
+          "source": "remote config"
+        }
+      ],
+      "exact_placeholder_snapshot_values": [
+        {
+          "gdd_config_index": 16,
+          "key": "AccountDeleteEnabled",
+          "status": "no_unambiguous_exact_field_match",
+          "matches": [],
+          "basis": "Model explicitly cited in key/where, or sole declaredmodel; fieldpath exactcasefold, no alias guessing."
+        },
+        {
+          "gdd_config_index": 17,
+          "key": "IsAppleSignInEnabled / IsGameCenterEnabled",
+          "status": "no_unambiguous_exact_field_match",
+          "matches": [],
+          "basis": "Model explicitly cited in key/where, or sole declaredmodel; fieldpath exactcasefold, no alias guessing."
+        },
+        {
+          "gdd_config_index": 18,
+          "key": "IsAndroidIapVerificationEnabled / RestorePurchaseEnabled",
+          "status": "no_unambiguous_exact_field_match",
+          "matches": [],
+          "basis": "Model explicitly cited in key/where, or sole declaredmodel; fieldpath exactcasefold, no alias guessing."
+        },
+        {
+          "gdd_config_index": 19,
+          "key": "IsFlatBuffer",
+          "status": "no_unambiguous_exact_field_match",
+          "matches": [],
+          "basis": "Model explicitly cited in key/where, or sole declaredmodel; fieldpath exactcasefold, no alias guessing."
+        }
+      ],
+      "dossier_abbreviated_values": [],
+      "note": "Model association uses explicitmap or exacttoken citations; fieldpresence does not prove allproductiondata. GDDsummaryrows and fullcatalogrows have separate counts. Abbreviated source summaries are not full arrays; catalog/source links remain authoritative."
+    },
+    "reward": {
+      "status": "delegated_or_no_direct_reward_in_this_scope",
+      "entries": 0,
+      "tables_in_site_meta": 2,
+      "source": "gdd/Account.json#/rewards"
+    },
+    "use_cases": {
+      "status": "specified_not_executed_in15nov_ledger",
+      "specified": 24,
+      "reviewed_uc_branch_count": 0,
+      "reviewed_uc_ids": [],
+      "not_reviewed_in_new_ledger": [
+        "UC-01",
+        "UC-02",
+        "UC-03",
+        "UC-04",
+        "UC-05",
+        "UC-06",
+        "UC-07",
+        "UC-08",
+        "UC-09",
+        "UC-10",
+        "UC-11",
+        "UC-12",
+        "UC-13",
+        "UC-14",
+        "UC-15",
+        "UC-16",
+        "UC-17",
+        "UC-18",
+        "UC-19",
+        "UC-20",
+        "UC-21",
+        "UC-22",
+        "UC-23",
+        "UC-24"
+      ],
+      "full_uc_pass_claimed": false
+    },
+    "screenshots": {
+      "historical_gallery_entries": 1,
+      "historical_uc_with_image_reference": 1,
+      "curated_new_images": [],
+      "curated_new_image_count": 0,
+      "status": "historical_references_only",
+      "source": "screens/web/screens.json#/Account",
+      "note": "Image presence does not prove execution result or completeness."
+    },
+    "runtime_actual": {
+      "status": "not_observed_in15nov_ledger",
+      "case_count": 0,
+      "cases": [],
+      "mode": "offline_existing_fixture",
+      "build": "0.0.3129 ARM64"
+    },
+    "segment_ab": {
+      "status": "not_identified_in_sources",
+      "segment_ids": [],
+      "matching_basis": "explicit_gd_config_map_or_exact_model_token_in_gdd_configs_where_key_sources; rootfieldscoped",
+      "rows": [],
+      "classifications": {},
+      "assignment_verified": false,
+      "uplift_verified": false,
+      "note": "No matchingrow does not prove no segmentation/AB. Rewardbucketfalsepositives remain explicitly classified."
+    },
+    "storage_backend_analytics": {
+      "storage_keys": {
+        "entries": 8,
+        "status": "documented_static_contract_runtime_not_verified",
+        "source": "gdd/Account.json#/storage_keys"
+      },
+      "backend": {
+        "entries": 15,
+        "status": "documented_static_contract_runtime_not_verified",
+        "source": "gdd/Account.json#/backend"
+      },
+      "analytics": {
+        "entries": 3,
+        "status": "documented_static_contract_runtime_not_verified",
+        "source": "gdd/Account.json#/analytics"
+      }
+    },
+    "remaining_next_step": {
+      "gap_count": 7,
+      "static_scoped_resolutions": 2,
+      "remaining_count": 5,
+      "all_gap_dispositions": [
+        {
+          "id": "MS-Account-G001",
+          "feature": "Account",
+          "source": "gdd/Account.json#/gaps/0",
+          "original": "Nội dung header thiết bị trong HttpProxy.CacheDeviceInfoHeaders không đọc được chi tiết từ pseudo-C.",
+          "current_note": "15/11 — resolved_static_code_historical_build: CacheDeviceInfoHeaders tạo dictionary7header: X-Game-Build←Application.version; X-Device-Model←SystemInfo.deviceModel; X-Device-Name←deviceName; X-Device-Type←deviceType.ToString; X-Device-Platform←Application.platform.ToString; X-Device-OS←operatingSystem; X-Client-ID←UserIdService.GetUniqueDeviceID. Null/rỗng dùng unknown; mỗi chuỗi bị giới hạn90ký tự rồi EscapeURL trước Add. Đây là mapping tên/loại, không xuất giá trị định danh thực. Còn lại: Cần đối chiếu method/consumer trên app0.0.3129 ARM64; chưa là runtime pass.",
+          "status": "resolved_static_code_historical_build",
+          "review_status": "preserved_resolved_static_code_historical_build",
+          "dependency": "local_code_review",
+          "next_action": "CacheDeviceInfoHeaders tạo dictionary7header: X-Game-Build←Application.version; X-Device-Model←SystemInfo.deviceModel; X-Device-Name←deviceName; X-Device-Type←deviceType.ToString; X-Device-Platform←Application.platform.ToString; X-Device-OS←operatingSystem; X-Client-ID←UserIdService.GetUniqueDeviceID. Null/rỗng dùng unknown; mỗi chuỗi bị giới hạn90ký tự rồi EscapeURL trước Add. Đây là mapping tên/loại, không xuất giá trị định danh thực. Cần đối chiếu method/consumer trên app0.0.3129 ARM64; chưa là runtime pass.",
+          "conclusion": "CacheDeviceInfoHeaders tạo dictionary7header: X-Game-Build←Application.version; X-Device-Model←SystemInfo.deviceModel; X-Device-Name←deviceName; X-Device-Type←deviceType.ToString; X-Device-Platform←Application.platform.ToString; X-Device-OS←operatingSystem; X-Client-ID←UserIdService.GetUniqueDeviceID. Null/rỗng dùng unknown; mỗi chuỗi bị giới hạn90ký tự rồi EscapeURL trước Add. Đây là mapping tên/loại, không xuất giá trị định danh thực.",
+          "evidence": [
+            "../com.grandgames.magicsort_Unity_20260909_112501/RecoveredNative/PseudoC/Assembly-CSharp/Modules/Infrastructure/Network/Http/HttpProxy.c:982"
+          ],
+          "reviewed": "2026-11-15",
+          "mode": "file_only_recovered_native_0.0.3063",
+          "remaining": "15/11 — resolved_static_code_historical_build: CacheDeviceInfoHeaders tạo dictionary7header: X-Game-Build←Application.version; X-Device-Model←SystemInfo.deviceModel; X-Device-Name←deviceName; X-Device-Type←deviceType.ToString; X-Device-Platform←Application.platform.ToString; X-Device-OS←operatingSystem; X-Client-ID←UserIdService.GetUniqueDeviceID. Null/rỗng dùng unknown; mỗi chuỗi bị giới hạn90ký tự rồi EscapeURL trước Add. Đây là mapping tên/loại, không xuất giá trị định danh thực. Còn lại: Cần đối chiếu method/consumer trên app0.0.3129 ARM64; chưa là runtime pass."
+        },
+        {
+          "id": "MS-Account-G002",
+          "feature": "Account",
+          "source": "gdd/Account.json#/gaps/1",
+          "original": "Giá trị _splashShowDurationMs, _idleEndWaitDurationMs, _maxCoolDownDurationAsSeconds đặt trong constructor LoginService, chưa xác định được số cụ thể.",
+          "current_note": "15/11 — resolved_static_code_historical_build: LoginService constructor gán _splashShowDurationMs=2000ms, _idleEndWaitDurationMs=1000ms, _coolDownDurationAsSeconds=5s và _maxCoolDownDurationAsSeconds=200s. Gap không đọc được số được giải trong body này; không đồng nghĩa login luôn mất2s vì còn network/state. Còn lại: Cần đối chiếu method/consumer trên app0.0.3129 ARM64; chưa là runtime pass.",
+          "status": "resolved_static_code_historical_build",
+          "review_status": "preserved_resolved_static_code_historical_build",
+          "dependency": "local_code_review",
+          "next_action": "LoginService constructor gán _splashShowDurationMs=2000ms, _idleEndWaitDurationMs=1000ms, _coolDownDurationAsSeconds=5s và _maxCoolDownDurationAsSeconds=200s. Gap không đọc được số được giải trong body này; không đồng nghĩa login luôn mất2s vì còn network/state. Cần đối chiếu method/consumer trên app0.0.3129 ARM64; chưa là runtime pass.",
+          "conclusion": "LoginService constructor gán _splashShowDurationMs=2000ms, _idleEndWaitDurationMs=1000ms, _coolDownDurationAsSeconds=5s và _maxCoolDownDurationAsSeconds=200s. Gap không đọc được số được giải trong body này; không đồng nghĩa login luôn mất2s vì còn network/state.",
+          "evidence": [
+            "../com.grandgames.magicsort_Unity_20260909_112501/RecoveredNative/PseudoC/Assembly-CSharp/Modules/Contexts/Application/ServerCommunication/Scripts/Login/LoginService.c:2290"
+          ],
+          "reviewed": "2026-11-15",
+          "mode": "file_only_recovered_native_0.0.3063",
+          "remaining": "15/11 — resolved_static_code_historical_build: LoginService constructor gán _splashShowDurationMs=2000ms, _idleEndWaitDurationMs=1000ms, _coolDownDurationAsSeconds=5s và _maxCoolDownDurationAsSeconds=200s. Gap không đọc được số được giải trong body này; không đồng nghĩa login luôn mất2s vì còn network/state. Còn lại: Cần đối chiếu method/consumer trên app0.0.3129 ARM64; chưa là runtime pass."
+        },
+        {
+          "id": "MS-Account-G003",
+          "feature": "Account",
+          "source": "gdd/Account.json#/gaps/2",
+          "original": "Luật quyết định thắng/thua khi xung đột dữ liệu do server nắm; client chỉ so Progress.",
+          "current_note": "Luật quyết định thắng/thua khi xung đột dữ liệu do server nắm; client chỉ so Progress.",
+          "status": "open_review_plan",
+          "review_status": "open_review_plan",
+          "dependency": "backend_contract_or_response",
+          "next_action": "Cần response conflict hai save có Progress khác/giống; lưu quyết định server và local before/after.",
+          "remaining": "Luật quyết định thắng/thua khi xung đột dữ liệu do server nắm; client chỉ so Progress."
+        },
+        {
+          "id": "MS-Account-G004",
+          "feature": "Account",
+          "source": "gdd/Account.json#/gaps/3",
+          "original": "Host và khoá API nằm trong BackendEnvironmentConfig.asset và không được chép vào tài liệu này.",
+          "current_note": "Host và khoá API nằm trong BackendEnvironmentConfig.asset và không được chép vào tài liệu này.",
+          "status": "qualified_note_not_runtime_verification",
+          "review_status": "qualified_note_not_runtime_verification",
+          "dependency": "intentional_omission_or_scope_note",
+          "next_action": "Host/key được chủ động loại khỏi GDD; giữ chức năng endpoint và tên field, không cần chép secret để hoàn thiện GD.",
+          "remaining": "Host và khoá API nằm trong BackendEnvironmentConfig.asset và không được chép vào tài liệu này."
+        },
+        {
+          "id": "MS-Account-G005",
+          "feature": "Account",
+          "source": "gdd/Account.json#/gaps/4",
+          "original": "Chi tiết BanStateResponse (thời hạn ban, lý do) không lộ trong client.",
+          "current_note": "Chi tiết BanStateResponse (thời hạn ban, lý do) không lộ trong client.",
+          "status": "open_review_plan",
+          "review_status": "open_review_plan",
+          "dependency": "backend_contract_or_response",
+          "next_action": "Cần fixture response ban hợp lệ và schema thời hạn/lý do; không tạo ban thật.",
+          "remaining": "Chi tiết BanStateResponse (thời hạn ban, lý do) không lộ trong client."
+        },
+        {
+          "id": "MS-Account-G006",
+          "feature": "Account",
+          "source": "gdd/Account.json#/gaps/5",
+          "original": "[Runtime 2026-09-10] Model server-only IAPVerificationConfigModel (không có trong Resources/defaultconfigs) đã đọc từ cache live.",
+          "current_note": "[Runtime 2026-09-10] Model server-only IAPVerificationConfigModel (không có trong Resources/defaultconfigs) đã đọc từ cache live.",
+          "status": "historical_evidence_annotation_not_test_result",
+          "review_status": "historical_evidence_annotation_not_test_result",
+          "dependency": "historical_note_requires_qualified_use",
+          "next_action": "Ghi chú model cache lịch sử đã có; xác minh schema/source và default-path theo đúng build. Server-only không chứng minh không có default ở mọi version.",
+          "remaining": "[Runtime 2026-09-10] Model server-only IAPVerificationConfigModel (không có trong Resources/defaultconfigs) đã đọc từ cache live."
+        },
+        {
+          "id": "MS-Account-G007",
+          "feature": "Account",
+          "source": "gdd/Account.json#/gaps/6",
+          "original": "[Runtime 2026-09-10] Cờ AB/tinh chỉnh server-only đọc từ Firebase Remote Config (template 3197).",
+          "current_note": "[Runtime 2026-09-10] Cờ AB/tinh chỉnh server-only đọc từ Firebase Remote Config (template 3197).",
+          "status": "historical_evidence_annotation_not_test_result",
+          "review_status": "historical_evidence_annotation_not_test_result",
+          "dependency": "historical_note_requires_qualified_use",
+          "next_action": "Ghi chú Firebase template3197 lịch sử, chưa có experiment assignment/traffic/outcome; dùng bài21 và row classifications, không gọi mọi key là A/B.",
+          "remaining": "[Runtime 2026-09-10] Cờ AB/tinh chỉnh server-only đọc từ Firebase Remote Config (template 3197)."
+        }
+      ],
+      "feature_specific_acceptance_questions": [
+        "Anonymous/login/link/unlink/conflict/delete/ban",
+        " timer/header/save priority và đồng bộ hai thiết bị"
+      ],
+      "next_steps": [
+        "Cần response conflict hai save có Progress khác/giống; lưu quyết định server và local before/after.",
+        "Host/key được chủ động loại khỏi GDD; giữ chức năng endpoint và tên field, không cần chép secret để hoàn thiện GD.",
+        "Cần fixture response ban hợp lệ và schema thời hạn/lý do; không tạo ban thật.",
+        "Ghi chú model cache lịch sử đã có; xác minh schema/source và default-path theo đúng build. Server-only không chứng minh không có default ở mọi version.",
+        "Ghi chú Firebase template3197 lịch sử, chưa có experiment assignment/traffic/outcome; dùng bài21 và row classifications, không gọi mọi key là A/B."
+      ]
+    }
+  },
+  "use_cases": 24,
+  "configs": 39,
+  "new_review_case_count": 0,
+  "reviewed_uc_branch_count": 0,
+  "curated_new_image_count": 0,
+  "segment_ids": [],
+  "matching_basis": "explicit_gd_config_map_or_exact_model_token_in_gdd_configs_where_key_sources; rootfieldscoped",
+  "unmatched_segment_status": "not_identified_in_sources",
+  "local_document_repairs": [],
+  "sources": [
+    "Il2CppDumper/dump.cs: LoginService, LoginRemoteService, LoginResponse, TokenService, UserIdService, SyncService, SyncRemoteService, SyncRequestModel, GetDataResponse, ChangeProfileRequestModel, FacebookSyncRequestModel, AppleSyncRequestModel, PlayerService, PlayerModel, AccountDeleteService/RemoteService/DataService, AccountDeleteStatus, BanService, BanStateService, BanState, PlayIntegrityManager, RemoteTimeService, ServerCommunicationModel(Service), HttpProxy, HttpConfig, BackendEnvironmentConfig, AppleLoginService, FacebookLoginService, AppleGameCenterService",
+    "Assets/MonoBehaviour/BackendEnvironmentConfig.asset (tên môi trường và đường dẫn endpoint)",
+    "RecoveredNative/PseudoC/Assembly-CSharp/Modules/Contexts/Application/{ServerCommunication,AccountDelete,Ban,PlayIntegrity,Player}/**, Modules/Infrastructure/Social/**",
+    "RecoveredNative/strings-by-type.tsv (SyncService, UserIdService, AppleLoginService, FacebookLoginService, PlayIntegrityHelper, FirebaseRemoteConfigResolver)",
+    "GameDesign/appendix/localization.tsv (DeleteAccount*, Delete*, UserBanned*, AppleLoginResultPopup*, FacebookLoginResultPopup*)"
+  ],
+  "source_hashes": {
+    "gdd_sha256": "5b48cfd4880446b2834a3ce11149a2c02ce5d86b28b14b9bd19ee272f47a0dd5",
+    "site_meta_sha256": "6a88802de24b4c36470e25dc576600c2a1a35b57492072575ea75884a9d4c253"
+  }
+}

@@ -1,0 +1,2089 @@
+{
+  "date": "2026-11-15",
+  "mode": "read_only_semantic_review_of_case_sources_uc_steps_results_and_capture_ledgers",
+  "source": "facts/review_cases_20261115.json",
+  "review_scope": "Các link là liên hệ giữa case và UC; không có cặp nào được nâng thành full UC pass. Review phân biệt nhánh thực thi, entry bị chặn, subsystem khác và internal lifecycle chưa quan sát.",
+  "flagged_pairs": [
+    {
+      "case": "MS-R15-ECO03",
+      "feature": "Inventory",
+      "uc": "UC-08",
+      "severity": "medium",
+      "classification": "gate_observation_only",
+      "reason": "UC-08 là mua refill: Spend coin rồi Earn Life/đặt LifeFillDate. Actual chỉ chạm Full5, không mở refill, không spend/earn. Đây là quan sát trạng thái entry ở precondition không áp dụng, chưa thực thi nhánh refill của UC.",
+      "recommendation": "Giữ như related_uc/blocked_by_full_lives hoặc một UC entry gate riêng; không tính UC-08 vào executed/reviewed branch coverage. Status observed_partial và limitation hiện tại đã tránh full-pass."
+    },
+    {
+      "case": "MS-R15-SOC01",
+      "feature": "Teams",
+      "uc": "UC-01",
+      "severity": "medium",
+      "classification": "feature_gate_before_uc",
+      "reason": "Coming Soon không chứng minh TryFetchCurrentState/GetUserTeamSummary hay TeamsInitialized của UC-01. Case đang blocked_feature_gate là đúng; mapping này chỉ là dependency/context.",
+      "recommendation": "Chuyển thành related/blocked UC, không vào reviewed executed branch count."
+    },
+    {
+      "case": "MS-R15-SOC01",
+      "feature": "Teams",
+      "uc": "UC-25",
+      "severity": "medium",
+      "classification": "feature_gate_before_uc",
+      "reason": "Không thấy intro Join a team, JoinView, IsIntroduced hoặc teams_unlocked. Coming Soon không phải nhánh onboarding đã thực thi.",
+      "recommendation": "Chuyển thành related/blocked UC; chỉ báo đã quan sát entry gate."
+    },
+    {
+      "case": "MS-R15-SOC02",
+      "feature": "Leaderboards",
+      "uc": "UC-05",
+      "severity": "medium",
+      "classification": "feature_gate_before_uc",
+      "reason": "Teams World/Country hiện Coming Soon; không có TeamLeaderboardViewAdapter, TeamScore/sticky user team để đối chiếu. Đây là blocked entry của bảng đội, không phải đã xem bảng đội.",
+      "recommendation": "Giữ entry gate observation, gắn trạng thái blocked_by_feature_gate cho cặp này thay vì dùng verified_observed_branch chung của cả case."
+    },
+    {
+      "case": "MS-R15-SOC02",
+      "feature": "Leaderboards",
+      "uc": "UC-06",
+      "severity": "low",
+      "classification": "attempted_entry_error_only",
+      "reason": "Friends chỉ hiện No Internet Connection. UC-06 mô tả init friends list/rank hoặc AddFriends khi rỗng, chưa nhánh nào trong đó được quan sát. Error entry vẫn là quan sát hợp lệ của feature.",
+      "recommendation": "Ghi riêng attempted_offline_error; không coi UI ranking/AddFriends của UC-06 đã kiểm tra. Có thể giữ link nếu per-pair scope ghi rõ."
+    },
+    {
+      "case": "MS-R15-SOC02",
+      "feature": "Leaderboards",
+      "uc": "UC-11",
+      "severity": "high",
+      "classification": "different_subsystem",
+      "reason": "UC-11 đọc PermanentLeaderboardDataService.GetCachedWorldLeaderboard/GetCachedCountryLeaderboard. Case quan sát Weekly cached Finished, Friends error, Teams Coming Soon; chưa mở Players World/Country. Weekly cache không chứng minh Permanent leaderboard cache.",
+      "recommendation": "Bỏ link UC-11 khỏi case này; UC-08 đã phủ Weekly cached result UI. Nếu muốn UC-11 cần mở Players World/Country với cache rồi đối chiếu."
+    },
+    {
+      "case": "MS-R15-DAILY02",
+      "feature": "DailyLevel",
+      "uc": "UC-05",
+      "severity": "high",
+      "classification": "uc_not_entered",
+      "reason": "Actual ghi rõ không vào Daily scene/level, ảnh lịch không đổi, isLevelInProgress false. Không có board hoặc timer để chứng minh UC-05 dựng bàn theo ngày. inconclusive_no_transition là đúng nhưng không phải UC-05 branch đã chạy.",
+      "recommendation": "Giữ UC-04 cho attempted Play/no-transition; chuyển UC-05 thành dependency/not_entered, không vào reviewed executed coverage. Không đoán thiếu seed hoặc lỗi mạng là nguyên nhân."
+    },
+    {
+      "case": "MS-R15-CORE07",
+      "feature": "LevelFlow",
+      "uc": "UC-18",
+      "severity": "medium",
+      "classification": "internal_lifecycle_not_instrumented",
+      "reason": "Win/progress/coin và về Home được quan sát. UC-18 còn khẳng định Level=null, Dispose/unsubscribe và giải phóng bộ nhớ; ảnh Home/PlayerModel không chứng minh các nội bộ này. UC-14 đã chứa observable return-to-Home.",
+      "recommendation": "Bỏ UC-18 khỏi runtime executed coverage hoặc ghi riêng chỉ scene-return observed; không coi Dispose/memory đã xác minh."
+    },
+    {
+      "case": "MS-R15-CORE10",
+      "feature": "LevelFlow",
+      "uc": "UC-18",
+      "severity": "medium",
+      "classification": "internal_lifecycle_not_instrumented",
+      "reason": "Quit và về Home/isLevelInProgress=false là bằng chứng UI/state. Không có trace Level=null, Dispose/unsubscribe hay memory của UC-18.",
+      "recommendation": "Giữ UC-12/UC-13 cho quit/Failed popup; UC-18 chỉ related lifecycle hoặc cần instrumentation."
+    }
+  ],
+  "case_findings": [
+    {
+      "case": "MS-R15-CORE08",
+      "severity": "high",
+      "classification": "ledger_window_includes_prior_reward",
+      "reason": "Before CORE21_win_ready có coin999995869; after CORE23_boat_continue có999995889: delta+20. Vì vậy câu không cộng thêm coin/booster trong khoảng hai capture sai nếu hiểu theo endpoint của case.20coin thuộc win trước Boat, không có chứng cứ refund/Boat bonus.",
+      "recommendation": "Dùng before=CORE22_win_continue, after=CORE23_boat_continue để isolate delta0 ở Boat; hoặc giữ endpoint và nói rõ +20 từ win đã xảy ra trước Boat Continue. Ảnh CORE22 được xem trực tiếp, là Boat Finished Stage1/4."
+    },
+    {
+      "case": "MS-R15-REC01",
+      "severity": "low",
+      "classification": "mixed_event_ledger_window",
+      "reason": "EVT16_merge_claimed→REC02_restart_ready bao trùm MiniGame claim; Undo tăng+1, currency_unchanged=false. Actual chỉ kết luận Merge claim flag/deadline không đổi, điều này đúng. Không nên nâng thành toàn inventory giữ nguyên qua restart từ endpoint này.",
+      "recommendation": "Giữ scope current actual; nếu cần inventory persistence thì dùng snapshot sát trước restart hoặc tách riêng Merge deadline/flag vs Undo của MiniGame."
+    },
+    {
+      "case": "MS-R15-ECO01",
+      "severity": "low",
+      "classification": "curated_image_reference_incomplete",
+      "reason": "Actual liệt kê đầy đủ6coin packs; endpoint ECO07_coins có capture gốc nhưng images chỉ chọn ECO04/05/06. Thêm ECO07 làm bảng giá coin dễ truy xuất trực tiếp hơn.",
+      "recommendation": "Thêm ECO07_coins vào curated images nếu không có lý do biên tập khác; không thay giá cache thành giá live."
+    }
+  ],
+  "explicitly_retained_partial_scopes": [
+    "StoreUC-11 chỉ label NoAds trong catalog, chưa entitlement/anti-duplicate ownership; limitation đúng.",
+    "CollectionUC-01 và MergeUC-02 chỉ cached UI/board ready, chưa fresh fetch/unlock; actual/limitations đã tách đúng.",
+    "Settings4toggle chỉ UI/model/persistence, chưa audio/haptic/notification delivery; limitation đúng.",
+    "Merge/MiniGame expired claim và restart chỉ local flag/reward deadline/nonduplicate observation; không chứng minh backend idempotency hoặc auto consumer call.",
+    "Wheel No Internet là text overlay/toast trên Home, không có spin/claim; không tự gán NoCache hay nguyên nhân request.",
+    "Store IAP fail không có successful payment/receipt/refund; coin delta0 đúng.",
+    "CORE10 Failed hiện Rewards20 nhưng actual coin không tăng; không gọi đây là thưởng fail hoặc refund.",
+    "CORE07 +20coin chỉ xuất hiện sau Continue, retry reset trước Continue; baseline cả lượt còn có các booster đã dùng, actual/limitations nói rõ.",
+    "Tên ảnh EVT02_magiclab_finished, EVT09_merge_zero/EVT10_merge_noenergy, CORE26/27_pillow không phản ánh feature/state thật; case limitations đã ghi đúng và không suy luận từ tên file."
+  ],
+  "reviewed_at": "2026-11-15T15:49:58.622882+00:00",
+  "source_sha256": "54578b827b3fdf935963a48dc1838552f9eb573ddfc483013f8345b4c4658bd1",
+  "gdd_source_sha256": {
+    "Store": "bece3126c5addabfc93aba95fd404783eef74ae183ffcbc82b22b25fb6b0e1b2",
+    "Inventory": "bf69a3a2187013f612f9f6bd3c5f6c5db6b15171359200a25b8bec4c7696e878",
+    "Settings": "e219e2f0d01e1267b339149a4ad0c436bf535caf5a48f4bb24807b0bdeccc53c",
+    "Collection": "2fd5c029ac242f0a907d27d149a7cd28fc64c177c9971d5951f6016bf07743b2",
+    "DuckFestival": "3cb2e361316a9e72c2e705872db8279f373c4f50eab0441ca2976bfe2ab05641",
+    "MergeMiniGame": "f48249cd0754950abcf6035c5f1a71b87c69e3a088eef1b3e9220b0b7a98c993",
+    "TreasureDrill": "9263c128ebd8c948cc6da4bcac25a0c227bafa293e55a968d9414fba672d3953",
+    "WheelOfFortune": "ec56af0967fa68d17672b9aaab75a7ce1d3bc488783754bd0d3904231c748a63",
+    "BroomStreak": "2f046f9e53fd4b2d7636b4ab9d87bf6e70a59c98175beebea8fb5a57da100751",
+    "MiniGame": "537cc12e5616e1a6e2d1f5910be908d3fbcfa178d65ee8c778c0a8a231853277",
+    "Teams": "10d4d9b68273f68f2ba9c091ab8c273491382f4f6366be4b9376aa6735b94dec",
+    "Leaderboards": "9b37e96d542f040e7deae30f52d969ba421f91161a48cd729a3e8039d664ea39",
+    "BottleSortMechanics": "9cdfab2ff8a903548f52cd0735204c44cabb555831523299dbb697626c11960a",
+    "Boosters": "a0ae4469f664f7d198ecaf437015a92191b842fb85f3a8862daf0e68b86788d8",
+    "LevelFlow": "189345908e1643ee91468382d9d797d7f4e0ab6a53dbbd2e251c9327bf8f2f0c",
+    "BoatRush": "b618c4fe59ec1a1e69a25dd79cc959e14e585a17849e78f6b561a149ecae2d80",
+    "DailyLevel": "a8b4f1fd577fdd73618ce6785f5a4bdb45e270152e5968a8994cbacb4fe07492",
+    "Obstacles": "f64cb688982286db52fcec8365ce1a547b4289e3bdf6645d030324672010bda7"
+  },
+  "case_count": 32,
+  "case_uc_link_count": 68,
+  "unique_feature_uc_count": 61,
+  "curated_unique_image_count": 80,
+  "flagged_pair_count": 9,
+  "structural_checks": {
+    "errors": [],
+    "screenshot_hashes_checked": 80,
+    "ledger_endpoint_ids_checked": 32,
+    "currency_unchanged_field_checked": 32
+  },
+  "pairs": [
+    {
+      "case": "MS-R15-ECO01",
+      "feature": "Store",
+      "uc": "UC-02",
+      "uc_title": "Dựng danh mục cửa hàng",
+      "uc_steps": [
+        "StoreModelService.GetCoinBundles() / GetSpecialBundles() / GetPermanentBundles() đọc StoreConfigModelV2.StoreBundles / StoreSpecialBundles / StorePermanentBundles",
+        "StoreViewService dựng StoreViewModel cho từng dòng với StoreViewType tương ứng",
+        "HomeStoreController chọn giữa StoreScrollController (V1) và StoreScrollControllerV2 cùng factory tương ứng (_currentStoreScrollController / _currentFactory)",
+        "StoreItemFactory / StoreBaseViewFactory tạo StoreBaseView; StoreDiscountTagView, StorePopularBestView, StorePictureView (StorePictureModel) trang trí",
+        "StoreScrollItemLayoutController (V2) sắp xếp bố cục",
+        "TryGetDailyReward(out StoreDailyRewardModel) và TryGetMagicPassOffer(out StoreMagicPassOfferModel) chèn hai dòng đặc biệt",
+        "EventSender.SendShopOpenedEvent(StorePopUpSource) → shop_opened với source"
+      ],
+      "uc_result": "Cửa hàng hiển thị đủ ba nhóm hàng cộng các dòng tích hợp",
+      "case_status": "observed_partial",
+      "expected": "Catalog dựng được từ dữ liệu có sẵn, duyệt catalog không tự tiêu/cấp tài nguyên.",
+      "actual": "Starter 1.000 coin + 1h lives + ba booster x1: 29.000 VND; Apprentice 2.000 coin + 3h lives + ba booster x1 + No Ads:149.000 VND. Mage20.000/36h/x18:1.499.000 VND; Wizard60.000/72h/x36:2.999.000 VND. Coins1.000/5.000/10.000/25.000/50.000/100.000 hiện59.000/249.000/499.000/999.000/1.799.000/2.999.000 VND. Kho không đổi.",
+      "limitations": "Giá cache/UI offline, không xác minh metadata store mới, productId bằng trace, purchase hay entitlement NoAds. Chưa chụp đủ nội dung Magician/Sorcerer.",
+      "semantic_disposition": "observable_subset_supported_with_current_limitations",
+      "flagged": false,
+      "full_uc_pass": false
+    },
+    {
+      "case": "MS-R15-ECO01",
+      "feature": "Store",
+      "uc": "UC-11",
+      "uc_title": "Bundle kèm quyền No Ads",
+      "uc_steps": [
+        "StoreBundleModel.ShouldCloseAds và StoreViewModel.IsExistNoAds đánh dấu gói có kèm No Ads",
+        "BundleNoAdsAvailabilityService (dùng _inAppPurchaseHistoryService, _storeModelService, _adService) quyết định gói còn bán được không",
+        "StoreModelService.IsSelectiveNoAdsBundleEnabled bật/tắt cơ chế chọn lọc",
+        "HomeStoreController._noAdsState theo dõi trạng thái để dựng lại danh mục khi đổi",
+        "Dòng dùng StoreViewType.BasicBundleWithNoAds (6) thay cho BasicBundle (1)"
+      ],
+      "uc_result": "Không bán trùng quyền No Ads cho người đã sở hữu",
+      "case_status": "observed_partial",
+      "expected": "Catalog dựng được từ dữ liệu có sẵn, duyệt catalog không tự tiêu/cấp tài nguyên.",
+      "actual": "Starter 1.000 coin + 1h lives + ba booster x1: 29.000 VND; Apprentice 2.000 coin + 3h lives + ba booster x1 + No Ads:149.000 VND. Mage20.000/36h/x18:1.499.000 VND; Wizard60.000/72h/x36:2.999.000 VND. Coins1.000/5.000/10.000/25.000/50.000/100.000 hiện59.000/249.000/499.000/999.000/1.799.000/2.999.000 VND. Kho không đổi.",
+      "limitations": "Giá cache/UI offline, không xác minh metadata store mới, productId bằng trace, purchase hay entitlement NoAds. Chưa chụp đủ nội dung Magician/Sorcerer.",
+      "semantic_disposition": "observable_subset_supported_with_current_limitations",
+      "flagged": false,
+      "full_uc_pass": false
+    },
+    {
+      "case": "MS-R15-ECO02",
+      "feature": "Store",
+      "uc": "UC-04",
+      "uc_title": "Mua một gói trong app",
+      "uc_steps": [
+        "StorePurchaseClickCommand / StoreBaseView.OnClick chạy",
+        "IAPService.ProcessPurchase(productId, IAPOrigin, IAPReason, IAPContext, giveRewardsWithoutAnimation); _isPurchaseInProgress chặn bấm trùng",
+        "SendPurchaseButtonSelectedEvent(productId, origin, reason, context) ghi analytics",
+        "IAPHandler.OnClickButton() → PurchaseAsync() → IAPManager.TryPurchase(productId, iapReason)",
+        "StartPurchaseProcess(productId): kiểm tra khởi tạo ('BuyProductID FAIL. Not initialized.'), productId null ('ProductIdIsNull'), sản phẩm không mua được ('ProductIdIsNotAvailableToPurchaseSomehow'), rồi log 'Purchasing product asychronously: '",
+        "Unity IAP mở hộp thoại mua của store nền"
+      ],
+      "uc_result": "Giao dịch được gửi tới Google Play / App Store",
+      "case_status": "verified_observed_branch",
+      "expected": "Giao dịch lỗi không cấp coin; UI trả lại Shop.",
+      "actual": "Store báo Không thể tìm thấy mặt hàng bạn đang cố gắng mua; game hiện Failed / Your account wasn't charged; Continue trả lại Shop. CurrencyAmountByType trước/sau bằng nhau, coin999995869. Không xác nhận hoặc hoàn tất thanh toán.",
+      "limitations": "Chỉ nhánh lỗi đã thấy; chưa kiểm chứng mọi mã lỗi, mua thành công, receipt/grant/refund. Không quy lỗi chắc chắn cho firewall vì chưa trace nguyên nhân store.",
+      "semantic_disposition": "observable_subset_supported_with_current_limitations",
+      "flagged": false,
+      "full_uc_pass": false
+    },
+    {
+      "case": "MS-R15-ECO02",
+      "feature": "Store",
+      "uc": "UC-07",
+      "uc_title": "Mua thất bại",
+      "uc_steps": [
+        "IAPManager.OnPurchaseFailed(Product, PurchaseFailureReason) hoặc bản PurchaseFailureDescription log 'OnPurchaseFailed: FAIL. Product: {0}, Reason: {1}'",
+        "PurchaseResult.Fail() trả về cho luồng đang chờ",
+        "IAPHandler.SendPurchaseFailed(productId, iapReason, purchaseResult) → EventSender.SendPurchaseFailedEvent → purchase_failed với reason (mặc định 'Unknown reason'), product_id, product_type, product_rank, price, currency, source",
+        "_isPurchaseInProgress được giải phóng, người chơi bấm lại được"
+      ],
+      "uc_result": "Không trao hàng, có log và analytics đầy đủ",
+      "case_status": "verified_observed_branch",
+      "expected": "Giao dịch lỗi không cấp coin; UI trả lại Shop.",
+      "actual": "Store báo Không thể tìm thấy mặt hàng bạn đang cố gắng mua; game hiện Failed / Your account wasn't charged; Continue trả lại Shop. CurrencyAmountByType trước/sau bằng nhau, coin999995869. Không xác nhận hoặc hoàn tất thanh toán.",
+      "limitations": "Chỉ nhánh lỗi đã thấy; chưa kiểm chứng mọi mã lỗi, mua thành công, receipt/grant/refund. Không quy lỗi chắc chắn cho firewall vì chưa trace nguyên nhân store.",
+      "semantic_disposition": "observable_subset_supported_with_current_limitations",
+      "flagged": false,
+      "full_uc_pass": false
+    },
+    {
+      "case": "MS-R15-ECO03",
+      "feature": "Inventory",
+      "uc": "UC-08",
+      "uc_title": "Mua đầy mạng bằng coin (Refill)",
+      "uc_steps": [
+        "InventoryService.Spend(CurrencySpendReason.Refill, CurrencyType.Coin, GameEconomyModel.RefillPrice)",
+        "Earn(CurrencyType.Life, MaxLifeAmount) hoặc đặt lại LifeFillDate",
+        "Analytics 'virtual_resource_transaction'"
+      ],
+      "uc_result": "Mạng đầy ngay, coin trừ tương ứng",
+      "case_status": "observed_partial",
+      "expected": "Quan sát cách UI xử lý khi không cần refill.",
+      "actual": "Home vẫn hiển thị5 Full, không mở refill popup trong hai thao tác; coin và kho không đổi.",
+      "limitations": "Chưa chứng minh nhánh mua refill, thiếu tiền hoặc hồi mạng. Không đánh dấu toàn UC-08 pass.",
+      "semantic_disposition": "gate_observation_only",
+      "flagged": true,
+      "full_uc_pass": false
+    },
+    {
+      "case": "MS-R15-META01",
+      "feature": "Settings",
+      "uc": "UC-01",
+      "uc_title": "Bật/tắt hiệu ứng âm thanh",
+      "uc_steps": [
+        "SettingsController.OnSoundToggleChanged(toggle)",
+        "SoundService.OnSoundEffectPreferenceChanged(isOn) chỉnh nhóm SFX trên AudioMixer",
+        "SoundModel.IsSoundEffectOn được lưu qua ISaveLoad<SoundModel>",
+        "GetSoundEffectPreference() dùng cho các nơi khác truy vấn"
+      ],
+      "uc_result": "Toàn bộ hiệu ứng tắt/bật ngay lập tức",
+      "case_status": "verified_observed_branch",
+      "expected": "UI và model ghi đúng lựa chọn; restart giữ lựa chọn.",
+      "actual": "Cả bốn OFF giữ qua restart. SoundModel isSoundEffectOn/isMusicOn=false; VibrationModel isVibrationOn=false; NotificationModel isNotificationOn=false. Bật lại đều true. settings_ledger.json có trạng thái từng bước.",
+      "limitations": "Xác minh UI/model/persistence; chưa xác minh âm thanh phát thực, rung vật lý hay delivery thông báo.",
+      "semantic_disposition": "observable_subset_supported_with_current_limitations",
+      "flagged": false,
+      "full_uc_pass": false
+    },
+    {
+      "case": "MS-R15-META01",
+      "feature": "Settings",
+      "uc": "UC-02",
+      "uc_title": "Bật/tắt nhạc nền",
+      "uc_steps": [
+        "SettingsController.OnMusicToggleChanged(toggle)",
+        "SoundService.OnMusicPreferenceChanged(isOn)",
+        "Bật → PlayMusic(MusicType.Home hoặc Gameplay) qua _musicSource; tắt → StopMusic()",
+        "SoundModel.IsMusicOn lưu lại"
+      ],
+      "uc_result": "Nhạc nền theo bối cảnh (Home/Gameplay/ChampionsLeaguePreJoin/MiniGameTrident)",
+      "case_status": "verified_observed_branch",
+      "expected": "UI và model ghi đúng lựa chọn; restart giữ lựa chọn.",
+      "actual": "Cả bốn OFF giữ qua restart. SoundModel isSoundEffectOn/isMusicOn=false; VibrationModel isVibrationOn=false; NotificationModel isNotificationOn=false. Bật lại đều true. settings_ledger.json có trạng thái từng bước.",
+      "limitations": "Xác minh UI/model/persistence; chưa xác minh âm thanh phát thực, rung vật lý hay delivery thông báo.",
+      "semantic_disposition": "observable_subset_supported_with_current_limitations",
+      "flagged": false,
+      "full_uc_pass": false
+    },
+    {
+      "case": "MS-R15-META01",
+      "feature": "Settings",
+      "uc": "UC-05",
+      "uc_title": "Bật/tắt rung",
+      "uc_steps": [
+        "SettingsController.OnVibrationToggleChanged(toggle)",
+        "VibrationService.OnVibrationPreferenceChanged(isOn) đặt VibrationModel.IsVibrationOn",
+        "MarkDataForLateUpdate() → LateUpdate() lưu qua ISaveLoad<VibrationModel>",
+        "GetVibrationPreference() dùng cho mọi lời gọi rung"
+      ],
+      "uc_result": "Rung tắt/bật toàn cục",
+      "case_status": "verified_observed_branch",
+      "expected": "UI và model ghi đúng lựa chọn; restart giữ lựa chọn.",
+      "actual": "Cả bốn OFF giữ qua restart. SoundModel isSoundEffectOn/isMusicOn=false; VibrationModel isVibrationOn=false; NotificationModel isNotificationOn=false. Bật lại đều true. settings_ledger.json có trạng thái từng bước.",
+      "limitations": "Xác minh UI/model/persistence; chưa xác minh âm thanh phát thực, rung vật lý hay delivery thông báo.",
+      "semantic_disposition": "observable_subset_supported_with_current_limitations",
+      "flagged": false,
+      "full_uc_pass": false
+    },
+    {
+      "case": "MS-R15-META01",
+      "feature": "Settings",
+      "uc": "UC-07",
+      "uc_title": "Bật/tắt thông báo đẩy từ Settings",
+      "uc_steps": [
+        "SettingsController.OnNotificationToggleChanged(toggle) (RadioToggle)",
+        "NotificationService bật/tắt lịch thông báo cục bộ"
+      ],
+      "uc_result": "Người chơi kiểm soát nhắc nhở của game",
+      "case_status": "verified_observed_branch",
+      "expected": "UI và model ghi đúng lựa chọn; restart giữ lựa chọn.",
+      "actual": "Cả bốn OFF giữ qua restart. SoundModel isSoundEffectOn/isMusicOn=false; VibrationModel isVibrationOn=false; NotificationModel isNotificationOn=false. Bật lại đều true. settings_ledger.json có trạng thái từng bước.",
+      "limitations": "Xác minh UI/model/persistence; chưa xác minh âm thanh phát thực, rung vật lý hay delivery thông báo.",
+      "semantic_disposition": "observable_subset_supported_with_current_limitations",
+      "flagged": false,
+      "full_uc_pass": false
+    },
+    {
+      "case": "MS-R15-META02",
+      "feature": "Collection",
+      "uc": "UC-01",
+      "uc_title": "Mở khoá và tải dữ liệu bộ sưu tập",
+      "uc_steps": [
+        "CollectionStateService.IsEligible() so level với CollectionConfigModel.FirstLevelToShow",
+        "CollectionService.TryFetchCurrentEvent() → CollectionRemoteService.GetEventInfo(eventType) trả CollectionResponseModel{EventId, EventType, StartTime, FinishTime, Segment, CollectionId}",
+        "TryInitializeCollectionDataMaps() → InitializeCollectionDataMaps(TextAsset) đọc Resources/<CollectionId>.json",
+        "HasCollectionExistInLocal(collectionId) kiểm tra file có trong build không",
+        "IsPlayerLevelEnoughForBundleDownload() so với MinBundleDownloadLevel; DownloadAndLoadCollectionAssets('<collectionId>_theme_icons') và các bundle icon thẻ",
+        "EventSender.SendCollectionStarted() với collection_id, collection_name, start_time, remaining_duration, segment"
+      ],
+      "uc_result": "CollectionData sẵn sàng: 15 theme × 9 thẻ + 5 loại pack; UI hiện icon Collection",
+      "case_status": "observed_partial",
+      "expected": "Thiếu sao không cấp rương.",
+      "actual": "Wonderland Collection hiển thị8/135,15 set (Snacks1/15), grand prize10.000 coin/token/boosterx5. Bonus Chest có giá100/250/500; hiện0 sao, nút xám; bấm100 không mở rương, kho không đổi.",
+      "limitations": "Đếm/timer từ cache; chưa xác minh instance mới, nguồn thẻ, điều kiện đủ sao hoặc nhận thưởng.",
+      "semantic_disposition": "observable_subset_supported_with_current_limitations",
+      "flagged": false,
+      "full_uc_pass": false
+    },
+    {
+      "case": "MS-R15-META02",
+      "feature": "Collection",
+      "uc": "UC-06",
+      "uc_title": "Mở Bonus Chest bằng sao dư",
+      "uc_steps": [
+        "CollectionService.GetBonusChestModels() lấy CollectionConfigModel.BonusChests",
+        "GetExtraStarCount() cộng (CardCount − 1) × StarCount trên toàn CardInventory",
+        "OpenBonusChest(chestIndex) → GiveBonusChestReward(chest): chọn ChestReward hoặc ChestRewardWithoutCollection",
+        "RewardService trao với CurrencyEarnReason.CollectionChest (33)",
+        "EventSender.SendStarChestOpened(openedPackId) với start_chest_remaining_star_count, opened_pack_no"
+      ],
+      "uc_result": "Thẻ trùng không lãng phí; localization CollectionOpenChest 'Open chests with your extra cards!'",
+      "case_status": "observed_partial",
+      "expected": "Thiếu sao không cấp rương.",
+      "actual": "Wonderland Collection hiển thị8/135,15 set (Snacks1/15), grand prize10.000 coin/token/boosterx5. Bonus Chest có giá100/250/500; hiện0 sao, nút xám; bấm100 không mở rương, kho không đổi.",
+      "limitations": "Đếm/timer từ cache; chưa xác minh instance mới, nguồn thẻ, điều kiện đủ sao hoặc nhận thưởng.",
+      "semantic_disposition": "observable_subset_supported_with_current_limitations",
+      "flagged": false,
+      "full_uc_pass": false
+    },
+    {
+      "case": "MS-R15-META03",
+      "feature": "Collection",
+      "uc": "UC-12",
+      "uc_title": "Đánh dấu thẻ mới đã xem",
+      "uc_steps": [
+        "GetThemeNewCardCount(theme) đếm thẻ mới để hiện badge trên CollectionThemeView",
+        "CollectionService.MarkThemeCardsAsSeen(theme) → CollectionDataService.MarkCardAsSeen(cardId) cho từng thẻ",
+        "CardInventoryDataModel.IsNewCard = false",
+        "EventSender.SendCollectionPageImpression() với total_unique_card_count, completed_theme_count, start_chest_star_count"
+      ],
+      "uc_result": "Badge 'mới' tắt sau khi xem",
+      "case_status": "observed_partial",
+      "expected": "Ghi nhận phạm vi badge được xóa khi xem set.",
+      "actual": "Lần đầu Wafer Rolls và Gelato đều New; chỉ mở chi tiết Wafer Rolls. Sau đóng/mở lại set cả hai badge New biến mất; tiến độ vẫn2/9.",
+      "limitations": "Chỉ xác nhận UI của phiên; XML giữa2snapshot cuối không đổi, chưa xác định thời điểm ghi seen hoặc persistence sau restart.",
+      "semantic_disposition": "observable_subset_supported_with_current_limitations",
+      "flagged": false,
+      "full_uc_pass": false
+    },
+    {
+      "case": "MS-R15-EVT01",
+      "feature": "DuckFestival",
+      "uc": "UC-08",
+      "uc_title": "Xem bảng xếp hạng và thứ hạng của mình",
+      "uc_steps": [
+        "DuckFestivalDataService.GetLeaderboardPlayers() / GetMyPlayer() trả DuckFestivalLeaderboardPlayer{UserPublicID, NickName, Score, Rank, IsBot, IsMe, ImageUrl, ImageID, TokenID, TeamName, NameStyle, FrameId}",
+        "DuckFestivalService.GetLeaderboardPlayerViewModels() dựng DuckFestivalLeaderboardViewModel",
+        "GetMyPlayerRank() / TryGetMyPlayerRank(out rank) / GetLeaderScore() / GetAvgProgress() / GetElo() / GetPreviousElo()",
+        "SetMyPlayerLastSeenRank(currentRank) / GetMyPlayerLastSeenRank() cho chấm đỏ khi tụt/lên hạng",
+        "EventSender.SendDuckFestivalLeaderboardImpression(source) (duck_festival_leaderboard_impression) với rank, entrance_rank, leader_score, elo, total_users, real_user_count, bot_count",
+        "DuckFestivalLeaderboardViewFactory dựng item"
+      ],
+      "uc_result": "Người chơi thấy vị trí của mình và điểm của người dẫn đầu",
+      "case_status": "verified_observed_branch",
+      "expected": "Ghi nhận settlement và xử lý offline.",
+      "actual": "Hạng45/50,6điểm; panel Rank45/Reward-; Continue báo No Internet Connection; X về Home. Trong chuyển tiếp tiến độ→settlement Undo tăng9997→9998, nên không kết luận toàn quá trình không có thưởng.",
+      "limitations": "Chưa tách được callback cấp Undo/mốc tiến độ; chưa xác nhận settlement backend, bot hay nhận thưởng hạng. Tên file EVT02_magiclab_finished thực tế là màn Duck settlement.",
+      "semantic_disposition": "observable_subset_supported_with_current_limitations",
+      "flagged": false,
+      "full_uc_pass": false
+    },
+    {
+      "case": "MS-R15-EVT01",
+      "feature": "DuckFestival",
+      "uc": "UC-12",
+      "uc_title": "Kết thúc sự kiện và nhận thưởng hạng",
+      "uc_steps": [
+        "DuckFestivalService.GetRemainingSeconds() / GetEventEndDate() / GetShownEndDate() / DuckFestivalDataService.GetEventEndDate()",
+        "State → LocalEnd(7) / RemoteEnd(8) / Claim(9); DuckFestivalDataService.IsFinished()",
+        "CanClaim() / DuckFestivalStateService.CanClaim(); GetRewardOfRank(playerRank) và TryGetLeaderboardRewards(out rewardModel) chọn rương theo hạng",
+        "SendClaimRequestAsync() → DuckFestivalRemoteService.SendClaimRequest() tới claimDuckFestival (/v1/claim-duck-festival)",
+        "FinishEvent(DuckFestivalFinishEventParameters) → EventSender.SendDuckFestivalFinished (duck_festival_finished) với rank, previous_rank, elo, previous_elo, stage_completed, duck_score, total_users, real_user_count, bot_count, avg_progress, leaderboard_id",
+        "IsClaimed() / DuckFestivalDataService.IsClaimed()"
+      ],
+      "uc_result": "Nhận rương theo hạng; Elo cập nhật cho lần ghép sau",
+      "case_status": "verified_observed_branch",
+      "expected": "Ghi nhận settlement và xử lý offline.",
+      "actual": "Hạng45/50,6điểm; panel Rank45/Reward-; Continue báo No Internet Connection; X về Home. Trong chuyển tiếp tiến độ→settlement Undo tăng9997→9998, nên không kết luận toàn quá trình không có thưởng.",
+      "limitations": "Chưa tách được callback cấp Undo/mốc tiến độ; chưa xác nhận settlement backend, bot hay nhận thưởng hạng. Tên file EVT02_magiclab_finished thực tế là màn Duck settlement.",
+      "semantic_disposition": "observable_subset_supported_with_current_limitations",
+      "flagged": false,
+      "full_uc_pass": false
+    },
+    {
+      "case": "MS-R15-EVT01",
+      "feature": "DuckFestival",
+      "uc": "UC-15",
+      "uc_title": "Offline / lỗi request",
+      "uc_steps": [
+        "NotActiveStatusCode = 425 phân biệt sự kiện không hoạt động với lỗi mạng",
+        "DuckFestivalPopupStateType.NoInternetConnection(1) hiển thị popup báo mất mạng",
+        "State giữ NoCache(2) nếu chưa từng fetch được",
+        "TryFetchCurrentEvent() / TryFetchCurrentEventAsync() thử lại ở IntervalUpdate",
+        "Điểm vịt vẫn tích local và đẩy kèm trường score ở request kế"
+      ],
+      "uc_result": "Không mất vịt đã thu thập; thao tác server bị hoãn",
+      "case_status": "verified_observed_branch",
+      "expected": "Ghi nhận settlement và xử lý offline.",
+      "actual": "Hạng45/50,6điểm; panel Rank45/Reward-; Continue báo No Internet Connection; X về Home. Trong chuyển tiếp tiến độ→settlement Undo tăng9997→9998, nên không kết luận toàn quá trình không có thưởng.",
+      "limitations": "Chưa tách được callback cấp Undo/mốc tiến độ; chưa xác nhận settlement backend, bot hay nhận thưởng hạng. Tên file EVT02_magiclab_finished thực tế là màn Duck settlement.",
+      "semantic_disposition": "observable_subset_supported_with_current_limitations",
+      "flagged": false,
+      "full_uc_pass": false
+    },
+    {
+      "case": "MS-R15-EVT02",
+      "feature": "MergeMiniGame",
+      "uc": "UC-02",
+      "uc_title": "Nhận cấu hình sự kiện và dựng bàn khởi đầu",
+      "uc_steps": [
+        "MergeMiniGameService.FetchCurrentEvent() → MergeMiniGameRemoteService.GetEventInfo(eventType) (MergeMiniGameEventInfoRequestModel{EventType})",
+        "TryStartNewEvent(response, eventType) → MergeMiniGameDataService.StartNewEvent()",
+        "BuildItemDefinitions(response): mỗi MergeItemDefinitionModel{MergeItem, ItemsToGenerate, Reward} thành MergeMiniGameItemModel{SetId, Level, Type, ItemsToGenerate, Reward}",
+        "BuildScatterDefinitions(response): ScatterDefinitionModel{Level, SetId, Items} → ScatterDefinitionCacheModel",
+        "BuildBoardState(response): dựng 49 MergeMiniGameCellModel{Position, Items} từ InitialBoard (CellCount = 0x31 = 49, tức bàn 7×7)",
+        "Cache lưu Rewards và RewardsWithCollection"
+      ],
+      "uc_result": "Bàn merge sẵn sàng với vật phẩm khởi đầu do server đặt",
+      "case_status": "verified_observed_branch",
+      "expected": "Energy chỉ tiêu khi sinh item được.",
+      "actual": "Bàn hiển thịStage1/12, energy5. Lần đầu5→4; sinh thêm hai item tới2. Các lần khi đầy không giảm dưới2, hiện No Space. totalSpendEnergy0→1→3 rồi giữ3.",
+      "limitations": "Các file EVT09_merge_zero và EVT10_merge_noenergy thực tế là hết chỗ, không phải0energy. Không chứng minh biên hết energy hoặc event đang chạy production.",
+      "semantic_disposition": "observable_subset_supported_with_current_limitations",
+      "flagged": false,
+      "full_uc_pass": false
+    },
+    {
+      "case": "MS-R15-EVT02",
+      "feature": "MergeMiniGame",
+      "uc": "UC-05",
+      "uc_title": "Bấm máy phát để sinh vật phẩm",
+      "uc_steps": [
+        "CanTapGeneratorButton() kiểm tra đủ Energy và GetEmptySpaceCount() > 0",
+        "Không đủ Energy → nút hiện 'No Energy!' (MergeButtonNoEnergyText); hết ô → 'No Space!' (MergeButtonNoSpaceText)",
+        "GetItem(setID, level, canProduceScatteredProducts) trả ItemSpawnResult{MergedItemModel, ScatteredByProducts}",
+        "GetMultiplier() quyết định số vật sinh ra một lần (1x / 2x / 4x)",
+        "IncreaseSpendEnergyCount(amount) cộng vào TotalSpendEnergy",
+        "PlaceItemInData(position, itemModel) đặt vật lên ô; MergeMiniGameItemModel.ItemsToGenerate cho biết máy phát sinh ra gì"
+      ],
+      "uc_result": "Vật phẩm mới xuất hiện trên bàn, Energy giảm",
+      "case_status": "verified_observed_branch",
+      "expected": "Energy chỉ tiêu khi sinh item được.",
+      "actual": "Bàn hiển thịStage1/12, energy5. Lần đầu5→4; sinh thêm hai item tới2. Các lần khi đầy không giảm dưới2, hiện No Space. totalSpendEnergy0→1→3 rồi giữ3.",
+      "limitations": "Các file EVT09_merge_zero và EVT10_merge_noenergy thực tế là hết chỗ, không phải0energy. Không chứng minh biên hết energy hoặc event đang chạy production.",
+      "semantic_disposition": "observable_subset_supported_with_current_limitations",
+      "flagged": false,
+      "full_uc_pass": false
+    },
+    {
+      "case": "MS-R15-EVT03",
+      "feature": "MergeMiniGame",
+      "uc": "UC-06",
+      "uc_title": "Merge hai vật phẩm",
+      "uc_steps": [
+        "MergeDragSelection / MergeItemInputReceiver / MergeMiniGameSelectionSystem xử lý kéo thả",
+        "MergeMiniGameService.SwapItems(fromIndex, toIndex) hoặc SnapItem(fromIndex, toIndex)",
+        "MergeMiniGameDataService.MergeItems(from, to, itemModel) tạo vật cấp Level + 1",
+        "IsItemInMaxLevel(itemModel) kiểm tra đã tới cấp cuối chưa",
+        "TryIncreaseProgress(setID, level) cập nhật MergeProgress; key nội bộ dạng '{0}_{1}' (setId_level)",
+        "GetScatteredProducts(setId, newLevel) trả các vật phụ sinh ra kèm theo",
+        "Vật mới lần đầu tìm thấy → MergeNewItemTitle 'New Item Found!' (chỉ từ chặng FirstStageToShowNewItemFound trở đi)"
+      ],
+      "uc_result": "Vật nâng cấp, tiến độ chuỗi tăng, có thể sinh vật phụ vào Scatter Queue",
+      "case_status": "verified_observed_branch",
+      "expected": "Cặp cùng loại nâng cấp, tiến độ stage và thưởng được ghi đúng.",
+      "actual": "Hai blueberry thành hũ level2; UIStage2/12, mergeProgress[1,0,0,0,0]→[2,0,0,0,0]; energy giữ2. Icon30m hoàn tất nhưng limitless end chưa tăng ngay.",
+      "limitations": "Mới thử một cặp; chưa kiểm tra mọi chain, item khác loại, multiplier hay Grand Prize.",
+      "semantic_disposition": "observable_subset_supported_with_current_limitations",
+      "flagged": false,
+      "full_uc_pass": false
+    },
+    {
+      "case": "MS-R15-EVT03",
+      "feature": "MergeMiniGame",
+      "uc": "UC-10",
+      "uc_title": "Hoàn thành chặng và nhận thưởng chặng",
+      "uc_steps": [
+        "MergeMiniGameService.TryIncreaseProgress(setID, level) làm CurrentStage tăng (MergeMiniGameDataService.SetCurrentStage(stage, setID))",
+        "GetStageReward(stageIndex) lấy từ MergeMiniGameCacheModel.Rewards (hoặc RewardsWithCollection)",
+        "RewardService trao với CurrencyEarnReason.MergeMiniGameStageCompleted (58)",
+        "HasStageCompletedRewardInQueue() / GiveStageCompletedRewardInQueue() cho trường hợp gián đoạn",
+        "ShouldPlayRewardAnimation(setID) / MarkRewardAnimationShown(setID) và LastShownStage đảm bảo animation chạy đúng một lần",
+        "Text MergeMiniGameStageCompleted 'Merge Stage Rewards'"
+      ],
+      "uc_result": "Nhận thưởng chặng, mở nội dung chặng kế",
+      "case_status": "verified_observed_branch",
+      "expected": "Cặp cùng loại nâng cấp, tiến độ stage và thưởng được ghi đúng.",
+      "actual": "Hai blueberry thành hũ level2; UIStage2/12, mergeProgress[1,0,0,0,0]→[2,0,0,0,0]; energy giữ2. Icon30m hoàn tất nhưng limitless end chưa tăng ngay.",
+      "limitations": "Mới thử một cặp; chưa kiểm tra mọi chain, item khác loại, multiplier hay Grand Prize.",
+      "semantic_disposition": "observable_subset_supported_with_current_limitations",
+      "flagged": false,
+      "full_uc_pass": false
+    },
+    {
+      "case": "MS-R15-EVT04",
+      "feature": "MergeMiniGame",
+      "uc": "UC-10",
+      "uc_title": "Hoàn thành chặng và nhận thưởng chặng",
+      "uc_steps": [
+        "MergeMiniGameService.TryIncreaseProgress(setID, level) làm CurrentStage tăng (MergeMiniGameDataService.SetCurrentStage(stage, setID))",
+        "GetStageReward(stageIndex) lấy từ MergeMiniGameCacheModel.Rewards (hoặc RewardsWithCollection)",
+        "RewardService trao với CurrencyEarnReason.MergeMiniGameStageCompleted (58)",
+        "HasStageCompletedRewardInQueue() / GiveStageCompletedRewardInQueue() cho trường hợp gián đoạn",
+        "ShouldPlayRewardAnimation(setID) / MarkRewardAnimationShown(setID) và LastShownStage đảm bảo animation chạy đúng một lần",
+        "Text MergeMiniGameStageCompleted 'Merge Stage Rewards'"
+      ],
+      "uc_result": "Nhận thưởng chặng, mở nội dung chặng kế",
+      "case_status": "verified_observed_branch",
+      "expected": "Ghi nhận cảnh báo và thời điểm áp phần thưởng.",
+      "actual": "X cảnh báo mất energy; Stay giữ2; Quit hiện Time’s Up. Sau Continue hiện Merge Stage Rewards30m. Claim làm isClaimed=true và limitlessLifeEnd=15:42:14UTC, Home29:58. Energy trong model vẫn2, không chứng minh bị xóa dù lời cảnh báo nói mất.",
+      "limitations": "Chỉ nhánh cache expired offline; chưa backend, reset kỳ mới, mọi phần thưởng hoặc chống claim lặp sau restart. Reward list14 phần tử không tự đồng nghĩa12 stage UI.",
+      "semantic_disposition": "observable_subset_supported_with_current_limitations",
+      "flagged": false,
+      "full_uc_pass": false
+    },
+    {
+      "case": "MS-R15-EVT04",
+      "feature": "MergeMiniGame",
+      "uc": "UC-13",
+      "uc_title": "Hết giờ và tự nhận thưởng",
+      "uc_steps": [
+        "OnEventStateChanged() phát hiện đổi trạng thái sang TimeIsUp",
+        "TryClaimEventAutomatically() nếu ShouldClaimEventAutomatically() (MergeMiniGameConfigModel.AutoOpenEnabledOnFinish)",
+        "ClaimEvent() bắn analytics merge_event_finished với board_state (GetBoardState), current_energy, max_founded_item_id, total_collected_coin_amount, total_collected_energy, event_id, readable_event_id, segment, progress",
+        "Chưa hoàn thành → MergeMiniGameShowEventFailedCommand mở popup 'Time's Up' (MergeEventFailedTitle / MergeEventFailedDescription 'Merge Bakery has ended! Try again next time.')",
+        "ClearBoard() dọn bàn"
+      ],
+      "uc_result": "Sự kiện đóng, thưởng đã đạt được trao hết, bàn xoá",
+      "case_status": "verified_observed_branch",
+      "expected": "Ghi nhận cảnh báo và thời điểm áp phần thưởng.",
+      "actual": "X cảnh báo mất energy; Stay giữ2; Quit hiện Time’s Up. Sau Continue hiện Merge Stage Rewards30m. Claim làm isClaimed=true và limitlessLifeEnd=15:42:14UTC, Home29:58. Energy trong model vẫn2, không chứng minh bị xóa dù lời cảnh báo nói mất.",
+      "limitations": "Chỉ nhánh cache expired offline; chưa backend, reset kỳ mới, mọi phần thưởng hoặc chống claim lặp sau restart. Reward list14 phần tử không tự đồng nghĩa12 stage UI.",
+      "semantic_disposition": "observable_subset_supported_with_current_limitations",
+      "flagged": false,
+      "full_uc_pass": false
+    },
+    {
+      "case": "MS-R15-EVT05",
+      "feature": "TreasureDrill",
+      "uc": "UC-05",
+      "uc_title": "Nhận thưởng một bậc",
+      "uc_steps": [
+        "TreasureDrillService.IsStepClaimable(stepIndex) / TreasureDrillDataService.CheckStepIsEligibleToClaim(stepIndex)",
+        "TryClaimStep(stepIndex) → ClaimStep(step)",
+        "GetStepRewards(stepModel) trả RewardModel hoặc RewardModelWithCollection (khi Collection bật)",
+        "RewardService/InventoryService trao thưởng; TreasureDrillDataService.SetStepAsClaimed(stepIndex)",
+        "IsStepClaimed(stepIndex) / GetClaimedSteps() / GetClaimedTaskCount() cập nhật UI"
+      ],
+      "uc_result": "Phần thưởng vào túi, ổ khoá của bậc mở ra (hoạt ảnh Lock* trong TreasureDrillAnimationConfig)",
+      "case_status": "verified_observed_branch",
+      "expected": "Chỉ cấp thưởng khi đáp ứng điều kiện mua/kích hoạt.",
+      "actual": "UI Finished, giá59000VND, bậc1 yêu cầu1win đã đủ nhưng khóa; tap hiện Activate Treasure Drill!, coin/boosters không đổi. Đóng popup, icon biến mất.",
+      "limitations": "Không mua gói; giá cache, không xác nhận store mới. Chưa nhánh đãmua hay server reset.",
+      "semantic_disposition": "observable_subset_supported_with_current_limitations",
+      "flagged": false,
+      "full_uc_pass": false
+    },
+    {
+      "case": "MS-R15-EVT05",
+      "feature": "TreasureDrill",
+      "uc": "UC-11",
+      "uc_title": "Kết thúc sự kiện",
+      "uc_steps": [
+        "TreasureDrillService.GetRemainingSeconds() / GetEndDate() (ConvertToUtc(FinishTime))",
+        "TreasureDrillStateService.ShouldEventFinish() / IsEventFinishedWithoutClaimableSteps()",
+        "State → TimeIsUp(5); ClaimEvent() → TreasureDrillDataService.ClaimEvent()",
+        "OnStateChanged() và ClaimEvent() gửi analytics treasure_drill_finished với claimed_task_count, total_completed_task_count, offer_unlocked, segment",
+        "State → Claimed(7) / ClaimedAndTimeIsUp(6)"
+      ],
+      "uc_result": "Sự kiện đóng; nếu chưa mua thì toàn bộ thưởng đã tích bị mất",
+      "case_status": "verified_observed_branch",
+      "expected": "Chỉ cấp thưởng khi đáp ứng điều kiện mua/kích hoạt.",
+      "actual": "UI Finished, giá59000VND, bậc1 yêu cầu1win đã đủ nhưng khóa; tap hiện Activate Treasure Drill!, coin/boosters không đổi. Đóng popup, icon biến mất.",
+      "limitations": "Không mua gói; giá cache, không xác nhận store mới. Chưa nhánh đãmua hay server reset.",
+      "semantic_disposition": "observable_subset_supported_with_current_limitations",
+      "flagged": false,
+      "full_uc_pass": false
+    },
+    {
+      "case": "MS-R15-EVT06",
+      "feature": "WheelOfFortune",
+      "uc": "UC-19",
+      "uc_title": "Không có cache / offline / lỗi request",
+      "uc_steps": [
+        "TryFetchCurrentEvent bọc trong try/CancellationTokenSource; lỗi → không đổi cache",
+        "WheelOfFortuneStateService.GetEventState() trả NoCache(1) khi CacheModel null",
+        "IntervalUpdate() thử lại ở nhịp kế tiếp"
+      ],
+      "uc_result": "Nút lobby ẩn, không có popup; dữ liệu cũ (nếu có) vẫn dùng được offline vì chip/progress lưu local",
+      "case_status": "verified_observed_branch",
+      "expected": "Ghi lỗi/fallback khi không có kết nối.",
+      "actual": "Hiện No Internet Connection!, chưa vào bảngspin; inventory không đổi.",
+      "limitations": "Không quan sát spin/probability/claim; icon4 không được coi là4chip.",
+      "semantic_disposition": "observable_subset_supported_with_current_limitations",
+      "flagged": false,
+      "full_uc_pass": false
+    },
+    {
+      "case": "MS-R15-EVT07",
+      "feature": "BroomStreak",
+      "uc": "UC-11",
+      "uc_title": "Kết thúc sự kiện và claim",
+      "uc_steps": [
+        "GetRemainingSeconds() / GetEndDate() (ConvertToUtc) / GetStartTimeAsUnix()",
+        "GetEventState() → TimeIsUp(3)",
+        "BroomStreakService.ClaimEvent() → BroomStreakDataService.ClaimEvent() đặt IsClaimed",
+        "EventSender.SendBroomStreakFinished (broom_streak_finished_v2) với current_streak, max_streak_current_tower, tournament_id, tournament_start_time",
+        "State → Claimed(4) / ClaimedAndTimeIsUp(5); popup mở với source EventFinish(3) hoặc EventClaimRewards(4)"
+      ],
+      "uc_result": "Sự kiện đóng, chờ đợt mới từ server",
+      "case_status": "verified_observed_branch",
+      "expected": "Kết thúc event, bảo toàn thưởng đã nhận.",
+      "actual": "Popup có mốc0/2/5, rương2 đãcheck. Continue vềHome và icon biến mất; isClaimed false→true, currency không đổi.",
+      "limitations": "Chỉ finalization cache; chưa thử progress/fail checkpoint hay thưởng chưa nhận.",
+      "semantic_disposition": "observable_subset_supported_with_current_limitations",
+      "flagged": false,
+      "full_uc_pass": false
+    },
+    {
+      "case": "MS-R15-EVT07",
+      "feature": "BroomStreak",
+      "uc": "UC-13",
+      "uc_title": "Theo dõi mốc đã nhận và checkpoint đã đạt",
+      "uc_steps": [
+        "BroomStreakDataService.GetMaxClaimedStepIndex() / SetMaxClaimedStepIndex(step)",
+        "GetMaxClaimedCheckPointStepIndex() / SetMaxClaimedCheckPointStepIndex(step) / GetMaxClaimedCheckPointWinCount()",
+        "GetLastSeenMaxClaimedStepIndex() / GetLastSeenMaxClaimedStepWinCount() / SetLastSeenMaxClaimedStepIndex(step)",
+        "BroomStreakService.GetMaxClaimedCheckPointWinCount() cho UI biết mốc an toàn"
+      ],
+      "uc_result": "UI hiển thị đúng bậc đã mở, checkpoint an toàn và bậc chưa nhận",
+      "case_status": "verified_observed_branch",
+      "expected": "Kết thúc event, bảo toàn thưởng đã nhận.",
+      "actual": "Popup có mốc0/2/5, rương2 đãcheck. Continue vềHome và icon biến mất; isClaimed false→true, currency không đổi.",
+      "limitations": "Chỉ finalization cache; chưa thử progress/fail checkpoint hay thưởng chưa nhận.",
+      "semantic_disposition": "observable_subset_supported_with_current_limitations",
+      "flagged": false,
+      "full_uc_pass": false
+    },
+    {
+      "case": "MS-R15-EVT08",
+      "feature": "MiniGame",
+      "uc": "UC-04",
+      "uc_title": "Dựng bàn chơi của chặng hiện tại",
+      "uc_steps": [
+        "MiniGameService.GetCurrentStage() và GetCurrentStageSeedIndex()",
+        "MiniGameLevelsConfig.GetStageLevelsData(stage) trả MiniGameStageLevelsData chứa 10 MiniGameLevelData",
+        "MiniGameLevelData{BoardSize, ItemPlacements} — mỗi MiniGameLevelItemPlacementData{ItemType, CellIndex, SlotPosition, SlotMoveScale}",
+        "MiniGameBoardConfig.GetBoardPrefabBySize(boardSize) và GetBoardItemScaleBySize(boardSize)",
+        "MiniGameItemDataConfig.GetItemData(itemType) trả MiniGameItemData{Type, Width, Height, Sprite, SlotSprite, ItemPrefab, ItemSlotPrefab}",
+        "GetCurrentStageHitCells() khôi phục các ô đã đập từ lần chơi trước",
+        "GetCurrentStageTotalCellCount() đọc từ MiniGameLevelsConfig"
+      ],
+      "uc_result": "Bàn đúng như lần trước, người chơi tiếp tục chặng dở",
+      "case_status": "verified_observed_branch",
+      "expected": "Một ômới tiêu1trident; ôđãmở không tiêu thêm.",
+      "actual": "Trident17→16→16, hitCells0→1→1, usedTrident0→1→1.",
+      "limitations": "Instanceexpired offline; không chứng minh toànboard seed/booster.",
+      "semantic_disposition": "observable_subset_supported_with_current_limitations",
+      "flagged": false,
+      "full_uc_pass": false
+    },
+    {
+      "case": "MS-R15-EVT08",
+      "feature": "MiniGame",
+      "uc": "UC-05",
+      "uc_title": "Đập một ô bằng Trident",
+      "uc_steps": [
+        "MiniGameController xử lý input trên MiniGameBoardCell",
+        "MiniGameService.SpendTrident() → MiniGameDataService.ChangeTridentCount(−1) và IncreaseCurrentStageUsedTridentCount(1)",
+        "AddCurrentStageHitCell(cellId) ghi ô đã đập",
+        "MiniGameCellHitResult cho biết trúng phần nào của báu vật; MiniGameBoardItemHider hé lộ dần MiniGameBoardBasicItem",
+        "MiniGameService.IncreaseCurrentStageBoosterHitPercentage() cộng MiniGameConfigModel.JellyFishHitPercentagePerMove vào thanh booster"
+      ],
+      "uc_result": "Ô mở ra, hiện báu vật hoặc trống; thanh JellyFish tiến gần đầy",
+      "case_status": "verified_observed_branch",
+      "expected": "Một ômới tiêu1trident; ôđãmở không tiêu thêm.",
+      "actual": "Trident17→16→16, hitCells0→1→1, usedTrident0→1→1.",
+      "limitations": "Instanceexpired offline; không chứng minh toànboard seed/booster.",
+      "semantic_disposition": "observable_subset_supported_with_current_limitations",
+      "flagged": false,
+      "full_uc_pass": false
+    },
+    {
+      "case": "MS-R15-EVT09",
+      "feature": "MiniGame",
+      "uc": "UC-07",
+      "uc_title": "Hoàn thành một chặng và nhận thưởng",
+      "uc_steps": [
+        "MiniGameService.CompleteCurrentStage() → ClaimStage(stageIndex)",
+        "GetStageReward(stageIndex) lấy phần tử thứ stageIndex trong MiniGameConfigModel.Rewards (hoặc RewardsWithCollection khi Collection đang chạy)",
+        "GiveStageRewards(stageIndex) → RewardService, CurrencyEarnReason.MiniGameUnderwaterTreasures (49); analytics 'earned' với coin/life/undo/shuffle/extra_bottle/collection_pack_1..5/duck_x2_in_seconds/merge_energy/additional_life_inventory/life_in_seconds",
+        "AddClaimedStage(stageIndex) ghi vào ClaimedStages",
+        "IncreaseCurrentStage(); MiniGameDataService.ResetCurrentStageHitCells(), ResetCurrentStageBoosterHitPercentage(), ResetCurrentStageUsedTridentCount(); SetCurrentStageSeedIndex(seed mới)",
+        "EventSender.SendMiniGameStepCompletedEvent(completedStep, rewardModel, usedTridentCount) → underwater_treasures_step_completed với step_rewards, step_rewards_amount, chest_type, used_trident_count, trident_inventory"
+      ],
+      "uc_result": "Nhận thưởng chặng, sang chặng kế với bàn lớn hơn",
+      "case_status": "verified_observed_branch",
+      "expected": "Stage tăng, thưởng cấp mộtlần tại bướcclaim.",
+      "actual": "Stage1→2/10, cache currentStage0→1, claimedStages[0]. Tridentcòn2 lúc chuyểnstage. Undo chưa tăng tại checkmark; khi claim9998→9999, isClaimedfalse→true.",
+      "limitations": "Chỉ1stage; chưa10stage, GrandPrize, Collectionpack hoặc claim backend.",
+      "semantic_disposition": "observable_subset_supported_with_current_limitations",
+      "flagged": false,
+      "full_uc_pass": false
+    },
+    {
+      "case": "MS-R15-EVT09",
+      "feature": "MiniGame",
+      "uc": "UC-09",
+      "uc_title": "Tự nhận thưởng khi hết giờ",
+      "uc_steps": [
+        "MiniGameService.InitializeData() gọi TryClaimEventAutomatically()",
+        "ShouldClaimEventAutomatically() kiểm tra AutoOpenEnabledOnFinish và còn thưởng chưa nhận",
+        "GiveBulkRewardInQueue() trao gộp mọi thưởng chặng còn lại (HasBulkRewardInQueue)",
+        "MiniGameDataService.ClaimEvent(); EventSender gửi underwater_treasures_finished"
+      ],
+      "uc_result": "Không mất thưởng dù hết giờ giữa chừng",
+      "case_status": "verified_observed_branch",
+      "expected": "Stage tăng, thưởng cấp mộtlần tại bướcclaim.",
+      "actual": "Stage1→2/10, cache currentStage0→1, claimedStages[0]. Tridentcòn2 lúc chuyểnstage. Undo chưa tăng tại checkmark; khi claim9998→9999, isClaimedfalse→true.",
+      "limitations": "Chỉ1stage; chưa10stage, GrandPrize, Collectionpack hoặc claim backend.",
+      "semantic_disposition": "observable_subset_supported_with_current_limitations",
+      "flagged": false,
+      "full_uc_pass": false
+    },
+    {
+      "case": "MS-R15-EVT10",
+      "feature": "MiniGame",
+      "uc": "UC-05",
+      "uc_title": "Đập một ô bằng Trident",
+      "uc_steps": [
+        "MiniGameController xử lý input trên MiniGameBoardCell",
+        "MiniGameService.SpendTrident() → MiniGameDataService.ChangeTridentCount(−1) và IncreaseCurrentStageUsedTridentCount(1)",
+        "AddCurrentStageHitCell(cellId) ghi ô đã đập",
+        "MiniGameCellHitResult cho biết trúng phần nào của báu vật; MiniGameBoardItemHider hé lộ dần MiniGameBoardBasicItem",
+        "MiniGameService.IncreaseCurrentStageBoosterHitPercentage() cộng MiniGameConfigModel.JellyFishHitPercentagePerMove vào thanh booster"
+      ],
+      "uc_result": "Ô mở ra, hiện báu vật hoặc trống; thanh JellyFish tiến gần đầy",
+      "case_status": "verified_observed_branch",
+      "expected": "Stay giữbàn;0chặnđào; cảnhbáo phụthuộc trident.",
+      "actual": "Còn2 hiện cảnhbáo mấttrident nếuQuit. Stay giữ2;2tap→0. Tapthứ3 hiện Get tridents from levels!, hitCells giữ2. X lúc0 vềHome và bậtclaim không có cảnhbáo.",
+      "limitations": "Không bấmQuit khi còntrident; không kếtluận xóasốdư ởnhánhđó.",
+      "semantic_disposition": "observable_subset_supported_with_current_limitations",
+      "flagged": false,
+      "full_uc_pass": false
+    },
+    {
+      "case": "MS-R15-EVT10",
+      "feature": "MiniGame",
+      "uc": "UC-13",
+      "uc_title": "Cảnh báo khi thoát lúc còn Trident",
+      "uc_steps": [
+        "MiniGameFinishedAreYouSurePopUp mở với text MiniGameTridentAreYouSure 'You will lose your tridents if you quit!'",
+        "Người chơi chọn ở lại chơi tiếp hoặc thoát"
+      ],
+      "uc_result": "Giảm số người bỏ phí Trident",
+      "case_status": "verified_observed_branch",
+      "expected": "Stay giữbàn;0chặnđào; cảnhbáo phụthuộc trident.",
+      "actual": "Còn2 hiện cảnhbáo mấttrident nếuQuit. Stay giữ2;2tap→0. Tapthứ3 hiện Get tridents from levels!, hitCells giữ2. X lúc0 vềHome và bậtclaim không có cảnhbáo.",
+      "limitations": "Không bấmQuit khi còntrident; không kếtluận xóasốdư ởnhánhđó.",
+      "semantic_disposition": "observable_subset_supported_with_current_limitations",
+      "flagged": false,
+      "full_uc_pass": false
+    },
+    {
+      "case": "MS-R15-SOC01",
+      "feature": "Teams",
+      "uc": "UC-01",
+      "uc_title": "Nạp trạng thái đội sau đăng nhập",
+      "uc_steps": [
+        "TeamsService.TryFetchCurrentState()",
+        "TeamsRemoteService.GetUserTeamSummary() → GetMyTeamResponse (FlatBuffers)",
+        "TeamsUtils.GetTeamViewModel(TeamSummary) dựng TeamViewModel",
+        "State = Initialized, bắn OnTeamServiceStateUpdated / OnUserTeamDataUpdated"
+      ],
+      "uc_result": "UserTeamModel, UserRole, RequestCount, UserImageUrl được nạp; TeamsController.UpdateView() chọn view phù hợp",
+      "case_status": "blocked_feature_gate",
+      "expected": "Ghi trạngthái entrypoint.",
+      "actual": "Teams hiện Coming Soon!, không có danh sách/tạođội/chat.",
+      "limitations": "Không suy ra trạngthái toànproduction; haiaccount/backend/flag được bật là dependency.",
+      "semantic_disposition": "feature_gate_before_uc",
+      "flagged": true,
+      "full_uc_pass": false
+    },
+    {
+      "case": "MS-R15-SOC01",
+      "feature": "Teams",
+      "uc": "UC-25",
+      "uc_title": "Onboarding Teams lần đầu và gửi sự kiện mở khoá",
+      "uc_steps": [
+        "TryShowTeamsCommand kiểm tra IsTeamsUnlocked()",
+        "Hiển thị màn giới thiệu ('TeamJoinTitle' = \"Join a team to get free lives!\", 'TeamsActiveNow')",
+        "TeamsService.SetTeamsIntroduced(true) lưu vào TeamsSyncModel.IsIntroduced",
+        "Analytics 'teams_unlocked'; SendUserTeamInfoEvent() gửi một lần (GetUserTeamInfoSend/SetUserTeamInfoSend)"
+      ],
+      "uc_result": "Người chơi được dẫn vào JoinView, chỉ hiện một lần",
+      "case_status": "blocked_feature_gate",
+      "expected": "Ghi trạngthái entrypoint.",
+      "actual": "Teams hiện Coming Soon!, không có danh sách/tạođội/chat.",
+      "limitations": "Không suy ra trạngthái toànproduction; haiaccount/backend/flag được bật là dependency.",
+      "semantic_disposition": "feature_gate_before_uc",
+      "flagged": true,
+      "full_uc_pass": false
+    },
+    {
+      "case": "MS-R15-SOC02",
+      "feature": "Leaderboards",
+      "uc": "UC-05",
+      "uc_title": "Xem bảng xếp hạng đội",
+      "uc_steps": [
+        "TeamsLeaderboardController.OnTabSelected(Tab) chọn ShowWorldLeaderboard() hoặc ShowCountryLeaderboard()",
+        "Lấy dữ liệu từ TeamsService (TeamsDataService.GetGlobalLeaderboard / GetCountryLeaderboard)",
+        "Initialize(List<LeaderboardTeam>) đổ vào TeamLeaderboardViewAdapter",
+        "GetUserTeamIndex(leaderboard) tìm vị trí đội của người chơi rồi InitializeStickyElements(userTeamData, userTeamIndex)"
+      ],
+      "uc_result": "Bảng xếp hạng đội theo TeamScore, ghim đội của người chơi",
+      "case_status": "verified_observed_branch",
+      "expected": "Phân biệt dữliệu cached, mấtkếtnối và chưa mở.",
+      "actual": "Weekly hiển thị leaderboard cũ Finished; Friends hiện No Internet Connection!; Teams World/Country hiện Coming Soon!. Currency không đổi.",
+      "limitations": "ẢnhWeekly raw giữlocal vì có tênngườichơi; không dùng bảngcache làmrank mới. Chưarefresh/country/2account.",
+      "semantic_disposition": "feature_gate_before_uc",
+      "flagged": true,
+      "full_uc_pass": false
+    },
+    {
+      "case": "MS-R15-SOC02",
+      "feature": "Leaderboards",
+      "uc": "UC-06",
+      "uc_title": "Xem bảng xếp hạng bạn bè",
+      "uc_steps": [
+        "FriendsLeaderboardController.OnTabSelected(Tab) → ShowFriendsLeaderboard()",
+        "Trong lúc FriendsService đang đồng bộ: OnFriendsInitializationStarted() bật _loadingContainer",
+        "OnFriendsInitializationCompletedSignal() đổ FriendsListView theo FriendElementViewModel.Rank",
+        "Không có bạn → ShowAddFriends() hiện AddFriendView"
+      ],
+      "uc_result": "Xếp hạng theo tiến độ giữa bạn bè, kèm lối tắt thêm bạn",
+      "case_status": "verified_observed_branch",
+      "expected": "Phân biệt dữliệu cached, mấtkếtnối và chưa mở.",
+      "actual": "Weekly hiển thị leaderboard cũ Finished; Friends hiện No Internet Connection!; Teams World/Country hiện Coming Soon!. Currency không đổi.",
+      "limitations": "ẢnhWeekly raw giữlocal vì có tênngườichơi; không dùng bảngcache làmrank mới. Chưarefresh/country/2account.",
+      "semantic_disposition": "attempted_entry_error_only",
+      "flagged": true,
+      "full_uc_pass": false
+    },
+    {
+      "case": "MS-R15-SOC02",
+      "feature": "Leaderboards",
+      "uc": "UC-08",
+      "uc_title": "Tab giải tuần trong khung leaderboard",
+      "uc_steps": [
+        "LeaderboardController.WeeklyTabSelected() xác định tab hiện tại",
+        "WeeklyTournamentLeaderboardController.UpdateView() chọn WeeklyTournamentInProgressView hay WeeklyTournamentInResultView",
+        "UpdateViewModels() dựng WeeklyTournamentLeaderboardPlayerViewModel"
+      ],
+      "uc_result": "Xem thứ hạng và phần thưởng giải tuần ngay trong khung leaderboard",
+      "case_status": "verified_observed_branch",
+      "expected": "Phân biệt dữliệu cached, mấtkếtnối và chưa mở.",
+      "actual": "Weekly hiển thị leaderboard cũ Finished; Friends hiện No Internet Connection!; Teams World/Country hiện Coming Soon!. Currency không đổi.",
+      "limitations": "ẢnhWeekly raw giữlocal vì có tênngườichơi; không dùng bảngcache làmrank mới. Chưarefresh/country/2account.",
+      "semantic_disposition": "observable_subset_supported_with_current_limitations",
+      "flagged": false,
+      "full_uc_pass": false
+    },
+    {
+      "case": "MS-R15-SOC02",
+      "feature": "Leaderboards",
+      "uc": "UC-11",
+      "uc_title": "Xem bảng khi offline (dùng cache)",
+      "uc_steps": [
+        "PermanentLeaderboardDataService.GetCachedWorldLeaderboard / GetCachedCountryLeaderboard trả dữ liệu đã lưu",
+        "Nếu chưa có cache → bật _noInternetConnectionGameObject",
+        "PermanentLeaderboardRemoteService ghi log lỗi với tiền tố \"error: \""
+      ],
+      "uc_result": "Vẫn xem được bảng cũ thay vì màn hình trắng",
+      "case_status": "verified_observed_branch",
+      "expected": "Phân biệt dữliệu cached, mấtkếtnối và chưa mở.",
+      "actual": "Weekly hiển thị leaderboard cũ Finished; Friends hiện No Internet Connection!; Teams World/Country hiện Coming Soon!. Currency không đổi.",
+      "limitations": "ẢnhWeekly raw giữlocal vì có tênngườichơi; không dùng bảngcache làmrank mới. Chưarefresh/country/2account.",
+      "semantic_disposition": "different_subsystem",
+      "flagged": true,
+      "full_uc_pass": false
+    },
+    {
+      "case": "MS-R15-REC01",
+      "feature": "MergeMiniGame",
+      "uc": "UC-10",
+      "uc_title": "Hoàn thành chặng và nhận thưởng chặng",
+      "uc_steps": [
+        "MergeMiniGameService.TryIncreaseProgress(setID, level) làm CurrentStage tăng (MergeMiniGameDataService.SetCurrentStage(stage, setID))",
+        "GetStageReward(stageIndex) lấy từ MergeMiniGameCacheModel.Rewards (hoặc RewardsWithCollection)",
+        "RewardService trao với CurrencyEarnReason.MergeMiniGameStageCompleted (58)",
+        "HasStageCompletedRewardInQueue() / GiveStageCompletedRewardInQueue() cho trường hợp gián đoạn",
+        "ShouldPlayRewardAnimation(setID) / MarkRewardAnimationShown(setID) và LastShownStage đảm bảo animation chạy đúng một lần",
+        "Text MergeMiniGameStageCompleted 'Merge Stage Rewards'"
+      ],
+      "uc_result": "Nhận thưởng chặng, mở nội dung chặng kế",
+      "case_status": "verified_observed_branch",
+      "expected": "Giữ cờ claim và thời hạn thưởng; không cộng lại.",
+      "actual": "isClaimed vẫn true; limitlessLifeEnd giữ 15:42:14.400145 UTC; không xuất hiện icon/claim Merge lần nữa.",
+      "limitations": "Chỉ một lần restart local; không kiểm tra khôi phục server, reinstall hoặc claim trên hai thiết bị.",
+      "semantic_disposition": "observable_subset_supported_with_current_limitations",
+      "flagged": false,
+      "full_uc_pass": false
+    },
+    {
+      "case": "MS-R15-REC01",
+      "feature": "MergeMiniGame",
+      "uc": "UC-13",
+      "uc_title": "Hết giờ và tự nhận thưởng",
+      "uc_steps": [
+        "OnEventStateChanged() phát hiện đổi trạng thái sang TimeIsUp",
+        "TryClaimEventAutomatically() nếu ShouldClaimEventAutomatically() (MergeMiniGameConfigModel.AutoOpenEnabledOnFinish)",
+        "ClaimEvent() bắn analytics merge_event_finished với board_state (GetBoardState), current_energy, max_founded_item_id, total_collected_coin_amount, total_collected_energy, event_id, readable_event_id, segment, progress",
+        "Chưa hoàn thành → MergeMiniGameShowEventFailedCommand mở popup 'Time's Up' (MergeEventFailedTitle / MergeEventFailedDescription 'Merge Bakery has ended! Try again next time.')",
+        "ClearBoard() dọn bàn"
+      ],
+      "uc_result": "Sự kiện đóng, thưởng đã đạt được trao hết, bàn xoá",
+      "case_status": "verified_observed_branch",
+      "expected": "Giữ cờ claim và thời hạn thưởng; không cộng lại.",
+      "actual": "isClaimed vẫn true; limitlessLifeEnd giữ 15:42:14.400145 UTC; không xuất hiện icon/claim Merge lần nữa.",
+      "limitations": "Chỉ một lần restart local; không kiểm tra khôi phục server, reinstall hoặc claim trên hai thiết bị.",
+      "semantic_disposition": "observable_subset_supported_with_current_limitations",
+      "flagged": false,
+      "full_uc_pass": false
+    },
+    {
+      "case": "MS-R15-REC01",
+      "feature": "MergeMiniGame",
+      "uc": "UC-17",
+      "uc_title": "Lưu, đồng bộ và khôi phục bàn",
+      "uc_steps": [
+        "Mọi thao tác gọi MarkDataForLateUpdate(); LateUpdate() lưu khi IsDataChangedSinceLastSave()",
+        "MergeMiniGameDataService.GetSyncName() = 'MergeMiniGameModel'; SerializeModelForSync() / OverwriteModelFromSync(data)",
+        "BoardState (49 ô), ScatterQueue, MergeProgress, Multiplier, TotalSpendEnergy, TotalCollectedCoinAmount đều nằm trong cache nên khôi phục nguyên trạng",
+        "GetBoardState() serialize bàn thành chuỗi cho analytics",
+        "DeleteData() / ClearBoard() khi reset"
+      ],
+      "uc_result": "Bàn merge giữ nguyên qua các phiên và giữa các thiết bị",
+      "case_status": "verified_observed_branch",
+      "expected": "Giữ cờ claim và thời hạn thưởng; không cộng lại.",
+      "actual": "isClaimed vẫn true; limitlessLifeEnd giữ 15:42:14.400145 UTC; không xuất hiện icon/claim Merge lần nữa.",
+      "limitations": "Chỉ một lần restart local; không kiểm tra khôi phục server, reinstall hoặc claim trên hai thiết bị.",
+      "semantic_disposition": "observable_subset_supported_with_current_limitations",
+      "flagged": false,
+      "full_uc_pass": false
+    },
+    {
+      "case": "MS-R15-REC02",
+      "feature": "MiniGame",
+      "uc": "UC-09",
+      "uc_title": "Tự nhận thưởng khi hết giờ",
+      "uc_steps": [
+        "MiniGameService.InitializeData() gọi TryClaimEventAutomatically()",
+        "ShouldClaimEventAutomatically() kiểm tra AutoOpenEnabledOnFinish và còn thưởng chưa nhận",
+        "GiveBulkRewardInQueue() trao gộp mọi thưởng chặng còn lại (HasBulkRewardInQueue)",
+        "MiniGameDataService.ClaimEvent(); EventSender gửi underwater_treasures_finished"
+      ],
+      "uc_result": "Không mất thưởng dù hết giờ giữa chừng",
+      "case_status": "verified_observed_branch",
+      "expected": "Không cấp lại thưởng stage đã claim.",
+      "actual": "Undo giữ 9999; isClaimed=true, currentStage=1, trident=0 đều được giữ; icon Underwater biến mất.",
+      "limitations": "Một checkpoint local; không chứng minh server idempotency hoặc mọi điểm crash.",
+      "semantic_disposition": "observable_subset_supported_with_current_limitations",
+      "flagged": false,
+      "full_uc_pass": false
+    },
+    {
+      "case": "MS-R15-REC02",
+      "feature": "MiniGame",
+      "uc": "UC-15",
+      "uc_title": "Offline, đồng bộ và reset",
+      "uc_steps": [
+        "Không fetch được → MiniGameStateType.NoCachedEvent, icon ẩn; có cache thì chơi bình thường vì bàn nằm trong MiniGameLevelsConfig (Resources)",
+        "MiniGameDataService là ISyncable: SerializeModelForSync() / OverwriteModelFromSync(); LateUpdate() lưu khi IsDataChangedSinceLastSave()",
+        "DeleteData() xoá khi reset tài khoản",
+        "Debug: MiniGameService.ResetClaimedStages() / ResetEventIntroducedEverInLifeTime(); MiniGameDataService.ResetCurrentStageHitCells() / ResetClaimedStages()"
+      ],
+      "uc_result": "Trident và tiến độ chặng đồng bộ giữa thiết bị; chơi offline không mất dữ liệu",
+      "case_status": "verified_observed_branch",
+      "expected": "Không cấp lại thưởng stage đã claim.",
+      "actual": "Undo giữ 9999; isClaimed=true, currentStage=1, trident=0 đều được giữ; icon Underwater biến mất.",
+      "limitations": "Một checkpoint local; không chứng minh server idempotency hoặc mọi điểm crash.",
+      "semantic_disposition": "observable_subset_supported_with_current_limitations",
+      "flagged": false,
+      "full_uc_pass": false
+    },
+    {
+      "case": "MS-R15-CORE01",
+      "feature": "BottleSortMechanics",
+      "uc": "UC-01",
+      "uc_title": "Dựng bàn chơi từ model level",
+      "uc_steps": [
+        "BottleCollections.GenerateBottleCollections(levelAndLevelConfigModel, isDaily) tạo danh sách BottleCollection (level nhiều đợt sẽ có nhiều collection)",
+        "BottleCollection.SortBottleModels xếp model thành List<List<BottleItemModel>> theo hàng; FindMaxBottleHeight chọn cấu hình theo chiều cao lớn nhất",
+        "GetColorsInLevel / GetColorAmountsInLevel / GetColorCountsInLevel thống kê số khối mỗi màu (dùng cho luật hoàn thành chai và cho Mega Shuffle)",
+        "GenerateBottles(bottlesModels, remapColors, levelDifficultyType): với remapColors = true thì ConvertColorIds đổi ColorId sang bảng màu hiện hành (ColorService.GetColorAndColorId)",
+        "AddBottle(x, y, bottleHeight) → BottleItem.Prepare(viewOffset, initialSortingOrder, height, bottleAndWaterVariant, frontSortOrder, backSortOrder, bottleAnimationConfig, sorting, isCompletable, bottleCollection, isLongBottle)",
+        "AddWaterItem / InsertWaterItem / AddQuestionMarkItem điền nội dung; AddShelvesIfNeeded thêm kệ",
+        "SetLeftBottle/SetRightBottle nối hàng xóm để xử lý blocker liên chai"
+      ],
+      "uc_result": "Bàn chơi hoàn chỉnh, camera căn theo BottleCollectionCameraConfig phù hợp (thường / new background / zoom)",
+      "case_status": "verified_observed_branch",
+      "expected": "Chỉ chuyển nước ở nhánh hợp lệ, mở màu nằm dưới lớp vừa đổ.",
+      "actual": "Lần đầu cam chuyển vào chai9, chai1 lộ đỏ; đổ xám lên cam bị từ chối, board không đổi; cam từ chai5 nhập chai9 và lộ xanh lá. Không tiêu coin/booster.",
+      "limitations": "Chai đánh số từ trái sang phải, hàng trên rồi hàng dưới. Một seed có dấu hỏi/Generator, chưa đại diện mọi obstacle hoặc cơ chế multi-wave.",
+      "semantic_disposition": "observable_subset_supported_with_current_limitations",
+      "flagged": false,
+      "full_uc_pass": false
+    },
+    {
+      "case": "MS-R15-CORE01",
+      "feature": "BottleSortMechanics",
+      "uc": "UC-02",
+      "uc_title": "Chọn chai nguồn (tap lần 1)",
+      "uc_steps": [
+        "GameplayInputSystem.OnTouchDown(worldPosition) → BottleCollection.GetIntersectedBottle(worldPosition, inputMode, out bottle) (BottleItem.IsIntersect dùng Bounds)",
+        "SelectionSystem.OnSelectionInput(bottleCollection, bottleItem) tạo Selection mới",
+        "Selection.CanSelectAsOrigin(bottle) → BottleItem.IsSelectableAsOrigin(): chai không trống, không đang bị animation khoá (AnimationLock), không bị blocker chặn (duyệt danh sách _blockers)",
+        "SelectAsOrigin → BottleItem.OnSelectAsOrigin(selection): PlayBottleSelectedAnimation nâng chai lên (_bottleSelectionAnimationHeight = 1 unit, 0.7 cho bàn 3 hàng, thời lượng 0.09s), SortingService đặt sorting layer 'BottlesClicked'",
+        "GamePlayInputHistory.AddBottleClick(bottleId) ghi lịch sử; nếu tap chỗ trống thì AddFalseClick()"
+      ],
+      "uc_result": "Chai nguồn được đánh dấu, chờ tap thứ hai",
+      "case_status": "verified_observed_branch",
+      "expected": "Chỉ chuyển nước ở nhánh hợp lệ, mở màu nằm dưới lớp vừa đổ.",
+      "actual": "Lần đầu cam chuyển vào chai9, chai1 lộ đỏ; đổ xám lên cam bị từ chối, board không đổi; cam từ chai5 nhập chai9 và lộ xanh lá. Không tiêu coin/booster.",
+      "limitations": "Chai đánh số từ trái sang phải, hàng trên rồi hàng dưới. Một seed có dấu hỏi/Generator, chưa đại diện mọi obstacle hoặc cơ chế multi-wave.",
+      "semantic_disposition": "observable_subset_supported_with_current_limitations",
+      "flagged": false,
+      "full_uc_pass": false
+    },
+    {
+      "case": "MS-R15-CORE01",
+      "feature": "BottleSortMechanics",
+      "uc": "UC-03",
+      "uc_title": "Chọn chai đích và kiểm tra luật đổ màu",
+      "uc_steps": [
+        "Selection.CanSelectAsTarget(targetBottle, originBottle) → BottleItem.IsSelectableAsTarget(originBottle, waterColorId)",
+        "Loại trừ: chai đích chính là chai nguồn; chai đích đã IsCompleted; chai đích đầy (IsFull)",
+        "So màu: lấy GetTopWaterColorAndColorId() của chai đích; nếu chai trống thì coi như ColorId.NONE (12) và luôn nhận; nếu khác màu nước đang đổ → false",
+        "Duyệt _blockers của chai đích: blocker nào đang chặn (ví dụ Curtain/Plaster/Clay/MagicSeal/Woodbox) → false",
+        "Luật vật cản đặc biệt cùng màu: nếu chai đích có blocker Clay (ItemType = 5) thì BottleCollection.HasDifferentBottleWithClayAndSameColor(origin, target) chặn; tương tự HasDifferentBottleWithIceAndSameColor cho Ice",
+        "Duyệt _outItems (vật đang bám ngoài chai) — nếu có vật cản đang chiếm chỗ thì từ chối",
+        "Hợp lệ → SelectAsTarget(targetBottle) và BottleItem.OnSelectAsTarget(selection)"
+      ],
+      "uc_result": "Cặp nguồn–đích được xác lập; nếu không hợp lệ, chai đích chỉ nháy phản hồi và selection bị huỷ",
+      "case_status": "verified_observed_branch",
+      "expected": "Chỉ chuyển nước ở nhánh hợp lệ, mở màu nằm dưới lớp vừa đổ.",
+      "actual": "Lần đầu cam chuyển vào chai9, chai1 lộ đỏ; đổ xám lên cam bị từ chối, board không đổi; cam từ chai5 nhập chai9 và lộ xanh lá. Không tiêu coin/booster.",
+      "limitations": "Chai đánh số từ trái sang phải, hàng trên rồi hàng dưới. Một seed có dấu hỏi/Generator, chưa đại diện mọi obstacle hoặc cơ chế multi-wave.",
+      "semantic_disposition": "observable_subset_supported_with_current_limitations",
+      "flagged": false,
+      "full_uc_pass": false
+    },
+    {
+      "case": "MS-R15-CORE01",
+      "feature": "BottleSortMechanics",
+      "uc": "UC-05",
+      "uc_title": "Thực hiện đổ nước (animation + dữ liệu)",
+      "uc_steps": [
+        "BottleCollection.OnAnyMoveStarted(originBottle, targetBottle, waterColorId) khoá bàn và thông báo blocker",
+        "Chai nguồn bay lên và sang cạnh chai đích (BottleItem.OnBottleMove(pourableHeight, isLeft, moveDuration)), _riseHeight = 1.85, _riseBottleDuration = 0.5s, cộng thêm _extraRiseBottleDurationByWaterDropHeight = 0.15s cho mỗi bậc rơi",
+        "WaterLine nối miệng hai chai được vẽ trong _waterLineDuration = 0.6s; BottleItem.RotateWaters(rotation) làm mặt nước nghiêng theo chai",
+        "Selection.ApplySelection: chai nguồn BottleItem.RemoveWater(height) / DecreaseWaterHeight, chai đích AddWater(height, colorId, isVisible) và PlayRegularWaterFillingAnimation (Daily dùng DailyPlayWaterFillingAnimation)",
+        "BottleItem.TryMergeColors() gộp các khối nước liền nhau cùng màu và cùng độ hiển thị; UpdateBottleWaters / UpdateSortOrders / UpdateFillAmountsWithoutAnimation làm mới hiển thị",
+        "BottleItem.OnPouringCompletedToTargetBottle(selection), sau đó chai nguồn OnOriginBottleReturnToInitialPosition (thời lượng tối thiểu _moveToInitialPositionMinDuration = 0.3s, tới đích tối thiểu 0.2s)",
+        "BottleCollection.OnAnyMoveFinished() mở khoá; LevelStats tăng total_move_count",
+        "Nếu bị huỷ giữa chừng: Selection.ReverseSelection() / TryCancel() và BottleCollection.OnReverseSelection"
+      ],
+      "uc_result": "Nước chuyển sang chai đích, bàn cập nhật; SelectionSystem lưu Selection vào _selectionHistory phục vụ Undo",
+      "case_status": "verified_observed_branch",
+      "expected": "Chỉ chuyển nước ở nhánh hợp lệ, mở màu nằm dưới lớp vừa đổ.",
+      "actual": "Lần đầu cam chuyển vào chai9, chai1 lộ đỏ; đổ xám lên cam bị từ chối, board không đổi; cam từ chai5 nhập chai9 và lộ xanh lá. Không tiêu coin/booster.",
+      "limitations": "Chai đánh số từ trái sang phải, hàng trên rồi hàng dưới. Một seed có dấu hỏi/Generator, chưa đại diện mọi obstacle hoặc cơ chế multi-wave.",
+      "semantic_disposition": "observable_subset_supported_with_current_limitations",
+      "flagged": false,
+      "full_uc_pass": false
+    },
+    {
+      "case": "MS-R15-CORE01",
+      "feature": "BottleSortMechanics",
+      "uc": "UC-11",
+      "uc_title": "Ô Question Mark che giấu màu",
+      "uc_steps": [
+        "BottleCollection.AddQuestionMarkItem(bottle, index, isDaily) thay khối nước bằng QuestionMarkItem",
+        "BottleItem.UpdateColorVisibilities() và HidesWaterColors() giữ màu ẩn",
+        "Khi khối nước phía trên bị lấy đi, RevealBottleCells() lộ dần màu thật; BottleItem.ToggleInvisibleWaters điều khiển hiển thị",
+        "Booster Reveal (CurrencyType.Reveal = 19) và BottleItem.Reveal()/CanReveal() cho phép lộ chủ động",
+        "LevelStats đếm _questionMarkCount và _questionMarkOpened; BottleItem.GetQuestionMarkCount()"
+      ],
+      "uc_result": "Người chơi phải phán đoán; tăng độ khó và tạo nhu cầu dùng booster Reveal",
+      "case_status": "verified_observed_branch",
+      "expected": "Chỉ chuyển nước ở nhánh hợp lệ, mở màu nằm dưới lớp vừa đổ.",
+      "actual": "Lần đầu cam chuyển vào chai9, chai1 lộ đỏ; đổ xám lên cam bị từ chối, board không đổi; cam từ chai5 nhập chai9 và lộ xanh lá. Không tiêu coin/booster.",
+      "limitations": "Chai đánh số từ trái sang phải, hàng trên rồi hàng dưới. Một seed có dấu hỏi/Generator, chưa đại diện mọi obstacle hoặc cơ chế multi-wave.",
+      "semantic_disposition": "observable_subset_supported_with_current_limitations",
+      "flagged": false,
+      "full_uc_pass": false
+    },
+    {
+      "case": "MS-R15-CORE02",
+      "feature": "Boosters",
+      "uc": "UC-02",
+      "uc_title": "Dùng booster Undo",
+      "uc_steps": [
+        "BoosterManager.TryUseBooster(CurrencyType.Undo) → CanUseBooster → CanUseUndo(): IsBoardStopped() và SelectionSystem.HasSelectionHistory()",
+        "TryUseBooster (RVA 0x19B3808): nếu kho còn Undo thì InventoryService.Spend(CurrencySpendReason.Boosters, CurrencyType.Undo, 1); nếu hết nhưng đủ coin thì Spend giá Undo, sau đó UseBooster thi hành hiệu ứng",
+        "BoosterManager.Undo() → SelectionSystem.ReverseLastSelection() trả nước đi cuối",
+        "BoosterStats.IncreaseUndoUsage(); LevelStats ghi undo_used",
+        "LevelWinOrStuckSystem.RequestLevelWinOrStuckCheck() kiểm lại trạng thái bàn"
+      ],
+      "uc_result": "Bàn trở về trạng thái trước nước đi cuối cùng",
+      "case_status": "verified_observed_branch",
+      "expected": "Ghi cả board và tiêu hao; phân biệt nước với thông tin đã khám phá.",
+      "actual": "Cam trả về chai5, chai9 trở về một lớp cam. Undo 9999→9998. Xanh lá ở chai5 vẫn hiển thị, không trở lại dấu hỏi.",
+      "limitations": "Một lần Undo sau đổ hợp lệ; không kiểm tra chuỗi Undo dài hoặc Undo sau Generator.",
+      "semantic_disposition": "observable_subset_supported_with_current_limitations",
+      "flagged": false,
+      "full_uc_pass": false
+    },
+    {
+      "case": "MS-R15-CORE03",
+      "feature": "Boosters",
+      "uc": "UC-03",
+      "uc_title": "Dùng booster Shuffle (chọn một chai)",
+      "uc_steps": [
+        "BoosterManager.Shuffle() → CanUseShuffleOrReveal(): kiểm bàn/target và khả năng chi trả; không gọi TryUseBooster(Shuffle) trong body đã đọc, và chưa trừ item ở bước mở chọn",
+        "BoosterManager.Shuffle() phát OnSelectionBackgroundShowStarted(InputMode.BottleSelection): BottleSelectionBackground hiện, đặt text theo khoá 'GameBoosterShuffleInfo' (\"SELECT BOTTLE TO SHUFFLE\") và hiện 2 nút huỷ",
+        "GameplayInputSystem.WaitForSelection(InputMode.BottleSelection) chờ người chơi chọn chai",
+        "BoosterManager.CanUseShuffleBooster(bottleItem) tĩnh kiểm chai hợp lệ (BottleItem.CanShuffle, blocker cho phép qua ABlockerItem.IsAllowShuffle)",
+        "Sau WaitForSelection: selectedBottle=null → BottleSelectionCanceledSignal, thoát trước Spend; target hợp lệ → ResetSelectionHistory, ưu tiên Spend 1 Shuffle nếu có, nếu hết thì Spend coin theo giá; rồi UseShuffleBooster(selectedBottle) chạy hiệu ứng",
+        "OnSelectionBackgroundHideStarted / HideEnd đóng lớp nền; BoosterStats.IncreaseShuffleUsage()",
+        "Huỷ chế độ chọn không phát sinh khoản Spend để hoàn trả. OBSERVED 10/10: mở chọn 9.999 → chạm chai rỗng để huỷ vẫn 9.999; target hợp lệ mới 9.998"
+      ],
+      "uc_result": "Thứ tự màu trong chai được đảo, thường mở ra nước đi mới",
+      "case_status": "verified_observed_branch",
+      "expected": "Chọn/hủy chưa tiêu; áp dụng mới trừ kho.",
+      "actual": "Overlay SELECT BOTTLE TO SHUFFLE; hủy giữ 9998. Chọn chai3 giảm Shuffle 9998→9997; thứ tự đáy→đỉnh từ đỏ/hồng/tím/hồng thành tím/hồng/đỏ/hồng.",
+      "limitations": "Một chai, một lần; chưa xác minh phân phối random, trạng thái kẹt hoặc mục tiêu không đủ điều kiện.",
+      "semantic_disposition": "observable_subset_supported_with_current_limitations",
+      "flagged": false,
+      "full_uc_pass": false
+    },
+    {
+      "case": "MS-R15-CORE03",
+      "feature": "Boosters",
+      "uc": "UC-10",
+      "uc_title": "Huỷ chế độ chọn chai",
+      "uc_steps": [
+        "BottleSelectionBackground.CancelSelection() (hai nút _cancelSelectionButton1/2 phủ trên và dưới bàn)",
+        "GameplayInputSystem.OnClickedToUIOnBottleSelection() xử lý trường hợp chạm nhầm UI",
+        "BoosterManager.OnSelectionBackgroundHideStarted / OnSelectionBackgroundHideEnd đóng lớp nền và trả input về WaterSortSelection",
+        "Booster chưa bị tiêu hao (chỉ trừ khi chọn thành công)"
+      ],
+      "uc_result": "Người chơi thoát chế độ chọn mà không mất booster",
+      "case_status": "verified_observed_branch",
+      "expected": "Chọn/hủy chưa tiêu; áp dụng mới trừ kho.",
+      "actual": "Overlay SELECT BOTTLE TO SHUFFLE; hủy giữ 9998. Chọn chai3 giảm Shuffle 9998→9997; thứ tự đáy→đỉnh từ đỏ/hồng/tím/hồng thành tím/hồng/đỏ/hồng.",
+      "limitations": "Một chai, một lần; chưa xác minh phân phối random, trạng thái kẹt hoặc mục tiêu không đủ điều kiện.",
+      "semantic_disposition": "observable_subset_supported_with_current_limitations",
+      "flagged": false,
+      "full_uc_pass": false
+    },
+    {
+      "case": "MS-R15-CORE04",
+      "feature": "Boosters",
+      "uc": "UC-05",
+      "uc_title": "Dùng booster Extra Bottle",
+      "uc_steps": [
+        "CanUseExtraBottleBooster(): bàn dừng và BottleCollection.IsBottlesCountReachedMax() = false",
+        "TryUseBooster (RVA 0x19B3808) trừ 1 ExtraBottle hoặc coin theo ExtraBottlePrice sau khi đủ điều kiện, rồi UseBooster thi hành hiệu ứng",
+        "BoosterManager.AddExtraBottle() → BottleCollection.GetExtraBottleIndex() tìm chỗ trống → BottleCollection.AddExtraBottle(delay)",
+        "BottlePositionAdjuster và BottleCollectionCameraConfig căn lại bố cục/camera",
+        "BoosterStats.IncreaseExtraBottleUsage(); LevelStats ghi extrabottle_used"
+      ],
+      "uc_result": "Bàn có thêm một chai rỗng — cách gỡ kẹt hiệu quả nhất trong thể loại bottle sort",
+      "case_status": "verified_observed_branch",
+      "expected": "Thêm một chai rỗng và giảm kho một đơn vị.",
+      "actual": "Board từ 12 lên 13 chai, hàng dưới bố trí lại; ExtraBottle 9990→9989. Chai mới dùng được làm chỗ chứa nhưng lượt giải này không cần đổ vào chai mới.",
+      "limitations": "Chưa kiểm tra giới hạn số lần, khi kho bằng 0 hoặc mua thêm.",
+      "semantic_disposition": "observable_subset_supported_with_current_limitations",
+      "flagged": false,
+      "full_uc_pass": false
+    },
+    {
+      "case": "MS-R15-CORE05",
+      "feature": "LevelFlow",
+      "uc": "UC-12",
+      "uc_title": "Thoát level giữa chừng",
+      "uc_steps": [
+        "RegularGamePlayStateManager.QuitPressedState() → QuitPressedState.Enter mở popup 'QuitAreYouSurePopup'; analytics quit_from_settings_clicked",
+        "Nếu người chơi huỷ → ResumePlayingAfterQuit.Enter đưa về PlayingState",
+        "Nếu xác nhận → RegularLevelManager.QuitLevel(): _levelState = LevelState.Quit (6); QuitState.Enter: DOTween.KillAll, SnitchService.TryResetProgress()",
+        "WaitingForStartAfterQuitState mở TryAgainPopup với TryAgainPopupOpenPlace.Quit",
+        "GrandEventSender.SendLevelEvent(LevelState.Quit) gửi 'level_quit'"
+      ],
+      "uc_result": "Rời level (tính là mất mạng như thua), tiến trình Snitch reset, chuyển sang chuỗi về Home",
+      "case_status": "verified_observed_branch",
+      "expected": "Hủy thoát giữ board và phiên level.",
+      "actual": "Hiện cảnh báo You will lose 1 life! dù đang có unlimited lives; X trở về board đang chơi, inventory giữ nguyên, isLevelInProgress=true.",
+      "limitations": "Không xác nhận mất mạng vì chưa bấm Quit ở case này; chữ cảnh báo không đủ chứng minh mức trừ thực tế.",
+      "semantic_disposition": "observable_subset_supported_with_current_limitations",
+      "flagged": false,
+      "full_uc_pass": false
+    },
+    {
+      "case": "MS-R15-CORE05",
+      "feature": "LevelFlow",
+      "uc": "UC-20",
+      "uc_title": "Cài đặt trong level và UI góc trái",
+      "uc_steps": [
+        "InLevelSettingsController mở bảng cài đặt (analytics 'settings_clicked')",
+        "MusicToggle / SoundToggle / VibrationToggle bật tắt theo RootLevelConfigModel.IsMusicEnabled, IsVibrationOn",
+        "AutoOpenCloseAccordingToOgPlayStyle tự mở/đóng theo cờ RootLevelConfigModel.IsOgPlayStyle",
+        "InLevelQuitButton dẫn sang UC-12",
+        "InLevelTopLeftUIController hiển thị số level, độ khó (SpriteSetterByDifficultyType), timer daily (DailyInLevelTimer)"
+      ],
+      "uc_result": "Người chơi chỉnh âm thanh/rung hoặc thoát level",
+      "case_status": "verified_observed_branch",
+      "expected": "Hủy thoát giữ board và phiên level.",
+      "actual": "Hiện cảnh báo You will lose 1 life! dù đang có unlimited lives; X trở về board đang chơi, inventory giữ nguyên, isLevelInProgress=true.",
+      "limitations": "Không xác nhận mất mạng vì chưa bấm Quit ở case này; chữ cảnh báo không đủ chứng minh mức trừ thực tế.",
+      "semantic_disposition": "observable_subset_supported_with_current_limitations",
+      "flagged": false,
+      "full_uc_pass": false
+    },
+    {
+      "case": "MS-R15-CORE06",
+      "feature": "BottleSortMechanics",
+      "uc": "UC-20",
+      "uc_title": "Đổ nước từ đáy chai (Generator / hiệu ứng đặc biệt)",
+      "uc_steps": [
+        "BottleItem.AddWaterFromBottom(height, colorId) chèn nước vào đáy thay vì đỉnh; InsertWaterItem(index, height, waterItem)",
+        "PlayWaterFillAnimationFromBottom(insertedHeight, newHeight, colorId, withParticle, isForGenerator)",
+        "PlayGeneratorFillAnimation / PlayGeneratorFillAnimationFromBottom / PlayGeneratorExplosionAnimation cho hiệu ứng máy sinh nước",
+        "GetFirstEmptyCellIndexFromTheBottom() xác định vị trí chèn",
+        "Sau đó RequestLevelWinOrStuckCheck() để đánh giá lại trạng thái bàn"
+      ],
+      "uc_result": "Nội dung chai thay đổi ngoài luồng tap thông thường, có thể gỡ hoặc gây kẹt",
+      "case_status": "verified_observed_branch",
+      "expected": "Đối chiếu serialized OBIM với màu sinh và UI.",
+      "actual": "Chai nhỏ cam sinh xám, chai nhỏ xanh lá sinh nâu; đai số1 biến mất sau khi phát màu cuối. Source OBIM.Id=18 được converter ánh xạ GeneratorItemModel, NC=[10]/[11].",
+      "limitations": "Một màu dự trữ mỗi Generator. Không dùng ItemType enum18 để diễn giải serialized discriminator18. Màu enum code cũ khác palette runtime; giữ CI số và ảnh.",
+      "semantic_disposition": "observable_subset_supported_with_current_limitations",
+      "flagged": false,
+      "full_uc_pass": false
+    },
+    {
+      "case": "MS-R15-CORE07",
+      "feature": "LevelFlow",
+      "uc": "UC-11",
+      "uc_title": "Thắng level",
+      "uc_steps": [
+        "RegularLevelManager.WinLevel(): _levelState = LevelState.Win (3)",
+        "WinState.Enter chạy sequence animation rồi WinState.DelayedWin()",
+        "DelayedWin: DOTween.KillAll, mở popup 'LevelCongratsPopUp', bắn signal thắng, JourneyService.OnLevelWin()",
+        "WinState.SendLevelWinAnalytics(): GrandEventSender 'level_win' + Adjust.TrackEvent; SendSuperChagerStatusEvent gửi trạng thái SuperCharger",
+        "LevelWinPopUp mở với LevelWinPopUpArguments (LevelAndLevelConfigModel, IsFirstTry, EarnedCoinsFromWin); Rewarded2xButton mời nhân đôi coin bằng quảng cáo",
+        "GiveRegularCoinRewardsCommand.GiveRegularLevelCoinReward() trao coin theo độ khó",
+        "RegularLevelManager.TryIntroduceNewBlocker() kiểm HasNewBlockerToIntroduce(), nếu có mở NewBlockerIntroPopUp"
+      ],
+      "uc_result": "Level +1, nhận coin (và phần thưởng Cauldron nếu LevelConfigModel.HasCauldronReward), analytics level_win / level_congrats / level_win_pop_up_opened",
+      "case_status": "verified_observed_branch",
+      "expected": "Hoàn thành board, tiến level, thưởng và retry đúng thời điểm.",
+      "actual": "Win nâng PlayerModel351→352 và isLevelInProgress=false trước Continue; retry8→0, snitchRetry1→0. Popup thưởng20. Coin vẫn999995869 tại popup, sau Continue999995889. firstTryLevelWinCount giữ5.",
+      "limitations": "Đây là lượt có dùng Undo/Shuffle/ExtraBottle và đọc seed, không dùng thời lượng để đo độ khó tự nhiên. Chỉ seed...351_difficulty1-12; không phải toàn bộ level pass. Replay log ghi input, ảnh checkpoint và kết quả win xác nhận thực thi.",
+      "semantic_disposition": "observable_subset_supported_with_current_limitations",
+      "flagged": false,
+      "full_uc_pass": false
+    },
+    {
+      "case": "MS-R15-CORE07",
+      "feature": "LevelFlow",
+      "uc": "UC-14",
+      "uc_title": "Chuỗi lệnh trở về Home sau khi kết thúc level",
+      "uc_steps": [
+        "ReturnToHomeSequenceService.LevelWin(model) hoặc LevelLoseOrQuit(model) đặt _isLevelWin và _lastLevelAndLevelConfigModel",
+        "SelectReturnToHomeSequence() chọn 1 trong 4 danh sách: _regularWinSequenceCommands / _regularLoseSequenceCommands / _dailyWinSequenceCommands / _dailyLoseSequenceCommands",
+        "Execute() → ExecuteAsync chạy lần lượt: InitializeReturnToHomeCommand, GiveRegularCoinRewardsCommand, PlayJourneyAnimationsCommand, TryShowDailyCommand, TryShowMagicLabCommand, TryShowBroomStreakCommand, TryShowTowerWinStreakCommand, TryShowWeeklyTournamentCommand, TryShowMagicBottlePopUpCommand, TryShowRateUsCommand, TryShowSoftUpdateCommand, TryPlayLobbyButtonsCollectibleAnimationsCommand, OpenHomePageCommand, ShowHomePlayButtonAnimationCommand",
+        "AreRemainingCommandsSkippable(startIndex, list) cho phép bỏ qua phần đuôi khi đã chạm giới hạn popup",
+        "CancelSequence() + DisposeCommands() nếu người chơi ngắt (IHomeIdleInterrupter.IsInterrupting)",
+        "Analytics 'home_return' rồi 'home_return_completed'"
+      ],
+      "uc_result": "Người chơi về Home, đã nhận thưởng và thấy tối đa N popup",
+      "case_status": "verified_observed_branch",
+      "expected": "Hoàn thành board, tiến level, thưởng và retry đúng thời điểm.",
+      "actual": "Win nâng PlayerModel351→352 và isLevelInProgress=false trước Continue; retry8→0, snitchRetry1→0. Popup thưởng20. Coin vẫn999995869 tại popup, sau Continue999995889. firstTryLevelWinCount giữ5.",
+      "limitations": "Đây là lượt có dùng Undo/Shuffle/ExtraBottle và đọc seed, không dùng thời lượng để đo độ khó tự nhiên. Chỉ seed...351_difficulty1-12; không phải toàn bộ level pass. Replay log ghi input, ảnh checkpoint và kết quả win xác nhận thực thi.",
+      "semantic_disposition": "observable_subset_supported_with_current_limitations",
+      "flagged": false,
+      "full_uc_pass": false
+    },
+    {
+      "case": "MS-R15-CORE07",
+      "feature": "LevelFlow",
+      "uc": "UC-18",
+      "uc_title": "Kết thúc và giải phóng level",
+      "uc_steps": [
+        "RegularLevelManager.EndLevel() đặt Level = null và dọn tham chiếu RegularLevel",
+        "GamePlaySceneToHomeSceneCommand tải lại scene Home; GameStateService.ChangeGameState(GameStateType.Home)",
+        "RegularLevelManager.Dispose() huỷ đăng ký signal"
+      ],
+      "uc_result": "Bộ nhớ level được giải phóng, trạng thái quay về Home",
+      "case_status": "verified_observed_branch",
+      "expected": "Hoàn thành board, tiến level, thưởng và retry đúng thời điểm.",
+      "actual": "Win nâng PlayerModel351→352 và isLevelInProgress=false trước Continue; retry8→0, snitchRetry1→0. Popup thưởng20. Coin vẫn999995869 tại popup, sau Continue999995889. firstTryLevelWinCount giữ5.",
+      "limitations": "Đây là lượt có dùng Undo/Shuffle/ExtraBottle và đọc seed, không dùng thời lượng để đo độ khó tự nhiên. Chỉ seed...351_difficulty1-12; không phải toàn bộ level pass. Replay log ghi input, ảnh checkpoint và kết quả win xác nhận thực thi.",
+      "semantic_disposition": "internal_lifecycle_not_instrumented",
+      "flagged": true,
+      "full_uc_pass": false
+    },
+    {
+      "case": "MS-R15-CORE08",
+      "feature": "BoatRush",
+      "uc": "UC-11",
+      "uc_title": "Popup tự mở theo ngữ cảnh",
+      "uc_steps": [
+        "ShouldOpenJoinPopUpAutomaticallyOnLobbyReturn() / ShouldOpenRacePopUpAutomaticallyOnLobbyReturn()",
+        "BoatRushDataService.ShouldShowBoatRushAfterJoin() mở Race popup ngay sau Join",
+        "ShouldShowJoinPopUpAfterClaim() / SetShouldShowJoinPopUpAfterClaim(bool) mở lại Join popup sau khi nhận thưởng chặng",
+        "IsRacePopUpFirstShowForEvent() / IsRacePopUpFirstShowForStage() / IsJoinPopUpFirstShow() để chọn layout lần đầu",
+        "MarkEventPopUpIntroducedForEvent() / MarkEventPopUpIntroducedForStage(bool) / MarkForceShowedJoinPopUpThisSession(bool)",
+        "EventSender.SendBoatRushRacePopUpImpression(source) (boat_rush_race_screen_impression) và SendBoatRushJoinPopUpImpression(source) (boat_rush_popup_impression)"
+      ],
+      "uc_result": "Vòng lặp Join → đua → claim → Join lại được đẩy liên tục",
+      "case_status": "verified_observed_branch",
+      "expected": "Ghi thứ tự popup và thưởng thực nhận.",
+      "actual": "Sau thưởng20coin mở BoatRush Finished, Stage1/4, hiển thị race đã kết thúc. Continue chuyển tiếp Duck settlement; không cộng thêm coin/booster trong khoảng hai capture.",
+      "limitations": "Không khẳng định rank mới hoặc server cập nhật. Kết quả các đối thủ là cache; nhánh race active chưa chạy.",
+      "semantic_disposition": "observable_subset_supported_with_current_limitations",
+      "flagged": false,
+      "full_uc_pass": false
+    },
+    {
+      "case": "MS-R15-DAILY01",
+      "feature": "DailyLevel",
+      "uc": "UC-03",
+      "uc_title": "Hiển thị lịch tháng và trạng thái từng ngày",
+      "uc_steps": [
+        "DailyService.GetActiveDailyViewModel() → CreateDailyViewModel(currentTime, selectedDate, monthDays)",
+        "GetDaysInMonth(targetMonth) + GetDailyDateModelsForMonth(targetMonth) tạo mảng DailyDateModel",
+        "GetDailyDateState(day) trả DailyDateState: Claimed = 0 (đã thắng), Today = 1, Locked = 2 (ngày quá khứ chưa mở), Upcoming = 3 (ngày tương lai), Unlocked = 4 (ngày quá khứ đã mở khoá)",
+        "DailyCalendarController.SetDailyDateViews(viewModel) vẽ từng DailyDateView với sprite lấy từ DailySpriteConfig (DailyClaimedSprite, DailyUnlockedSelectedSprite, DailyUnclaimedSprite, DailyUpcomingSprite, DailyLockedSelectedSprite)",
+        "SetMonthText(dateTime) và SelectFirstOpenDailyDateView(viewModel) chọn sẵn ngày khả dụng đầu tiên",
+        "IsNextMonthExist / IsPreviousMonthExist bật nút chuyển tháng"
+      ],
+      "uc_result": "Người chơi nhìn thấy toàn tháng, ngày nào đã hoàn thành, ngày nào còn chơi được",
+      "case_status": "verified_observed_branch",
+      "expected": "Ghi ngày được chọn và các mốc thưởng.",
+      "actual": "Lịch November2026 chọn ngày15; progress0. Mốc3/7/14/25 ngày:100coin/30m/500coin/2500coin. Tap16 hoặc14 giữ nguyên màn hình (hash ảnh trùng).",
+      "limitations": "Không suy ra cơ chế unlock ngày cũ cho mọi account hoặc thay tháng; không đổi đồng hồ thiết bị.",
+      "semantic_disposition": "observable_subset_supported_with_current_limitations",
+      "flagged": false,
+      "full_uc_pass": false
+    },
+    {
+      "case": "MS-R15-DAILY01",
+      "feature": "DailyLevel",
+      "uc": "UC-09",
+      "uc_title": "Thanh tiến độ tháng và phần thưởng mốc",
+      "uc_steps": [
+        "DailyService.GetProgressOfMonth(monthDays) đếm số ngày Claimed; MaxProgress là tổng số mốc",
+        "DailyService.GetRewardModelByStep(step) trả RewardModel của mốc",
+        "GiveDailyProgressBarStepRewards trao thưởng khi chạm mốc, CurrencyEarnReason.DailyProgressBarStep (= 16)",
+        "DailyProgressRewardStepView hiển thị từng mốc; DailyAnimationConfig điều khiển ProgressBarMoveCurve/Duration, GreenTick scale, ProgressStepParticleHitTime",
+        "DailyService.IsAllDaysClaimed(currentTime) kiểm đã hoàn thành cả tháng"
+      ],
+      "uc_result": "Người chơi có động lực quay lại mỗi ngày để lấy phần thưởng mốc",
+      "case_status": "verified_observed_branch",
+      "expected": "Ghi ngày được chọn và các mốc thưởng.",
+      "actual": "Lịch November2026 chọn ngày15; progress0. Mốc3/7/14/25 ngày:100coin/30m/500coin/2500coin. Tap16 hoặc14 giữ nguyên màn hình (hash ảnh trùng).",
+      "limitations": "Không suy ra cơ chế unlock ngày cũ cho mọi account hoặc thay tháng; không đổi đồng hồ thiết bị.",
+      "semantic_disposition": "observable_subset_supported_with_current_limitations",
+      "flagged": false,
+      "full_uc_pass": false
+    },
+    {
+      "case": "MS-R15-DAILY01",
+      "feature": "DailyLevel",
+      "uc": "UC-16",
+      "uc_title": "Nút Daily ở Home và các nguồn mở màn hình",
+      "uc_steps": [
+        "DailyChallengeLobbyButton.UpdateView() hiện tiến độ dạng '{0}/{1}' và mở 'DailyPopup' qua SwipeToPage(PageType)",
+        "DailyScreenViewSource ghi nguồn mở: None = 0, NavigationBar = 1, FirstImpression = 2, DailyWin = 3, LobbyButton = 4",
+        "TryShowDailyCommand trong ReturnToHomeSequenceService tự mở Daily sau level thường khi đủ điều kiện",
+        "DailyController / DailyPopup dựng giao diện; DailyViewExtender mở rộng khung nhìn",
+        "Tiêu đề dùng 'DailyChallengeTitle' = \"Daily Challenge\", danh sách thưởng 'DailyChallengeRewards' = \"Daily Challenge Rewards\""
+      ],
+      "uc_result": "Nhiều điểm vào giúp tăng tỷ lệ người chơi thử Daily",
+      "case_status": "verified_observed_branch",
+      "expected": "Ghi ngày được chọn và các mốc thưởng.",
+      "actual": "Lịch November2026 chọn ngày15; progress0. Mốc3/7/14/25 ngày:100coin/30m/500coin/2500coin. Tap16 hoặc14 giữ nguyên màn hình (hash ảnh trùng).",
+      "limitations": "Không suy ra cơ chế unlock ngày cũ cho mọi account hoặc thay tháng; không đổi đồng hồ thiết bị.",
+      "semantic_disposition": "observable_subset_supported_with_current_limitations",
+      "flagged": false,
+      "full_uc_pass": false
+    },
+    {
+      "case": "MS-R15-DAILY02",
+      "feature": "DailyLevel",
+      "uc": "UC-04",
+      "uc_title": "Chọn ngày và bấm Play",
+      "uc_steps": [
+        "DailyCalendarController.SetCurrentSelectedDailyDate(dailyDateView) và DailyService.SetSelectedDate(dateTime)",
+        "SetDailyPlayButtonViewForState(DailyPlayButtonState) đổi nút: ActiveDay = 0 (chơi được), Locked = 1 (phải mở khoá), Cooldown = 2 (đã chơi, chờ ngày mới)",
+        "DailyPlayButton nhấn → DailyService.GetSelectedDailyLevelInfo() trả DailyLevelInfo (DateTime + GetFormattedDate 'MM/dd/yyyy')",
+        "HomeSceneToDailySceneCommand + BoostrapDailyContextCommand + DailyContextInstaller dựng context; GameStateService.ChangeGameState(GameStateType.Daily)",
+        "DailyStateManager.Initialize() rồi FromHomeToGamePlay()"
+      ],
+      "uc_result": "Vào bàn Daily của ngày đã chọn",
+      "case_status": "inconclusive_no_transition",
+      "expected": "Ghi kết quả thực tế, không coi nhấn nút là đã vào bàn.",
+      "actual": "Màn hình vẫn là lịch; DAILY04 và DAILY05 có cùng hash, PlayerModel không vào level, coin không đổi. Không thấy popup lỗi trong hai capture.",
+      "limitations": "Chưa biết nguyên nhân là thiếu seed/cache hoặc mạng; chưa test timer/PlayOn Daily. Không ghi pass cho dựng bàn.",
+      "semantic_disposition": "observable_subset_supported_with_current_limitations",
+      "flagged": false,
+      "full_uc_pass": false
+    },
+    {
+      "case": "MS-R15-DAILY02",
+      "feature": "DailyLevel",
+      "uc": "UC-05",
+      "uc_title": "Dựng bàn Daily theo cấu hình ngày",
+      "uc_steps": [
+        "LevelModelService.GetDailyLevelAndLevelConfigModel(dailyLevelInfo) → GetDailyLevelConfigModel(configModels, dateTime, shouldFallback) tìm DailyLevelConfigModel theo dayIndex trong CurrentMonthDailyLevels, rơi về PreviousMonthDailyLevels khi chơi bù",
+        "GetDailySeedIdFromConfig(dailyLevelConfigModel) chọn 1 trong 5 seed",
+        "BottleCollections.GenerateBottleCollections(model, isDaily: true) dùng ConfigsBottleCollectionPlacementConfigDaily (DefaultBottleHeight = 12, DistanceBetweenRowsAsUnit = 12) và GameplayConfigsDaily",
+        "EmptyBottleCount / FilledBottleCount trong cấu hình quyết định số chai trống và chai đầy",
+        "DailyLevel.Start(levelAndLevelConfigModel) khởi tạo InputService, GameplayInputSystem, LevelEntranceHandler và LevelTimer",
+        "LevelTimer.Start(LevelDuration) bắt đầu đếm ngược"
+      ],
+      "uc_result": "Bàn Daily 12 ô mỗi chai, giới hạn thời gian",
+      "case_status": "inconclusive_no_transition",
+      "expected": "Ghi kết quả thực tế, không coi nhấn nút là đã vào bàn.",
+      "actual": "Màn hình vẫn là lịch; DAILY04 và DAILY05 có cùng hash, PlayerModel không vào level, coin không đổi. Không thấy popup lỗi trong hai capture.",
+      "limitations": "Chưa biết nguyên nhân là thiếu seed/cache hoặc mạng; chưa test timer/PlayOn Daily. Không ghi pass cho dựng bàn.",
+      "semantic_disposition": "uc_not_entered",
+      "flagged": true,
+      "full_uc_pass": false
+    },
+    {
+      "case": "MS-R15-CORE09",
+      "feature": "Obstacles",
+      "uc": "UC-02",
+      "uc_title": "Curtain — rèm che chai",
+      "uc_steps": [
+        "AddCurtainItem(bottle, curtainItemModel, blockerVariant) → CurtainItem.Prepare(viewOffset, sorting, belongingBottle, colorAndColorId, blockerVariant)",
+        "Rèm khoá chai: IsSelectableAsOrigin() và IsSelectableAsTarget() trả false",
+        "Điều kiện phá: CurtainItem.OnAnyBottleCompleted(completedBottle, waterColorId) — khi bất kỳ chai nào hoàn thành đúng màu ObjectiveModel.ColorId (JSON key \"CI\") thì Complete(withAnimation, revealDelay = 0.2f)",
+        "PlayCompleteAnimation chạy CurtainVariant.RevealAnimationKey rồi lộ nội dung chai",
+        "Snitch có thể phá thay (IsSelectableAsSnitchTarget / OnSnitchPerformed); booster Reveal cũng dùng được (IsRevealable = true)"
+      ],
+      "uc_result": "Chai lộ ra và dùng được bình thường",
+      "case_status": "verified_observed_branch",
+      "expected": "Đối chiếu token trên rèm với màu hoàn tất.",
+      "actual": "Sáu rèm hàng trên biến mất sau chai xám hoàn chỉnh; lộ chai và dấu hỏi bên dưới. Serialized OBIM.Id4 trên6chai có Obj.CI9; converter code cũ ánh xạ CurtainItemModel. Generator hiển thị2→1 sau một lần sinh màu.",
+      "limitations": "Tên file CORE26/27 chứa pillow do nhãn tạm lúc chụp, thực tế feature là Curtain. CI9 đang hiển thị xám trong level352, không áp palette của level351. Một trigger; chưa mọi loại target/Undo/rèm lồng.",
+      "semantic_disposition": "observable_subset_supported_with_current_limitations",
+      "flagged": false,
+      "full_uc_pass": false
+    },
+    {
+      "case": "MS-R15-CORE10",
+      "feature": "LevelFlow",
+      "uc": "UC-12",
+      "uc_title": "Thoát level giữa chừng",
+      "uc_steps": [
+        "RegularGamePlayStateManager.QuitPressedState() → QuitPressedState.Enter mở popup 'QuitAreYouSurePopup'; analytics quit_from_settings_clicked",
+        "Nếu người chơi huỷ → ResumePlayingAfterQuit.Enter đưa về PlayingState",
+        "Nếu xác nhận → RegularLevelManager.QuitLevel(): _levelState = LevelState.Quit (6); QuitState.Enter: DOTween.KillAll, SnitchService.TryResetProgress()",
+        "WaitingForStartAfterQuitState mở TryAgainPopup với TryAgainPopupOpenPlace.Quit",
+        "GrandEventSender.SendLevelEvent(LevelState.Quit) gửi 'level_quit'"
+      ],
+      "uc_result": "Rời level (tính là mất mạng như thua), tiến trình Snitch reset, chuyển sang chuỗi về Home",
+      "case_status": "observed_ui_ledger_discrepancy",
+      "expected": "Ghi fail state, mức thưởng thật và phân biệt với nhãn UI.",
+      "actual": "Level352 giữ nguyên, isLevelInProgress true→false. Failed có TryAgain và vẫn hiển thị Rewards20; đóng bằngX vềHome, coin giữ999995889, không cấp20. RetryCount giữ1 trong khoảng quit; unlimitedLifeEnd/lifeFillDate không đổi.",
+      "limitations": "Một lượt quit sau thắng351, có unlimited lives. Phần Rewards20 có thể là UI còn trạng thái cũ; chưa quy kết bug production hoặc tuyên bố fail có thưởng. Chưa bấmTryAgain.",
+      "semantic_disposition": "observable_subset_supported_with_current_limitations",
+      "flagged": false,
+      "full_uc_pass": false
+    },
+    {
+      "case": "MS-R15-CORE10",
+      "feature": "LevelFlow",
+      "uc": "UC-13",
+      "uc_title": "Luồng Try Again sau khi thua/thoát",
+      "uc_steps": [
+        "TryAgainFlowService.SetTryAgainOpenPlace(TryAgainPopupOpenPlace) ghi nhận ngữ cảnh",
+        "Các sự kiện live-ops nạp lệnh vào _preTryAgainCommands: SkyJumpFallDown, SkyJumpWithStageFallDown, TowerFallDown(lastScoreBeforeFail), BroomFallDown(lastBroomScore), JetpackFallDown, JetpackWithStageFallDown",
+        "TryAgainFlowService.Execute() → ExecuteAsync(commands) chạy tuần tự từng ITryAgainCommand (TowerWinStreakTryAgainCommand, BroomStreakTryAgainCommand, SkyJump*, JetpackRace*)",
+        "Cuối chuỗi mở TryAgainPopup kèm LevelRewardsView; Clear() dọn danh sách"
+      ],
+      "uc_result": "Người chơi thấy hậu quả với các event đang tham gia (rơi tháp, mất streak…) rồi được mời chơi lại",
+      "case_status": "observed_ui_ledger_discrepancy",
+      "expected": "Ghi fail state, mức thưởng thật và phân biệt với nhãn UI.",
+      "actual": "Level352 giữ nguyên, isLevelInProgress true→false. Failed có TryAgain và vẫn hiển thị Rewards20; đóng bằngX vềHome, coin giữ999995889, không cấp20. RetryCount giữ1 trong khoảng quit; unlimitedLifeEnd/lifeFillDate không đổi.",
+      "limitations": "Một lượt quit sau thắng351, có unlimited lives. Phần Rewards20 có thể là UI còn trạng thái cũ; chưa quy kết bug production hoặc tuyên bố fail có thưởng. Chưa bấmTryAgain.",
+      "semantic_disposition": "observable_subset_supported_with_current_limitations",
+      "flagged": false,
+      "full_uc_pass": false
+    },
+    {
+      "case": "MS-R15-CORE10",
+      "feature": "LevelFlow",
+      "uc": "UC-18",
+      "uc_title": "Kết thúc và giải phóng level",
+      "uc_steps": [
+        "RegularLevelManager.EndLevel() đặt Level = null và dọn tham chiếu RegularLevel",
+        "GamePlaySceneToHomeSceneCommand tải lại scene Home; GameStateService.ChangeGameState(GameStateType.Home)",
+        "RegularLevelManager.Dispose() huỷ đăng ký signal"
+      ],
+      "uc_result": "Bộ nhớ level được giải phóng, trạng thái quay về Home",
+      "case_status": "observed_ui_ledger_discrepancy",
+      "expected": "Ghi fail state, mức thưởng thật và phân biệt với nhãn UI.",
+      "actual": "Level352 giữ nguyên, isLevelInProgress true→false. Failed có TryAgain và vẫn hiển thị Rewards20; đóng bằngX vềHome, coin giữ999995889, không cấp20. RetryCount giữ1 trong khoảng quit; unlimitedLifeEnd/lifeFillDate không đổi.",
+      "limitations": "Một lượt quit sau thắng351, có unlimited lives. Phần Rewards20 có thể là UI còn trạng thái cũ; chưa quy kết bug production hoặc tuyên bố fail có thưởng. Chưa bấmTryAgain.",
+      "semantic_disposition": "internal_lifecycle_not_instrumented",
+      "flagged": true,
+      "full_uc_pass": false
+    }
+  ],
+  "ledger_windows": [
+    {
+      "case": "MS-R15-ECO01",
+      "before": "ECO02_wait",
+      "after": "ECO07_coins",
+      "currency_amount_delta": {},
+      "currency_unchanged": true,
+      "builds": [
+        "0.0.3129 ARM64",
+        "0.0.3129 ARM64"
+      ],
+      "mode": [
+        "offline_existing_fixture",
+        "offline_existing_fixture"
+      ]
+    },
+    {
+      "case": "MS-R15-ECO02",
+      "before": "ECO07_coins",
+      "after": "ECO12_error_continue",
+      "currency_amount_delta": {},
+      "currency_unchanged": true,
+      "builds": [
+        "0.0.3129 ARM64",
+        "0.0.3129 ARM64"
+      ],
+      "mode": [
+        "offline_existing_fixture",
+        "offline_existing_fixture"
+      ]
+    },
+    {
+      "case": "MS-R15-ECO03",
+      "before": "ECO12_error_continue",
+      "after": "ECO14_lives_touch",
+      "currency_amount_delta": {},
+      "currency_unchanged": true,
+      "builds": [
+        "0.0.3129 ARM64",
+        "0.0.3129 ARM64"
+      ],
+      "mode": [
+        "offline_existing_fixture",
+        "offline_existing_fixture"
+      ]
+    },
+    {
+      "case": "MS-R15-META01",
+      "before": "META01_settings",
+      "after": "META04_toggles_restored",
+      "currency_amount_delta": {},
+      "currency_unchanged": true,
+      "builds": [
+        "0.0.3129 ARM64",
+        "0.0.3129 ARM64"
+      ],
+      "mode": [
+        "offline_existing_fixture",
+        "offline_existing_fixture"
+      ]
+    },
+    {
+      "case": "MS-R15-META02",
+      "before": "META06_collection",
+      "after": "META10_bonus_insufficient",
+      "currency_amount_delta": {},
+      "currency_unchanged": true,
+      "builds": [
+        "0.0.3129 ARM64",
+        "0.0.3129 ARM64"
+      ],
+      "mode": [
+        "offline_existing_fixture",
+        "offline_existing_fixture"
+      ]
+    },
+    {
+      "case": "MS-R15-META03",
+      "before": "META11_snacks_set",
+      "after": "META13_set_reopen",
+      "currency_amount_delta": {},
+      "currency_unchanged": true,
+      "builds": [
+        "0.0.3129 ARM64",
+        "0.0.3129 ARM64"
+      ],
+      "mode": [
+        "offline_existing_fixture",
+        "offline_existing_fixture"
+      ]
+    },
+    {
+      "case": "MS-R15-EVT01",
+      "before": "EVT01_duck_finished",
+      "after": "EVT04_duck_exit",
+      "currency_amount_delta": {
+        "4": 1
+      },
+      "currency_unchanged": false,
+      "builds": [
+        "0.0.3129 ARM64",
+        "0.0.3129 ARM64"
+      ],
+      "mode": [
+        "offline_existing_fixture",
+        "offline_existing_fixture"
+      ]
+    },
+    {
+      "case": "MS-R15-EVT02",
+      "before": "EVT07_merge_board_ready",
+      "after": "EVT10_merge_noenergy",
+      "currency_amount_delta": {
+        "21": -3
+      },
+      "currency_unchanged": false,
+      "builds": [
+        "0.0.3129 ARM64",
+        "0.0.3129 ARM64"
+      ],
+      "mode": [
+        "offline_existing_fixture",
+        "offline_existing_fixture"
+      ]
+    },
+    {
+      "case": "MS-R15-EVT03",
+      "before": "EVT10_merge_noenergy",
+      "after": "EVT11_merge_pair",
+      "currency_amount_delta": {},
+      "currency_unchanged": true,
+      "builds": [
+        "0.0.3129 ARM64",
+        "0.0.3129 ARM64"
+      ],
+      "mode": [
+        "offline_existing_fixture",
+        "offline_existing_fixture"
+      ]
+    },
+    {
+      "case": "MS-R15-EVT04",
+      "before": "EVT11_merge_pair",
+      "after": "EVT16_merge_claimed",
+      "currency_amount_delta": {},
+      "currency_unchanged": true,
+      "builds": [
+        "0.0.3129 ARM64",
+        "0.0.3129 ARM64"
+      ],
+      "mode": [
+        "offline_existing_fixture",
+        "offline_existing_fixture"
+      ]
+    },
+    {
+      "case": "MS-R15-EVT05",
+      "before": "EVT17_drill_open",
+      "after": "EVT20_wheel_open",
+      "currency_amount_delta": {},
+      "currency_unchanged": true,
+      "builds": [
+        "0.0.3129 ARM64",
+        "0.0.3129 ARM64"
+      ],
+      "mode": [
+        "offline_existing_fixture",
+        "offline_existing_fixture"
+      ]
+    },
+    {
+      "case": "MS-R15-EVT06",
+      "before": "EVT19_drill_info",
+      "after": "EVT20_wheel_open",
+      "currency_amount_delta": {},
+      "currency_unchanged": true,
+      "builds": [
+        "0.0.3129 ARM64",
+        "0.0.3129 ARM64"
+      ],
+      "mode": [
+        "offline_existing_fixture",
+        "offline_existing_fixture"
+      ]
+    },
+    {
+      "case": "MS-R15-EVT07",
+      "before": "EVT21_broom_open",
+      "after": "EVT22_broom_continue",
+      "currency_amount_delta": {},
+      "currency_unchanged": true,
+      "builds": [
+        "0.0.3129 ARM64",
+        "0.0.3129 ARM64"
+      ],
+      "mode": [
+        "offline_existing_fixture",
+        "offline_existing_fixture"
+      ]
+    },
+    {
+      "case": "MS-R15-EVT08",
+      "before": "EVT23_minigame_open",
+      "after": "EVT25_minigame_repeat",
+      "currency_amount_delta": {},
+      "currency_unchanged": true,
+      "builds": [
+        "0.0.3129 ARM64",
+        "0.0.3129 ARM64"
+      ],
+      "mode": [
+        "offline_existing_fixture",
+        "offline_existing_fixture"
+      ]
+    },
+    {
+      "case": "MS-R15-EVT09",
+      "before": "EVT25_minigame_repeat",
+      "after": "EVT35_minigame_claim",
+      "currency_amount_delta": {
+        "4": 1
+      },
+      "currency_unchanged": false,
+      "builds": [
+        "0.0.3129 ARM64",
+        "0.0.3129 ARM64"
+      ],
+      "mode": [
+        "offline_existing_fixture",
+        "offline_existing_fixture"
+      ]
+    },
+    {
+      "case": "MS-R15-EVT10",
+      "before": "EVT30_minigame_stage2",
+      "after": "EVT34_minigame_exit_zero",
+      "currency_amount_delta": {},
+      "currency_unchanged": true,
+      "builds": [
+        "0.0.3129 ARM64",
+        "0.0.3129 ARM64"
+      ],
+      "mode": [
+        "offline_existing_fixture",
+        "offline_existing_fixture"
+      ]
+    },
+    {
+      "case": "MS-R15-SOC01",
+      "before": "SOC01_teams",
+      "after": "SOC01_teams",
+      "currency_amount_delta": {},
+      "currency_unchanged": true,
+      "builds": [
+        "0.0.3129 ARM64",
+        "0.0.3129 ARM64"
+      ],
+      "mode": [
+        "offline_existing_fixture",
+        "offline_existing_fixture"
+      ]
+    },
+    {
+      "case": "MS-R15-SOC02",
+      "before": "SOC02_leaderboard",
+      "after": "SOC04_teams_board",
+      "currency_amount_delta": {},
+      "currency_unchanged": true,
+      "builds": [
+        "0.0.3129 ARM64",
+        "0.0.3129 ARM64"
+      ],
+      "mode": [
+        "offline_existing_fixture",
+        "offline_existing_fixture"
+      ]
+    },
+    {
+      "case": "MS-R15-REC01",
+      "before": "EVT16_merge_claimed",
+      "after": "REC02_restart_ready",
+      "currency_amount_delta": {
+        "4": 1
+      },
+      "currency_unchanged": false,
+      "builds": [
+        "0.0.3129 ARM64",
+        "0.0.3129 ARM64"
+      ],
+      "mode": [
+        "offline_existing_fixture",
+        "offline_existing_fixture"
+      ]
+    },
+    {
+      "case": "MS-R15-REC02",
+      "before": "EVT35_minigame_claim",
+      "after": "REC02_restart_ready",
+      "currency_amount_delta": {},
+      "currency_unchanged": true,
+      "builds": [
+        "0.0.3129 ARM64",
+        "0.0.3129 ARM64"
+      ],
+      "mode": [
+        "offline_existing_fixture",
+        "offline_existing_fixture"
+      ]
+    },
+    {
+      "case": "MS-R15-CORE01",
+      "before": "CORE01_prelevel",
+      "after": "CORE04_pour_same",
+      "currency_amount_delta": {},
+      "currency_unchanged": true,
+      "builds": [
+        "0.0.3129 ARM64",
+        "0.0.3129 ARM64"
+      ],
+      "mode": [
+        "offline_existing_fixture",
+        "offline_existing_fixture"
+      ]
+    },
+    {
+      "case": "MS-R15-CORE02",
+      "before": "CORE04_pour_same",
+      "after": "CORE05_undo",
+      "currency_amount_delta": {
+        "4": -1
+      },
+      "currency_unchanged": false,
+      "builds": [
+        "0.0.3129 ARM64",
+        "0.0.3129 ARM64"
+      ],
+      "mode": [
+        "offline_existing_fixture",
+        "offline_existing_fixture"
+      ]
+    },
+    {
+      "case": "MS-R15-CORE03",
+      "before": "CORE05_undo",
+      "after": "CORE08_shuffle_apply",
+      "currency_amount_delta": {
+        "5": -1
+      },
+      "currency_unchanged": false,
+      "builds": [
+        "0.0.3129 ARM64",
+        "0.0.3129 ARM64"
+      ],
+      "mode": [
+        "offline_existing_fixture",
+        "offline_existing_fixture"
+      ]
+    },
+    {
+      "case": "MS-R15-CORE04",
+      "before": "CORE08_shuffle_apply",
+      "after": "CORE09_extra_bottle",
+      "currency_amount_delta": {
+        "6": -1
+      },
+      "currency_unchanged": false,
+      "builds": [
+        "0.0.3129 ARM64",
+        "0.0.3129 ARM64"
+      ],
+      "mode": [
+        "offline_existing_fixture",
+        "offline_existing_fixture"
+      ]
+    },
+    {
+      "case": "MS-R15-CORE05",
+      "before": "CORE09_extra_bottle",
+      "after": "CORE12_exit_cancel",
+      "currency_amount_delta": {},
+      "currency_unchanged": true,
+      "builds": [
+        "0.0.3129 ARM64",
+        "0.0.3129 ARM64"
+      ],
+      "mode": [
+        "offline_existing_fixture",
+        "offline_existing_fixture"
+      ]
+    },
+    {
+      "case": "MS-R15-CORE06",
+      "before": "CORE13_solver_step4",
+      "after": "CORE16_generator_second",
+      "currency_amount_delta": {},
+      "currency_unchanged": true,
+      "builds": [
+        "0.0.3129 ARM64",
+        "0.0.3129 ARM64"
+      ],
+      "mode": [
+        "offline_existing_fixture",
+        "offline_existing_fixture"
+      ]
+    },
+    {
+      "case": "MS-R15-CORE07",
+      "before": "CORE01_prelevel",
+      "after": "CORE22_win_continue",
+      "currency_amount_delta": {
+        "6": -1,
+        "5": -1,
+        "1": 20,
+        "4": -1
+      },
+      "currency_unchanged": false,
+      "builds": [
+        "0.0.3129 ARM64",
+        "0.0.3129 ARM64"
+      ],
+      "mode": [
+        "offline_existing_fixture",
+        "offline_existing_fixture"
+      ]
+    },
+    {
+      "case": "MS-R15-CORE08",
+      "before": "CORE21_win_ready",
+      "after": "CORE23_boat_continue",
+      "currency_amount_delta": {
+        "1": 20
+      },
+      "currency_unchanged": false,
+      "builds": [
+        "0.0.3129 ARM64",
+        "0.0.3129 ARM64"
+      ],
+      "mode": [
+        "offline_existing_fixture",
+        "offline_existing_fixture"
+      ]
+    },
+    {
+      "case": "MS-R15-DAILY01",
+      "before": "DAILY01_calendar",
+      "after": "DAILY03_past",
+      "currency_amount_delta": {},
+      "currency_unchanged": true,
+      "builds": [
+        "0.0.3129 ARM64",
+        "0.0.3129 ARM64"
+      ],
+      "mode": [
+        "offline_existing_fixture",
+        "offline_existing_fixture"
+      ]
+    },
+    {
+      "case": "MS-R15-DAILY02",
+      "before": "DAILY01_calendar",
+      "after": "DAILY05_wait",
+      "currency_amount_delta": {},
+      "currency_unchanged": true,
+      "builds": [
+        "0.0.3129 ARM64",
+        "0.0.3129 ARM64"
+      ],
+      "mode": [
+        "offline_existing_fixture",
+        "offline_existing_fixture"
+      ]
+    },
+    {
+      "case": "MS-R15-CORE09",
+      "before": "CORE24_level352",
+      "after": "CORE27_pillow_unlock",
+      "currency_amount_delta": {
+        "6": -1
+      },
+      "currency_unchanged": false,
+      "builds": [
+        "0.0.3129 ARM64",
+        "0.0.3129 ARM64"
+      ],
+      "mode": [
+        "offline_existing_fixture",
+        "offline_existing_fixture"
+      ]
+    },
+    {
+      "case": "MS-R15-CORE10",
+      "before": "CORE27_pillow_unlock",
+      "after": "CORE29_fail_close",
+      "currency_amount_delta": {},
+      "currency_unchanged": true,
+      "builds": [
+        "0.0.3129 ARM64",
+        "0.0.3129 ARM64"
+      ],
+      "mode": [
+        "offline_existing_fixture",
+        "offline_existing_fixture"
+      ]
+    }
+  ]
+}

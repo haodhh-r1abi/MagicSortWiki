@@ -1,0 +1,128 @@
+{
+  "id": "WelcomeBack",
+  "title": "Chào mừng trở lại (Welcome Back)",
+  "tagline": "Gói quà tái tương tác do server phát cho người chơi quay lại sau thời gian nghỉ.",
+  "infobox": [
+    ["Loại", "Kinh tế"],
+    ["Mở khóa", "Không có level gate; điều kiện phát gói do backend quyết định"],
+    ["Thời lượng", "Gói tồn tại cho tới khi được nhận"],
+    ["Chu kỳ / lịch", "Backend phát khi phát hiện người chơi quay lại"],
+    ["Tham gia", "Cá nhân"],
+    ["Vật phẩm thu thập", "Không có; nhận thẳng phần thưởng"],
+    ["Tiền tệ", "Theo RewardModels do server gửi"],
+    ["Thưởng chính", "WelcomeBackPackage.RewardModels (server)"],
+    ["Điều kiện / phụ thuộc", "Backend liveops welcome_back và NotificationService"],
+    ["Manager", "WelcomeBackService"]
+  ],
+  "description": [
+    "Welcome Back là gói quà tái tương tác: khi người chơi quay lại sau một thời gian nghỉ, server phát một gói kèm danh sách phần thưởng.",
+    "Client hỏi server mỗi lần vào game; nếu có gói chưa nhận thì bật popup chào mừng ở Home.",
+    "Toàn bộ điều kiện phát gói (nghỉ bao lâu, phân khúc nào) và nội dung thưởng do backend quyết định.",
+    "Không có level gate hay cờ remote config riêng — muốn tắt thì backend đơn giản không phát gói.",
+    "Máy trạng thái chỉ có ba nhánh: IsDisabled, AllClaimed và ShouldClaim.",
+    "Popup được thử mở ở hai thời điểm: khi vừa vào Home và khi quay lại Home từ level.",
+    "Client trao thưởng trước rồi mới báo server (optimistic), nếu báo lỗi thì thử lại ở lần vào game sau.",
+    "Danh sách WelcomeBackId đã nhận được lưu và đồng bộ, chống trao trùng kể cả khi đổi thiết bị.",
+    "Client tự đặt lịch thông báo cục bộ để kéo người chơi quay lại, khép kín vòng lặp tái tương tác.",
+    "Mọi phần thưởng ghi lý do CurrencyEarnReason.WelcomeBack (18) trong analytics."
+  ],
+  "notes": [
+    "Lưu ý: request lấy gói được thử lại tối đa 5 lần, mỗi lần cách 10 giây (tổng khoảng 50 giây), sau đó bỏ qua tới lần vào game sau.",
+    "Lưu ý: nếu server trả lại một WelcomeBackId đã nằm trong PreviousWelcomeBackIds thì gói bị bỏ qua, không bật popup.",
+    "Lưu ý: chỉ danh sách PreviousWelcomeBackIds được đồng bộ; gói đang chờ nhận là dữ liệu cục bộ.",
+    "Lưu ý: nếu báo claim lên server thất bại, gói vẫn nằm trong hàng chờ gửi và được thử lại về sau.",
+    "Lưu ý: nội dung thông báo dùng ký hiệu ' NEWLINE ' làm dấu xuống dòng khi dựng text.",
+    "Lưu ý: thời điểm và nội dung thông báo cục bộ không đọc được từ client.",
+    "Lưu ý: không có class UI riêng cho popup Welcome Back — nhiều khả năng dùng khung popup thưởng chung.",
+    "Lưu ý: Dispose() huỷ timer thử lại để tránh rò rỉ."
+  ],
+  "how_it_works": [
+    "Vào game: WelcomeBackService khởi tạo dữ liệu và kiểm tra có được phép gửi request hay không (CanSendRequest).",
+    "Hỏi server: gửi request lấy gói và nhận về GetWelcomeBackResponse gồm WelcomeBackId, RewardModels và IsClaimed.",
+    "Nếu request lỗi, đặt hẹn giờ 10 giây rồi thử lại, tối đa 5 lần.",
+    "Kiểm tra trùng: nếu WelcomeBackId đã có trong PreviousWelcomeBackIds thì bỏ qua, trạng thái giữ AllClaimed(1).",
+    "Nếu là gói mới, lưu WelcomeBackPackage vào dữ liệu cục bộ và chuyển trạng thái sang ShouldClaim(2).",
+    "Popup được thử mở trong chuỗi home welcoming ngay khi vào Home (TryShowWelcomeBackHomeWelcomingCommand).",
+    "Nếu người chơi vào thẳng level, popup được thử lại khi quay về Home (TryShowWelcomeBackReturnToHomeCommand).",
+    "Popup hiển thị danh sách phần thưởng của gói với tiêu đề 'Welcome Back'.",
+    "Bấm nhận: RewardService trao toàn bộ RewardModels với lý do CurrencyEarnReason.WelcomeBack (18).",
+    "Ghi nhận: đánh dấu gói đã nhận và thêm WelcomeBackId vào danh sách PreviousWelcomeBackIds.",
+    "Gửi analytics welcome_back_claim kèm welcome_back_id và progress.",
+    "Báo server: gửi ClaimWelcomeBackRequest{WelcomeBackId} rồi dọn gói khỏi cache khi thành công.",
+    "Song song, client đặt lịch thông báo cục bộ để nhắc người chơi quay lại lần sau.",
+    "Đồng bộ: chỉ khối WelcomeBackSyncableDataModel (danh sách id đã nhận) được đẩy qua SyncService.",
+    "Nếu không có gói hoặc gói đã claim, trạng thái là IsDisabled(0) và luồng home welcoming đi tiếp bình thường."
+  ],
+  "reward_tables": [
+    {
+      "title": "PHẦN THƯỞNG (cấu trúc, do server gửi)",
+      "columns": ["Mốc", "Điều kiện", "Phần thưởng"],
+      "rows": [
+        ["Gói Welcome Back", "Backend phát gói và người chơi chưa nhận id đó", "WelcomeBackPackage.RewardModels (server), lý do nhận CurrencyEarnReason.WelcomeBack (18)"],
+        ["Gói đã nhận trước đó", "WelcomeBackId nằm trong PreviousWelcomeBackIds", "Không trao lại, không hiện popup"],
+        ["Không có gói", "Server trả rỗng hoặc IsClaimed = true", "Không có phần thưởng, trạng thái IsDisabled(0)"]
+      ]
+    },
+    {
+      "title": "CƠ CHẾ THỬ LẠI REQUEST",
+      "columns": ["Tham số", "Giá trị", "Ý nghĩa"],
+      "rows": [
+        ["RetryLimit", "5", "Số lần thử lại tối đa khi gọi API thất bại"],
+        ["RetryDelayInSeconds", "10", "Khoảng cách giữa hai lần thử lại"],
+        ["Tổng thời gian thử lại", "khoảng 50 giây (suy luận từ 5 x 10 giây)", "Sau đó bỏ qua tới lần vào game sau"]
+      ]
+    },
+    {
+      "title": "TRẠNG THÁI (WelcomeBackState)",
+      "columns": ["Mã", "Trạng thái", "Ý nghĩa"],
+      "rows": [
+        ["0", "IsDisabled", "Không có gói nào"],
+        ["1", "AllClaimed", "Đã nhận hết gói"],
+        ["2", "ShouldClaim", "Có gói chờ nhận, popup được phép mở"]
+      ]
+    }
+  ],
+  "key_numbers": [
+    {"label": "Số lần thử lại tối đa", "value": "5", "source": "WelcomeBackService.RetryLimit"},
+    {"label": "Khoảng cách giữa hai lần thử lại", "value": "10 giây", "source": "WelcomeBackService.RetryDelayInSeconds"},
+    {"label": "Tổng thời gian thử lại", "value": "khoảng 50 giây (suy luận)", "source": "WelcomeBackService.RetryLimit x RetryDelayInSeconds"},
+    {"label": "Số trạng thái", "value": "3 (IsDisabled=0, AllClaimed=1, ShouldClaim=2)", "source": "WelcomeBackState"},
+    {"label": "Lý do nhận thưởng", "value": "CurrencyEarnReason.WelcomeBack = 18", "source": "CurrencyEarnReason"},
+    {"label": "Số điểm chạm mở popup", "value": "2 (home welcoming và return-to-home)", "source": "TryShowWelcomeBackHomeWelcomingCommand / TryShowWelcomeBackReturnToHomeCommand"},
+    {"label": "Tên service gọi HttpProxy", "value": "\"WelcomeBackRemoteService\"", "source": "WelcomeBackRemoteService.ServiceName"},
+    {"label": "Tên khối sync", "value": "WelcomeBackSyncableDataModel", "source": "WelcomeBackDataService.GetSyncName"},
+    {"label": "Dữ liệu được đồng bộ", "value": "Chỉ PreviousWelcomeBackIds (List<string>)", "source": "WelcomeBackSyncableDataModel"},
+    {"label": "Ký hiệu xuống dòng trong thông báo", "value": "\" NEWLINE \"", "source": "WelcomeBackService.ScheduleWelcomeBackNotification"},
+    {"label": "Tiêu đề popup", "value": "\"Welcome Back\"", "source": "localization WelcomeBackTitle"},
+    {"label": "Level mở khoá", "value": "Không có (backend quyết định phát gói)", "source": "WelcomeBackStateService.GetState"},
+    {"label": "Nội dung phần thưởng", "value": "RewardModels do server gửi (server)", "source": "GetWelcomeBackResponse.RewardModels"},
+    {"label": "Schema backend", "value": "magicsort.schemas.v1.liveops.welcome_back", "source": "FlatBuffer schema"}
+  ],
+  "config_highlights": [
+    {"key": "WelcomeBackService.RetryLimit", "value": "5", "meaning": "Số lần thử lại tối đa khi gọi API thất bại"},
+    {"key": "WelcomeBackService.RetryDelayInSeconds", "value": "10", "meaning": "Khoảng cách giữa hai lần thử lại"},
+    {"key": "WelcomeBackRemoteService.ServiceName", "value": "\"WelcomeBackRemoteService\"", "meaning": "Tên service dùng khi gọi HttpProxy"},
+    {"key": "WelcomeBackState", "value": "IsDisabled=0, AllClaimed=1, ShouldClaim=2", "meaning": "Máy trạng thái đơn giản ba nhánh"},
+    {"key": "CurrencyEarnReason.WelcomeBack", "value": "18", "meaning": "Lý do nhận thưởng trong analytics 'earned'"},
+    {"key": "Ký hiệu xuống dòng thông báo", "value": "\" NEWLINE \"", "meaning": "Được thay bằng ký tự xuống dòng khi dựng nội dung notification"},
+    {"key": "GetWelcomeBackResponse", "value": "WelcomeBackId, RewardModels, IsClaimed", "meaning": "Gói quà tái tương tác do backend phát"},
+    {"key": "ClaimWelcomeBackRequest / Response", "value": "WelcomeBackId", "meaning": "Báo đã nhận gói lên server"},
+    {"key": "Schema magicsort.schemas.v1.liveops.welcome_back", "value": "GetWelcomeBackResponse, ClaimWelcomeBackResponse", "meaning": "Định nghĩa dữ liệu phía backend"},
+    {"key": "WelcomeBackSyncableDataModel", "value": "\"WelcomeBackSyncableDataModel\"", "meaning": "Tên bản ghi đồng bộ"},
+    {"key": "WelcomeBackSyncableDataModel.PreviousWelcomeBackIds", "value": "List<string> (client + server)", "meaning": "Danh sách gói đã nhận, chống trao trùng"},
+    {"key": "WelcomeBackDataModel.WelcomeBack", "value": "WelcomeBackPackage{WelcomeBackId, RewardModels, IsClaimed} (không đồng bộ)", "meaning": "Gói đang chờ nhận"},
+    {"key": "Localization WelcomeBackTitle", "value": "\"Welcome Back\"", "meaning": "Tiêu đề popup"},
+    {"key": "TryShowWelcomeBackHomeWelcomingCommand", "value": "command", "meaning": "Mở popup trong chuỗi welcome khi vào Home"},
+    {"key": "TryShowWelcomeBackReturnToHomeCommand", "value": "command", "meaning": "Mở popup khi quay lại Home từ level"},
+    {"key": "NotificationService", "value": "local notification", "meaning": "Đặt lịch thông báo kéo người chơi quay lại"},
+    {"key": "Endpoint HTTP", "value": "nằm trong BackendEnvironmentConfig", "meaning": "Không chép URL vào tài liệu"}
+  ],
+  "tips": [
+    "Không có bất kỳ cấu hình nào ở client giúp live-ops đổi điều kiện và giá trị quà tái tương tác tức thì.",
+    "Trao thưởng trước rồi báo server sau khiến người chơi không phải chờ mạng ở khoảnh khắc quay lại đầu tiên.",
+    "Danh sách id đã nhận là lớp bảo vệ đơn giản mà hiệu quả chống trao trùng khi client mất đồng bộ.",
+    "Thử lại 5 lần trong khoảng 50 giây đủ để vượt qua mạng chập chờn mà không kéo dài phiên khởi động.",
+    "Gắn thông báo cục bộ vào chính tính năng này khép kín vòng lặp nghỉ chơi → nhắc → quay lại → nhận quà."
+  ],
+  "categories": ["Kinh tế", "Live-ops", "Meta"]
+}

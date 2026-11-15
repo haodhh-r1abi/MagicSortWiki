@@ -1,0 +1,888 @@
+{
+  "id": "Leaderboards",
+  "name": "Bảng xếp hạng",
+  "category": "Social",
+  "managers": [
+    "Modules.Contexts.Home.PermanentLeaderboard.Scripts.PermanentLeaderboardService",
+    "Modules.Contexts.Home.PermanentLeaderboard.Scripts.PermanentLeaderboardRemoteService",
+    "Modules.Contexts.Home.PermanentLeaderboard.Scripts.PermanentLeaderboardDataService",
+    "Modules.Contexts.Home.PermanentLeaderboard.Scripts.LeaderboardController"
+  ],
+  "summary": "Bảng xếp hạng thường trực (Permanent Leaderboard) là một trang riêng trong Home, gom nhiều bảng vào một khung tab: Players (World / Country), Teams (World / Country), Friends và Weekly (giải tuần). Bảng Players xếp theo tiến độ level của người chơi trên toàn thế giới và trong quốc gia của họ; dữ liệu được backend trả về kèm cờ IsMe để đánh dấu dòng của chính người chơi, và dòng đó được ghim (StickyScrollElementsController) khi cuộn ra ngoài tầm nhìn. Bảng Teams tái sử dụng dữ liệu của TeamsService, bảng Friends tái sử dụng FriendsService, còn tab Weekly do WeeklyTournamentService cung cấp. Client cache bảng gần nhất (LeaderboardModel) để hiển thị ngay khi offline và chỉ gọi lại server sau mỗi lần thắng level.",
+  "unlock": "Chuỗi localize 'LeaderboardSectionInfo' = \"Unlocks at Level 40\" mô tả mốc mở khoá của khu vực bảng xếp hạng; LeaderboardController.UpdateView() chọn giữa _lockedGameObject và _unlockedGameObject. Tab Teams/Friends còn phụ thuộc cờ riêng của TeamsConfigModel.IsEnable và FriendsConfigModel.IsEnabled (nếu tắt thì hiện _comingSoonHolder / _comingSoonContainer).",
+  "entry_points": [
+    "Trang Leaderboard trong SwipeMenu ở Home (LeaderboardController.OnPageSelected(PageType))",
+    "Tab Weekly được chọn tự động khi có giải tuần chưa xem (LeaderboardController.SelectWeeklyTournamentTab)",
+    "Bảng xếp hạng đội mở từ TeamInfoPopup (TeamsLeaderboardController)",
+    "Bảng bạn bè mở từ tab Friends (FriendsLeaderboardController)"
+  ],
+  "flow": "PermanentLeaderboardService là ILateLoginService: sau đăng nhập nó gọi UpdateLeaderboard(). Nhánh giao thức chọn theo cờ remote config IsFlatBuffer: nếu bật thì UpdateLeaderboardAsFlatBuffer() gọi PermanentLeaderboardRemoteService.GetLeaderboardAsFlatBuffer() → GetLeaderboardsResponse (FlatBuffers, mảng GlobalPlayers/CountryPlayers + Country), nếu tắt thì UpdateLeaderboardAsJson() gọi GetLeaderboard() → PermanentLeaderboardResponse{Players, CountryPlayers, Country}. Kết quả đi vào PermanentLeaderboardDataService.SetWorldLeaderboard / SetCountryLeaderboard; CacheRemoteLeaderboard() chép sang List<LeaderboardPlayer> dùng ObjectPool<LeaderboardPlayer> để tránh cấp phát, rồi MarkDataForLateUpdate() lưu LeaderboardModel qua ISaveLoad. GetWorldLeaderboard()/GetCountryLeaderboard() trả bản cache cho UI. LeaderboardController quản lý 4 tab ('Players', 'Teams', 'Friends', 'Weekly'); PlayersLeaderboardController lại chia 2 tab con ('World', 'Country') dẫn tới WorldLeaderboardController và CountryLeaderboardController. Mỗi controller dựng PermanentLeaderboardPlayerViewModel từ pool, nạp avatar qua ProfileSpriteCacheService, tính các mốc (UpdateDegrees + PermanentLeaderboardDegreeElementView) và ghim dòng của người chơi bằng StickyScrollElementsController. Khi không có mạng, _noInternetConnectionGameObject được bật thay cho danh sách. Sau mỗi lần thắng level, IntervalUpdate() đặt _shouldSyncLeaderboard = true và OnLevelWin() thực hiện gọi lại API rồi hạ cờ.",
+  "use_cases": [
+    {
+      "id": "UC-01",
+      "title": "Nạp bảng xếp hạng sau đăng nhập",
+      "actor": "System",
+      "trigger": "Login hoàn tất (ILateLoginService)",
+      "precondition": "-",
+      "steps": [
+        "PermanentLeaderboardService.Initialize() rồi UpdateLeaderboard()",
+        "Kiểm tra cờ IsFlatBuffer",
+        "Gọi GetLeaderboardAsFlatBuffer() hoặc GetLeaderboard()",
+        "PermanentLeaderboardDataService.SetWorldLeaderboard / SetCountryLeaderboard lưu cache"
+      ],
+      "result": "Bảng World và Country sẵn sàng, LeaderboardModel.Country ghi mã quốc gia",
+      "rules": "Hai đường dữ liệu song song: FlatBuffers (GetLeaderboardsResponse) và JSON (PermanentLeaderboardResponse)",
+      "evidence": "PermanentLeaderboardService.UpdateLeaderboard; PermanentLeaderboardService.UpdateLeaderboardAsFlatBuffer; PermanentLeaderboardService.UpdateLeaderboardAsJson; PermanentLeaderboardRemoteService.GetLeaderboard"
+    },
+    {
+      "id": "UC-02",
+      "title": "Xem bảng xếp hạng thế giới",
+      "actor": "Player",
+      "trigger": "Chọn tab Players → World",
+      "precondition": "Đã mở khoá khu vực leaderboard",
+      "steps": [
+        "PlayersLeaderboardController.OnTabSelected(Tab) chọn WorldLeaderboardController",
+        "WorldLeaderboardController.UpdateLeaderboards() lấy PermanentLeaderboardService.GetWorldLeaderboard()",
+        "UpdateViewModels() dựng PermanentLeaderboardPlayerViewModel từ _viewModelPool",
+        "ProfileSpriteCacheService nạp avatar theo ImageID/ImageUrl",
+        "UpdateDegrees() dựng các mốc PermanentLeaderboardDegreeElementView"
+      ],
+      "result": "Danh sách người chơi toàn cầu với Rank, Nickname, Score, khung/name style và tên đội",
+      "rules": "LeaderboardPlayer gồm PublicID, Nickname, Score, Rank, IsMe, ImageUrl, ImageID, TokenID, FrameId, NameStyle, TeamName",
+      "evidence": "WorldLeaderboardController.UpdateLeaderboards; WorldLeaderboardController.UpdateViewModels; PermanentLeaderboardService.GetWorldLeaderboard; LeaderboardPlayer"
+    },
+    {
+      "id": "UC-03",
+      "title": "Xem bảng xếp hạng quốc gia",
+      "actor": "Player",
+      "trigger": "Chọn tab con 'Country'",
+      "precondition": "Server đã xác định quốc gia người chơi",
+      "steps": [
+        "CountryLeaderboardController.Show() và UpdateLeaderboards()",
+        "Lấy PermanentLeaderboardService.GetCountryLeaderboard()",
+        "Hiển thị theo LeaderboardModel.Country (mã quốc gia từ response)"
+      ],
+      "result": "Danh sách người chơi cùng quốc gia",
+      "rules": "Quốc gia do backend suy ra, client không cho chọn tay trong màn này",
+      "evidence": "CountryLeaderboardController.UpdateLeaderboards; PermanentLeaderboardService.GetCountryLeaderboard; PermanentLeaderboardDataService.SetCountryLeaderboard; LeaderboardModel.Country"
+    },
+    {
+      "id": "UC-04",
+      "title": "Ghim dòng của chính người chơi",
+      "actor": "System",
+      "trigger": "Cuộn danh sách",
+      "precondition": "Có bản ghi với IsMe = true",
+      "steps": [
+        "Tìm dòng IsMe trong danh sách",
+        "StickyScrollElementsController giữ dòng đó dính trên/dưới khung nhìn khi cuộn ra ngoài"
+      ],
+      "result": "Người chơi luôn thấy hạng của mình",
+      "rules": "Cùng cơ chế dùng cho bảng đội (InitializeStickyElements)",
+      "evidence": "WorldLeaderboardController._stickyScrollElementsController; TeamsLeaderboardController.InitializeStickyElements; LeaderboardPlayer.IsMe"
+    },
+    {
+      "id": "UC-05",
+      "title": "Xem bảng xếp hạng đội",
+      "actor": "Player",
+      "trigger": "Chọn tab 'Teams'",
+      "precondition": "TeamsConfigModel.IsEnable = true",
+      "steps": [
+        "TeamsLeaderboardController.OnTabSelected(Tab) chọn ShowWorldLeaderboard() hoặc ShowCountryLeaderboard()",
+        "Lấy dữ liệu từ TeamsService (TeamsDataService.GetGlobalLeaderboard / GetCountryLeaderboard)",
+        "Initialize(List<LeaderboardTeam>) đổ vào TeamLeaderboardViewAdapter",
+        "GetUserTeamIndex(leaderboard) tìm vị trí đội của người chơi rồi InitializeStickyElements(userTeamData, userTeamIndex)"
+      ],
+      "result": "Bảng xếp hạng đội theo TeamScore, ghim đội của người chơi",
+      "rules": "Nếu tắt tính năng → _comingSoonHolder; mất mạng → _noInternetGameObject. OnUserTeamDataUpdated() làm mới khi đổi đội",
+      "evidence": "TeamsLeaderboardController.ShowWorldLeaderboard; TeamsLeaderboardController.ShowCountryLeaderboard; TeamsLeaderboardController.GetUserTeamIndex; TeamsLeaderboardController.OnUserTeamDataUpdated; LeaderboardTeam"
+    },
+    {
+      "id": "UC-06",
+      "title": "Xem bảng xếp hạng bạn bè",
+      "actor": "Player",
+      "trigger": "Chọn tab 'Friends'",
+      "precondition": "FriendsConfigModel.IsEnabled = true",
+      "steps": [
+        "FriendsLeaderboardController.OnTabSelected(Tab) → ShowFriendsLeaderboard()",
+        "Trong lúc FriendsService đang đồng bộ: OnFriendsInitializationStarted() bật _loadingContainer",
+        "OnFriendsInitializationCompletedSignal() đổ FriendsListView theo FriendElementViewModel.Rank",
+        "Không có bạn → ShowAddFriends() hiện AddFriendView"
+      ],
+      "result": "Xếp hạng theo tiến độ giữa bạn bè, kèm lối tắt thêm bạn",
+      "rules": "Tính năng tắt → _comingSoonContainer; mất mạng → _noConnectionContainer",
+      "evidence": "FriendsLeaderboardController.ShowFriendsLeaderboard; FriendsLeaderboardController.ShowAddFriends; FriendsLeaderboardController.OnFriendsInitializationCompletedSignal; FriendElementViewModel.Rank"
+    },
+    {
+      "id": "UC-07",
+      "title": "Mời liên kết Facebook từ bảng bạn bè",
+      "actor": "Player",
+      "trigger": "Bấm nút Facebook trong tab Friends của leaderboard",
+      "precondition": "Chưa liên kết Facebook",
+      "steps": [
+        "FriendsLeaderboardController.OnSignInButtonSelected()",
+        "InitializeRewardContainer() hiện FacebookSignInRewardView với phần thưởng (localize 'FriendsGetYourCoin' = \"Get your rewards!\")",
+        "Nếu không có thưởng thì thu hẹp khung về _noRewardWidth"
+      ],
+      "result": "Người chơi liên kết Facebook để có thêm bạn trên bảng",
+      "rules": "Phần thưởng lấy từ FriendsConfigModel.FbConnectReward",
+      "evidence": "FriendsLeaderboardController.OnSignInButtonSelected; FriendsLeaderboardController.InitializeRewardContainer; FacebookSignInRewardView"
+    },
+    {
+      "id": "UC-08",
+      "title": "Tab giải tuần trong khung leaderboard",
+      "actor": "Player",
+      "trigger": "Chọn tab 'Weekly'",
+      "precondition": "WeeklyTournamentService có giải đang diễn ra hoặc đã kết thúc",
+      "steps": [
+        "LeaderboardController.WeeklyTabSelected() xác định tab hiện tại",
+        "WeeklyTournamentLeaderboardController.UpdateView() chọn WeeklyTournamentInProgressView hay WeeklyTournamentInResultView",
+        "UpdateViewModels() dựng WeeklyTournamentLeaderboardPlayerViewModel"
+      ],
+      "result": "Xem thứ hạng và phần thưởng giải tuần ngay trong khung leaderboard",
+      "rules": "Không có mạng → _noInternetConnectionGameObject",
+      "evidence": "LeaderboardController.WeeklyTabSelected; WeeklyTournamentLeaderboardController.UpdateView; WeeklyTournamentLeaderboardController.UpdateViewModels"
+    },
+    {
+      "id": "UC-09",
+      "title": "Tự chọn tab Weekly khi có kết quả chưa xem",
+      "actor": "System",
+      "trigger": "Mở trang leaderboard",
+      "precondition": "Giải tuần có kết quả người chơi chưa xem",
+      "steps": [
+        "LeaderboardController.UpdateView() kiểm tra WeeklyTournamentService",
+        "SelectWeeklyTournamentTab() chuyển tab tự động",
+        "Sau khi xem: OnWeeklyTournamentSeenByUser() hạ cờ"
+      ],
+      "result": "Người chơi không bỏ lỡ phần thưởng giải tuần",
+      "rules": "Phân biệt OnTabSelectedByUser (do người chơi) và OnTabSelected (do hệ thống) để tránh ghi analytics sai",
+      "evidence": "LeaderboardController.SelectWeeklyTournamentTab; LeaderboardController.OnWeeklyTournamentSeenByUser; LeaderboardController.OnTabSelectedByUser"
+    },
+    {
+      "id": "UC-10",
+      "title": "Làm mới bảng sau khi thắng level",
+      "actor": "System",
+      "trigger": "Thắng level",
+      "precondition": "-",
+      "steps": [
+        "PermanentLeaderboardService.IntervalUpdate() đặt _shouldSyncLeaderboard = true",
+        "OnLevelWin() thấy cờ, gọi lại API theo nhánh IsFlatBuffer rồi đặt _shouldSyncLeaderboard = false"
+      ],
+      "result": "Điểm và hạng cập nhật sau mỗi màn thắng, không gọi API liên tục",
+      "rules": "Cơ chế cờ + IIntervalUpdate",
+      "evidence": "PermanentLeaderboardService.IntervalUpdate; PermanentLeaderboardService.OnLevelWin"
+    },
+    {
+      "id": "UC-11",
+      "title": "Xem bảng khi offline (dùng cache)",
+      "actor": "Player",
+      "trigger": "Mở leaderboard khi mất mạng",
+      "precondition": "Đã từng nạp bảng thành công",
+      "steps": [
+        "PermanentLeaderboardDataService.GetCachedWorldLeaderboard / GetCachedCountryLeaderboard trả dữ liệu đã lưu",
+        "Nếu chưa có cache → bật _noInternetConnectionGameObject",
+        "PermanentLeaderboardRemoteService ghi log lỗi với tiền tố \"error: \""
+      ],
+      "result": "Vẫn xem được bảng cũ thay vì màn hình trắng",
+      "rules": "LeaderboardModel được lưu qua ISaveLoad và MarkDataForLateUpdate()",
+      "evidence": "PermanentLeaderboardDataService.GetCachedWorldLeaderboard; PermanentLeaderboardDataService.LateUpdate; PermanentLeaderboardRemoteService (chuỗi \"error: \")"
+    },
+    {
+      "id": "UC-12",
+      "title": "Xem hồ sơ người chơi khác từ bảng xếp hạng",
+      "actor": "Player",
+      "trigger": "Bấm vào một dòng trong bảng",
+      "precondition": "Dòng không phải của chính mình",
+      "steps": [
+        "View adapter chuyển PublicID sang luồng hồ sơ (GetUserProfileRequestModel)",
+        "Mở popup hồ sơ với FriendProfileController để kết bạn/xoá bạn"
+      ],
+      "result": "Bảng xếp hạng trở thành nguồn kết bạn",
+      "rules": "Nguồn popup được ghi lại (chuỗi 'profile_{0}')",
+      "evidence": "FriendProfileController.Initialize; LeaderboardPlayer.PublicID; GetUserProfileRequestModel"
+    },
+    {
+      "id": "UC-13",
+      "title": "Xoá dữ liệu bảng xếp hạng khi xoá tài khoản",
+      "actor": "System",
+      "trigger": "Xoá tài khoản / đăng nhập tài khoản khác",
+      "precondition": "-",
+      "steps": [
+        "PermanentLeaderboardDataService.DeleteData() (IDeletable) xoá LeaderboardModel",
+        "Bảng được nạp lại từ server cho tài khoản mới"
+      ],
+      "result": "Không lẫn dữ liệu giữa hai tài khoản trên cùng máy",
+      "rules": "-",
+      "evidence": "PermanentLeaderboardDataService.DeleteData"
+    },
+    {
+      "id": "UC-14",
+      "title": "Hiển thị huy chương theo hạng (bảng streak)",
+      "actor": "System",
+      "trigger": "Render dòng xếp hạng của sự kiện streak",
+      "precondition": "-",
+      "steps": [
+        "Dùng enum LeaderboardMedalType (None=0, Golden=1, Silver=2, Bronze=3) để chọn sprite huy chương theo top 1/2/3"
+      ],
+      "result": "Ba hạng đầu có huy chương vàng/bạc/đồng",
+      "rules": "Enum nằm trong Modules.Contexts.Home.Streak.Scripts.UI, dùng cho bảng của sự kiện streak chứ không phải bảng thường trực",
+      "evidence": "LeaderboardMedalType"
+    }
+  ],
+  "configs": [
+    {
+      "source": "remote config",
+      "key": "IsFlatBuffer",
+      "type": "bool",
+      "value": "server",
+      "meaning": "Chọn giao thức FlatBuffers hay JSON cho bảng xếp hạng",
+      "where": "FirebaseRemoteConfigResolver → PermanentLeaderboardService.UpdateLeaderboard"
+    },
+    {
+      "source": "Default/code0.0.3063 and historical caches20260910/20261010; per-snapshot source/hash in snapshot_values; not effective-runtime proof",
+      "key": "HttpConfig.UsePermanentLeaderboardV2",
+      "type": "bool",
+      "value": "default_0.0.3063: false; cache_20260910: false; cache_20261010: false; firebase_20260910: false",
+      "meaning": "Chuyển sang endpoint bảng xếp hạng thế hệ 2 [15/11: giá trị theo snapshot cụ thể; thiếu field khác với false/0. Không xác nhận assignment hoặc effective runtime.]",
+      "where": "Firebase Remote Config key 'HttpConfig' → HttpConfig",
+      "previous_unresolved_value": "server",
+      "snapshot_values": [
+        {
+          "snapshot": "default_0.0.3063",
+          "model": "HttpConfig",
+          "key": "UsePermanentLeaderboardV2",
+          "value": false,
+          "type": "bool",
+          "source": "../com.grandgames.magicsort_Unity_20260909_112501/UnityExport/ExportedProject/Assets/Resources/defaultconfigs/HttpConfig.json",
+          "value_type": "bool",
+          "source_sha256": "586cb564c2d6aabf03cc85d390a83f01602b245bdbe53450a709559baa6dc0a1",
+          "field_present": true
+        },
+        {
+          "snapshot": "cache_20260910",
+          "model": "httpConfig",
+          "key": "usePermanentLeaderboardV2",
+          "value": false,
+          "type": "bool",
+          "source": "facts/runtime/server_configs/httpConfig.json",
+          "value_type": "bool",
+          "source_sha256": "44dcceab00cb7569ed117f73bfd9d9347ec35bec75a31a0babcced1aa4e275bc",
+          "field_present": true
+        },
+        {
+          "snapshot": "cache_20261010",
+          "model": "httpConfig",
+          "key": "usePermanentLeaderboardV2",
+          "value": false,
+          "type": "bool",
+          "source": "facts/runtime/test_20261010/before/CachedRemoteConfigs",
+          "value_type": "bool",
+          "source_sha256": "433164d4877b2dee55d2bbd79ef2fe83d3fe9519492fe15e3cb0926daf216050",
+          "field_present": true
+        },
+        {
+          "snapshot": "firebase_20260910",
+          "model": "HttpConfig",
+          "key": "UsePermanentLeaderboardV2",
+          "value": false,
+          "type": "bool",
+          "source": "facts/runtime/decoded/firebase_rc.json",
+          "value_type": "bool",
+          "source_sha256": "e49f73c0e3854a98c0c27ffae86e6abc7897c767b5f3e82991004c48c4eb45d5",
+          "field_present": true
+        }
+      ],
+      "snapshot_review_id": "MS-CFG-Leaderboards-0001"
+    },
+    {
+      "source": "remote config",
+      "key": "TeamsConfigModel.IsEnable / FriendsConfigModel.IsEnabled",
+      "type": "bool",
+      "value": "server",
+      "meaning": "Quyết định tab Teams/Friends hiện danh sách hay 'Coming soon'",
+      "where": "TeamsLeaderboardController._comingSoonHolder; FriendsLeaderboardController._comingSoonContainer"
+    },
+    {
+      "source": "code const",
+      "key": "Tên tab",
+      "type": "string",
+      "value": "\"Players\", \"Teams\", \"Weekly\" (LeaderboardController); \"World\", \"Country\" (PlayersLeaderboardController); \"Friends\" (FriendsLeaderboardController)",
+      "meaning": "Định danh tab trong khung leaderboard",
+      "where": "strings-by-type.tsv"
+    },
+    {
+      "source": "code enum",
+      "key": "LeaderboardMedalType",
+      "type": "enum int",
+      "value": "None=0, Golden=1, Silver=2, Bronze=3",
+      "meaning": "Huy chương theo hạng",
+      "where": "Modules.Contexts.Home.Streak.Scripts.UI.LeaderboardMedalType"
+    },
+    {
+      "source": "code field",
+      "key": "LeaderboardPlayer",
+      "type": "class",
+      "value": "PublicID, Nickname, Score, Rank, IsMe, ImageUrl, ImageID, TokenID, FrameId, NameStyle, TeamName",
+      "meaning": "Một dòng bảng xếp hạng người chơi (bản cache client)",
+      "where": "LeaderboardPlayer"
+    },
+    {
+      "source": "code field",
+      "key": "PermanentLeaderboardPlayerResponse",
+      "type": "class (JSON)",
+      "value": "PublicID, Nickname, Score, Rank, IsMe, ImageUrl, ImageID, TokenID, FrameID, NameStyle, TeamName",
+      "meaning": "Bản ghi trả về theo nhánh JSON",
+      "where": "PermanentLeaderboardResponse.Players / CountryPlayers"
+    },
+    {
+      "source": "server info",
+      "key": "GlobalLeaderboardPlayer (FlatBuffers)",
+      "type": "table",
+      "value": "UserPublicID, NickName, Score (long), Rank (long), IsMe, ImageUrl, ImageID",
+      "meaning": "Bản ghi trả về theo nhánh FlatBuffers",
+      "where": "MagicSort.schemas.v1.liveops.global_leaderboard.GlobalLeaderboardPlayer"
+    },
+    {
+      "source": "server info",
+      "key": "GetLeaderboardsResponse (FlatBuffers)",
+      "type": "table",
+      "value": "GlobalPlayers[], CountryPlayers[], Country",
+      "meaning": "Gói dữ liệu bảng thế giới + quốc gia",
+      "where": "MagicSort.schemas.v1.liveops.global_leaderboard.GetLeaderboardsResponse"
+    },
+    {
+      "source": "code field",
+      "key": "LeaderboardModel",
+      "type": "class",
+      "value": "WorldLeaderboard, CountryLeaderboard, Country",
+      "meaning": "Cache bảng xếp hạng lưu qua ISaveLoad<LeaderboardModel>",
+      "where": "LeaderboardModel"
+    },
+    {
+      "source": "code field",
+      "key": "ObjectPool<LeaderboardPlayer> / ObjectPool<PermanentLeaderboardPlayerViewModel>",
+      "type": "pool",
+      "value": "-",
+      "meaning": "Tái sử dụng đối tượng dòng để tránh GC khi cuộn",
+      "where": "PermanentLeaderboardDataService; WorldLeaderboardController"
+    },
+    {
+      "source": "asset",
+      "key": "LeaderboardViewFactory.asset, TeamLeaderboardViewFactory.asset, WeeklyTournamentLeaderboardViewFactory.asset, FriendsScrollViewFactory.asset",
+      "type": "ScriptableObject",
+      "value": "-",
+      "meaning": "Factory prefab cho từng loại dòng bảng xếp hạng",
+      "where": "Assets/MonoBehaviour/"
+    },
+    {
+      "source": "localization",
+      "key": "LeaderboardSectionInfo",
+      "type": "string",
+      "value": "\"Unlocks at Level 40\"",
+      "meaning": "Text mốc mở khoá khu vực bảng xếp hạng",
+      "where": "appendix/localization.tsv"
+    },
+    {
+      "source": "localization",
+      "key": "Leaderboard / Rank / World / Country",
+      "type": "string",
+      "value": "\"Leaderboard\", \"Rank\", \"World\", \"Country\"",
+      "meaning": "Nhãn tiêu đề và cột",
+      "where": "appendix/localization.tsv"
+    },
+    {
+      "source": "asset",
+      "key": "BackendEnvironmentConfig – endpoint Leaderboard (chỉ path)",
+      "type": "string",
+      "value": "/v1/get-leaderboards (bảng thường trực), /v1/get-weekly-leaderboard, /v1/get-streak-leaderboard, /v1/get-magicstreak-leaderboard, /v2/get-team-leaderboard",
+      "meaning": "Đường dẫn API các bảng xếp hạng",
+      "where": "Assets/MonoBehaviour/BackendEnvironmentConfig.asset"
+    },
+    {
+      "source": "server instance (historical)",
+      "key": "WeeklyTournament leaderboard: IsBot",
+      "type": "",
+      "value": "3/10 bot (swiftpiratequeen, electricliongal, SaltyWizardPro)",
+      "meaning": "Mỗi entry có field IsBot; server độn ~30% bot vào bảng 10 người, bot tự tăng điểm theo thời gian",
+      "where": "PlayerPrefs WeeklyTournamentModel (instance event đang chạy) — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server instance (historical)",
+      "key": "SkyJump ladder totalUserCount",
+      "type": "",
+      "value": "100 → 82 → 64 → 46 → 28 → 16",
+      "meaning": "'100 người' = ladder rớt dần server tính sẵn; mọi id dạng <tournamentId>-N = bot 100%",
+      "where": "PlayerPrefs SkyJumpWithStageModel (instance event đang chạy) — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server instance (historical)",
+      "key": "SkyJump playerImages",
+      "type": "",
+      "value": "60 id bot ↦ ảnh FB thật (static-grand-games.s3…/fb-images)",
+      "meaning": "Bot mặc ảnh người thật",
+      "where": "PlayerPrefs SkyJumpWithStageModel (instance event đang chạy) — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "storage key",
+      "key": "SaveData/leaderboard_model.data worldLeaderboard",
+      "type": "",
+      "value": "1000 mục, 159 ảnh FB thật, 670 có teamName, score 85856→23054",
+      "meaning": "Bảng world seed sẵn 1000 mục (pool fill)",
+      "where": "external files/SaveData — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "storage key",
+      "key": "SaveData/leaderboard_model.data countryLeaderboard",
+      "type": "",
+      "value": "1000 mục, 127 ảnh FB thật, 376 có teamName, score 53995→4565, country=vn",
+      "meaning": "Bảng quốc gia seed sẵn 1000 mục",
+      "where": "external files/SaveData — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server instance (historical)",
+      "key": "TeamsModel.countryLeaderboard",
+      "type": "",
+      "value": "910 đội (VN) — top: Hanoioi (50 tv, 279413 đ); VINABIDA (50 tv, 273354 đ); VIETNAM (45 tv, 255724 đ)",
+      "meaning": "Bảng đội quốc gia server trả về dù Teams tắt cho segment",
+      "where": "PlayerPrefs TeamsModel (instance event đang chạy) — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server instance (historical)",
+      "key": "TeamsModel.globalLeaderboard",
+      "type": "",
+      "value": "1000 đội — top: USA Players (49 tv, 1634869 đ); Team America (48 tv, 1368911 đ); Wrecking Crew (49 tv, 1026023 đ)",
+      "meaning": "Bảng đội toàn cầu",
+      "where": "PlayerPrefs TeamsModel (instance event đang chạy) — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    }
+  ],
+  "rewards": [
+    {
+      "context": "Bảng thường trực (Players/Teams/Friends)",
+      "reward": "Không phát thưởng trực tiếp — chỉ hiển thị thứ hạng",
+      "evidence": "PermanentLeaderboardService (không có API claim)"
+    },
+    {
+      "context": "Tab Weekly",
+      "reward": "Thưởng do WeeklyTournamentService quản lý",
+      "evidence": "WeeklyTournamentLeaderboardController.UpdateView"
+    },
+    {
+      "context": "Liên kết Facebook từ tab Friends",
+      "reward": "FriendsConfigModel.FbConnectReward",
+      "evidence": "FriendsLeaderboardController.InitializeRewardContainer"
+    }
+  ],
+  "backend": [
+    {
+      "command": "GetLeaderboard → PermanentLeaderboardResponse{Players, CountryPlayers, Country}",
+      "direction": "client→server (JSON)",
+      "purpose": "bảng thế giới + quốc gia"
+    },
+    {
+      "command": "GetLeaderboardAsFlatBuffer → GetLeaderboardsResponse",
+      "direction": "client→server (FlatBuffers)",
+      "purpose": "bản tối ưu băng thông của cùng dữ liệu"
+    },
+    {
+      "command": "GetTeamLeaderboard → GetTeamLeaderboardResponse",
+      "direction": "client→server",
+      "purpose": "bảng xếp hạng đội (qua TeamsRemoteService)"
+    },
+    {
+      "command": "GetMyFriendList → FriendListResponse",
+      "direction": "client→server",
+      "purpose": "nguồn cho bảng bạn bè (qua FriendsRemoteService)"
+    },
+    {
+      "command": "GetWeeklyLeaderboardResponse",
+      "direction": "server→client (FlatBuffers)",
+      "purpose": "bảng giải tuần"
+    },
+    {
+      "command": "Schema magicsort.schemas.v1.liveops.global_leaderboard / lava_leaderboard / weekly_leaderboard / streak_leaderboard / magic_streak_leaderboard / champions_league",
+      "direction": "server→client",
+      "purpose": "các họ bảng xếp hạng khác nhau dùng chung khuôn FlatBuffers"
+    }
+  ],
+  "ui": [
+    {
+      "element": "Khung leaderboard 4 tab",
+      "class": "Modules.Contexts.Home.PermanentLeaderboard.Scripts.LeaderboardController",
+      "purpose": "chuyển tab Players/Teams/Friends/Weekly, khoá/mở khu vực"
+    },
+    {
+      "element": "Tab Players (World/Country)",
+      "class": "Modules.Contexts.Home.PermanentLeaderboard.Scripts.UI.PlayersLeaderboardController",
+      "purpose": "hai bảng người chơi"
+    },
+    {
+      "element": "Bảng thế giới",
+      "class": "Modules.Contexts.Home.PermanentLeaderboard.Scripts.UI.World.WorldLeaderboardController, WorldLeaderboardViewAdapter",
+      "purpose": "danh sách toàn cầu, mốc (degrees), ghim dòng của mình"
+    },
+    {
+      "element": "Bảng quốc gia",
+      "class": "Modules.Contexts.Home.PermanentLeaderboard.Scripts.UI.Country.CountryLeaderboardController",
+      "purpose": "danh sách theo quốc gia"
+    },
+    {
+      "element": "Bảng đội",
+      "class": "Modules.Contexts.Home.PermanentLeaderboard.Scripts.UI.TeamsLeaderboardController, TeamLeaderboardViewAdapter",
+      "purpose": "xếp hạng đội world/country"
+    },
+    {
+      "element": "Bảng bạn bè",
+      "class": "Modules.Contexts.Home.PermanentLeaderboard.Scripts.UI.FriendsLeaderboardController, FriendsListView, AddFriendView, FriendsLeaderboardNotificationController",
+      "purpose": "xếp hạng bạn bè + thêm bạn"
+    },
+    {
+      "element": "Bảng giải tuần",
+      "class": "Modules.Contexts.Home.WeeklyTournament.Scripts.UI.WeeklyTournamentLeaderboardController, WeeklyTournamentInProgressView, WeeklyTournamentInResultView",
+      "purpose": "giải tuần đang chạy / kết quả"
+    },
+    {
+      "element": "Mốc thứ hạng",
+      "class": "PermanentLeaderboardDegreeElementView, StickyScrollElementsController",
+      "purpose": "chia mốc và ghim dòng người chơi"
+    }
+  ],
+  "analytics": [
+    {
+      "event": "leaderboard_id",
+      "params": "id bảng",
+      "when": "gửi kèm các sự kiện leaderboard sự kiện"
+    },
+    {
+      "event": "leaderboard_faulted",
+      "params": "-",
+      "when": "nạp bảng xếp hạng thất bại"
+    },
+    {
+      "event": "leaderboard_model",
+      "params": "-",
+      "when": "khởi tạo dịch vụ (InstallAndInitializeApplicationContextServicesCommand)"
+    }
+  ],
+  "storage_keys": [
+    "LeaderboardModel (ISaveLoad: WorldLeaderboard, CountryLeaderboard, Country)"
+  ],
+  "related_features": [
+    "Teams",
+    "Friends",
+    "Profile",
+    "Account"
+  ],
+  "gaps": [
+    "Cách backend tính Score (dựa trên level đã qua hay điểm riêng) không nhìn thấy trong client.",
+    "15/11 — partial_static_code_unresolved: Đã đọc Show và Initialize của LeaderboardController: dựng/chọn tab và UI với weekly tournament state; không có bodyGetLevel/constant40 trong các method này. Mốc40 trong localization vẫn chỉ là displaytext cho tới khi trace entry/nav gate. Còn lại: Cần caller navigation/tab unlock và remote rootflag; không thể lấy thiếu levelcheck trong Show để gọi mở từ mọi level.",
+    "Chu kỳ reset của bảng thường trực (nếu có) do server quyết định.",
+    "15/11 — resolved_static_code_historical_build: SkyJumpRemoteService async get parse LavaTournamentData.GetRootAsLavaTournamentData và next-start parse LavaTournamentStartTime. Schema thuộc SkyJump/lava, không cần ép vào permanent leaderboards chỉ vì thư mục schema chung. Còn lại: Cần đối chiếu ARM64/current runtime và các nhánh caller còn chưa đủ bằng chứng.",
+    "[Runtime 2026-09-10] Cơ chế người chơi giả đã xác nhận từ runtime: IsBot trong leaderboard, ladder id tổng hợp Sky Jump, bảng world/country seed 1000 mục (facts/runtime/fake-players.md)."
+  ],
+  "sources": [
+    "Il2CppDumper/dump.cs: PermanentLeaderboardService, PermanentLeaderboardRemoteService, PermanentLeaderboardDataService, LeaderboardController, PlayersLeaderboardController, WorldLeaderboardController, CountryLeaderboardController, TeamsLeaderboardController, FriendsLeaderboardController, WeeklyTournamentLeaderboardController, LeaderboardPlayer, LeaderboardModel, LeaderboardMedalType, GlobalLeaderboardPlayer, GetLeaderboardsResponse",
+    "RecoveredNative/PseudoC/Assembly-CSharp/Modules/Contexts/Home/PermanentLeaderboard/**, MagicSort/schemas/v1/liveops/global_leaderboard/**",
+    "RecoveredNative/strings-by-type.tsv (LeaderboardController, PlayersLeaderboardController, FriendsLeaderboardController)",
+    "GameDesign/appendix/localization.tsv (Leaderboard, LeaderboardSectionInfo, World, Country, Rank)"
+  ],
+  "audit_provenance": {
+    "review_date": "2026-11-15",
+    "mode": "offline_existing_files",
+    "code_build": "0.0.3063 ARMv7",
+    "runtime_build_observed_historically": "0.0.3129 ARM64 (audit 2026-10-18); not rechecked 2026-11-15",
+    "new_playtests": 2,
+    "uc_status": "See facts/audit_20261115/uc_registry.json; image reference is not pass",
+    "workbook_status": "Existing XLSX is historical; JSON and local web include 2026-11-15 corrections",
+    "static_review": "facts/local_code_gap_results_20261115.json; facts/local_asset_gap_results_20261115.json; facts/final_data_gap_decisions_20261115.json; facts/core_body_gap_decisions_20261115.json; facts/remaining_asset_gap_decisions_20261115.json"
+  },
+  "runtime_review_20261115": [
+    {
+      "id": "MS-R15-SOC02",
+      "feature": "Leaderboards",
+      "uc": [
+        "UC-06",
+        "UC-08"
+      ],
+      "title": "Leaderboard cached và các taboffline",
+      "precondition": "0.0.3129 ARM64, level351, UID offline; save fixture có sẵn và instance tháng10.",
+      "steps": [
+        "MởLeaderboard",
+        "ChọnFriends",
+        "ChọnTeams"
+      ],
+      "expected": "Phân biệt dữliệu cached, mấtkếtnối và chưa mở.",
+      "actual": "Weekly hiển thị leaderboard cũ Finished; Friends hiện No Internet Connection!; Teams World/Country hiện Coming Soon!. Currency không đổi.",
+      "status": "verified_observed_branch",
+      "limitations": "ẢnhWeekly raw giữlocal vì có tênngườichơi; không dùng bảngcache làmrank mới. Chưarefresh/country/2account.",
+      "images": [
+        "SOC03_friends",
+        "SOC04_teams_board"
+      ],
+      "before": "SOC02_leaderboard",
+      "after": "SOC04_teams_board",
+      "currency_unchanged": true,
+      "build": "0.0.3129 ARM64",
+      "mode": "offline_existing_fixture",
+      "date": "2026-11-15",
+      "ledger": {
+        "before": "SOC02_leaderboard.json",
+        "after": "SOC04_teams_board.json"
+      },
+      "related_uc": [
+        "UC-05",
+        "UC-11"
+      ],
+      "uc_scope_note": "related_uc chỉ context/dependency: gate, chưa vào UC, khác subsystem hoặc teardown nội bộ chưa đo; không tính vào executed branch coverage.",
+      "uc_scope": {
+        "UC-06": "attempted_entry_offline_error_only",
+        "UC-08": "cached_weekly_result_ui_only"
+      }
+    },
+    {
+      "id": "MS-R15-SOC03",
+      "feature": "Leaderboards",
+      "uc": [
+        "UC-02",
+        "UC-03",
+        "UC-04",
+        "UC-11"
+      ],
+      "title": "Players World và Country từ cache offline",
+      "precondition": "0.0.3129 ARM64; level352, UID MagicSort offline, save fixture có sẵn. Code/asset0.0.3063 là nguồn lịch sử riêng.",
+      "steps": [
+        "Chọn Players World",
+        "Chọn Country"
+      ],
+      "expected": "Phân biệt bảng Permanent cached với Weekly.",
+      "actual": "World hiện các hạng993–1000, dòng của mình hạng1000 với level352; Country hiển thị cache khác. Không có kết nối mới.",
+      "limitations": "Chỉ cached UI; không gắn UC-01 fetch/login mới, không coi rank hiện tại production hoặc đã refresh. UC-04 chỉ self row thấy được, chưa kiểm tra hành vi sticky khi cuộn.",
+      "status": "observed_partial",
+      "before": "MORE20_players",
+      "after": "MORE21_country",
+      "images": [
+        "MORE20_players",
+        "MORE21_country"
+      ],
+      "build": "0.0.3129 ARM64",
+      "mode": "offline_existing_fixture",
+      "date": "2026-11-15",
+      "currency_unchanged": true,
+      "ledger": {
+        "before": "MORE20_players.json",
+        "after": "MORE21_country.json"
+      }
+    }
+  ],
+  "static_review_20261115": {
+    "date": "2026-11-15",
+    "scope": "Historical code/assets 0.0.3063, dated caches, device 0.0.3129 cached bundles and explicitly scoped runtime evidence. Not full runtime pass.",
+    "findings": [
+      {
+        "kind": "code",
+        "source_report": "facts/local_code_gap_results_20261115.json",
+        "id": "MS-CODE-42",
+        "gap_ids": [
+          "MS-Leaderboards-G004"
+        ],
+        "title": "lava_leaderboard có consumer SkyJump",
+        "status": "resolved_static_code",
+        "conclusion": "SkyJumpRemoteService async get parse LavaTournamentData.GetRootAsLavaTournamentData và next-start parse LavaTournamentStartTime. Schema thuộc SkyJump/lava, không cần ép vào permanent leaderboards chỉ vì thư mục schema chung.",
+        "evidence": [
+          {
+            "file": "../com.grandgames.magicsort_Unity_20260909_112501/RecoveredNative/PseudoC/Assembly-CSharp/Modules/Contexts/Home/SkyJump/Scripts/SkyJumpRemoteService.c",
+            "line": 517,
+            "end_line": 563,
+            "method": "LavaTournamentData__GetRootAsLavaTournamentData",
+            "sha256": "400d369b2575b3824a372826498a28b5e24b3074ce2debbda838a06716fc1284",
+            "body_checked": true,
+            "build": "0.0.3063 ARMv7",
+            "required_body_tokens": []
+          }
+        ],
+        "remaining": "Cần đối chiếu ARM64/current runtime và các nhánh caller còn chưa đủ bằng chứng.",
+        "scope": "recovered_native_0.0.3063_only",
+        "runtime_verified": false
+      },
+      {
+        "kind": "code",
+        "source_report": "facts/local_code_gap_results_20261115.json",
+        "id": "MS-CODE-53",
+        "gap_ids": [
+          "MS-Leaderboards-G002"
+        ],
+        "title": "Leaderboard.Show không chứa unlock level40",
+        "status": "partial_static_code",
+        "conclusion": "Đã đọc Show và Initialize của LeaderboardController: dựng/chọn tab và UI với weekly tournament state; không có bodyGetLevel/constant40 trong các method này. Mốc40 trong localization vẫn chỉ là displaytext cho tới khi trace entry/nav gate.",
+        "evidence": [
+          {
+            "file": "../com.grandgames.magicsort_Unity_20260909_112501/RecoveredNative/PseudoC/Assembly-CSharp/Modules/Contexts/Home/PermanentLeaderboard/Scripts/LeaderboardController.c",
+            "line": 406,
+            "end_line": 698,
+            "method": "// ===== LeaderboardController :: public void Show()",
+            "sha256": "24f9493baf7e3f39d57a802b6cd16258fe5fd7c195f4c86aaf850ae449c0027b",
+            "body_checked": true,
+            "build": "0.0.3063 ARMv7",
+            "required_body_tokens": []
+          }
+        ],
+        "remaining": "Cần caller navigation/tab unlock và remote rootflag; không thể lấy thiếu levelcheck trong Show để gọi mở từ mọi level.",
+        "scope": "recovered_native_0.0.3063_only",
+        "runtime_verified": false
+      }
+    ]
+  },
+  "acceptance_review_20261115": {
+    "source": "facts/feature_acceptance_20261115.json",
+    "feature_id": "Leaderboards",
+    "scope": "All eleven dossier dimensions reviewed; full_feature_verified is not implied; read per-dimension gaps and actual runtime evidence."
+  },
+  "segment_ab_review_20261115": {
+    "status": "not_identified_in_sources",
+    "segment_ids": [],
+    "matching_basis": "explicit_gd_config_map_or_exact_model_token_in_gdd_configs_where_key_sources; rootfieldscoped",
+    "rows": [],
+    "classifications": {},
+    "assignment_verified": false,
+    "uplift_verified": false,
+    "note": "No matchingrow does not prove no segmentation/AB. Rewardbucketfalsepositives remain explicitly classified."
+  },
+  "continuation_review_20261116": {
+    "date": "2026-11-16",
+    "build": "0.0.3129 ARM64 host APK",
+    "build_scope": "Host APK version3129 matches LAST observed installed version15/11 only; installed bytes/live device16/11 not verified.",
+    "runtime_status": "device_unavailable",
+    "runtime_case_ids": [],
+    "current_apk_model_links": {
+      "feature": "Leaderboards",
+      "models": [
+        {
+          "model": "FriendsConfigModel",
+          "current_default_file": "facts/review_20261116/public_current_config_3129/defaults/FriendsConfigModel.json",
+          "resource_path": "defaultconfigs/friendsconfigmodel",
+          "sha256": "c83a3cacf5217b85193fe648a100a0c685bbbc53c3677500972d997f54287ecd",
+          "matching_basis": [
+            "gdd/Leaderboards.json#/configs"
+          ],
+          "scope": "Packaged default3129, not effective server config.",
+          "site_data_path": "data/current_config_3129/defaults/FriendsConfigModel.json",
+          "original_source_sha256": "c83a3cacf5217b85193fe648a100a0c685bbbc53c3677500972d997f54287ecd",
+          "public_artifact_sha256": "ea37dbf29453226392b3acb81a697d74702e92814c0c4a4c138e54c8bade8bd4",
+          "sha256_scope": "sha256 is original raw model; public_artifact_sha256 is the sanitized download"
+        },
+        {
+          "model": "HttpConfig",
+          "current_default_file": "facts/review_20261116/public_current_config_3129/defaults/HttpConfig.json",
+          "resource_path": "defaultconfigs/httpconfig",
+          "sha256": "586cb564c2d6aabf03cc85d390a83f01602b245bdbe53450a709559baa6dc0a1",
+          "matching_basis": [
+            "gdd/Leaderboards.json#/configs"
+          ],
+          "scope": "Packaged default3129, not effective server config.",
+          "site_data_path": "data/current_config_3129/defaults/HttpConfig.json",
+          "original_source_sha256": "586cb564c2d6aabf03cc85d390a83f01602b245bdbe53450a709559baa6dc0a1",
+          "public_artifact_sha256": "8cdc1d8d46d4569d436ce212522519373a3c07d8815c93ad6fd85df53bb81144",
+          "sha256_scope": "sha256 is original raw model; public_artifact_sha256 is the sanitized download"
+        },
+        {
+          "model": "TeamsConfigModel",
+          "current_default_file": "facts/review_20261116/public_current_config_3129/defaults/TeamsConfigModel.json",
+          "resource_path": "defaultconfigs/teamsconfigmodel",
+          "sha256": "9b48472dcef39f9708fc3ff8540f8ed15c358eb255ea18228295f71fcf983953",
+          "matching_basis": [
+            "gdd/Leaderboards.json#/configs"
+          ],
+          "scope": "Packaged default3129, not effective server config.",
+          "site_data_path": "data/current_config_3129/defaults/TeamsConfigModel.json",
+          "original_source_sha256": "9b48472dcef39f9708fc3ff8540f8ed15c358eb255ea18228295f71fcf983953",
+          "public_artifact_sha256": "966d847eb34f4b69cbc3b03b8f07e4ed5c9656a160aeb59cd1a9e11754e3fb13",
+          "sha256_scope": "sha256 is original raw model; public_artifact_sha256 is the sanitized download"
+        }
+      ],
+      "status": "exact_model_source_association",
+      "distribution": "sanitized_public",
+      "public_mapping_pending": false
+    },
+    "current_packaged_defaults": [
+      {
+        "model": "FriendsConfigModel",
+        "source": "facts/review_20261116/public_current_config_3129/defaults/FriendsConfigModel.json",
+        "site_data_path": "data/current_config_3129/defaults/FriendsConfigModel.json",
+        "public_artifact_sha256": "ea37dbf29453226392b3acb81a697d74702e92814c0c4a4c138e54c8bade8bd4",
+        "original_source_sha256": "c83a3cacf5217b85193fe648a100a0c685bbbc53c3677500972d997f54287ecd",
+        "source_class": "static_asset",
+        "build": "0.0.3129 host APK",
+        "scope": "Sanitized packaged default fullvalues only; not effective remote/selected config or runtime.",
+        "values": {
+          "IsEnabled": false,
+          "MaxFriendCount": 100,
+          "FbConnectReward": {
+            "CurrencyType": 1,
+            "Amount": 300
+          },
+          "IsFacebookFriendsEnabled": false
+        }
+      },
+      {
+        "model": "HttpConfig",
+        "source": "facts/review_20261116/public_current_config_3129/defaults/HttpConfig.json",
+        "site_data_path": "data/current_config_3129/defaults/HttpConfig.json",
+        "public_artifact_sha256": "8cdc1d8d46d4569d436ce212522519373a3c07d8815c93ad6fd85df53bb81144",
+        "original_source_sha256": "586cb564c2d6aabf03cc85d390a83f01602b245bdbe53450a709559baa6dc0a1",
+        "source_class": "static_asset",
+        "build": "0.0.3129 host APK",
+        "scope": "Sanitized packaged default fullvalues only; not effective remote/selected config or runtime.",
+        "values": {
+          "UsePermanentLeaderboardV2": false
+        }
+      },
+      {
+        "model": "TeamsConfigModel",
+        "source": "facts/review_20261116/public_current_config_3129/defaults/TeamsConfigModel.json",
+        "site_data_path": "data/current_config_3129/defaults/TeamsConfigModel.json",
+        "public_artifact_sha256": "966d847eb34f4b69cbc3b03b8f07e4ed5c9656a160aeb59cd1a9e11754e3fb13",
+        "original_source_sha256": "9b48472dcef39f9708fc3ff8540f8ed15c358eb255ea18228295f71fcf983953",
+        "source_class": "static_asset",
+        "build": "0.0.3129 host APK",
+        "scope": "Sanitized packaged default fullvalues only; not effective remote/selected config or runtime.",
+        "values": {
+          "IsEnable": false,
+          "UnlockLevel": 40,
+          "TeamCapacity": 50,
+          "CreateCost": 100,
+          "MaxHelpCount": 5,
+          "DefaultHelpCooldown": 14400,
+          "HelpSupportReward": 5,
+          "MaxColeaderCount": 3
+        }
+      }
+    ],
+    "native_finding_ids": [],
+    "documentation_source_coverage": {
+      "dossier_present": true,
+      "use_case_catalog_count": 14,
+      "config_catalog_rows": 22,
+      "current_apk_default_model_links": 3,
+      "current_native_findings": 0,
+      "scope": "Documentation/source coverage only; not complete runtime verification."
+    },
+    "runtime_completion": {
+      "date": "2026-11-16",
+      "status": "device_unavailable",
+      "executed_case_count": 0,
+      "full_feature_runtime_verified": false
+    },
+    "planned_branch": "Từ hàng leaderboard cached thử profile detail và đóng; kiểm tra tab team/global còn chưa render, skeleton và nút retry.",
+    "target_uc_ids": [
+      "UC-01",
+      "UC-05",
+      "UC-09"
+    ],
+    "execution_phase": "noncore_first",
+    "core_or_levels_last": false,
+    "actionability_full_json": "facts/continuation_20261116/current/feature_actionability.json",
+    "actionability_site_data_path": "data/continuation_20261116/feature_actionability.json",
+    "source_classes": [
+      "static_asset"
+    ],
+    "full_feature_verified": false
+  }
+}

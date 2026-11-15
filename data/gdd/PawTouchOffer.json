@@ -1,0 +1,999 @@
+{
+  "id": "PawTouchOffer",
+  "name": "Paw Touch Offer",
+  "category": "Economy",
+  "managers": [
+    "Modules.Contexts.Home.Monetization.PawTouchOffer.Scripts.PawTouchOfferService",
+    "Modules.Contexts.Home.Monetization.PawTouchOffer.Scripts.PawTouchOfferDataService",
+    "Modules.Contexts.Home.Monetization.PawTouchOffer.Scripts.PawTouchOfferStateService",
+    "Modules.Contexts.Home.Monetization.PawTouchOffer.Scripts.PawTouchOfferRemoteService",
+    "Modules.Contexts.Home.Monetization.PawTouchOffer.Scripts.PawTouchOfferConfig"
+  ],
+  "summary": "Paw Touch Offer là gói ưu đãi chớp nhoáng chèn vào màn Play On (khi người chơi hết nước và được mời chơi tiếp). Điều kiện kích hoạt gắn với túi tiền của người chơi: PawTouchOfferStateService chỉ cho hiện khi số coin đang có nhỏ hơn ngưỡng MaxCoinAmountToShow = 2000 — tức nhắm đúng người chơi đang thiếu tiền để mua booster/Play On. Container chỉ hiện trong một khoảng ngắn (ShowDurationInSeconds) tạo cảm giác gấp gáp. Gói theo phân khúc do server gửi (PawTouchOfferPackage: IAPProductId, IAPProductDiscountAmount, RewardModels), có bảng thưởng dự phòng trong remote config.",
+  "unlock": "PawTouchOfferStateService.GetState() / GetContainerState() dựa trên: PawTouchOfferConfig.IsEnable, level >= PawTouchOfferConfig.FirstLevelToShow (IPlayerService), có PawTouchOfferPackage trong cache, chưa mua (IsPurchased == false), còn hạn (GetEndDate), và số coin hiện tại (InventoryService) < MaxCoinAmountToShow = 2000. ShouldShowPlayOnContainer() và CanPurchaseOffer() là hai cổng cuối.",
+  "entry_points": [
+    "Container chèn trong màn Play On (ShouldShowPlayOnContainer / OnPlayOnContainerShowed)",
+    "Popup Paw Touch (localization PawTouchTitle 'Paw Touch')"
+  ],
+  "flow": "PawTouchOfferStateService dùng hai enum lồng: PawTouchOfferState (trạng thái tổng của offer) và PawTouchOfferContainerState (trạng thái riêng của container trong Play On). Khi ShouldSendGetRequest(), PawTouchOfferService.TryFetchCurrentEvent() → TrySendGetPawTouchOfferRequest() gọi PawTouchOfferRemoteService; kết quả lưu qua PawTouchOfferDataService: SetEventID, SetEventType, SetSegment, SetEndDate, SetOfferPackage(PawTouchOfferPackage{IAPProductId, IAPProductDiscountAmount, RewardModels}). Khi người chơi hết nước, PawTouchOfferStateService.ShouldShowPlayOnContainer() kiểm tra điều kiện coin < 2000 và các cổng khác; container hiện ra, PawTouchOfferService.OnPlayOnContainerShowed(offerPackage) ghi nhận và đặt SetShowEndDate(showEndDateUnixSeconds) = now + PawTouchOfferConfig.ShowDurationInSeconds, đồng thời SetIsShowed(true); GetShowRemainingTimeInSeconds() / GetShowEndDateTime() chạy đồng hồ đếm ngược riêng cho container, còn GetRemainingTimeInSeconds() / GetEndDateTime() là hạn của cả offer. Analytics: lần hiện đầu tiên bắn paw_touch_offer_first_impression, các lần sau bắn paw_touch_offer_impression. Mua: GetUniqueIAPConfigModels() / GetIAPConfigModel(iapProductId) lấy sản phẩm từ PawTouchOfferConfig.IAPConfigModels; IAPService mua với IAPOrigin.PawTouchOffer (5), IAPReason.PawTouchOffer (7). Thành công: PawTouchOfferService.OnPurchaseOffer(productId, out List<RewardModel> rewards) gọi GetOfferPackage(productId, out bool isFallback) — nếu không tra được thì dùng PawTouchOfferConfig.FallBackRewardModels và đánh dấu 'fallback' (bắn paw_touch_offer_fallback_rewards); trao thưởng với CurrencyEarnReason.PawTouchOffer (20), SetIsPurchased(true) và bắn paw_touch_offer_purchased. Sau đó ShouldSendClaimRequest() → TrySendClaimPawTouchOfferRequest() báo server, SetIsClaimSent(true). PawTouchOfferDataService là ISyncable với SyncName 'PawTouchOfferSyncableData'.",
+  "use_cases": [
+    {
+      "id": "UC-01",
+      "title": "Kiểm tra điều kiện tổng của offer",
+      "actor": "System",
+      "trigger": "Vào Home / IntervalUpdate",
+      "precondition": "Có remote config",
+      "steps": [
+        "PawTouchOfferStateService.UpdateState() → GetState() trả PawTouchOfferState",
+        "Kiểm tra PawTouchOfferConfig.IsEnable, level vs FirstLevelToShow (IPlayerService)",
+        "Kiểm tra PawTouchOfferDataService.GetOfferPackage() có dữ liệu và IsPurchased() == false",
+        "Kiểm tra GetEndDate() còn hạn"
+      ],
+      "result": "Offer chỉ ở trạng thái sẵn sàng khi mọi điều kiện thoả",
+      "rules": "Metadata0.0.3129: PawTouchOfferState Disabled0,Active1,Claimed2,WaitForInvalidation3,InvalidEvent4; PawTouchOfferContainerState NotVisible0,Visible1. Đây là symbolic mapping thực, không đặt tên suy đoán từ old raw branch.",
+      "evidence": "PawTouchOfferStateService.GetState; PawTouchOfferStateService.UpdateState; PawTouchOfferDataService.IsPurchased; PawTouchOfferService.GetEndDateTime"
+    },
+    {
+      "id": "UC-02",
+      "title": "Nhắm người chơi đang thiếu coin",
+      "actor": "System",
+      "trigger": "Chuẩn bị hiện container trong Play On",
+      "precondition": "-",
+      "steps": [
+        "PawTouchOfferStateService.GetContainerState() đọc số coin hiện có từ InventoryService",
+        "So với hằng số MaxCoinAmountToShow = 2000",
+        "Coin >= 2000 → không hiện container (người chơi không đủ động lực mua)",
+        "Coin < 2000 → cho phép hiện"
+      ],
+      "result": "Offer chỉ xuất hiện với người chơi thực sự đang thiếu tiền để tiếp tục",
+      "rules": "MaxCoinAmountToShow = 2000 là hằng số cứng trong PawTouchOfferStateService (không phải remote config)",
+      "evidence": "PawTouchOfferStateService.MaxCoinAmountToShow; PawTouchOfferStateService.GetContainerState; PawTouchOfferStateService..ctor(inventoryService)"
+    },
+    {
+      "id": "UC-03",
+      "title": "Lấy gói ưu đãi theo phân khúc",
+      "actor": "System",
+      "trigger": "PawTouchOfferStateService.ShouldSendGetRequest() == true",
+      "precondition": "Có mạng",
+      "steps": [
+        "PawTouchOfferService.TryFetchCurrentEvent() → TrySendGetPawTouchOfferRequest()",
+        "PawTouchOfferRemoteService gửi request qua HttpProxy (schema magicsort.schemas.v1.liveops.paw_touch_offer.PawTouchOfferResponse)",
+        "PawTouchOfferDataService.SetEventID(eventId), SetEventType(eventType), SetSegment(segment), SetEndDate(endDate)",
+        "SetOfferPackage(PawTouchOfferPackage{IAPProductId, IAPProductDiscountAmount, RewardModels})"
+      ],
+      "result": "Gói và hạn chót sẵn sàng, chờ đúng thời điểm để hiện",
+      "rules": "IAPProductDiscountAmount là % giảm giá hiển thị trên nút mua",
+      "evidence": "PawTouchOfferService.TryFetchCurrentEvent; PawTouchOfferService.TrySendGetPawTouchOfferRequest; PawTouchOfferDataService.SetOfferPackage; PawTouchOfferDataService.SetEndDate"
+    },
+    {
+      "id": "UC-04",
+      "title": "Hiện container trong màn Play On",
+      "actor": "Player",
+      "trigger": "Hết nước ở level và vào màn Play On",
+      "precondition": "PawTouchOfferStateService.ShouldShowPlayOnContainer() == true",
+      "steps": [
+        "Container Paw Touch chèn vào màn Play On (PawTouchOfferContainerAnimationConfig, 16 field)",
+        "PawTouchOfferService.OnPlayOnContainerShowed(offerPackage) ghi nhận",
+        "PawTouchOfferDataService.SetIsShowed(true) và SetShowEndDate(now + PawTouchOfferConfig.ShowDurationInSeconds)",
+        "GetShowRemainingTimeInSeconds() chạy đồng hồ đếm ngược ngắn trên container",
+        "Lần đầu: EventSender.SendPawTouchOfferContainerFirstImpressionStat(offerPackage) → paw_touch_offer_first_impression; các lần sau: SendPawTouchOfferContainerImpressionStat(offerPackage) → paw_touch_offer_impression (kèm product_id, price, currency, dollar_equivalent, event_id, event_type, user_segment, remaining_duration, progress)"
+      ],
+      "result": "Ưu đãi xuất hiện đúng khoảnh khắc người chơi cần tiền nhất, với đồng hồ tạo áp lực",
+      "rules": "Hai đồng hồ tách biệt: ShowEndDate (thời gian container còn hiện) và EndDate (hạn của cả offer)",
+      "evidence": "PawTouchOfferStateService.ShouldShowPlayOnContainer; PawTouchOfferService.OnPlayOnContainerShowed; PawTouchOfferDataService.SetShowEndDate; PawTouchOfferService.GetShowRemainingTimeInSeconds; EventSender.SendPawTouchOfferContainerFirstImpressionStat"
+    },
+    {
+      "id": "UC-05",
+      "title": "Mua gói Paw Touch",
+      "actor": "Player",
+      "trigger": "Bấm nút mua trên container",
+      "precondition": "PawTouchOfferStateService.CanPurchaseOffer() == true",
+      "steps": [
+        "PawTouchOfferService.GetIAPConfigModel(iapProductId) lấy sản phẩm từ PawTouchOfferConfig.IAPConfigModels",
+        "IAPService mua với IAPOrigin.PawTouchOffer (5), IAPReason.PawTouchOffer (7)",
+        "IAPPurchaseVerificationService xác thực receipt",
+        "PawTouchOfferService.OnPurchaseOffer(productId, out List<RewardModel> rewards) → GetOfferPackage(productId, out isFallback)",
+        "RewardService trao với CurrencyEarnReason.PawTouchOffer (20)",
+        "PawTouchOfferDataService.SetIsPurchased(true)",
+        "EventSender.SendPawTouchOfferPurchasedStat(offerPackage) → paw_touch_offer_purchased với product_id, price, currency, dollar_equivalent, event_id, event_type, user_segment, remaining_duration, progress"
+      ],
+      "result": "Nhận thưởng ngay để chơi tiếp level đang dở",
+      "rules": "Offer chỉ mua được một lần mỗi đợt (IsPurchased trong PawTouchOfferData)",
+      "evidence": "PawTouchOfferService.OnPurchaseOffer; PawTouchOfferService.GetIAPConfigModel; PawTouchOfferStateService.CanPurchaseOffer; PawTouchOfferDataService.SetIsPurchased; EventSender.SendPawTouchOfferPurchasedStat"
+    },
+    {
+      "id": "UC-06",
+      "title": "Thưởng dự phòng khi không tra được gói",
+      "actor": "System",
+      "trigger": "GetOfferPackage(productId) không khớp (giao dịch tới trễ, cache mất)",
+      "precondition": "-",
+      "steps": [
+        "PawTouchOfferService.GetOfferPackage(productId, out bool isFallback) đặt isFallback = true (chuỗi 'fallback' trong pseudo-C)",
+        "Dùng PawTouchOfferConfig.FallBackRewardModels",
+        "EventSender.SendPawTouchOfferFallBackRewardsStat() → paw_touch_offer_fallback_rewards"
+      ],
+      "result": "Người chơi vẫn nhận thưởng dù client mất dữ liệu gói",
+      "rules": "Cơ chế fallback dùng chung với SpecialOffer / EndlessPortal",
+      "evidence": "PawTouchOfferService.GetOfferPackage; PawTouchOfferConfig.FallBackRewardModels; EventSender.SendPawTouchOfferFallBackRewardsStat"
+    },
+    {
+      "id": "UC-07",
+      "title": "Báo server đã mua",
+      "actor": "System",
+      "trigger": "Sau khi trao thưởng",
+      "precondition": "PawTouchOfferStateService.ShouldSendClaimRequest() == true",
+      "steps": [
+        "PawTouchOfferService.TrySendClaimPawTouchOfferRequest()",
+        "PawTouchOfferRemoteService gửi claim với eventId từ PawTouchOfferDataService.GetEventId()",
+        "PawTouchOfferDataService.SetIsClaimSent(true)"
+      ],
+      "result": "Server biết offer đã dùng, không phát lại cho người chơi này",
+      "rules": "IsClaimSent tách riêng với IsPurchased để thử lại claim khi mất mạng",
+      "evidence": "PawTouchOfferService.TrySendClaimPawTouchOfferRequest; PawTouchOfferStateService.ShouldSendClaimRequest; PawTouchOfferDataService.SetIsClaimSent; PawTouchOfferDataService.IsClaimSent"
+    },
+    {
+      "id": "UC-08",
+      "title": "Hết thời gian hiện container",
+      "actor": "System",
+      "trigger": "Quá ShowEndDate",
+      "precondition": "IsShowed == true",
+      "steps": [
+        "PawTouchOfferService.GetShowRemainingTimeInSeconds() về 0",
+        "GetContainerState() chuyển sang trạng thái đã hết hạn hiển thị",
+        "Container biến mất khỏi màn Play On"
+      ],
+      "result": "Áp lực thời gian thật sự — bỏ lỡ là mất",
+      "rules": "ShowDurationInSeconds do server đặt trong PawTouchOfferConfig",
+      "evidence": "PawTouchOfferService.GetShowRemainingTimeInSeconds; PawTouchOfferService.GetShowEndDateTime; PawTouchOfferStateService.GetContainerState; PawTouchOfferConfig.ShowDurationInSeconds"
+    },
+    {
+      "id": "UC-09",
+      "title": "Hết hạn cả đợt offer",
+      "actor": "System",
+      "trigger": "Quá EndDate",
+      "precondition": "-",
+      "steps": [
+        "PawTouchOfferService.GetRemainingTimeInSeconds() / GetEndDateTime() về 0",
+        "State chuyển sang hết hạn, container không còn hiện",
+        "ShouldSendGetRequest() cho phép lấy đợt mới"
+      ],
+      "result": "Chờ đợt Paw Touch tiếp theo từ server",
+      "rules": "Hai mốc thời gian độc lập (show và event)",
+      "evidence": "PawTouchOfferService.GetRemainingTimeInSeconds; PawTouchOfferService.GetEndDateTime; PawTouchOfferStateService.ShouldSendGetRequest"
+    },
+    {
+      "id": "UC-10",
+      "title": "Đồng bộ và xoá dữ liệu",
+      "actor": "System",
+      "trigger": "SyncService / reset tài khoản",
+      "precondition": "-",
+      "steps": [
+        "PawTouchOfferDataService.GetSyncName() = 'PawTouchOfferSyncableData'",
+        "SerializeModelForSync() / OverwriteModelFromSync(data)",
+        "MarkDataForLateUpdate(shouldSyncWithBackend); LateUpdate() lưu khi IsDataChangedSinceLastSave()",
+        "DeleteData() xoá toàn bộ PawTouchOfferData"
+      ],
+      "result": "Trạng thái đã mua/đã hiện đồng bộ giữa thiết bị",
+      "rules": "PawTouchOfferDataService implement ISyncable, IDeletable, ILateUpdate",
+      "evidence": "PawTouchOfferDataService.GetSyncName; PawTouchOfferDataService.SerializeModelForSync; PawTouchOfferDataService.OverwriteModelFromSync; PawTouchOfferDataService.DeleteData"
+    },
+    {
+      "id": "UC-11",
+      "title": "Mua thất bại",
+      "actor": "System",
+      "trigger": "Store từ chối hoặc verify thất bại",
+      "precondition": "-",
+      "steps": [
+        "IAPService trả StorePurchaseFailureReason",
+        "EventSender.SendPurchaseFailedEvent(productId, …, IAPReason.PawTouchOffer) → purchase_failed",
+        "IsPurchased vẫn false; nếu container còn thời gian thì vẫn mua lại được",
+        "Giao dịch treo được xử lý ở lần vào game sau qua luồng fallback (UC-06)"
+      ],
+      "result": "Không mất tiền, không mất thưởng",
+      "rules": "EventSender.SendNotRequestedIAPStat ghi lại giao dịch chưa được yêu cầu",
+      "evidence": "EventSender.SendPurchaseFailedEvent; EventSender.SendNotRequestedIAPStat; PawTouchOfferService.GetOfferPackage"
+    }
+  ],
+  "configs": [
+    {
+      "source": "code const",
+      "key": "PawTouchOfferStateService.MaxCoinAmountToShow",
+      "type": "int",
+      "value": "2000",
+      "meaning": "Chỉ hiện offer khi số coin của người chơi thấp hơn ngưỡng này",
+      "where": "PawTouchOfferStateService"
+    },
+    {
+      "source": "server info",
+      "key": "PawTouchOfferConfig.IsEnable / EventType / FirstLevelToShow",
+      "type": "bool/int",
+      "value": "server",
+      "meaning": "Bật tắt, loại sự kiện, level mở khoá",
+      "where": "RemoteConfigs → PawTouchOfferConfig (IRemoteConfigValidatable)"
+    },
+    {
+      "source": "Default/code0.0.3063 and historical caches20260910/20261010; per-snapshot source/hash in snapshot_values; not effective-runtime proof",
+      "key": "PawTouchOfferConfig.ShowDurationInSeconds",
+      "type": "int",
+      "value": "default_0.0.3063: 1800; cache_20260910: 1800; cache_20261010: 1800; firebase_20260910: 1800",
+      "meaning": "Thời gian container hiện trong màn Play On [15/11: giá trị theo snapshot cụ thể; thiếu field khác với false/0. Không xác nhận assignment hoặc effective runtime.]",
+      "where": "PawTouchOfferService.OnPlayOnContainerShowed",
+      "previous_unresolved_value": "server",
+      "snapshot_values": [
+        {
+          "snapshot": "default_0.0.3063",
+          "model": "PawTouchOfferConfig",
+          "key": "ShowDurationInSeconds",
+          "value": 1800,
+          "type": "int",
+          "source": "../com.grandgames.magicsort_Unity_20260909_112501/UnityExport/ExportedProject/Assets/Resources/defaultconfigs/PawTouchOfferConfig.json",
+          "value_type": "int",
+          "source_sha256": "d6ada66a089a59dbecb64c6499e93bd364ab7f1cfc77cb5b3bbc99b48150645a",
+          "field_present": true
+        },
+        {
+          "snapshot": "cache_20260910",
+          "model": "pawTouchOfferConfig",
+          "key": "showDurationInSeconds",
+          "value": 1800,
+          "type": "int",
+          "source": "facts/runtime/server_configs/pawTouchOfferConfig.json",
+          "value_type": "int",
+          "source_sha256": "e9b89393225b44eaf1ce2920989949c95a0b2517a79d93ed4f27998212c5c876",
+          "field_present": true
+        },
+        {
+          "snapshot": "cache_20261010",
+          "model": "pawTouchOfferConfig",
+          "key": "showDurationInSeconds",
+          "value": 1800,
+          "type": "int",
+          "source": "facts/runtime/test_20261010/before/CachedRemoteConfigs",
+          "value_type": "int",
+          "source_sha256": "433164d4877b2dee55d2bbd79ef2fe83d3fe9519492fe15e3cb0926daf216050",
+          "field_present": true
+        },
+        {
+          "snapshot": "firebase_20260910",
+          "model": "PawTouchOfferConfig",
+          "key": "ShowDurationInSeconds",
+          "value": 1800,
+          "type": "int",
+          "source": "facts/runtime/decoded/firebase_rc.json",
+          "value_type": "int",
+          "source_sha256": "e49f73c0e3854a98c0c27ffae86e6abc7897c767b5f3e82991004c48c4eb45d5",
+          "field_present": true
+        }
+      ],
+      "snapshot_review_id": "MS-CFG-PawTouchOffer-0002"
+    },
+    {
+      "source": "server info",
+      "key": "PawTouchOfferConfig.IAPConfigModels",
+      "type": "List<IAPConfigModel>",
+      "value": "server",
+      "meaning": "Danh sách sản phẩm IAP dùng cho offer",
+      "where": "PawTouchOfferService.GetUniqueIAPConfigModels"
+    },
+    {
+      "source": "server info",
+      "key": "PawTouchOfferConfig.FallBackRewardModels",
+      "type": "List<RewardModel>",
+      "value": "server",
+      "meaning": "Thưởng dự phòng khi không tra được productId",
+      "where": "PawTouchOfferService.GetOfferPackage"
+    },
+    {
+      "source": "server info",
+      "key": "PawTouchOfferPackage",
+      "type": "object",
+      "value": "{IAPProductId, IAPProductDiscountAmount, RewardModels}",
+      "meaning": "Gói theo phân khúc: sản phẩm, % giảm giá, thưởng",
+      "where": "PawTouchOfferDataService.SetOfferPackage"
+    },
+    {
+      "source": "server info",
+      "key": "Schema magicsort.schemas.v1.liveops.paw_touch_offer.PawTouchOfferResponse",
+      "type": "FlatBuffer",
+      "value": "server",
+      "meaning": "Định nghĩa dữ liệu offer phía backend",
+      "where": "magicsort.schemas.v1.liveops.paw_touch_offer"
+    },
+    {
+      "source": "code const",
+      "key": "PawTouchOfferStateService.PawTouchOfferState / PawTouchOfferContainerState",
+      "type": "enum (lồng)",
+      "value": "PawTouchOfferState: Disabled=0, Active=1, Claimed=2, WaitForInvalidation=3, InvalidEvent=4; ContainerState: NotVisible=0, Visible=1 (metadata hostAPK0.0.3129ARM64)",
+      "meaning": "Trạng thái tổng của offer và trạng thái container trong Play On",
+      "where": "PawTouchOfferStateService"
+    },
+    {
+      "source": "code const",
+      "key": "IAPOrigin.PawTouchOffer / IAPReason.PawTouchOffer",
+      "type": "enum",
+      "value": "5 / 7",
+      "meaning": "Phân loại giao dịch",
+      "where": "Modules.Contexts.Application.IAP.Scripts"
+    },
+    {
+      "source": "code const",
+      "key": "CurrencyEarnReason.PawTouchOffer",
+      "type": "enum",
+      "value": "20",
+      "meaning": "Lý do nhận thưởng",
+      "where": "Modules.Contexts.Application.Inventory.Scripts.CurrencyEarnReason"
+    },
+    {
+      "source": "storage key",
+      "key": "PawTouchOfferSyncableData",
+      "type": "sync name",
+      "value": "\"PawTouchOfferSyncableData\"",
+      "meaning": "Tên bản ghi đồng bộ",
+      "where": "PawTouchOfferDataService.GetSyncName"
+    },
+    {
+      "source": "storage key",
+      "key": "PawTouchOfferData.EventId / EventType / Segment / EndDate / ShowEndDate",
+      "type": "object",
+      "value": "client + server",
+      "meaning": "Định danh đợt offer và hai mốc thời gian",
+      "where": "PawTouchOfferDataService"
+    },
+    {
+      "source": "storage key",
+      "key": "PawTouchOfferData.OfferPackage / IsPurchased / IsClaimSent / IsShowed",
+      "type": "object",
+      "value": "client + server",
+      "meaning": "Gói, trạng thái mua, đã báo server, đã hiện container",
+      "where": "PawTouchOfferDataService"
+    },
+    {
+      "source": "asset",
+      "key": "PawTouchOfferContainerAnimationConfig (16 field)",
+      "type": "ScriptableObject",
+      "value": "asset",
+      "meaning": "Hoạt ảnh container trong màn Play On",
+      "where": "Modules.Contexts.Home.Monetization.EndlessPortal.Scripts.UI.PawTouchOfferContainerAnimationConfig"
+    },
+    {
+      "source": "code const",
+      "key": "Localization",
+      "type": "string",
+      "value": "PawTouchTitle 'Paw Touch'",
+      "meaning": "Tiêu đề offer",
+      "where": "appendix/localization.tsv"
+    },
+    {
+      "source": "json default",
+      "key": "PawTouchOfferConfig.json: IsEnable",
+      "type": "",
+      "value": "false",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/PawTouchOfferConfig.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "PawTouchOfferConfig.json: EventType",
+      "type": "",
+      "value": "1",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/PawTouchOfferConfig.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "PawTouchOfferConfig.json: FirstLevelToShow",
+      "type": "",
+      "value": "59",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/PawTouchOfferConfig.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "PawTouchOfferConfig.json: ShowDurationInSeconds",
+      "type": "",
+      "value": "1800",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/PawTouchOfferConfig.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "PawTouchOfferConfig.json: IAPConfigModels[0].ProductId",
+      "type": "",
+      "value": "sort.pawtouch1",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/PawTouchOfferConfig.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "PawTouchOfferConfig.json: IAPConfigModels[0].ProductType",
+      "type": "",
+      "value": "0",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/PawTouchOfferConfig.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "PawTouchOfferConfig.json: IAPConfigModels[0].DollarEquivalent",
+      "type": "",
+      "value": "0.99",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/PawTouchOfferConfig.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "PawTouchOfferConfig.json: IAPConfigModels[1].ProductId",
+      "type": "",
+      "value": "sort.pawtouch3",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/PawTouchOfferConfig.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "PawTouchOfferConfig.json: IAPConfigModels[1].ProductType",
+      "type": "",
+      "value": "0",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/PawTouchOfferConfig.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "PawTouchOfferConfig.json: IAPConfigModels[1].DollarEquivalent",
+      "type": "",
+      "value": "2.99",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/PawTouchOfferConfig.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "PawTouchOfferConfig.json: IAPConfigModels[2].ProductId",
+      "type": "",
+      "value": "sort.pawtouch10",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/PawTouchOfferConfig.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "PawTouchOfferConfig.json: IAPConfigModels[2].ProductType",
+      "type": "",
+      "value": "0",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/PawTouchOfferConfig.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "PawTouchOfferConfig.json: IAPConfigModels[2].DollarEquivalent",
+      "type": "",
+      "value": "9.99",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/PawTouchOfferConfig.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "PawTouchOfferConfig.json: IAPConfigModels[3].ProductId",
+      "type": "",
+      "value": "sort.pawtouch20",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/PawTouchOfferConfig.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "PawTouchOfferConfig.json: IAPConfigModels[3].ProductType",
+      "type": "",
+      "value": "0",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/PawTouchOfferConfig.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "PawTouchOfferConfig.json: IAPConfigModels[3].DollarEquivalent",
+      "type": "",
+      "value": "19.99",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/PawTouchOfferConfig.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "PawTouchOfferConfig.json: IAPConfigModels[4].ProductId",
+      "type": "",
+      "value": "sort.pawtouch50",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/PawTouchOfferConfig.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "PawTouchOfferConfig.json: IAPConfigModels[4].ProductType",
+      "type": "",
+      "value": "0",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/PawTouchOfferConfig.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "PawTouchOfferConfig.json: IAPConfigModels[4].DollarEquivalent",
+      "type": "",
+      "value": "49.99",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/PawTouchOfferConfig.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "PawTouchOfferConfig.json: FallBackRewardModels[0].CurrencyType",
+      "type": "",
+      "value": "1",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/PawTouchOfferConfig.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "PawTouchOfferConfig.json: FallBackRewardModels[0].Amount",
+      "type": "",
+      "value": "100",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/PawTouchOfferConfig.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "PawTouchOfferConfig.json: FallBackRewardModels[1].CurrencyType",
+      "type": "",
+      "value": "2",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/PawTouchOfferConfig.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "PawTouchOfferConfig.json: FallBackRewardModels[1].TimeSpan",
+      "type": "",
+      "value": "00:15:00",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/PawTouchOfferConfig.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "server cache (historical)",
+      "key": "PawTouchOfferConfig (live) = default?",
+      "type": "",
+      "value": "22/29 key trùng default, 7 key khác/thêm",
+      "meaning": "Đối chiếu config server thật (CachedRemoteConfigs) với PawTouchOfferConfig.json",
+      "where": "Configs/CachedRemoteConfigs + Firebase RC template 3197 — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server cache (historical)",
+      "key": "PawTouchOfferConfig: isEnable",
+      "type": "",
+      "value": "true",
+      "meaning": "server ghi đè (default = false)",
+      "where": "Configs/CachedRemoteConfigs + Firebase RC template 3197 — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server cache (historical)",
+      "key": "PawTouchOfferConfig: fallBackRewardModels[0].timeSpan",
+      "type": "",
+      "value": "00:00:00",
+      "meaning": "server-only (không có trong default)",
+      "where": "Configs/CachedRemoteConfigs + Firebase RC template 3197 — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server cache (historical)",
+      "key": "PawTouchOfferConfig: fallBackRewardModels[0].chestType",
+      "type": "",
+      "value": "0",
+      "meaning": "server-only (không có trong default)",
+      "where": "Configs/CachedRemoteConfigs + Firebase RC template 3197 — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server cache (historical)",
+      "key": "PawTouchOfferConfig: fallBackRewardModels[0].collectionPackType",
+      "type": "",
+      "value": "0",
+      "meaning": "server-only (không có trong default)",
+      "where": "Configs/CachedRemoteConfigs + Firebase RC template 3197 — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server cache (historical)",
+      "key": "PawTouchOfferConfig: fallBackRewardModels[1].amount",
+      "type": "",
+      "value": "0",
+      "meaning": "server-only (không có trong default)",
+      "where": "Configs/CachedRemoteConfigs + Firebase RC template 3197 — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server cache (historical)",
+      "key": "PawTouchOfferConfig: fallBackRewardModels[1].chestType",
+      "type": "",
+      "value": "0",
+      "meaning": "server-only (không có trong default)",
+      "where": "Configs/CachedRemoteConfigs + Firebase RC template 3197 — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server cache (historical)",
+      "key": "PawTouchOfferConfig: fallBackRewardModels[1].collectionPackType",
+      "type": "",
+      "value": "0",
+      "meaning": "server-only (không có trong default)",
+      "where": "Configs/CachedRemoteConfigs + Firebase RC template 3197 — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    }
+  ],
+  "rewards": [
+    {
+      "context": "Gói Paw Touch",
+      "reward": "PawTouchOfferPackage.RewardModels (theo phân khúc, giảm giá IAPProductDiscountAmount) — CurrencyEarnReason.PawTouchOffer (20)",
+      "evidence": "PawTouchOfferService.OnPurchaseOffer"
+    },
+    {
+      "context": "Dự phòng",
+      "reward": "PawTouchOfferConfig.FallBackRewardModels",
+      "evidence": "PawTouchOfferService.GetOfferPackage"
+    }
+  ],
+  "backend": [
+    {
+      "command": "PawTouchOfferRemoteService – get offer",
+      "direction": "client→server",
+      "purpose": "lấy PawTouchOfferResponse (eventId, eventType, segment, endDate, offerPackage)"
+    },
+    {
+      "command": "PawTouchOfferRemoteService – claim",
+      "direction": "client→server",
+      "purpose": "báo đã mua (TrySendClaimPawTouchOfferRequest)"
+    },
+    {
+      "command": "IAPService + IAPPurchaseVerificationService",
+      "direction": "client→store→server",
+      "purpose": "mua và xác thực gói"
+    },
+    {
+      "command": "SyncService – SyncName 'PawTouchOfferSyncableData'",
+      "direction": "hai chiều",
+      "purpose": "đồng bộ trạng thái offer"
+    }
+  ],
+  "ui": [
+    {
+      "element": "Container Play On",
+      "class": "PawTouchOfferContainerAnimationConfig + container trong màn Play On",
+      "purpose": "chèn ưu đãi vào lúc người chơi hết nước"
+    },
+    {
+      "element": "Enum trạng thái",
+      "class": "PawTouchOfferStateService.PawTouchOfferState / PawTouchOfferContainerState",
+      "purpose": "điều khiển hiển thị"
+    }
+  ],
+  "analytics": [
+    {
+      "event": "paw_touch_offer_first_impression",
+      "params": "product_id, price, currency, dollar_equivalent, event_id, event_type, user_segment, remaining_duration, progress",
+      "when": "container hiện lần đầu"
+    },
+    {
+      "event": "paw_touch_offer_impression",
+      "params": "như trên",
+      "when": "container hiện các lần sau"
+    },
+    {
+      "event": "paw_touch_offer_purchased",
+      "params": "product_id, price, currency, dollar_equivalent, event_id, event_type, user_segment, remaining_duration, progress",
+      "when": "mua thành công"
+    },
+    {
+      "event": "paw_touch_offer_fallback_rewards",
+      "params": "-",
+      "when": "phải dùng thưởng dự phòng"
+    },
+    {
+      "event": "earned",
+      "params": "reason=PawTouchOffer, danh sách thưởng",
+      "when": "trao thưởng"
+    },
+    {
+      "event": "iap_purchase / purchase_failed",
+      "params": "origin=PawTouchOffer, source=PawTouchOffer",
+      "when": "vòng đời giao dịch"
+    }
+  ],
+  "storage_keys": [
+    "PawTouchOfferSyncableData (sync name)",
+    "PawTouchOfferData.EventId / EventType / Segment",
+    "PawTouchOfferData.EndDate / ShowEndDate",
+    "PawTouchOfferData.OfferPackage",
+    "PawTouchOfferData.IsPurchased / IsClaimSent / IsShowed"
+  ],
+  "related_features": [
+    "SpecialOffer",
+    "Store",
+    "Inventory",
+    "ChooseOneSpecialOffer"
+  ],
+  "gaps": [
+    "15/11 — partial_static_code_unresolved: GetState gán raw0/1/2/3/4 theo data/time/level gates. Consumers cụ thể: CanPurchaseOffer=state1,ShouldSendClaimRequest=state2,ShouldSendGetRequest=state4. GetContainerState chỉ đánh giá khistate1 rồi Inventory eligibility, trả0/1. Officialenum names vẫn không có trongmetadata, nên lưu rawvalues+consumer semantics. Còn lại: Cần names từmetadata/buildkhác nếu bắtbuộc; không đặt tênenum phỏngđoán. Bảngrawstate có thể dùng ngay với nguồnconsumer.",
+    "15/11 — partial_actual_evidence: Bản mặc định ghi ShowDurationInSeconds=1800, FirstLevelToShow=59 và có 5 IAPConfigModels. Đây là dữ liệu default thật của export 0.0.3063, không phải response production mới. Câu hỏi cũ không nên tiếp tục được hiểu là chưa có dữ liệu tĩnh nào. Còn lại: Giữ default, cache và runtime được chọn thành các nguồn riêng. Chỉ xác minh phần hiện hành còn thiếu bằng instance, store sandbox hoặc backend hợp lệ.",
+    "15/11 — resolved_historical_snapshot: Lớp UI thực là PawTouchOfferContainerView trong namespace PawTouchOffer.Scripts.UI. GUID script của lớp xuất hiện trong StuckAreYouSurePopup.prefab. Namespace EndlessPortal của animation config không chứng minh container UI bị thiếu. Còn lại: Giữ rõ build và phiên bản cache của nguồn; kiểm nhánh runtime riêng khi cần.",
+    "15/11 — partial_static_code_unresolved: StuckAreYouSurePopup gọi PawTouchOfferService.ShouldShowPlayOnContainer, OnPlayOnContainerShowed và PawTouchOfferContainerView.Show. Đây là entry confirmation AreYouSure đã có consumer body, không chỉ một nhãn PlayOn trong dossier. Còn lại: Cần enumerate toàn bộ popup/prefab caller và event-eligible fixture; một consumer không chứng minh exclusive entry.",
+    "Endpoint HTTP nằm trong BackendEnvironmentConfig.",
+    "[Runtime 2026-09-10] Config server LIVE đã đọc trực tiếp từ cache máy (không cần request); các hàng 'server live' là giá trị server ghi đè/thêm so với default."
+  ],
+  "sources": [
+    "features/PawTouchOfferService.md",
+    "features/PawTouchOfferDataService.md",
+    "features/PawTouchOfferStateService.md",
+    "features/PawTouchOfferRemoteService.md",
+    "features/PawTouchOfferConfig.md",
+    "RecoveredNative/strings-by-type.tsv (EventSender.SendPawTouchOffer*)",
+    "GameDesign/appendix/localization.tsv (PawTouchTitle)",
+    "GameDesign/facts/facts.json (PawTouchOfferPackage, PawTouchOfferConfig, IAPOrigin, IAPReason, CurrencyEarnReason)"
+  ],
+  "related_feature_aliases": [
+    {
+      "original": "Lives",
+      "feature": "Inventory"
+    }
+  ],
+  "audit_provenance": {
+    "review_date": "2026-11-15",
+    "mode": "offline_existing_files",
+    "code_build": "0.0.3063 ARMv7",
+    "runtime_build_observed_historically": "0.0.3129 ARM64 (audit 2026-10-18); not rechecked 2026-11-15",
+    "new_playtests": 0,
+    "uc_status": "See facts/audit_20261115/uc_registry.json; image reference is not pass",
+    "workbook_status": "Existing XLSX is historical; JSON and local web include 2026-11-15 corrections",
+    "static_review": "facts/local_code_gap_results_20261115.json; facts/local_asset_gap_results_20261115.json; facts/final_data_gap_decisions_20261115.json; facts/core_body_gap_decisions_20261115.json; facts/remaining_asset_gap_decisions_20261115.json"
+  },
+  "static_review_20261115": {
+    "date": "2026-11-15",
+    "scope": "Historical code/assets 0.0.3063, dated caches, device 0.0.3129 cached bundles and explicitly scoped runtime evidence. Not full runtime pass.",
+    "findings": [
+      {
+        "kind": "remaining_asset",
+        "source_report": "facts/remaining_asset_gap_decisions_20261115.json",
+        "id": "MS-RA-017",
+        "gap_ids": [
+          "MS-PawTouchOffer-G003"
+        ],
+        "title": "Không tìm thấy class UI riêng cho container Paw Touch trong types-index; PawTouchOfferContainerAnimationConfig nằm nhầm trong namespace EndlessPortal.Scripts.UI.",
+        "status": "resolved_historical_snapshot",
+        "conclusion": "Lớp UI thực là PawTouchOfferContainerView trong namespace PawTouchOffer.Scripts.UI. GUID script của lớp xuất hiện trong StuckAreYouSurePopup.prefab. Namespace EndlessPortal của animation config không chứng minh container UI bị thiếu.",
+        "evidence": [
+          "facts/remaining_asset_review_20261115/ui_class_prefab_proof.json",
+          "facts/remaining_asset_review_20261115/asset_catalog.json"
+        ],
+        "remaining": "",
+        "next_action": "Giữ rõ build và phiên bản cache của nguồn; kiểm nhánh runtime riêng khi cần.",
+        "scope": "Asset/native export 0.0.3063 và cache UnityFS đọc ngày 15/11 từ app 0.0.3129 được giữ riêng; ảnh render asset không phải ảnh chụp playtest.",
+        "reviewed": "2026-11-15",
+        "full_uc_pass": false
+      },
+      {
+        "kind": "core_body",
+        "source_report": "facts/core_body_gap_decisions_20261115.json",
+        "id": "MS-CORE-BODY-12",
+        "gap_ids": [
+          "MS-PawTouchOffer-G004"
+        ],
+        "title": "Có integration StuckAreYouSure",
+        "conclusion": "StuckAreYouSurePopup gọi PawTouchOfferService.ShouldShowPlayOnContainer, OnPlayOnContainerShowed và PawTouchOfferContainerView.Show. Đây là entry confirmation AreYouSure đã có consumer body, không chỉ một nhãn PlayOn trong dossier.",
+        "evidence": [
+          {
+            "file": "../com.grandgames.magicsort_Unity_20260909_112501/RecoveredNative/PseudoC/Assembly-CSharp/Modules/Contexts/GamePlay/UI/StuckAreYouSurePopUpNs/Scripts/StuckAreYouSurePopup.c",
+            "line": 1717,
+            "end_line": 2019,
+            "method": "// ===== StuckAreYouSurePopup :: private bool TryShowOffer(",
+            "sha256": "372508165c7b8bee12484c8cc5e38c37dae8687689c31d8f40957c8f78b01c9b",
+            "body_checked": true,
+            "build": "0.0.3063 ARMv7",
+            "required_body_tokens": []
+          }
+        ],
+        "status": "partial_static_code_unresolved",
+        "remaining": "Cần enumerate toàn bộ popup/prefab caller và event-eligible fixture; một consumer không chứng minh exclusive entry.",
+        "runtime_verified": false,
+        "scope": "recovered_native_0.0.3063_only"
+      },
+      {
+        "kind": "code",
+        "source_report": "facts/local_code_gap_results_20261115.json",
+        "id": "MS-CODE-60",
+        "gap_ids": [
+          "MS-PawTouchOffer-G001"
+        ],
+        "title": "Paw state có raw0..4 và container0/1",
+        "status": "partial_static_code",
+        "conclusion": "GetState gán raw0/1/2/3/4 theo data/time/level gates. Consumers cụ thể: CanPurchaseOffer=state1,ShouldSendClaimRequest=state2,ShouldSendGetRequest=state4. GetContainerState chỉ đánh giá khistate1 rồi Inventory eligibility, trả0/1. Officialenum names vẫn không có trongmetadata, nên lưu rawvalues+consumer semantics.",
+        "evidence": [
+          {
+            "file": "../com.grandgames.magicsort_Unity_20260909_112501/RecoveredNative/PseudoC/Assembly-CSharp/Modules/Contexts/Home/Monetization/PawTouchOffer/Scripts/PawTouchOfferStateService.c",
+            "line": 389,
+            "end_line": 671,
+            "method": "// ===== PawTouchOfferStateService :: private PawTouchOfferStateService.PawTouchOfferState GetState()",
+            "sha256": "45bcd71c7e932e3cd756a2d54b119f4ae4f2792758e9a86f6261b3aadeb97bc0",
+            "body_checked": true,
+            "build": "0.0.3063 ARMv7",
+            "required_body_tokens": [
+              "iVar10 = 2",
+              "iVar10 = 4",
+              "iVar10 = 3",
+              "iVar10 = 1"
+            ]
+          }
+        ],
+        "remaining": "Cần names từmetadata/buildkhác nếu bắtbuộc; không đặt tênenum phỏngđoán. Bảngrawstate có thể dùng ngay với nguồnconsumer.",
+        "scope": "recovered_native_0.0.3063_only",
+        "runtime_verified": false
+      }
+    ]
+  },
+  "acceptance_review_20261115": {
+    "source": "facts/feature_acceptance_20261115.json",
+    "feature_id": "PawTouchOffer",
+    "scope": "All eleven dossier dimensions reviewed; full_feature_verified is not implied; read per-dimension gaps and actual runtime evidence."
+  },
+  "segment_ab_review_20261115": {
+    "status": "not_identified_in_sources",
+    "segment_ids": [],
+    "matching_basis": "explicit_gd_config_map_or_exact_model_token_in_gdd_configs_where_key_sources; rootfieldscoped",
+    "rows": [],
+    "classifications": {},
+    "assignment_verified": false,
+    "uplift_verified": false,
+    "note": "No matchingrow does not prove no segmentation/AB. Rewardbucketfalsepositives remain explicitly classified."
+  },
+  "current_native_review_20261116": {
+    "reviewed": "2026-11-16",
+    "scope": "file_only_host_APK_0.0.3129_ARM64_matches_last_observed_installed_version_2026-11-15",
+    "live_installed_20261116_verified": false,
+    "installed_binary_identity_verified": false,
+    "runtime_cases_new": 0,
+    "source_facts": "facts/review_20261116/code_findings.json",
+    "source_facts_sha256": "7adb0ab760cea248de7baaa76671082aff9231708782bc0bbcdadff38e2564ea",
+    "native_sha256": "d901f86380bdecae3a8ec5cf9a9b60acc5132d50dfcf7ec1f606de807e22b2d5",
+    "metadata_sha256": "d019f1787d94bcaf0e31508eea72a86dae8df2f422454f6263a2df7d56e3786a",
+    "findings": [
+      {
+        "id": "MS-CURRENT-20261116-05",
+        "gap_ids": [
+          "MS-PawTouchOffer-G001"
+        ],
+        "status": "partial_static_code_current_build",
+        "conclusion": "Metadata0.0.3129: PawTouchOfferState Disabled0,Active1,Claimed2,WaitForInvalidation3,InvalidEvent4; PawTouchOfferContainerState NotVisible0,Visible1. Đây là symbolic mapping thực, không đặt tên suy đoán từ old raw branch.",
+        "remaining": "Current eligibility/transition/gating body và event instance vẫn cần đối chiếu; không dùng enum declaration thành state-machine runtime pass.",
+        "evidence": [
+          {
+            "file": "facts/review_20261116/current_build_dump/dump.cs",
+            "line": 125635,
+            "end_line": 125644,
+            "sha256": "47edf53b3a3e0e82dd81316c145d0cebde72ad2bc5d2dfe3a35492e9cfbd2df2",
+            "text": "private enum PawTouchOfferStateService.PawTouchOfferState // TypeDefIndex: 3127\n{\n\t// Fields\n\tpublic int value__; // 0x0\n\tpublic const PawTouchOfferStateService.PawTouchOfferState Disabled = 0;\n\tpublic const PawTouchOfferStateService.PawTouchOfferState Active = 1;\n\tpublic const PawTouchOfferStateService.PawTouchOfferState Claimed = 2;\n\tpublic const PawTouchOfferStateService.PawTouchOfferState WaitForInvalidation = 3;\n\tpublic const PawTouchOfferStateService.PawTouchOfferState InvalidEvent = 4;\n}",
+            "build": "0.0.3129 ARM64",
+            "kind": "metadata_declaration_not_method_body"
+          },
+          {
+            "file": "facts/review_20261116/current_build_dump/dump.cs",
+            "line": 125647,
+            "end_line": 125653,
+            "sha256": "47edf53b3a3e0e82dd81316c145d0cebde72ad2bc5d2dfe3a35492e9cfbd2df2",
+            "text": "private enum PawTouchOfferStateService.PawTouchOfferContainerState // TypeDefIndex: 3128\n{\n\t// Fields\n\tpublic int value__; // 0x0\n\tpublic const PawTouchOfferStateService.PawTouchOfferContainerState NotVisible = 0;\n\tpublic const PawTouchOfferStateService.PawTouchOfferContainerState Visible = 1;\n}",
+            "build": "0.0.3129 ARM64",
+            "kind": "metadata_declaration_not_method_body"
+          }
+        ]
+      }
+    ],
+    "historical_review_policy": "Existing15Nov fields/gap decisions retained unchanged. Current native review is independent; static evidence is not device acceptance."
+  },
+  "continuation_review_20261116": {
+    "date": "2026-11-16",
+    "build": "0.0.3129 ARM64 host APK",
+    "build_scope": "Host APK version3129 matches LAST observed installed version15/11 only; installed bytes/live device16/11 not verified.",
+    "runtime_status": "device_unavailable",
+    "runtime_case_ids": [],
+    "current_apk_model_links": {
+      "feature": "PawTouchOffer",
+      "models": [
+        {
+          "model": "PawTouchOfferConfig",
+          "current_default_file": "facts/review_20261116/public_current_config_3129/defaults/PawTouchOfferConfig.json",
+          "resource_path": "defaultconfigs/pawtouchofferconfig",
+          "sha256": "d6ada66a089a59dbecb64c6499e93bd364ab7f1cfc77cb5b3bbc99b48150645a",
+          "matching_basis": [
+            "gdd/PawTouchOffer.json#/configs",
+            "gdd/PawTouchOffer.json#/sources",
+            "gdd/PawTouchOffer.json#/flow",
+            "gdd/PawTouchOffer.json#/managers"
+          ],
+          "scope": "Packaged default3129, not effective server config.",
+          "site_data_path": "data/current_config_3129/defaults/PawTouchOfferConfig.json",
+          "original_source_sha256": "d6ada66a089a59dbecb64c6499e93bd364ab7f1cfc77cb5b3bbc99b48150645a",
+          "public_artifact_sha256": "ba1f969983c94705de0b5bd78f31bbc1b477454de3c2ab55db587085daa0d0e8",
+          "sha256_scope": "sha256 is original raw model; public_artifact_sha256 is the sanitized download"
+        }
+      ],
+      "status": "exact_model_source_association",
+      "distribution": "sanitized_public",
+      "public_mapping_pending": false
+    },
+    "current_packaged_defaults": [
+      {
+        "model": "PawTouchOfferConfig",
+        "source": "facts/review_20261116/public_current_config_3129/defaults/PawTouchOfferConfig.json",
+        "site_data_path": "data/current_config_3129/defaults/PawTouchOfferConfig.json",
+        "public_artifact_sha256": "ba1f969983c94705de0b5bd78f31bbc1b477454de3c2ab55db587085daa0d0e8",
+        "original_source_sha256": "d6ada66a089a59dbecb64c6499e93bd364ab7f1cfc77cb5b3bbc99b48150645a",
+        "source_class": "static_asset",
+        "build": "0.0.3129 host APK",
+        "scope": "Sanitized packaged default fullvalues only; not effective remote/selected config or runtime.",
+        "values": {
+          "IsEnable": false,
+          "EventType": 1,
+          "FirstLevelToShow": 59,
+          "ShowDurationInSeconds": 1800,
+          "IAPConfigModels": [
+            {
+              "ProductId": "sort.pawtouch1",
+              "ProductType": 0,
+              "DollarEquivalent": 0.99
+            },
+            {
+              "ProductId": "sort.pawtouch3",
+              "ProductType": 0,
+              "DollarEquivalent": 2.99
+            },
+            {
+              "ProductId": "sort.pawtouch10",
+              "ProductType": 0,
+              "DollarEquivalent": 9.99
+            },
+            {
+              "ProductId": "sort.pawtouch20",
+              "ProductType": 0,
+              "DollarEquivalent": 19.99
+            },
+            {
+              "ProductId": "sort.pawtouch50",
+              "ProductType": 0,
+              "DollarEquivalent": 49.99
+            }
+          ],
+          "FallBackRewardModels": [
+            {
+              "CurrencyType": 1,
+              "Amount": 100
+            },
+            {
+              "CurrencyType": 2,
+              "TimeSpan": "00:15:00"
+            }
+          ]
+        }
+      }
+    ],
+    "native_finding_ids": [
+      "MS-CURRENT-20261116-05"
+    ],
+    "documentation_source_coverage": {
+      "dossier_present": true,
+      "use_case_catalog_count": 11,
+      "config_catalog_rows": 46,
+      "current_apk_default_model_links": 1,
+      "current_native_findings": 1,
+      "scope": "Documentation/source coverage only; not complete runtime verification."
+    },
+    "runtime_completion": {
+      "date": "2026-11-16",
+      "status": "device_unavailable",
+      "executed_case_count": 0,
+      "full_feature_runtime_verified": false
+    },
+    "planned_branch": "Ghi có/không container Paw khi có popup Play On tự nhiên ở lượt core cuối; chụp timer và reward, đóng/cancel.",
+    "target_uc_ids": [
+      "UC-04",
+      "UC-08"
+    ],
+    "execution_phase": "noncore_first",
+    "core_or_levels_last": false,
+    "actionability_full_json": "facts/continuation_20261116/current/feature_actionability.json",
+    "actionability_site_data_path": "data/continuation_20261116/feature_actionability.json",
+    "source_classes": [
+      "recovered_code",
+      "static_asset"
+    ],
+    "full_feature_verified": false
+  }
+}

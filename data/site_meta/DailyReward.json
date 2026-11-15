@@ -1,0 +1,915 @@
+{
+ "id": "DailyReward",
+ "title": "Quà Hằng Ngày (Daily Bonus)",
+ "tagline": "Sự kiện chọn ô quà mỗi ngày, mỗi ô rút ngẫu nhiên booster, coin hoặc Unlimited Lives theo bảng xác suất đổi theo hoàn cảnh.",
+ "infobox": [
+  [
+   "Loại",
+   "Sự kiện solo"
+  ],
+  [
+   "Mở khóa",
+   "Level 34 (DailyRewardConfigModelV2.firstLevelToShow, json default; bản V1 là 20)"
+  ],
+  [
+   "Thời lượng",
+   "Theo StartTime / FinishTime của chu kỳ do server trả về (server)"
+  ],
+  [
+   "Chu kỳ / lịch",
+   "Lặp theo chu kỳ, mỗi chu kỳ một EventId (server)"
+  ],
+  [
+   "Tham gia",
+   "Cá nhân"
+  ],
+  [
+   "Tiền tệ",
+   "Coin (CurrencyType 1), Unlimited Lives (2), Undo (4), Shuffle (5), Extra Bottle (6), gói thẻ Collection (14)"
+  ],
+  [
+   "Thưởng chính",
+   "50–400 coin, 1–2 Undo, 1–2 Shuffle, 1 Extra Bottle, 15/30/60 phút Unlimited Lives, 1 gói thẻ Collection"
+  ],
+  [
+   "Điều kiện / phụ thuộc",
+   "DailyRewardConfigModelV2.IsEnabled = true và có cache sự kiện từ DailyRewardRemoteService"
+  ],
+  [
+   "Manager",
+   "DailyRewardService"
+  ]
+ ],
+ "description": [
+  "Daily Bonus là sự kiện quà hằng ngày kiểu chọn hộp: người chơi bấm mở một số ô, mỗi ô rút ngẫu nhiên một phần thưởng từ pool.",
+  "Pool gồm Undo, Shuffle, Extra Bottle, coin 50/100/200/300/400 và Unlimited Lives 15/30/60 phút.",
+  "Xác suất không cố định: bản V2 có ba bảng riêng cho ngày đầu tiên, cho lúc hết mạng hoặc kẹt level khó, và cho các trường hợp còn lại.",
+  "Mỗi bảng còn có biến thể WithCollection, chèn thêm gói thẻ Collection vào pool khi sự kiện Collection đang chạy.",
+  "Cơ hội trúng Unlimited Lives tăng dần theo số ô đã mở, theo bảng cố định 34/50/60/70/80/90/100 phần trăm.",
+  "Có cơ chế chống lặp: nếu hai phần thưởng gần nhất trùng cả loại, số lượng và thời lượng thì lần rút sau bị điều chỉnh.",
+  "Phần thưởng đã chọn không trao ngay mà xếp vào hàng đợi rồi trao gộp bằng animation khi người chơi về màn hình Home.",
+  "Vào được từ icon lobby ở Home, từ dòng Daily Bonus trong Store, hoặc popup tự bật khi vào game và khi về Home.",
+  "Trạng thái sự kiện chạy qua tám bước từ NoCachedEvent tới Disable, quyết định việc hiện icon và nội dung popup."
+ ],
+ "notes": [
+  "Lưu ý: điều kiện 'level khó' được xác định bằng công thức level % 10 == 4 hoặc level % 10 == 9, tức các level Hard/Super Hard.",
+  "Lưu ý: người chơi cũng bị coi là hết mạng khi kho không đủ 1 CurrencyType.Life (2); khi đó pool đổi sang bảng ưu đãi Unlimited Lives.",
+  "Lưu ý: chỉ số của bảng xác suất Unlimited Lives bị kẹp ở 6, nên từ ô thứ 7 trở đi tỉ lệ luôn là 100.",
+  "Lưu ý: khi thiếu cấu hình, coin mặc định trả về 100 và Unlimited Lives mặc định trả về 15 phút.",
+  "Lưu ý: bản V1 (DailyRewardConfigModel) và bản V2 (DailyRewardConfigModelV2) cùng tồn tại trong client; không xác định được cờ nào chọn giữa hai bản.",
+  "Lưu ý: mọi trọng số dưới đây là giá trị mặc định trong Resources/defaultconfigs; remote config có thể ghi đè toàn bộ (server).",
+  "Lưu ý: số ô người chơi được mở mỗi chu kỳ không có hằng số trong client, do server/UI quyết định (suy luận)."
+ ],
+ "how_it_works": [
+  "DailyRewardStateService lấy DailyRewardConfigModelV2 rồi kiểm tra IsEnabled; nếu false thì trạng thái là Disable (7).",
+  "Tiếp theo so level người chơi với FirstLevelToShow (json default 34); chưa đủ thì trạng thái InsufficientLevel (6).",
+  "Nếu chưa có DailyRewardCacheModel thì trạng thái là NoCachedEvent (0) và icon lobby bị ẩn (GetEventState).",
+  "Client gọi DailyRewardRemoteService với DailyRewardEventInfoRequestModel{EventType} (json default eventType = 1) qua TryFetchCurrentEvent().",
+  "Server trả DailyRewardEventInfoResponse{EventId, EventType, StartTime, FinishTime, Segment}; TryStartNewEvent() tạo DailyRewardCacheModel mới với SelectedRewards rỗng, IsClaimed = false và bắn daily_bonus_started.",
+  "Lần đầu trong đời, trạng thái là NotIntroduced (1), popup mở với impression source FirstImpression (0), rồi ghi DailyRewardModel.IsEventIntroducedEverInLifeTime = true.",
+  "Pool được dựng theo hoàn cảnh: DayOneProbabilities cho ngày đầu, HardLevelOrNoLifeProbabilities khi hết mạng hoặc level khó, còn lại OthersProbabilities (GetTargetProbabilitiesForV2).",
+  "Điều kiện đổi bảng: kho không đủ 1 Life, hoặc level % 10 == 4, hoặc level % 10 == 9 (IsPlayerHasNoLifeOrInHardLevel).",
+  "Nếu sự kiện Collection đang chạy, ba bảng trên đổi sang biến thể WithCollection có thêm 5 dòng gói thẻ (CollectionPackType 1–5).",
+  "Người chơi bấm một ô: hệ thống rút theo trọng số DailyRewardProbabilityRewardModelV2{Reward, Probability} (SelectRandomRewardV2).",
+  "Nếu trúng coin, số lượng chọn 100/200/300 theo DailyRewardCoinProbabilityModel (json default 40/40/20), mặc định 100 (GetRandomCoinAmountByConfig).",
+  "Nếu trúng Unlimited Lives, thời lượng chọn 15/30/60 phút theo DailyRewardUnlimitedLifeProbabilityModel (json default 30/50/20), mặc định 15 phút.",
+  "Cơ hội mở khóa Unlimited Lives ở lần rút đó tra bảng [34, 50, 60, 70, 80, 90, 100] theo số ô đã mở, index kẹp ở 6.",
+  "Phần thưởng vừa rút ghi vào DailyRewardModel.LastEarnedRewards để chống lặp và xếp vào DailyRewardCacheModel.SelectedRewards; analytics bắn daily_bonus_claimed.",
+  "Khi về Home, animation trao gộp chạy và toàn bộ thưởng được cộng với CurrencyEarnReason.DailyReward (30), analytics earned (GiveBulkRewards).",
+  "Hết giờ chuyển TimeIsUp (3); đóng sự kiện đặt IsClaimed = true đưa về Claimed (4) hoặc ClaimedAndTimeIsUp (5) và popup hiện 'Daily Bonus event has ended!' (ClaimEvent)."
+ ],
+ "reward_tables": [
+  {
+   "title": "BẢNG XÁC SUẤT NGÀY ĐẦU TIÊN (DayOneProbabilities)",
+   "columns": [
+    "#",
+    "Trọng số",
+    "Phần thưởng"
+   ],
+   "rows": [
+    [
+     "0",
+     "1",
+     "1 Undo"
+    ],
+    [
+     "1",
+     "1",
+     "1 Shuffle"
+    ],
+    [
+     "2",
+     "1",
+     "1 Extra Bottle"
+    ],
+    [
+     "3",
+     "1",
+     "2 Undo"
+    ],
+    [
+     "4",
+     "1",
+     "2 Shuffle"
+    ],
+    [
+     "5",
+     "5",
+     "50 coin"
+    ],
+    [
+     "6",
+     "25",
+     "100 coin"
+    ],
+    [
+     "7",
+     "27",
+     "200 coin"
+    ],
+    [
+     "8",
+     "23",
+     "300 coin"
+    ],
+    [
+     "9",
+     "5",
+     "400 coin"
+    ],
+    [
+     "10",
+     "2",
+     "15 phút Unlimited Lives"
+    ],
+    [
+     "11",
+     "5",
+     "30 phút Unlimited Lives"
+    ],
+    [
+     "12",
+     "3",
+     "60 phút Unlimited Lives"
+    ],
+    [
+     "Tổng",
+     "100",
+     "—"
+    ]
+   ]
+  },
+  {
+   "title": "BẢNG XÁC SUẤT KHI HẾT MẠNG / LEVEL KHÓ (HardLevelOrNoLifeProbabilities)",
+   "columns": [
+    "#",
+    "Trọng số",
+    "Phần thưởng"
+   ],
+   "rows": [
+    [
+     "0",
+     "1",
+     "1 Undo"
+    ],
+    [
+     "1",
+     "1",
+     "2 Undo"
+    ],
+    [
+     "2",
+     "1",
+     "1 Shuffle"
+    ],
+    [
+     "3",
+     "1",
+     "2 Shuffle"
+    ],
+    [
+     "4",
+     "1",
+     "1 Extra Bottle"
+    ],
+    [
+     "5",
+     "1",
+     "50 coin"
+    ],
+    [
+     "6",
+     "1",
+     "100 coin"
+    ],
+    [
+     "7",
+     "1",
+     "200 coin"
+    ],
+    [
+     "8",
+     "1",
+     "300 coin"
+    ],
+    [
+     "9",
+     "1",
+     "400 coin"
+    ],
+    [
+     "10",
+     "23",
+     "15 phút Unlimited Lives"
+    ],
+    [
+     "11",
+     "45",
+     "30 phút Unlimited Lives"
+    ],
+    [
+     "12",
+     "22",
+     "60 phút Unlimited Lives"
+    ],
+    [
+     "Tổng",
+     "100",
+     "—"
+    ]
+   ]
+  },
+  {
+   "title": "BẢNG XÁC SUẤT MẶC ĐỊNH (OthersProbabilities)",
+   "columns": [
+    "#",
+    "Trọng số",
+    "Phần thưởng"
+   ],
+   "rows": [
+    [
+     "0",
+     "10",
+     "50 coin"
+    ],
+    [
+     "1",
+     "15",
+     "100 coin"
+    ],
+    [
+     "2",
+     "3",
+     "200 coin"
+    ],
+    [
+     "3",
+     "1",
+     "300 coin"
+    ],
+    [
+     "4",
+     "1",
+     "400 coin"
+    ],
+    [
+     "5",
+     "1",
+     "1 Extra Bottle"
+    ],
+    [
+     "6",
+     "6",
+     "1 Undo"
+    ],
+    [
+     "7",
+     "1",
+     "2 Undo"
+    ],
+    [
+     "8",
+     "6",
+     "1 Shuffle"
+    ],
+    [
+     "9",
+     "1",
+     "2 Shuffle"
+    ],
+    [
+     "10",
+     "15",
+     "15 phút Unlimited Lives"
+    ],
+    [
+     "11",
+     "10",
+     "30 phút Unlimited Lives"
+    ],
+    [
+     "12",
+     "10",
+     "60 phút Unlimited Lives"
+    ],
+    [
+     "Tổng",
+     "80",
+     "—"
+    ]
+   ]
+  },
+  {
+   "title": "BẢNG NGÀY ĐẦU TIÊN KHI COLLECTION ĐANG CHẠY (DayOneProbabilitiesWithCollection)",
+   "columns": [
+    "#",
+    "Trọng số",
+    "Phần thưởng"
+   ],
+   "rows": [
+    [
+     "0",
+     "1",
+     "1 Undo"
+    ],
+    [
+     "1",
+     "1",
+     "1 Shuffle"
+    ],
+    [
+     "2",
+     "1",
+     "1 Extra Bottle"
+    ],
+    [
+     "3",
+     "1",
+     "2 Undo"
+    ],
+    [
+     "4",
+     "1",
+     "2 Shuffle"
+    ],
+    [
+     "5",
+     "5",
+     "50 coin"
+    ],
+    [
+     "6",
+     "25",
+     "100 coin"
+    ],
+    [
+     "7",
+     "27",
+     "200 coin"
+    ],
+    [
+     "8",
+     "23",
+     "300 coin"
+    ],
+    [
+     "9",
+     "5",
+     "400 coin"
+    ],
+    [
+     "10",
+     "2",
+     "15 phút Unlimited Lives"
+    ],
+    [
+     "11",
+     "5",
+     "30 phút Unlimited Lives"
+    ],
+    [
+     "12",
+     "3",
+     "60 phút Unlimited Lives"
+    ],
+    [
+     "13",
+     "5",
+     "1 gói thẻ Collection (CollectionPackType 1)"
+    ],
+    [
+     "14",
+     "3",
+     "1 gói thẻ Collection (CollectionPackType 2)"
+    ],
+    [
+     "15",
+     "1",
+     "1 gói thẻ Collection (CollectionPackType 3)"
+    ],
+    [
+     "16",
+     "0",
+     "1 gói thẻ Collection (CollectionPackType 4)"
+    ],
+    [
+     "17",
+     "0",
+     "1 gói thẻ Collection (CollectionPackType 5)"
+    ],
+    [
+     "Tổng",
+     "109",
+     "—"
+    ]
+   ]
+  },
+  {
+   "title": "BẢNG HẾT MẠNG / LEVEL KHÓ KHI COLLECTION ĐANG CHẠY (HardLevelOrNoLifeProbabilitiesWithCollection)",
+   "columns": [
+    "#",
+    "Trọng số",
+    "Phần thưởng"
+   ],
+   "rows": [
+    [
+     "0",
+     "1",
+     "1 Undo"
+    ],
+    [
+     "1",
+     "1",
+     "2 Undo"
+    ],
+    [
+     "2",
+     "1",
+     "1 Shuffle"
+    ],
+    [
+     "3",
+     "1",
+     "2 Shuffle"
+    ],
+    [
+     "4",
+     "1",
+     "1 Extra Bottle"
+    ],
+    [
+     "5",
+     "1",
+     "50 coin"
+    ],
+    [
+     "6",
+     "1",
+     "100 coin"
+    ],
+    [
+     "7",
+     "1",
+     "200 coin"
+    ],
+    [
+     "8",
+     "1",
+     "300 coin"
+    ],
+    [
+     "9",
+     "1",
+     "400 coin"
+    ],
+    [
+     "10",
+     "23",
+     "15 phút Unlimited Lives"
+    ],
+    [
+     "11",
+     "45",
+     "30 phút Unlimited Lives"
+    ],
+    [
+     "12",
+     "22",
+     "60 phút Unlimited Lives"
+    ],
+    [
+     "13",
+     "5",
+     "1 gói thẻ Collection (CollectionPackType 1)"
+    ],
+    [
+     "14",
+     "3",
+     "1 gói thẻ Collection (CollectionPackType 2)"
+    ],
+    [
+     "15",
+     "1",
+     "1 gói thẻ Collection (CollectionPackType 3)"
+    ],
+    [
+     "16",
+     "0",
+     "1 gói thẻ Collection (CollectionPackType 4)"
+    ],
+    [
+     "17",
+     "0",
+     "1 gói thẻ Collection (CollectionPackType 5)"
+    ],
+    [
+     "Tổng",
+     "109",
+     "—"
+    ]
+   ]
+  },
+  {
+   "title": "BẢNG MẶC ĐỊNH KHI COLLECTION ĐANG CHẠY (OthersProbabilitiesWithCollection)",
+   "columns": [
+    "#",
+    "Trọng số",
+    "Phần thưởng"
+   ],
+   "rows": [
+    [
+     "0",
+     "10",
+     "50 coin"
+    ],
+    [
+     "1",
+     "15",
+     "100 coin"
+    ],
+    [
+     "2",
+     "3",
+     "200 coin"
+    ],
+    [
+     "3",
+     "1",
+     "300 coin"
+    ],
+    [
+     "4",
+     "1",
+     "400 coin"
+    ],
+    [
+     "5",
+     "1",
+     "1 Extra Bottle"
+    ],
+    [
+     "6",
+     "6",
+     "1 Undo"
+    ],
+    [
+     "7",
+     "1",
+     "2 Undo"
+    ],
+    [
+     "8",
+     "6",
+     "1 Shuffle"
+    ],
+    [
+     "9",
+     "1",
+     "2 Shuffle"
+    ],
+    [
+     "10",
+     "15",
+     "15 phút Unlimited Lives"
+    ],
+    [
+     "11",
+     "10",
+     "30 phút Unlimited Lives"
+    ],
+    [
+     "12",
+     "10",
+     "60 phút Unlimited Lives"
+    ],
+    [
+     "13",
+     "5",
+     "1 gói thẻ Collection (CollectionPackType 1)"
+    ],
+    [
+     "14",
+     "3",
+     "1 gói thẻ Collection (CollectionPackType 2)"
+    ],
+    [
+     "15",
+     "1",
+     "1 gói thẻ Collection (CollectionPackType 3)"
+    ],
+    [
+     "16",
+     "0",
+     "1 gói thẻ Collection (CollectionPackType 4)"
+    ],
+    [
+     "17",
+     "0",
+     "1 gói thẻ Collection (CollectionPackType 5)"
+    ],
+    [
+     "Tổng",
+     "89",
+     "—"
+    ]
+   ]
+  }
+ ],
+ "key_numbers": [
+  {
+   "label": "Level mở khóa (bản V2)",
+   "value": "34",
+   "source": "DailyRewardConfigModelV2.json: firstLevelToShow"
+  },
+  {
+   "label": "Level mở khóa (bản V1)",
+   "value": "20",
+   "source": "DailyRewardConfigModel.json: firstLevelToShow"
+  },
+  {
+   "label": "EventType mặc định",
+   "value": "1",
+   "source": "DailyRewardConfigModelV2.json: eventType"
+  },
+  {
+   "label": "IsEnabled mặc định",
+   "value": "false (chờ remote config bật)",
+   "source": "DailyRewardConfigModelV2.json: isEnabled"
+  },
+  {
+   "label": "Bảng % mở khóa Unlimited Lives theo số ô đã mở",
+   "value": "34, 50, 60, 70, 80, 90, 100",
+   "source": "DailyRewardDataService.GetUnlimitedLifeOpenProbabilityByOpenedRewardCount"
+  },
+  {
+   "label": "Index kẹp của bảng trên",
+   "value": "6 (openedRewardCount > 5 → 6)",
+   "source": "DailyRewardDataService.GetUnlimitedLifeOpenProbabilityByOpenedRewardCount"
+  },
+  {
+   "label": "Coin mặc định khi thiếu cấu hình",
+   "value": "100",
+   "source": "DailyRewardDataService.GetRandomCoinAmountByConfig"
+  },
+  {
+   "label": "Unlimited Lives mặc định khi thiếu cấu hình",
+   "value": "15 phút",
+   "source": "DailyRewardDataService.GetRandomUnlimitedLifeTimeByConfig"
+  },
+  {
+   "label": "Điều kiện level khó",
+   "value": "level % 10 == 4 hoặc level % 10 == 9",
+   "source": "DailyRewardDataService.IsPlayerHasNoLifeOrInHardLevel"
+  },
+  {
+   "label": "Các mức coin trong pool V2",
+   "value": "50, 100, 200, 300, 400",
+   "source": "DailyRewardConfigModelV2.json"
+  },
+  {
+   "label": "Các mức Unlimited Lives",
+   "value": "15, 30, 60 phút",
+   "source": "DailyRewardConfigModelV2.json"
+  },
+  {
+   "label": "Số dòng bảng xác suất cơ bản",
+   "value": "13 dòng mỗi bảng",
+   "source": "DailyRewardConfigModelV2.json: DayOneProbabilities"
+  },
+  {
+   "label": "Số dòng bảng biến thể WithCollection",
+   "value": "18 dòng (thêm 5 gói thẻ)",
+   "source": "DailyRewardConfigModelV2.json: DayOneProbabilitiesWithCollection"
+  },
+  {
+   "label": "Tổng trọng số DayOneProbabilities",
+   "value": "100",
+   "source": "DailyRewardConfigModelV2.json: DayOneProbabilities"
+  },
+  {
+   "label": "Tổng trọng số HardLevelOrNoLifeProbabilities",
+   "value": "100",
+   "source": "DailyRewardConfigModelV2.json: HardLevelOrNoLifeProbabilities"
+  },
+  {
+   "label": "Tổng trọng số OthersProbabilities",
+   "value": "80",
+   "source": "DailyRewardConfigModelV2.json: OthersProbabilities"
+  },
+  {
+   "label": "Trọng số Unlimited Lives khi hết mạng / level khó",
+   "value": "23 + 45 + 22 = 90 trên tổng 100",
+   "source": "DailyRewardConfigModelV2.json: HardLevelOrNoLifeProbabilities"
+  },
+  {
+   "label": "CurrencyEarnReason khi trao thưởng",
+   "value": "DailyReward = 30",
+   "source": "Modules.Contexts.Application.Inventory.Scripts.CurrencyEarnReason"
+  },
+  {
+   "label": "Dòng Daily Bonus trong Store",
+   "value": "StoreViewType.DailyReward = 8",
+   "source": "Modules.Contexts.Home.Store.Scripts.StoreViewType"
+  },
+  {
+   "label": "Số trạng thái sự kiện",
+   "value": "8 (NoCachedEvent=0 … Disable=7)",
+   "source": "DailyRewardStateService.GetEventState"
+  },
+  {
+   "label": "Số nguồn mở popup cho analytics",
+   "value": "5 (FirstImpression=0, ForceHard=1, ForceOthers=2, LobbyButton=3, Shop=4)",
+   "source": "DailyRewardPopUpImpressionSource"
+  },
+  {
+   "label": "Tên bản ghi đồng bộ",
+   "value": "DailyRewardModel",
+   "source": "DailyRewardDataService.GetSyncName"
+  }
+ ],
+ "config_highlights": [
+  {
+   "key": "DailyRewardConfigModelV2.json: isEnabled",
+   "value": "false",
+   "meaning": "Mặc định tắt, remote config bật sự kiện"
+  },
+  {
+   "key": "DailyRewardConfigModelV2.json: eventType",
+   "value": "1",
+   "meaning": "Loại sự kiện gửi kèm request lấy chu kỳ"
+  },
+  {
+   "key": "DailyRewardConfigModelV2.json: firstLevelToShow",
+   "value": "34",
+   "meaning": "Level tối thiểu để thấy Daily Bonus (bản V2)"
+  },
+  {
+   "key": "DailyRewardConfigModel.json: firstLevelToShow",
+   "value": "20",
+   "meaning": "Level tối thiểu của bản V1"
+  },
+  {
+   "key": "DailyRewardConfigModel.json: probabilityModel.undo",
+   "value": "15",
+   "meaning": "Trọng số Undo trong pool bản V1"
+  },
+  {
+   "key": "DailyRewardConfigModel.json: probabilityModel.shuffle",
+   "value": "15",
+   "meaning": "Trọng số Shuffle trong pool bản V1"
+  },
+  {
+   "key": "DailyRewardConfigModel.json: probabilityModel.extraBottle",
+   "value": "10",
+   "meaning": "Trọng số Extra Bottle trong pool bản V1"
+  },
+  {
+   "key": "DailyRewardConfigModel.json: probabilityModel.coin",
+   "value": "20",
+   "meaning": "Trọng số coin trong pool bản V1"
+  },
+  {
+   "key": "DailyRewardConfigModel.json: probabilityModel.life",
+   "value": "40",
+   "meaning": "Trọng số Life trong pool bản V1"
+  },
+  {
+   "key": "DailyRewardConfigModel.json: probabilityModel.coinProbabilities.coin100",
+   "value": "40",
+   "meaning": "Trọng số trúng 100 coin"
+  },
+  {
+   "key": "DailyRewardConfigModel.json: probabilityModel.coinProbabilities.coin200",
+   "value": "40",
+   "meaning": "Trọng số trúng 200 coin"
+  },
+  {
+   "key": "DailyRewardConfigModel.json: probabilityModel.coinProbabilities.coin300",
+   "value": "20",
+   "meaning": "Trọng số trúng 300 coin"
+  },
+  {
+   "key": "DailyRewardConfigModel.json: probabilityModel.unlimitedLifeProbabilities.life15Min",
+   "value": "30",
+   "meaning": "Trọng số trúng 15 phút Unlimited Lives"
+  },
+  {
+   "key": "DailyRewardConfigModel.json: probabilityModel.unlimitedLifeProbabilities.life30Min",
+   "value": "50",
+   "meaning": "Trọng số trúng 30 phút Unlimited Lives"
+  },
+  {
+   "key": "DailyRewardConfigModel.json: probabilityModel.unlimitedLifeProbabilities.life60min",
+   "value": "20",
+   "meaning": "Trọng số trúng 60 phút Unlimited Lives"
+  },
+  {
+   "key": "DailyRewardConfigModelV2.DayOneProbabilities",
+   "value": "13 dòng, tổng trọng số 100",
+   "meaning": "Bảng dùng cho ngày đầu tiên, nghiêng mạnh về coin 100–300"
+  },
+  {
+   "key": "DailyRewardConfigModelV2.HardLevelOrNoLifeProbabilities",
+   "value": "13 dòng, tổng 100, riêng Unlimited Lives 90",
+   "meaning": "Bảng cứu trợ khi hết mạng hoặc kẹt level khó"
+  },
+  {
+   "key": "DailyRewardConfigModelV2.OthersProbabilities",
+   "value": "13 dòng, tổng trọng số 80",
+   "meaning": "Bảng mặc định cho các trường hợp còn lại"
+  },
+  {
+   "key": "DailyRewardConfigModelV2.DayOneProbabilitiesWithCollection",
+   "value": "18 dòng, thêm CollectionPackType 1–5 trọng số 5/3/1/0/0",
+   "meaning": "Biến thể ngày đầu khi Collection đang chạy"
+  },
+  {
+   "key": "DailyRewardConfigModelV2.HardLevelOrNoLifeProbabilitiesWithCollection",
+   "value": "18 dòng, thêm CollectionPackType 1–5 trọng số 5/3/1/0/0",
+   "meaning": "Biến thể cứu trợ khi Collection đang chạy"
+  },
+  {
+   "key": "DailyRewardConfigModelV2.OthersProbabilitiesWithCollection",
+   "value": "18 dòng, thêm CollectionPackType 1–5 trọng số 5/3/1/0/0",
+   "meaning": "Biến thể mặc định khi Collection đang chạy"
+  },
+  {
+   "key": "GetUnlimitedLifeOpenProbabilityByOpenedRewardCount",
+   "value": "[34, 50, 60, 70, 80, 90, 100]",
+   "meaning": "% mở khóa Unlimited Lives tăng dần theo số ô đã mở"
+  },
+  {
+   "key": "Điều kiện level khó",
+   "value": "level % 10 == 4 || level % 10 == 9",
+   "meaning": "Cách game nhận diện level Hard / Super Hard"
+  },
+  {
+   "key": "DailyRewardStateType",
+   "value": "NoCachedEvent=0, NotIntroduced=1, InProgress=2, TimeIsUp=3, Claimed=4, ClaimedAndTimeIsUp=5, InsufficientLevel=6, Disable=7",
+   "meaning": "Máy trạng thái điều khiển icon và popup"
+  },
+  {
+   "key": "DailyRewardPopUpImpressionSource",
+   "value": "FirstImpression=0, ForceHard=1, ForceOthers=2, LobbyButton=3, Shop=4",
+   "meaning": "Nguồn mở popup gửi kèm analytics"
+  },
+  {
+   "key": "CurrencyEarnReason.DailyReward",
+   "value": "30",
+   "meaning": "Lý do nhận thưởng khi trao gộp"
+  },
+  {
+   "key": "StoreViewType.DailyReward",
+   "value": "8",
+   "meaning": "Vị trí dòng Daily Bonus trong Store"
+  },
+  {
+   "key": "DailyRewardPopUp.event_ended_text",
+   "value": "Daily Bonus event has ended!",
+   "meaning": "Text hiển thị khi chu kỳ đã đóng"
+  },
+  {
+   "key": "DailyRewardEventInfoResponse",
+   "value": "EventId, EventType, StartTime, FinishTime, Segment (server)",
+   "meaning": "Thông tin chu kỳ do server cấp"
+  },
+  {
+   "key": "DailyRewardSelectedRewardModel",
+   "value": "{SelectedRewardIndex, SelectedReward}",
+   "meaning": "Ghi ô nào cho thưởng nào để khôi phục UI"
+  }
+ ],
+ "tips": [
+  "Ba bảng xác suất theo hoàn cảnh là một dạng dynamic difficulty: người kẹt level khó hoặc hết mạng được đẩy trọng số Unlimited Lives lên 90 trên tổng 100.",
+  "Bảng 34 đến 100 khiến ô cuối gần như chắc chắn ra Unlimited Lives, tạo cảm giác kết thúc lượt chọn thật đã.",
+  "Trao gộp thưởng ở Home tách thao tác chọn khỏi thao tác nhận, tránh mất thưởng nếu popup bị đóng đột ngột.",
+  "Bảng WithCollection dùng gói thẻ như phần thưởng chéo, kéo người chơi Daily Bonus sang sự kiện Collection.",
+  "Mọi trọng số mặc định trong client đều có thể bị remote config ghi đè nên chỉ nên coi là baseline thiết kế."
+ ],
+ "categories": [
+  "Sự kiện",
+  "Live-ops",
+  "Kinh tế",
+  "Booster"
+ ]
+}

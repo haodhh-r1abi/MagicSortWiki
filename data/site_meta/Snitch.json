@@ -1,0 +1,422 @@
+{
+  "id": "Snitch",
+  "title": "Snitch Hunt (trợ thủ Snitch)",
+  "tagline": "Thắng 10 level để kích hoạt bầy Snitch bay vào ván, lật ô ẩn hoặc phá vật cản giúp người chơi.",
+  "infobox": [
+    [
+      "Loại",
+      "Cơ chế lõi"
+    ],
+    [
+      "Mở khóa",
+      "Level 290 (SnitchConfigModel.FirstLevelToShow, client default), IsEnabled mặc định false"
+    ],
+    [
+      "Thời lượng",
+      "Giữ trạng thái kích hoạt cho tới khi thua một ván"
+    ],
+    [
+      "Tham gia",
+      "Người chơi đơn"
+    ],
+    [
+      "Vật phẩm thu thập",
+      "Tiến độ Progress (thắng level), mục tiêu 10 level"
+    ],
+    [
+      "Thưởng chính",
+      "Snitch Thường lật 1 ô ẩn; Snitch Đỏ phá 1 vật cản"
+    ],
+    [
+      "Điều kiện / phụ thuộc",
+      "EventsFramework, SuperCharger, MagicBottle, Analytics, Obstacles (Blockers)"
+    ],
+    [
+      "Manager",
+      "SnitchService, SnitchDataService, SnitchModel, SnitchConfigModel, SnitchInGameManager, SnitchTargetFinder, SnitchItem"
+    ]
+  ],
+  "description": [
+    "Snitch Hunt là trợ thủ dạng 'sinh vật bay' xuất hiện trong level sau khi người chơi thắng đủ số level ở Home.",
+    "Khi đã kích hoạt, vào ván sẽ có một cái hộp (SnitchBoxView) thả ra các con Snitch.",
+    "Snitch Thường (Normal/Silver, ItemType 0) bay tới một ô ẩn và lật mở nó, để lộ màu nước phía dưới.",
+    "Snitch Đỏ (Red/Power, ItemType 1) bay tới một vật cản và phá nó.",
+    "Snitch được đặt sẵn trong dữ liệu level (SnitchSpawnInfo) hoặc bay vào từ ngoài bàn (ExternalSnitchObject).",
+    "Mục tiêu do SnitchTargetFinder chọn theo thứ tự ưu tiên: mục tiêu cố định trong level, rồi mục tiêu ngẫu nhiên có trọng số, rồi mục tiêu dự phòng.",
+    "Giống Super Charger, trạng thái kích hoạt kéo dài đến khi người chơi thua một ván, có popup Are You Sure cảnh báo trước.",
+    "Toàn bộ do khoá remote config SnitchConfigModel điều khiển; mặc định client tắt và mở từ level 290.",
+    "Nút ở Home hiển thị vòng tròn tiến độ dạng {0}/{1} kèm hoạt ảnh 'thu thập' khi vừa tăng tiến độ."
+  ],
+  "notes": [
+    "Lưu ý: Thua một ván sẽ đặt Progress = 0 và LastSeenLobbyButtonProgress = 0, đồng thời bắn analytics snitch_lost.",
+    "Lưu ý: Tiến độ chỉ tăng khi EventShownInLifeTime = true và Progress chưa bằng TargetLevelProgress.",
+    "Lưu ý: IsEligible() cần IsEnabled và tiến độ >= FirstLevelToShow (290); IsActive() thêm điều kiện Progress >= TargetLevelProgress (10).",
+    "Lưu ý: Khi không có blocker rõ ràng và IsFallbackPremiumHitActive = true, Snitch Đỏ ép chọn mục tiêu dự phòng (GetMaxQuestionMarkBottle hoặc GetRandomFallbackSnitchSpawnTarget).",
+    "Lưu ý: LockTarget/UnlockTarget và SnitchTargetFinder.LockItem/UnlockItem ngăn hai con Snitch nhắm cùng một mục tiêu.",
+    "Lưu ý: Số Snitch tối đa mỗi ván không có hằng số rõ ràng; suy luận từ SnitchAnimationConfig có delay cho tối đa 3 Snitch xám và 2 Snitch vàng.",
+    "Lưu ý: Công thức GetBlockerPriorityScore (cách chấm điểm blocker) không đọc được con số từ pseudo-C (gap).",
+    "Lưu ý: Không rõ Snitch hành động vào thời điểm nào trong lượt — PerformSnitch được gọi từ hệ trạng thái level ngoài phạm vi các class Snitch (gap)."
+  ],
+  "how_it_works": [
+    "Ở Home, mỗi lần thắng level SnitchService.TryIncreaseProgress() tăng SnitchModel.Progress thêm 1.",
+    "Khi Progress đạt TargetLevelProgress (10), service bắn analytics snitch_claim và Snitch trở thành Active.",
+    "TryResetProgress() rẽ nhánh: còn đủ điều kiện thì tăng tiến độ, không đủ (thua ván / config tắt) thì đặt Progress = 0 và bắn snitch_lost.",
+    "SnitchLobbyButton hiển thị vòng tròn tiến độ; IsLobbyButtonProgressIncreased so Progress với LastSeenLobbyButtonProgress.",
+    "Nếu tăng, ShouldShowCollectibleEarnAnimationOnLobbyReturn chạy hoạt ảnh thu thập, sau đó TrySetLastSeenLobbyButtonProgress ghi lại mốc đã xem.",
+    "Khi đủ tiến độ, TryPlaySnitchActivationCommand mở SnitchActivationPopUp (đứng trước MagicBottleCongrats trong chuỗi return-to-home).",
+    "Vào level: SnitchInGameManager.Initialize(bottleCollections) dựng SnitchTargetFinder theo bàn chơi hiện tại.",
+    "OnLevelStart(externalSnitches, levelSnitchInfo, onComplete) chạy hoạt ảnh hộp Snitch bay vào theo SnitchAnimationConfig (LevelStartDelay, SnitchBoxEntryDuration, SnithBoxWaitDuration, SnitchBoxExitDuration, SnitchesPerformDelay).",
+    "Mỗi con Snitch là SnitchItem (kế thừa ABlockerItem, IsOverlay = true) mang SnitchItemModel với ItemType, TargetCellIndices và TargetBottleIndices.",
+    "PerformSnitch(snitchItem) rẽ nhánh theo loại: PerformNormalSnitch hoặc PerformRedSnitch.",
+    "PerformNormalSnitch gọi GetNormalSnitchTarget: ưu tiên GetFixedNormalSnitchTarget nếu level chỉ định, ngược lại GetRandomNormalSnitchTarget; snitch ngoài bàn dùng GetExternalNormalSnitchTarget hoặc GetDummyNormalSnitchTarget.",
+    "OnNormalSnitchHitTarget(snitchTarget) → RevealCell(targetCell, targetBottle) lật ô ẩn, có thể RevealBottleCells cả chai; nếu IsWaterColorChangeActive thì ChangeSnitchWaterColor(water) đổi màu nước cho khớp.",
+    "PerformRedSnitch gọi GetRedSnitchTargetItem: GetRedSnitchTargetBlockers thu thập blocker theo chai chỉ định, theo từng chai hoặc overlay, rồi SortBlockers dùng GetBlockerPriorityScore chọn blocker đáng phá nhất.",
+    "MoveSnitchItemToTarget bay tới đích theo đường Bezier (tham số MinMaxBezierDurationForHit, MinMaxBezierLengthForHit, SnitchMoveSpeed, MaxDistanceCap), rồi OnRedSnitchHitTarget(targetItem) phá blocker.",
+    "Snitch Đỏ có khoảng chờ khác nhau theo loại blocker mục tiêu (redSnitchPerformIntervals, TryGetRedSnitchPerformInterval).",
+    "Sau khi hành động, Snitch có thể đậu lại (PlaySnitchSitAnimation, clip 'SnitchSit') hoặc được đặt vào ô mới theo SnitchSpawnInfo.",
+    "Lần đầu gặp trong level, ShouldShowTutorial() → StartTutorial() mở SnitchLevelTutorialPopUp; Snitch cũng nhường lượt cho luồng giới thiệu blocker mới, và OnAllStatesCompleted báo hoàn tất chuỗi Snitch của ván."
+  ],
+  "reward_tables": [
+    {
+      "title": "TIẾN ĐỘ VÀ KÍCH HOẠT (SnitchConfigModel.json, client default)",
+      "columns": [
+        "Mốc",
+        "Điều kiện",
+        "Kết quả"
+      ],
+      "rows": [
+        [
+          "Đủ điều kiện",
+          "IsEnabled = true và tiến độ người chơi >= level 290",
+          "Thấy nút Snitch ở Home (IsEligible)"
+        ],
+        [
+          "Tích tiến độ",
+          "Mỗi level thắng",
+          "Progress + 1"
+        ],
+        [
+          "Kích hoạt",
+          "Progress đạt 10 (TargetLevelProgress)",
+          "Snitch Active, bắn analytics snitch_claim, mở SnitchActivationPopUp"
+        ],
+        [
+          "Mất Snitch",
+          "Thua một ván hoặc config tắt",
+          "Progress = 0, LastSeenLobbyButtonProgress = 0, bắn snitch_lost"
+        ]
+      ]
+    },
+    {
+      "title": "HAI LOẠI SNITCH (enum SnitchItemType)",
+      "columns": [
+        "Mã",
+        "Loại",
+        "Tác dụng"
+      ],
+      "rows": [
+        [
+          "0",
+          "Normal (Silver)",
+          "Lật mở 1 ô ẩn, có thể lộ cả chai; đổi màu nước tương ứng nếu IsWaterColorChangeActive = true"
+        ],
+        [
+          "1",
+          "Red (Power)",
+          "Phá 1 vật cản được GetBlockerPriorityScore chấm điểm cao nhất"
+        ]
+      ]
+    },
+    {
+      "title": "SỐ SNITCH VÀ ĐỘ TRỄ (SnitchAnimationConfig.asset)",
+      "columns": [
+        "Thứ tự",
+        "Snitch",
+        "Tham số delay"
+      ],
+      "rows": [
+        [
+          "1",
+          "Snitch xám thứ nhất",
+          "FirstGraySnitchHitDelay, FirstGraySnitchRiseDelay"
+        ],
+        [
+          "2",
+          "Snitch xám thứ hai",
+          "SecondGraySnitchHitDelay, SecondGraySnitchRiseDelay"
+        ],
+        [
+          "3",
+          "Snitch xám thứ ba",
+          "ThirdGraySnitchHitDelay, ThirdGraySnitchRiseDelay"
+        ],
+        [
+          "4",
+          "Snitch vàng thứ nhất",
+          "FirstYellowSnitchRiseDelay, FirstYellowSnitchSitRiseDelay"
+        ],
+        [
+          "5",
+          "Snitch vàng thứ hai",
+          "SecondYellowSnitchRiseDelay, SecondYellowSnitchSitRiseDelay"
+        ],
+        [
+          "Tổng",
+          "Tối đa 3 xám + 2 vàng",
+          "(suy luận từ số tham số delay có sẵn)"
+        ]
+      ]
+    },
+    {
+      "title": "NGUỒN MỞ POPUP (analytics)",
+      "columns": [
+        "Enum",
+        "Giá trị",
+        "Ý nghĩa"
+      ],
+      "rows": [
+        [
+          "SnitchInfoPopUpImpressionSource",
+          "InfoButton=0, FirstOpen=1",
+          "Nguồn mở SnitchInfoPopUp"
+        ],
+        [
+          "SnitchJoinPopUpImpressionSource",
+          "LobbyIcon=0, FirstOpen=1",
+          "Nguồn mở SnitchJoinPopUp"
+        ]
+      ]
+    }
+  ],
+  "key_numbers": [
+    {
+      "label": "Bật mặc định (client)",
+      "value": "false",
+      "source": "SnitchConfigModel.json: IsEnabled"
+    },
+    {
+      "label": "Level tối thiểu",
+      "value": "290",
+      "source": "SnitchConfigModel.json: FirstLevelToShow"
+    },
+    {
+      "label": "Số level phải thắng để kích hoạt",
+      "value": "10",
+      "source": "SnitchConfigModel.json: TargetLevelProgress"
+    },
+    {
+      "label": "Cho phép mục tiêu dự phòng của Snitch Đỏ",
+      "value": "true",
+      "source": "SnitchConfigModel.json: IsFallbackPremiumHitActive"
+    },
+    {
+      "label": "Đổi màu nước sau khi lật ô",
+      "value": "true",
+      "source": "SnitchConfigModel.json: IsWaterColorChangeActive"
+    },
+    {
+      "label": "Số loại Snitch",
+      "value": "2 (Normal=0, Red=1)",
+      "source": "SnitchItemType"
+    },
+    {
+      "label": "Số Snitch xám có tham số delay riêng",
+      "value": "3",
+      "source": "SnitchAnimationConfig.asset"
+    },
+    {
+      "label": "Số Snitch vàng có tham số delay riêng",
+      "value": "2",
+      "source": "SnitchAnimationConfig.asset"
+    },
+    {
+      "label": "Clip hoạt ảnh đậu",
+      "value": "\"SnitchSit\"",
+      "source": "SnitchItem.PlaySnitchSitAnimation"
+    },
+    {
+      "label": "Tên khối đồng bộ",
+      "value": "\"SnitchModel\"",
+      "source": "SnitchDataService.GetSyncName"
+    },
+    {
+      "label": "Số trường của SnitchModel",
+      "value": "5 (Progress, LastSeenLobbyButtonProgress, IsInfoPopUpIntroduced, IsLevelTutorialIntroduced, EventShownInLifeTime)",
+      "source": "SnitchModel"
+    },
+    {
+      "label": "Số điểm vào tính năng",
+      "value": "6",
+      "source": "Snitch.entry_points"
+    },
+    {
+      "label": "Số sự kiện analytics",
+      "value": "5",
+      "source": "Snitch.analytics"
+    },
+    {
+      "label": "Số popup của tính năng",
+      "value": "3 (SnitchJoinPopUp, SnitchInfoPopUp, SnitchLevelTutorialPopUp)",
+      "source": "IPopUpService keys"
+    },
+    {
+      "label": "Số khoá localization",
+      "value": "9 (SnitchJoinTitle … SnitchAreYouSure)",
+      "source": "appendix/localization.tsv"
+    },
+    {
+      "label": "Số bước hướng dẫn trong SnitchInfoPopUp",
+      "value": "3 bước",
+      "source": "SnitchInfoStep1/2/3"
+    },
+    {
+      "label": "Kiểu Snitch trên bàn",
+      "value": "SnitchItem kế thừa ABlockerItem, IsOverlay = true",
+      "source": "Board.Items.Scripts.Snitch.SnitchItem"
+    },
+    {
+      "label": "Đồng bộ dữ liệu",
+      "value": "sync-data (client→server)",
+      "source": "Snitch.backend"
+    },
+    {
+      "label": "Khoá chữ số level cần thắng",
+      "value": "\"SnitchInfoStep1\"",
+      "source": "SnitchInfoPopUp.max_level_localization_term"
+    },
+    {
+      "label": "Kiểu mục tiêu Snitch Đỏ dự phòng",
+      "value": "forceTarget / GetMaxQuestionMarkBottle / GetRandomFallbackSnitchSpawnTarget",
+      "source": "SnitchTargetFinder"
+    }
+  ],
+  "config_highlights": [
+    {
+      "key": "SnitchConfigModel.json: IsEnabled",
+      "value": "false",
+      "meaning": "Bật/tắt Snitch Hunt (client default; server bật)"
+    },
+    {
+      "key": "SnitchConfigModel.json: FirstLevelToShow",
+      "value": "290",
+      "meaning": "Level tối thiểu để thấy tính năng"
+    },
+    {
+      "key": "SnitchConfigModel.json: TargetLevelProgress",
+      "value": "10",
+      "meaning": "Số level phải thắng để kích hoạt Snitch"
+    },
+    {
+      "key": "SnitchConfigModel.json: IsFallbackPremiumHitActive",
+      "value": "true",
+      "meaning": "Cho phép Snitch Đỏ ép chọn mục tiêu khi không có blocker rõ ràng"
+    },
+    {
+      "key": "SnitchConfigModel.json: IsWaterColorChangeActive",
+      "value": "true",
+      "meaning": "Sau khi lật ô ẩn thì đổi màu nước tương ứng"
+    },
+    {
+      "key": "SnitchItemType",
+      "value": "Normal=0, Red=1",
+      "meaning": "Hai loại Snitch (Silver và Power)"
+    },
+    {
+      "key": "SnitchInfoPopUpImpressionSource / SnitchJoinPopUpImpressionSource",
+      "value": "InfoButton=0, FirstOpen=1 / LobbyIcon=0, FirstOpen=1",
+      "meaning": "Nguồn mở popup, gửi trong analytics"
+    },
+    {
+      "key": "SnitchItemModel.TargetCellIndices / TargetBottleIndices",
+      "value": "do dữ liệu level cấp",
+      "meaning": "Cho phép level designer chỉ định cứng mục tiêu của từng Snitch"
+    },
+    {
+      "key": "SnitchAnimationConfig — nhóm hộp Snitch",
+      "value": "LevelStartDelay, SnitchCellRevealDelay, SnitchesPerformDelay, SnitchBoxStartPosition, SnitchBoxTargetPosition, SnitchBoxExitPosition, SnitchBoxEntryDuration, SnithBoxWaitDuration, SnitchBoxExitDuration, BoxRotationPivotStartRotation, BoxRotationDuration, BoxExitRotation",
+      "meaning": "Nhịp hoạt ảnh hộp Snitch đầu ván"
+    },
+    {
+      "key": "SnitchAnimationConfig — nhóm di chuyển",
+      "value": "SnitchMoveSpeed, SnitchMoveSpeedBetweenBottles, MoveTime, SnitchHitTargetMoveMinMaxDuration, MaxDistanceCap, MinMaxBezierDurationForHit/ForSit, MinMaxBezierLengthForHit/ForSit, CloseProximityThreshold, CloseProximityHitDuration, SnitchOutOfBottleArcHeight, OutOfBottleHitDurationMinMax",
+      "meaning": "Đường bay Bezier và tốc độ của Snitch"
+    },
+    {
+      "key": "SnitchAnimationConfig — nhóm delay theo thứ tự",
+      "value": "First/Second/ThirdGraySnitchHitDelay, First/Second/ThirdGraySnitchRiseDelay, First/SecondYellowSnitchRiseDelay, First/SecondYellowSnitchSitRiseDelay, SortOrdersByIndex",
+      "meaning": "Tối đa 3 Snitch xám và 2 Snitch vàng có delay riêng"
+    },
+    {
+      "key": "SnitchAnimationConfig.redSnitchPerformIntervals",
+      "value": "List<ItemTypeInterval>",
+      "meaning": "Snitch Đỏ chờ khác nhau tuỳ loại blocker (TryGetRedSnitchPerformInterval)"
+    },
+    {
+      "key": "SnitchLobbyButtonAnimationConfig.asset",
+      "value": "CircleProgressBarAnimationDuration/Delay/Curve, PunchRotation, PunchDelay, PunchDuration, PunchVibraton, PunchElasticity, PunchCurve, SitPosition",
+      "meaning": "Hoạt ảnh nút Snitch ở Home"
+    },
+    {
+      "key": "SnitchDataService.GetSyncName",
+      "value": "\"SnitchModel\"",
+      "meaning": "Khoá lưu và đồng bộ dữ liệu Snitch"
+    },
+    {
+      "key": "SnitchModel",
+      "value": "Progress, LastSeenLobbyButtonProgress, IsInfoPopUpIntroduced, IsLevelTutorialIntroduced, EventShownInLifeTime",
+      "meaning": "Toàn bộ dữ liệu lưu của tính năng"
+    },
+    {
+      "key": "Tên popup (IPopUpService)",
+      "value": "\"SnitchJoinPopUp\", \"SnitchInfoPopUp\", \"SnitchLevelTutorialPopUp\"",
+      "meaning": "Khoá mở popup"
+    },
+    {
+      "key": "Khoá localization",
+      "value": "SnitchJoinTitle, SnitchJoinProgressText, SnitchJoinProgressCompletedText, SnitchInfoStep1, SnitchInfoStep2, SnitchInfoStep3Power, SnitchInfoStep3Silver, SnitchInfoWarning, SnitchAreYouSure",
+      "meaning": "Toàn bộ chữ hiển thị của tính năng (11 ngôn ngữ)"
+    },
+    {
+      "key": "SnitchInfoPopUp.max_level_localization_term",
+      "value": "\"SnitchInfoStep1\"",
+      "meaning": "Khoá chữ điền số level cần thắng"
+    },
+    {
+      "key": "SnitchItem.PlaySnitchSitAnimation — clip",
+      "value": "\"SnitchSit\"",
+      "meaning": "Clip Snitch đậu trên chai"
+    },
+    {
+      "key": "SnitchTargetFinder — chuỗi chọn mục tiêu thường",
+      "value": "GetFixedNormalSnitchTarget → GetRandomNormalSnitchTarget → GetExternalNormalSnitchTarget / GetDummyNormalSnitchTarget",
+      "meaning": "Thứ tự ưu tiên tìm ô ẩn cho Snitch Thường"
+    },
+    {
+      "key": "SnitchTargetFinder — chuỗi chọn mục tiêu đỏ",
+      "value": "GetRedSnitchTargetBlockersByBottleIndices → GetRedSnitchTargetBlockersByBottle → GetRedSnitchTargetOverlayBlockers → SortBlockers",
+      "meaning": "Thứ tự ưu tiên tìm blocker cho Snitch Đỏ"
+    },
+    {
+      "key": "Mục tiêu dự phòng của Snitch Đỏ",
+      "value": "forceTarget, GetMaxQuestionMarkBottle, GetRandomFallbackSnitchSpawnTarget",
+      "meaning": "Dùng khi không tìm được blocker và IsFallbackPremiumHitActive = true"
+    },
+    {
+      "key": "SnitchInGameManager — luồng ưu tiên",
+      "value": "OnNewBlockerIntroductionStarted / OnNewBlockerIntroductionEnd",
+      "meaning": "Snitch nhường lượt cho luồng giới thiệu vật cản mới"
+    }
+  ],
+  "tips": [
+    "Ngưỡng 10 level thắng liên tiếp biến Snitch thành phần thưởng cho chuỗi chơi tốt, mất ngay khi thua một ván.",
+    "Hai loại Snitch chia vai rõ: bạc giải quyết thông tin (ô ẩn), đỏ giải quyết chướng ngại (blocker).",
+    "Cho phép level designer chỉ định cứng mục tiêu giúp kiểm soát trải nghiệm ở các level tutorial hay showcase.",
+    "Cơ chế khoá mục tiêu tránh hai Snitch lãng phí lượt vào cùng một ô, giữ giá trị cảm nhận của trợ thủ.",
+    "Đặt mở khoá ở level 290 khiến Snitch là phần thưởng dành cho người chơi lâu năm, không làm loãng độ khó giai đoạn đầu."
+  ],
+  "categories": [
+    "Cơ chế lõi",
+    "Live-ops",
+    "Tiến trình"
+  ]
+}

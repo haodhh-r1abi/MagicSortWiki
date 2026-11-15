@@ -1,0 +1,171 @@
+{
+  "id": "SpecialOffer",
+  "title": "Ưu đãi đặc biệt (Special Offer)",
+  "tagline": "Gói ưu đãi giới hạn thời gian, chỉ mua một lần, đổi bộ mặt theo chủ đề mùa do server chọn.",
+  "infobox": [
+    ["Loại", "Offer"],
+    ["Mở khóa", "Level 55 (SpecialOfferConfigModel.FirstLevelToShow, client default)"],
+    ["Thời lượng", "Theo StartTime / FinishTime của từng đợt (server)"],
+    ["Chu kỳ / lịch", "Tự bật sau mỗi 2 lần đủ điều kiện (ShowFrequency), tối đa 10 lần hiện (MaxShowCount)"],
+    ["Tham gia", "Người chơi đơn"],
+    ["Tiền tệ", "Tiền thật (IAP): sort.special1 … sort.special100"],
+    ["Thưởng chính", "SegmentedOfferPackage.RewardModels theo phân khúc; dự phòng 100 coin, 15 phút Unlimited Lives, 1 Undo, 1 Shuffle, 1 Extra Bottle"],
+    ["Điều kiện / phụ thuộc", "Chưa mua, còn hạn, dữ liệu hợp lệ, asset bundle chủ đề đã tải; liên quan Store, ChooseOneSpecialOffer, NoAdsOffer, PawTouchOffer, EndlessPortal, Lives"],
+    ["Manager", "SpecialOfferService, SpecialOfferDataService, SpecialOfferStateService, SpecialOfferRemoteService, SpecialOfferConfigModel"]
+  ],
+  "description": [
+    "Special Offer là gói ưu đãi giới hạn thời gian, chỉ mua một lần, có bộ mặt thay đổi theo chủ đề mùa.",
+    "Các chủ đề gồm Ancient Deal, Coastline Deal, Coinfall Deal, Heavenly Deal, Splashing Deal, Sorcerer's Deal, St Patrick's, Fourth of July, World Cup, Pool Party.",
+    "Server chọn chủ đề (SpecialOfferThemeTpye), kiểu popup (PopupType) và gói theo phân khúc người chơi (SegmentedOfferPackage).",
+    "Client tải asset bundle tương ứng chủ đề (8 bundle) rồi mới hiển thị; nếu chưa tải xong thì trạng thái là AssetsNotReady(8).",
+    "Offer xuất hiện ở icon lobby, tự bật theo tần suất và chèn vào popup Refill, Booster, Play On.",
+    "Có biến thể riêng khi người chơi hết nước ở cuối level: Ego offer, kèm tuỳ chọn tặng thêm một lượt Play On.",
+    "Chín bậc sản phẩm IAP mặc định từ 0.99 tới 99.99 USD (sort.special1 … sort.special100).",
+    "Máy trạng thái có 9 giá trị, từ Disable(0) tới AssetsNotReady(8).",
+    "Biến thể AdaptiveSpecialOfferConfigModel dùng bảng 10 bậc IAP riêng, có thêm sort.special4.99."
+  ],
+  "notes": [
+    "Lưu ý: Đây là offer một lần mua — SpecialOfferSyncableDataModel.IsPurchased = true thì không hiện lại.",
+    "Lưu ý: Client kiểm tra IsDataWrong(); dữ liệu sai thì bắn analytics wrong_special_offer_data và chuyển trạng thái WrongData(7).",
+    "Lưu ý: Client không fetch hoặc claim khi popup 'SpecialOfferPopup' đang mở.",
+    "Lưu ý: Nếu không tra được thưởng theo productId thì dùng FallBackRewardModels và bắn special_offer_fallback_rewards.",
+    "Lưu ý: Enum SpecialOfferThemeTpye chỉ có 4 giá trị nhưng có 8 bundle và 9 tên offer — phần lớn chủ đề chọn qua PopupType.",
+    "Lưu ý: Tên enum SpecialOfferThemeTpye viết sai chính tả trong mã nguồn gốc.",
+    "Lưu ý: Giá, product id và nội dung thưởng của từng phân khúc do server gửi trong SegmentedOfferPackage — số dưới đây là client default.",
+    "Lưu ý: ShouldLimitEgoPlayOnToFirstStuck giới hạn quà Play On của Ego offer chỉ ở lần kẹt đầu tiên."
+  ],
+  "how_it_works": [
+    "SpecialOfferStateService.GetState() lần lượt lọc: Disable(0), ProgressNotEnough(1), NoCache(2), Enable(3), LocalTimeIsUp(4), RemoteTimeIsUp(5), Purchased(6), WrongData(7), AssetsNotReady(8).",
+    "Khi ShouldSendGetRequest() đúng và popup 'SpecialOfferPopup' không mở, TryFetchCurrentEvent() dựng SpecialOfferRequestModel{EventId, EventType, HasPurchased}.",
+    "SpecialOfferRemoteService.SendGetRequest() gửi lên server, nhận về SpecialOfferResponse (schema magicsort.schemas.v1.liveops.special_offer).",
+    "HandleSpecialOfferResponse(response) → UpdateAndCacheBackendOfferResponse() kiểm tra tính hợp lệ; dữ liệu sai thì bắn wrong_special_offer_data.",
+    "CacheBackendResponse lưu SpecialOfferResponse{EventId, StartTime, FinishTime, IsFinished, IsClaimed, SegmentedOfferPackage, PopupType, Segment, ThemeType}.",
+    "GetThemeType() và GetBundleId() tra hai bảng _themeBundle (theo SpecialOfferThemeTpye) và _popupBundle (theo PopupType) để chọn một trong 8 bundle giao diện.",
+    "CheckAndResolveAssetDependencies() tải bundle qua AssetManager; chưa xong thì trạng thái ở AssetsNotReady(8).",
+    "SpecialOfferThemeController chọn UI variant theo chủ đề, SpecialOfferLobbyIconThemeVariants đổi icon ở lobby.",
+    "Tần suất tự bật: IncrementPopupTrigger() tăng bộ đếm, GetPopupTriggerCount() so với ShowFrequency (2) và MaxShowCount (10) trong ShouldForceShowPopup.",
+    "ClearPopupTriggerCount() reset bộ đếm sau khi mở popup; nguồn mở popup được ghi lại qua SpecialOfferPopupImpressionSource.",
+    "Ego offer: ShouldShowEgoOffer() theo cờ cấu hình; ShouldShowPlayOnAtEgo(isFirstPlayOn) theo ShouldGivePlayOnAtEgo, kết hợp IsAllowedByFirstStuckRule(isFirstPlayOn).",
+    "Mua: GetSpecialOfferUniqueIAPs() / GetIAPConfigModel(iapProductId) lấy sản phẩm từ SpecialOfferConfigModel.IAPConfigModels (9 bậc: 0.99 … 99.99 USD).",
+    "IAPService thực hiện giao dịch với IAPOrigin.SpecialOffer (4) và IAPReason.SpecialOffer (6); IAPPurchaseVerificationService xác thực biên lai.",
+    "Thành công: ClaimPurchasedSpecialOfferRewards(productId, giveRewardsWithoutAnimation) → GetRewardsForProductId(productId) lấy SegmentedOfferPackage.RewardModels.",
+    "Thưởng trao với CurrencyEarnReason.SpecialOffer (17); loại thưởng có thể là coin, life, life_in_seconds, additional_life_inventory, undo, shuffle, extra_bottle, duck_x2_in_seconds, merge_energy, collection_pack_1..5.",
+    "Nếu không tra được productId thì dùng FallBackRewardModels (100 coin, 15 phút Unlimited Lives, 1 Undo, 1 Shuffle, 1 Extra Bottle).",
+    "SetIsPurchased(true) ghi trạng thái, SendClaimRequest() báo server, và SyncService đồng bộ qua SyncName 'SpecialOfferSyncableDataModel'."
+  ],
+  "reward_tables": [
+    {
+      "title": "CÁC BẬC SẢN PHẨM IAP (SpecialOfferConfigModel.json, client default)",
+      "columns": ["Bậc", "ProductId", "Giá (DollarEquivalent)"],
+      "rows": [
+        ["Bậc 1", "sort.special1", "0.99 USD"],
+        ["Bậc 2", "sort.special3", "2.99 USD"],
+        ["Bậc 3", "sort.special5", "4.99 USD"],
+        ["Bậc 4", "sort.special10", "9.99 USD"],
+        ["Bậc 5", "sort.special20", "19.99 USD"],
+        ["Bậc 6", "sort.special40", "39.99 USD"],
+        ["Bậc 7", "sort.special50", "49.99 USD"],
+        ["Bậc 8", "sort.special80", "79.99 USD"],
+        ["Bậc 9", "sort.special100", "99.99 USD"]
+      ]
+    },
+    {
+      "title": "BẬC IAP CỦA BIẾN THỂ ADAPTIVE (AdaptiveSpecialOfferConfigModel.json, client default)",
+      "columns": ["Bậc", "ProductId", "Giá (DollarEquivalent)"],
+      "rows": [
+        ["Bậc 1", "sort.special1", "0.99 USD"],
+        ["Bậc 2", "sort.special3", "2.99 USD"],
+        ["Bậc 3", "sort.special4.99", "4.99 USD"],
+        ["Bậc 4", "sort.special5", "4.99 USD"],
+        ["Bậc 5", "sort.special10", "9.99 USD"],
+        ["Bậc 6", "sort.special20", "19.99 USD"],
+        ["Bậc 7", "sort.special40", "39.99 USD"],
+        ["Bậc 8", "sort.special50", "49.99 USD"],
+        ["Bậc 9", "sort.special80", "79.99 USD"],
+        ["Bậc 10", "sort.special100", "99.99 USD"]
+      ]
+    },
+    {
+      "title": "PHẦN THƯỞNG DỰ PHÒNG (FallBackRewardModels, client default)",
+      "columns": ["Mốc", "Điều kiện", "Phần thưởng"],
+      "rows": [
+        ["Dự phòng (Special Offer)", "Không tra được productId trong gói của server", "100 coin, 15 phút Unlimited Lives, 1 Undo, 1 Shuffle, 1 Extra Bottle"],
+        ["Dự phòng (Adaptive)", "Cùng điều kiện, cấu hình Adaptive", "100 coin, 15 phút Unlimited Lives, 1 Undo, 1 Shuffle, 1 Extra Bottle"]
+      ]
+    },
+    {
+      "title": "TRẠNG THÁI VÀ CHỦ ĐỀ",
+      "columns": ["Enum", "Giá trị", "Ý nghĩa"],
+      "rows": [
+        ["SpecialOfferState", "Disable=0, ProgressNotEnough=1, NoCache=2, Enable=3, LocalTimeIsUp=4, RemoteTimeIsUp=5, Purchased=6, WrongData=7, AssetsNotReady=8", "Máy trạng thái của offer"],
+        ["SpecialOfferThemeTpye", "Default=0, StPatricks=1, FourthOfJuly=2, WorldCup=3", "Chủ đề giao diện (tên enum viết sai chính tả trong code)"],
+        ["SpecialOfferPopupImpressionSource", "None=0, Booster=1, LobbyIcon=2, PlayOn=3, Refill=4, FirstShow=5", "Nguồn mở popup cho analytics"],
+        ["Asset bundle", "ancient_deal_bundle, coastline_deal_bundle, coin_fall_bundle, fourth_of_july_bundle, heavenly_deal_bundle, splashing_deal_bundle, st_patricks_bundle, world_cup_bundle", "8 bundle giao diện theo mùa"],
+        ["Tên offer (analytics)", "Ancient, Coastline, CoinFall, FourthOfJuly, Heavenly, Nan-Poolside, PoolParty, StPatricks, WorldCup", "offer_name gửi kèm sự kiện analytics"]
+      ]
+    }
+  ],
+  "key_numbers": [
+    {"label": "Bật mặc định (client)", "value": "false", "source": "SpecialOfferConfigModel.json: IsEnable"},
+    {"label": "Level đầu tiên hiện offer", "value": "55", "source": "SpecialOfferConfigModel.json: FirstLevelToShow"},
+    {"label": "EventType", "value": "2", "source": "SpecialOfferConfigModel.json: EventType"},
+    {"label": "Tần suất tự bật popup", "value": "2 lần đủ điều kiện", "source": "SpecialOfferConfigModel.json: ShowFrequency"},
+    {"label": "Số lần hiện popup tối đa", "value": "10", "source": "SpecialOfferConfigModel.json: MaxShowCount"},
+    {"label": "Số bậc sản phẩm IAP", "value": "9 (0.99 … 99.99 USD)", "source": "SpecialOfferConfigModel.json: IAPConfigModels"},
+    {"label": "Số bậc IAP biến thể Adaptive", "value": "10", "source": "AdaptiveSpecialOfferConfigModel.json: IAPConfigModels"},
+    {"label": "Adaptive — bật mặc định", "value": "false", "source": "AdaptiveSpecialOfferConfigModel.json: IsEnable"},
+    {"label": "Adaptive — level đầu tiên", "value": "55", "source": "AdaptiveSpecialOfferConfigModel.json: FirstLevelToShow"},
+    {"label": "Adaptive — EventType", "value": "1", "source": "AdaptiveSpecialOfferConfigModel.json: EventType"},
+    {"label": "Thưởng dự phòng — coin", "value": "100 (CurrencyType 1)", "source": "FallBackRewardModels[0].Amount"},
+    {"label": "Thưởng dự phòng — mạng", "value": "TimeSpan 00:15:00 (CurrencyType 2)", "source": "FallBackRewardModels[1].TimeSpan"},
+    {"label": "Thưởng dự phòng — Undo", "value": "1 (CurrencyType 4)", "source": "FallBackRewardModels[2].Amount"},
+    {"label": "Thưởng dự phòng — Shuffle", "value": "1 (CurrencyType 5)", "source": "FallBackRewardModels[3].Amount"},
+    {"label": "Thưởng dự phòng — Extra Bottle", "value": "1 (CurrencyType 6)", "source": "FallBackRewardModels[4].Amount"},
+    {"label": "Số trạng thái của offer", "value": "9 (Disable=0 … AssetsNotReady=8)", "source": "SpecialOfferState"},
+    {"label": "Số chủ đề trong enum", "value": "4 (Default=0 … WorldCup=3)", "source": "SpecialOfferThemeTpye"},
+    {"label": "Số asset bundle giao diện", "value": "8", "source": "SpecialOfferService.Initialize"},
+    {"label": "Số tên offer dùng cho analytics", "value": "9", "source": "SpecialOfferService.GetOfferName"},
+    {"label": "IAPOrigin.SpecialOffer / IAPReason.SpecialOffer", "value": "4 / 6", "source": "Application.IAP.Scripts"},
+    {"label": "CurrencyEarnReason.SpecialOffer", "value": "17", "source": "Inventory.Scripts.CurrencyEarnReason"},
+    {"label": "Số nguồn mở popup", "value": "6 (None=0 … FirstShow=5)", "source": "SpecialOfferPopupImpressionSource"},
+    {"label": "AreYouSureOfferConfigModel.OfferPriorities", "value": "[0, 1, 2, 3]", "source": "AreYouSureOfferConfigModel.json"},
+    {"label": "Tên bản ghi đồng bộ", "value": "SpecialOfferSyncableDataModel", "source": "SpecialOfferDataService.GetSyncName"}
+  ],
+  "config_highlights": [
+    {"key": "SpecialOfferConfigModel.json: IsEnable", "value": "false", "meaning": "Bật/tắt offer (client default, remote config ghi đè)"},
+    {"key": "SpecialOfferConfigModel.json: FirstLevelToShow", "value": "55", "meaning": "Level tối thiểu để offer được hiện"},
+    {"key": "SpecialOfferConfigModel.json: EventType", "value": "2", "meaning": "Loại sự kiện gửi kèm request và analytics"},
+    {"key": "SpecialOfferConfigModel.json: ShowFrequency", "value": "2", "meaning": "Số lần đủ điều kiện trước khi tự bật popup"},
+    {"key": "SpecialOfferConfigModel.json: MaxShowCount", "value": "10", "meaning": "Số lần tối đa được hiện popup"},
+    {"key": "SpecialOfferConfigModel.ShouldShowEgoOffer", "value": "(server)", "meaning": "Có hiện offer ở màn Ego (hết nước) không"},
+    {"key": "SpecialOfferConfigModel.ShouldGivePlayOnAtEgo", "value": "(server)", "meaning": "Có tặng thêm lượt Play On ở Ego không"},
+    {"key": "SpecialOfferConfigModel.ShouldLimitEgoPlayOnToFirstStuck", "value": "(server)", "meaning": "Chỉ tặng Play On ở lần kẹt đầu tiên"},
+    {"key": "SpecialOfferConfigModel.json: IAPConfigModels", "value": "sort.special1 (0.99), sort.special3 (2.99), sort.special5 (4.99), sort.special10 (9.99), sort.special20 (19.99), sort.special40 (39.99), sort.special50 (49.99), sort.special80 (79.99), sort.special100 (99.99)", "meaning": "Chín bậc sản phẩm IAP dùng cho offer"},
+    {"key": "SpecialOfferConfigModel.json: FallBackRewardModels", "value": "CurrencyType 1 (100), 2 (00:15:00), 4 (1), 5 (1), 6 (1)", "meaning": "Thưởng dự phòng: 100 coin, 15 phút Unlimited Lives, 1 Undo, 1 Shuffle, 1 Extra Bottle"},
+    {"key": "AdaptiveSpecialOfferConfigModel.json: ShowFrequency / MaxShowCount", "value": "2 / 10", "meaning": "Tần suất và trần hiển thị của biến thể Adaptive"},
+    {"key": "AdaptiveSpecialOfferConfigModel.json: IAPConfigModels[2].ProductId", "value": "sort.special4.99", "meaning": "Bậc sản phẩm chỉ có ở biến thể Adaptive"},
+    {"key": "SpecialOfferResponse", "value": "EventId, StartTime, FinishTime, IsFinished, IsClaimed, SegmentedOfferPackage, PopupType, Segment, ThemeType", "meaning": "Phiên offer, chủ đề và kiểu popup do server quyết định"},
+    {"key": "SegmentedOfferPackage", "value": "{IAPProductId, RewardModels, IAPProductDiscountAmount}", "meaning": "Gói theo phân khúc: sản phẩm, thưởng và mức giảm giá hiển thị"},
+    {"key": "Asset bundle theo chủ đề", "value": "ancient_deal_bundle, coastline_deal_bundle, coin_fall_bundle, fourth_of_july_bundle, heavenly_deal_bundle, splashing_deal_bundle, st_patricks_bundle, world_cup_bundle", "meaning": "8 bundle giao diện theo mùa"},
+    {"key": "Tên offer dùng cho analytics", "value": "Ancient, Coastline, CoinFall, FourthOfJuly, Heavenly, Nan-Poolside, PoolParty, StPatricks, WorldCup", "meaning": "offer_name gửi kèm sự kiện analytics"},
+    {"key": "SpecialOfferState", "value": "Disable=0, ProgressNotEnough=1, NoCache=2, Enable=3, LocalTimeIsUp=4, RemoteTimeIsUp=5, Purchased=6, WrongData=7, AssetsNotReady=8", "meaning": "Máy trạng thái của offer"},
+    {"key": "SpecialOfferThemeTpye", "value": "Default=0, StPatricks=1, FourthOfJuly=2, WorldCup=3", "meaning": "Chủ đề giao diện (tên enum viết sai chính tả trong code)"},
+    {"key": "SpecialOfferPopupImpressionSource", "value": "None=0, Booster=1, LobbyIcon=2, PlayOn=3, Refill=4, FirstShow=5", "meaning": "Nguồn mở popup cho analytics"},
+    {"key": "IAPOrigin.SpecialOffer / IAPReason.SpecialOffer", "value": "4 / 6", "meaning": "Phân loại giao dịch IAP"},
+    {"key": "CurrencyEarnReason.SpecialOffer", "value": "17", "meaning": "Lý do nhận thưởng ghi vào Inventory"},
+    {"key": "Popup key", "value": "\"SpecialOfferPopup\"", "meaning": "Tên popup kiểm tra trong IPopUpService trước khi fetch/claim"},
+    {"key": "SpecialOfferSyncableDataModel", "value": "IsPurchased", "meaning": "Bản ghi đồng bộ trạng thái đã mua"},
+    {"key": "SpecialOfferDataModel", "value": "SpecialOfferResponse, PopupTriggerCount, IsPopupShown, PopupTypeForOldSpecialOffer", "meaning": "Cache response và trạng thái hiển thị popup (client, không đồng bộ)"},
+    {"key": "SpecialOfferBannerAnimationConfig / SpecialOfferLobbyButtonAnimationConfig", "value": "16 field / 13 field", "meaning": "Hoạt ảnh banner và icon lobby"},
+    {"key": "Localization theo chủ đề", "value": "SpecialOfferAncientDeal, SpecialOfferCoastline, SpecialOfferCoinFallDeal, SpecialOfferHeavenly, SpecialOfferSorcerer, SpecialOfferSplashing, SpecialOfferPopupTimer ('Ends in:')", "meaning": "Tên các gói theo chủ đề và nhãn đồng hồ"},
+    {"key": "AreYouSureOfferConfigModel.json: OfferPriorities", "value": "[0, 1, 2, 3]", "meaning": "Thứ tự ưu tiên các offer trong màn Are You Sure"}
+  ],
+  "tips": [
+    "Đổi chủ đề theo mùa giữ offer luôn mới mắt dù cấu trúc gói không đổi, chi phí sản xuất chỉ là bộ asset bundle.",
+    "Chín bậc giá từ 0.99 tới 99.99 USD cho phép server ghép đúng gói với sức chi của từng phân khúc.",
+    "Chèn offer vào Refill, Booster và Play On đặt lời mời mua đúng lúc người chơi thiếu tài nguyên.",
+    "Ego offer kèm quà Play On biến khoảnh khắc thua thành cơ hội chuyển đổi thay vì điểm rời game.",
+    "Trần MaxShowCount = 10 giữ tần suất quảng cáo trong ngưỡng chấp nhận được, tránh gây khó chịu."
+  ],
+  "categories": ["Offer/IAP", "Kinh tế", "Live-ops", "Meta"]
+}

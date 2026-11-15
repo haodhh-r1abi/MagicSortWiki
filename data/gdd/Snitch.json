@@ -1,0 +1,919 @@
+{
+  "id": "Snitch",
+  "name": "Snitch (Snitch Hunt)",
+  "category": "Core",
+  "managers": [
+    "Modules.Contexts.Home.Snitch.Scripts.SnitchService",
+    "Modules.Contexts.Home.Snitch.Scripts.SnitchDataService",
+    "Modules.Contexts.Home.Snitch.Scripts.SnitchModel",
+    "Modules.Contexts.Home.Snitch.Scripts.SnitchConfigModel",
+    "Modules.Contexts.GamePlay.Snitch.Scripts.SnitchInGameManager",
+    "Modules.Contexts.GamePlay.Snitch.Scripts.SnitchTargetFinder",
+    "Modules.Contexts.GamePlay.Board.Items.Scripts.Snitch.SnitchItem"
+  ],
+  "summary": "Snitch Hunt là trợ thủ dạng 'sinh vật bay' trong level. Người chơi thắng đủ số level ở Home để kích hoạt, sau đó khi vào ván sẽ có một cái hộp thả ra các con Snitch. Có hai loại: Snitch Thường (Normal/Silver) bay tới một ô ẩn và lật mở nó (bỏ dấu hỏi, để lộ màu nước), và Snitch Đỏ (Red/Power) bay tới một vật cản (blocker) và phá nó. Snitch được đặt sẵn trong dữ liệu level (SnitchSpawnInfo) hoặc bay vào từ ngoài bàn (ExternalSnitchObject), và mục tiêu của chúng do SnitchTargetFinder chọn theo thứ tự ưu tiên (fixed target trong level → mục tiêu ngẫu nhiên có trọng số → mục tiêu dự phòng). Giống Super Charger, trạng thái kích hoạt kéo dài đến khi người chơi thua một ván, và có popup Are You Sure cảnh báo. Toàn bộ do khoá remote config SnitchConfigModel điều khiển, mặc định client tắt và mở từ level 290.",
+  "unlock": "SnitchService.IsEligible(): SnitchConfigModel.IsEnabled = true và tiến độ người chơi ≥ FirstLevelToShow (mặc định client 290). SnitchService.IsActive() thêm điều kiện Progress ≥ TargetLevelProgress (mặc định client 10).",
+  "entry_points": [
+    "SnitchLobbyButton ở Home (vòng tròn tiến độ {0}/{1}, bấm mở SnitchJoinPopUp — impression source LobbyIcon)",
+    "SnitchJoinPopUp tự bật khi về Home (TryShowSnitchPopUpCommand / TryShowSnitchPopUpOnLobbyReturnCommand)",
+    "SnitchActivationPopUp khi vừa đủ tiến độ (TryPlaySnitchActivationCommand — đứng trước MagicBottleCongrats trong chuỗi return-to-home)",
+    "SnitchInfoButton → SnitchInfoPopUp",
+    "Trong level: hộp Snitch (SnitchBoxView) và SnitchLevelTutorialPopUp lần đầu",
+    "SnitchAreYouSureContainer khi định bỏ ván"
+  ],
+  "flow": "Ở Home: mỗi lần thắng level, SnitchService.TryIncreaseProgress() tăng SnitchModel.Progress 1 (chỉ khi EventShownInLifeTime = true và Progress chưa bằng TargetLevelProgress); khi Progress đạt TargetLevelProgress, service bắn analytics snitch_claim. TryResetProgress() làm hai việc: nếu vẫn đủ điều kiện thì tăng tiến độ như trên, còn nếu không (thua ván / config tắt) thì đặt Progress = 0, LastSeenLobbyButtonProgress = 0 và bắn snitch_lost. SnitchLobbyButton hiển thị vòng tròn tiến độ; SnitchService.IsLobbyButtonProgressIncreased so Progress hiện tại với LastSeenLobbyButtonProgress để biết có cần chạy hoạt ảnh 'thu thập' khi về Home (ShouldShowCollectibleEarnAnimationOnLobbyReturn), sau đó TrySetLastSeenLobbyButtonProgress ghi lại mốc đã xem. Trong level: SnitchInGameManager.Initialize(bottleCollections) dựng SnitchTargetFinder; OnLevelStart(externalSnitches, levelSnitchInfo, onComplete) chạy hoạt ảnh hộp Snitch bay vào (SnitchBoxView, SnitchAnimationConfig điều khiển toàn bộ nhịp: LevelStartDelay, SnitchBoxEntryDuration, SnithBoxWaitDuration, SnitchBoxExitDuration, SnitchesPerformDelay, SnitchMoveSpeed...). Mỗi con Snitch (SnitchItem, kế thừa ABlockerItem, IsOverlay = true) mang SnitchItemModel với ItemType (Normal/Red), TargetCellIndices và TargetBottleIndices — tức level designer có thể chỉ định cứng mục tiêu. PerformSnitch(snitchItem) rẽ nhánh: PerformNormalSnitch → SnitchTargetFinder.GetNormalSnitchTarget (GetFixedNormalSnitchTarget nếu level chỉ định, ngược lại GetRandomNormalSnitchTarget; với snitch ngoài bàn thì GetExternalNormalSnitchTarget/GetDummyNormalSnitchTarget) → OnNormalSnitchHitTarget(snitchTarget) → RevealCell(targetCell, targetBottle) lật ô ẩn, có thể RevealBottleCells cả chai; nếu IsWaterColorChangeActive thì ChangeSnitchWaterColor(water) đổi màu nước cho khớp. PerformRedSnitch → SnitchTargetFinder.GetRedSnitchTargetItem: GetRedSnitchTargetBlockers thu thập blocker (theo chai chỉ định GetRedSnitchTargetBlockersByBottleIndices, theo từng chai GetRedSnitchTargetBlockersByBottle, hoặc overlay GetRedSnitchTargetOverlayBlockers), rồi SortBlockers dùng GetBlockerPriorityScore để chọn blocker 'đáng phá nhất'; nếu không có blocker và IsFallbackPremiumHitActive = true thì dùng forceTarget hoặc GetMaxQuestionMarkBottle / GetRandomFallbackSnitchSpawnTarget. MoveSnitchItemToTarget bay tới đích (đường Bezier, tham số MinMaxBezier* trong SnitchAnimationConfig), OnRedSnitchHitTarget(targetItem) phá blocker. Trong lúc bay, LockTarget/UnlockTarget và SnitchTargetFinder.LockItem/UnlockItem ngăn hai con Snitch nhắm cùng một mục tiêu. Sau khi hành động xong, Snitch có thể đậu lại (PlaySnitchSitAnimation, clip 'SnitchSit') hoặc được đặt vào ô mới (OnRedSnitchPlaceTarget/OnNormalSnitchPlaceTarget theo SnitchSpawnInfo). Tutorial: ShouldShowTutorial() → StartTutorial() mở SnitchLevelTutorialPopUp, OnTutorialStarted/OnTutorialEnd tạm dừng và tiếp tục chuỗi. Snitch cũng nhường lượt cho luồng giới thiệu blocker mới (OnNewBlockerIntroductionStarted/End). Kết thúc: OnAllStatesCompleted báo hoàn tất chuỗi Snitch của ván.",
+  "use_cases": [
+    {
+      "id": "UC-01",
+      "title": "Server bật Snitch Hunt",
+      "actor": "Server",
+      "trigger": "Đổi khoá Firebase SnitchConfigModel",
+      "precondition": "-",
+      "steps": [
+        "FirebaseRemoteConfigResolver đọc SnitchConfigModel",
+        "SnitchService.GetConfig() trả model",
+        "IsEligible/IsActive dùng IsEnabled, FirstLevelToShow, TargetLevelProgress"
+      ],
+      "result": "Icon lobby và luồng in-game bật cho nhóm người chơi phù hợp",
+      "rules": "Mặc định client: IsEnabled=false, FirstLevelToShow=290, TargetLevelProgress=10, IsFallbackPremiumHitActive=true, IsWaterColorChangeActive=true",
+      "evidence": "SnitchService.GetConfig; SnitchService.IsEligible; SnitchConfigModel"
+    },
+    {
+      "id": "UC-02",
+      "title": "Tăng tiến độ khi thắng level",
+      "actor": "System",
+      "trigger": "Thắng một level ở Home",
+      "precondition": "IsEligible = true, EventShownInLifeTime = true, Progress < TargetLevelProgress",
+      "steps": [
+        "SnitchService.TryIncreaseProgress()",
+        "SnitchDataService.IncreaseProgress() tăng Progress, bật _isMarkedForLateUpdate + _isDataChangedSinceLastSave",
+        "Khi Progress == TargetLevelProgress → bắn analytics snitch_claim (progress, snitch_progress)"
+      ],
+      "result": "Vòng tiến độ trên SnitchLobbyButton nhích lên; đủ 10/10 thì Snitch được kích hoạt",
+      "rules": "TargetLevelProgress mặc định 10; chuỗi hiển thị \"{0}/{1}\" trên nút lobby",
+      "evidence": "SnitchService.TryIncreaseProgress; SnitchDataService.IncreaseProgress; SnitchLobbyButton.UpdateState; EventSender.SendSnitchClaim"
+    },
+    {
+      "id": "UC-03",
+      "title": "Mất Snitch khi thua ván",
+      "actor": "System",
+      "trigger": "Thua/bỏ level, hoặc không còn đủ điều kiện",
+      "precondition": "-",
+      "steps": [
+        "SnitchService.TryResetProgress()",
+        "Nhánh không đủ điều kiện: Progress = 0, LastSeenLobbyButtonProgress = 0, đánh dấu dữ liệu bẩn",
+        "Bắn analytics snitch_lost (progress)"
+      ],
+      "result": "Tiến độ về 0, phải thắng lại đủ level",
+      "rules": "Chữ cảnh báo SnitchInfoWarning: 'Snitches will be active until you fail!'",
+      "evidence": "SnitchService.TryResetProgress; SnitchDataService.ResetProgress; EventSender.SendSnitchLost"
+    },
+    {
+      "id": "UC-04",
+      "title": "Popup giới thiệu lần đầu",
+      "actor": "System",
+      "trigger": "Về Home khi vừa đủ điều kiện",
+      "precondition": "EventShownInLifeTime = false",
+      "steps": [
+        "TryShowSnitchPopUpOnLobbyReturnCommand kiểm tra SnitchService.ShouldAutoOpenPopUp()",
+        "Mở SnitchJoinPopUp (SnitchJoinPopUpArguments với impression source FirstOpen)",
+        "PlayFirstShowEverAnimations, OpenAutomaticallyInfoPopUp mở luôn SnitchInfoPopUp",
+        "MarkEventShownInLifeTime(); analytics snitch_popup_impression"
+      ],
+      "result": "Người chơi biết tính năng, tiến độ bắt đầu tính",
+      "rules": "SnitchJoinPopUpImpressionSource = {LobbyIcon:0, FirstOpen:1}. Tiêu đề SnitchJoinTitle 'Snitch Hunt'; tiến độ SnitchJoinProgressText / SnitchJoinProgressCompletedText",
+      "evidence": "SnitchService.ShouldAutoOpenPopUp; SnitchJoinPopUp.ShowAsync; SnitchJoinPopUp.OpenAutomaticallyInfoPopUp; EventSender.SendSnitchPopUpImpression"
+    },
+    {
+      "id": "UC-05",
+      "title": "Xem popup hướng dẫn",
+      "actor": "Player",
+      "trigger": "Bấm SnitchInfoButton hoặc popup tự mở",
+      "precondition": "-",
+      "steps": [
+        "SnitchInfoPopUpArguments(impressionSource) → mở SnitchInfoPopUp",
+        "_maxLevelText điền số level cần thắng qua khoá SnitchInfoStep1",
+        "Hiển thị 3 bước: SnitchInfoStep1 (thắng {0} level), SnitchInfoStep2 (kích hoạt), SnitchInfoStep3Power / SnitchInfoStep3Silver (mô tả 2 loại Snitch) và SnitchInfoWarning",
+        "MarkInfoPopUpAsIntroduced()"
+      ],
+      "result": "Analytics snitch_info_impression (impression_source, snitch_progress)",
+      "rules": "SnitchInfoPopUpImpressionSource = {InfoButton:0, FirstOpen:1}; hằng SnitchInfoPopUp.max_level_localization_term = \"SnitchInfoStep1\"",
+      "evidence": "SnitchInfoPopUp.Show; SnitchService.MarkInfoPopUpAsIntroduced; SnitchService.IsInfoPopUpIntroduced; EventSender.SendSnitchInfoPopUpImpression"
+    },
+    {
+      "id": "UC-06",
+      "title": "Popup báo đã kích hoạt",
+      "actor": "System",
+      "trigger": "Về Home khi vừa đạt TargetLevelProgress",
+      "precondition": "-",
+      "steps": [
+        "TryPlaySnitchActivationCommand chạy trong chuỗi return-to-home",
+        "Mở SnitchActivationPopUp, PlayAnimationsWithInterval",
+        "Analytics snitch_activation_impression"
+      ],
+      "result": "Người chơi biết Snitch đã sẵn sàng; chữ SnitchJoinProgressCompletedText 'Snitches are now Active!'",
+      "rules": "Lệnh này đứng ngay trước TryPlayMagicBottleCongratsCommand trong danh sách return-to-home",
+      "evidence": "TryPlaySnitchActivationCommand; SnitchActivationPopUp.Show; EventSender.SendSnitchActivationPopUpImpression"
+    },
+    {
+      "id": "UC-07",
+      "title": "Hoạt ảnh thu thập tiến độ khi về Home",
+      "actor": "System",
+      "trigger": "Về Home sau khi thắng",
+      "precondition": "Progress > LastSeenLobbyButtonProgress",
+      "steps": [
+        "SnitchService.ShouldShowCollectibleEarnAnimationOnLobbyReturn() dựa trên IsLobbyButtonProgressIncreased()",
+        "SnitchLobbyButton.PlayCollectibleAndProgressAnimation() chạy LobbyIconCollectibleAnimation + CircleProgressBar (SnitchLobbyButtonAnimationConfig: PunchRotation, PunchDelay, PunchDuration, PunchVibraton, PunchElasticity, CircleProgressBarAnimationDuration/Delay/Curve, SitPosition)",
+        "SnitchService.TrySetLastSeenLobbyButtonProgress() ghi mốc đã xem"
+      ],
+      "result": "Người chơi thấy Snitch bay về đậu trên nút, vòng tiến độ chạy",
+      "rules": "LastSeenLobbyButtonProgress lưu trong SnitchModel và đồng bộ server",
+      "evidence": "SnitchService.ShouldShowCollectibleEarnAnimationOnLobbyReturn; SnitchService.IsLobbyButtonProgressIncreased; SnitchLobbyButton.PlayCollectibleAndProgressAnimation; SnitchService.TrySetLastSeenLobbyButtonProgress"
+    },
+    {
+      "id": "UC-08",
+      "title": "Hộp Snitch mở đầu ván",
+      "actor": "System",
+      "trigger": "Bắt đầu level khi Snitch đang Active",
+      "precondition": "SnitchInGameManager.IsLevelSnitchSpawnActive()",
+      "steps": [
+        "SnitchInGameManager.OnLevelStart(externalSnitches, levelSnitchInfo, onComplete)",
+        "SnitchBoxView chạy hoạt ảnh vào/ra theo SnitchAnimationConfig (SnitchBoxStartPosition → SnitchBoxTargetPosition → SnitchBoxExitPosition, các curve BoxEntry/BoxExit/BoxRotation)",
+        "Chờ LevelStartDelay rồi thả lần lượt các Snitch, cách nhau SnitchesPerformDelay",
+        "_onLevelStartCompleteAction được gọi khi xong"
+      ],
+      "result": "Snitch xuất hiện trên bàn, sẵn sàng hành động",
+      "rules": "Số Snitch và vị trí lấy từ dữ liệu level (SnitchSpawnInfo) hoặc từ danh sách ExternalSnitchObject bay vào từ ngoài",
+      "evidence": "SnitchInGameManager.OnLevelStart; SnitchBoxView; SnitchAnimationConfig; SnitchInGameManager.IsLevelSnitchSpawnActive"
+    },
+    {
+      "id": "UC-09",
+      "title": "Snitch Thường (Silver) lật mở ô ẩn",
+      "actor": "System",
+      "trigger": "PerformSnitch với SnitchItemType.Normal",
+      "precondition": "Còn ô dấu hỏi trên bàn",
+      "steps": [
+        "PerformNormalSnitch(normalSnitch)",
+        "SnitchTargetFinder.GetNormalSnitchTarget: nếu SnitchItemModel.TargetBottleIndices/TargetCellIndices có giá trị → GetFixedNormalSnitchTarget; ngược lại GetRandomNormalSnitchTarget",
+        "Bay tới đích (NormalSnitchMoveTarget, MoveSnitchItemToTarget)",
+        "OnNormalSnitchHitTarget(snitchTarget) → RevealCell(targetCell, targetBottle), có thể RevealBottleCells(bottle)",
+        "Nếu IsWaterColorChangeActive → ChangeSnitchWaterColor(water)"
+      ],
+      "result": "Ô ẩn được lật, người chơi thấy màu nước thật",
+      "rules": "SnitchItemType = {Normal:0, Red:1}. Text mô tả: SnitchInfoStep3Silver 'Silver Snitch reveals ...'",
+      "evidence": "SnitchInGameManager.PerformNormalSnitch; SnitchTargetFinder.GetNormalSnitchTarget; SnitchInGameManager.RevealCell; SnitchInGameManager.ChangeSnitchWaterColor"
+    },
+    {
+      "id": "UC-10",
+      "title": "Snitch Đỏ (Power) phá vật cản",
+      "actor": "System",
+      "trigger": "PerformSnitch với SnitchItemType.Red",
+      "precondition": "Có blocker trên bàn",
+      "steps": [
+        "PerformRedSnitch(redSnitch)",
+        "SnitchTargetFinder.GetRedSnitchTargetItem: gom blocker (theo bottleIndices chỉ định, theo từng chai, hoặc overlay), SortBlockers theo GetBlockerPriorityScore",
+        "RedSnitchMoveTarget lưu TargetItem + SpawnInfo; MoveSnitchItemToTarget bay tới (GetTargetItemRowIndex chọn cung đường theo hàng)",
+        "OnRedSnitchHitTarget(targetItem) phá blocker"
+      ],
+      "result": "Một vật cản bị loại bỏ",
+      "rules": "SnitchAnimationConfig.redSnitchPerformIntervals cho phép đặt nhịp riêng theo ItemType (TryGetRedSnitchPerformInterval); SnitchInfoStep3Power 'Power Snitch removes blocker!'",
+      "evidence": "SnitchInGameManager.PerformRedSnitch; SnitchTargetFinder.GetRedSnitchTargetItem; SnitchTargetFinder.SortBlockers; SnitchTargetFinder.GetBlockerPriorityScore; SnitchInGameManager.OnRedSnitchHitTarget"
+    },
+    {
+      "id": "UC-11",
+      "title": "Không có mục tiêu hợp lệ (fallback)",
+      "actor": "System",
+      "trigger": "Bàn không còn blocker/ô ẩn phù hợp",
+      "precondition": "-",
+      "steps": [
+        "SnitchInGameManager.IsFallbackPremiumHitActive() đọc SnitchConfigModel.IsFallbackPremiumHitActive",
+        "Bật → SortBlockers/GetRedSnitchTargetBlockers chạy với forceTarget = true, hoặc GetMaxQuestionMarkBottle chọn chai nhiều dấu hỏi nhất",
+        "Vẫn không có → GetRandomFallbackSnitchSpawnTarget(includeQuestionMarkCells) chọn ô đặt Snitch",
+        "OnRedSnitchPlaceTarget / OnNormalSnitchPlaceTarget đặt Snitch vào ô mới thay vì tấn công"
+      ],
+      "result": "Snitch không bị 'đứng hình', luôn có hành động",
+      "rules": "IsFallbackPremiumHitActive mặc định client = true; _placedToNoQuestionMarkCell theo dõi trường hợp phải đặt vào ô không có dấu hỏi",
+      "evidence": "SnitchInGameManager.IsFallbackPremiumHitActive; SnitchTargetFinder.GetRandomFallbackSnitchSpawnTarget; SnitchTargetFinder.GetMaxQuestionMarkBottle; SnitchInGameManager.OnRedSnitchPlaceTarget"
+    },
+    {
+      "id": "UC-12",
+      "title": "Hai Snitch không tranh cùng một mục tiêu",
+      "actor": "System",
+      "trigger": "Nhiều Snitch hoạt động cùng lúc",
+      "precondition": "-",
+      "steps": [
+        "SnitchInGameManager.LockTarget(targetItem) → SnitchTargetFinder.LockItem thêm vào _lockedSnitchTargets",
+        "MarkTargetItemAsSelected(targetItem) và SnitchTargetFinder.AddSelectedBlockerType(type) ghi loại đã chọn vào _selectedBlockerTypes",
+        "Sau khi xong: UnlockTarget → UnlockItem",
+        "AnimationLockTargetBottle / AnimationUnlockTargetBottle khoá tương tác chai trong lúc hoạt ảnh chạy"
+      ],
+      "result": "Không có hai con Snitch bay vào cùng blocker; người chơi không thao tác được chai đang bị nhắm",
+      "rules": "SnitchTarget là struct-like (Cell + BottleItem) có Equals/GetHashCode để so sánh mục tiêu",
+      "evidence": "SnitchInGameManager.LockTarget; SnitchTargetFinder.LockItem; SnitchInGameManager.AnimationLockTargetBottle; SnitchTarget.Equals"
+    },
+    {
+      "id": "UC-13",
+      "title": "Tutorial Snitch trong level",
+      "actor": "System",
+      "trigger": "Lần đầu Snitch xuất hiện trong ván",
+      "precondition": "SnitchService.ShouldShowLevelTutorial() = true (IsLevelTutorialIntroduced = false)",
+      "steps": [
+        "SnitchInGameManager.ShouldShowTutorial() → StartTutorial() mở popup tên \"SnitchLevelTutorialPopUp\"",
+        "OnTutorialStarted() tạm dừng chuỗi Snitch; OnTutorialEnd() chạy tiếp",
+        "SnitchService.MarkLevelTutorialAsIntroduced()"
+      ],
+      "result": "Người chơi hiểu Snitch làm gì; chỉ hiện một lần trọn đời",
+      "rules": "Cờ IsLevelTutorialIntroduced nằm trong SnitchModel và được đồng bộ server",
+      "evidence": "SnitchInGameManager.ShouldShowTutorial; SnitchInGameManager.StartTutorial; SnitchService.MarkLevelTutorialAsIntroduced; SnitchService.ShouldShowLevelTutorial"
+    },
+    {
+      "id": "UC-14",
+      "title": "Nhường lượt cho phần giới thiệu blocker mới",
+      "actor": "System",
+      "trigger": "Level có blocker lần đầu xuất hiện",
+      "precondition": "-",
+      "steps": [
+        "OnNewBlockerIntroductionStarted() tạm dừng chuỗi Snitch",
+        "Sau khi giới thiệu xong, OnNewBlockerIntroductionEnd() cho Snitch tiếp tục",
+        "OnAllStatesCompleted() khi mọi trạng thái vào ván đã xong"
+      ],
+      "result": "Hai luồng hoạt ảnh đầu ván không chồng lên nhau",
+      "rules": "Analytics new_blocker_introduced (blocker_id) do hệ blocker bắn riêng",
+      "evidence": "SnitchInGameManager.OnNewBlockerIntroductionStarted; SnitchInGameManager.OnNewBlockerIntroductionEnd; SnitchInGameManager.OnAllStatesCompleted"
+    },
+    {
+      "id": "UC-15",
+      "title": "Snitch đậu lại trên chai sau khi hành động",
+      "actor": "System",
+      "trigger": "Kết thúc hoạt ảnh tấn công",
+      "precondition": "-",
+      "steps": [
+        "SnitchItem.PlaySnitchSitAnimation() phát clip \"SnitchSit\"",
+        "SnitchItem.OnWaterRotate / OnBottleWatersUpdated cập nhật vị trí khi nước trong chai đổi",
+        "SnitchItem.Complete() khi Snitch hoàn tất vòng đời và được thu hồi (OnRecycle)"
+      ],
+      "result": "Snitch bám theo mặt nước, không bị lệch khi chai thay đổi",
+      "rules": "SnitchItem.IsOverlay = true nên vẽ trên các item khác; SnitchAnimationConfig có bộ tham số riêng cho trạng thái đậu (SitMove*, SitRise*, SitOnBottle*, Sway*)",
+      "evidence": "SnitchItem.PlaySnitchSitAnimation; SnitchItem.OnBottleWatersUpdated; SnitchItem.Complete; SnitchItem.get_IsOverlay"
+    },
+    {
+      "id": "UC-16",
+      "title": "Cảnh báo trước khi bỏ ván",
+      "actor": "Player",
+      "trigger": "Bấm thoát / từ chối chơi tiếp",
+      "precondition": "SnitchService.ShouldShowAreYouSure() = true",
+      "steps": [
+        "SnitchAreYouSureContainer.ShouldShow() kiểm tra IsEligible và Progress ≥ TargetLevelProgress",
+        "Show() hiển thị SnitchAreYouSure: 'You will lose your Snitches !'"
+      ],
+      "result": "Người chơi cân nhắc; nếu vẫn thoát thì mất Snitch",
+      "rules": "Cùng cơ chế với SuperChargerAreYouSureContainer, hai container cùng kế thừa AreYouSureContainer",
+      "evidence": "SnitchService.ShouldShowAreYouSure; SnitchAreYouSureContainer.ShouldShow; SnitchAreYouSureContainer.Show"
+    },
+    {
+      "id": "UC-17",
+      "title": "Đồng bộ / xoá dữ liệu Snitch",
+      "actor": "System",
+      "trigger": "Sync định kỳ, đăng nhập lại, xoá tài khoản",
+      "precondition": "-",
+      "steps": [
+        "SnitchDataService.GetSyncName() = \"SnitchModel\", SerializeModelForSync()",
+        "SyncService gửi lên sync-data; OverwriteModelFromSync(data) khi kéo về",
+        "DeleteData() khi xoá tài khoản"
+      ],
+      "result": "Tiến độ Snitch theo tài khoản",
+      "rules": "Model lưu: Progress, LastSeenLobbyButtonProgress, IsInfoPopUpIntroduced, IsLevelTutorialIntroduced, EventShownInLifeTime",
+      "evidence": "SnitchDataService.GetSyncName; SnitchDataService.SerializeModelForSync; SnitchDataService.OverwriteModelFromSync; SnitchDataService.DeleteData"
+    },
+    {
+      "id": "UC-18",
+      "title": "Snitch chiếm ô icon ở Home",
+      "actor": "System",
+      "trigger": "Vào Home",
+      "precondition": "-",
+      "steps": [
+        "SnitchService implement ILobbyShownService: IsLobbyShown() và IsLobbyGoingToBeShown()",
+        "LobbyEventsService.CanShowService quyết định có đủ ô trống ở cột không",
+        "IsLobbyIconVisible() = IsEnabled && level ≥ FirstLevelToShow"
+      ],
+      "result": "Nút Snitch chỉ hiện khi cột icon còn chỗ",
+      "rules": "Xem chi tiết cơ chế ở tính năng EventsFramework",
+      "evidence": "SnitchService.IsLobbyShown; SnitchService.IsLobbyGoingToBeShown; SnitchService.IsLobbyIconVisible"
+    }
+  ],
+  "configs": [
+    {
+      "source": "json default",
+      "key": "SnitchConfigModel.IsEnabled",
+      "type": "bool",
+      "value": "false (client default; server bật)",
+      "meaning": "Bật/tắt Snitch Hunt",
+      "where": "Resources/defaultconfigs/SnitchConfigModel.json"
+    },
+    {
+      "source": "json default",
+      "key": "SnitchConfigModel.FirstLevelToShow",
+      "type": "int",
+      "value": "290",
+      "meaning": "Level tối thiểu để thấy tính năng",
+      "where": "Resources/defaultconfigs/SnitchConfigModel.json"
+    },
+    {
+      "source": "json default",
+      "key": "SnitchConfigModel.TargetLevelProgress",
+      "type": "int",
+      "value": "10",
+      "meaning": "Số level phải thắng để kích hoạt Snitch",
+      "where": "Resources/defaultconfigs/SnitchConfigModel.json"
+    },
+    {
+      "source": "json default",
+      "key": "SnitchConfigModel.IsFallbackPremiumHitActive",
+      "type": "bool",
+      "value": "true",
+      "meaning": "Cho phép Snitch Đỏ ép chọn mục tiêu khi không có blocker rõ ràng",
+      "where": "Resources/defaultconfigs/SnitchConfigModel.json"
+    },
+    {
+      "source": "json default",
+      "key": "SnitchConfigModel.IsWaterColorChangeActive",
+      "type": "bool",
+      "value": "true",
+      "meaning": "Sau khi lật ô ẩn thì đổi màu nước tương ứng",
+      "where": "Resources/defaultconfigs/SnitchConfigModel.json"
+    },
+    {
+      "source": "code const",
+      "key": "SnitchItemType",
+      "type": "enum",
+      "value": "Normal=0, Red=1",
+      "meaning": "Hai loại Snitch (Silver và Power)",
+      "where": "Modules.Contexts.GamePlay.Board.Items.Scripts.Snitch.SnitchItemType"
+    },
+    {
+      "source": "code const",
+      "key": "SnitchInfoPopUpImpressionSource / SnitchJoinPopUpImpressionSource",
+      "type": "enum",
+      "value": "InfoButton=0, FirstOpen=1 / LobbyIcon=0, FirstOpen=1",
+      "meaning": "Nguồn mở popup, gửi trong analytics",
+      "where": "Modules.Contexts.Home.Snitch.Scripts.UI"
+    },
+    {
+      "source": "code const",
+      "key": "SnitchInfoPopUp.max_level_localization_term",
+      "type": "string",
+      "value": "\"SnitchInfoStep1\"",
+      "meaning": "Khoá chữ điền số level cần thắng",
+      "where": "SnitchInfoPopUp"
+    },
+    {
+      "source": "code field",
+      "key": "SnitchItemModel.TargetCellIndices / TargetBottleIndices",
+      "type": "int[]",
+      "value": "do dữ liệu level cấp",
+      "meaning": "Cho phép level designer chỉ định cứng mục tiêu của từng Snitch",
+      "where": "SnitchItemModel"
+    },
+    {
+      "source": "asset",
+      "key": "SnitchAnimationConfig.asset — nhóm hộp Snitch",
+      "type": "ScriptableObject",
+      "value": "LevelStartDelay, SnitchCellRevealDelay, SnitchesPerformDelay, SnitchBoxStartPosition, SnitchBoxTargetPosition, SnitchBoxExitPosition, SnitchBoxEntryDuration, SnithBoxWaitDuration, SnitchBoxExitDuration, BoxRotationPivotStartRotation, BoxRotationDuration, BoxExitRotation + các AnimationCurve",
+      "meaning": "Nhịp hoạt ảnh hộp Snitch đầu ván",
+      "where": "Assets/MonoBehaviour/SnitchAnimationConfig.asset"
+    },
+    {
+      "source": "asset",
+      "key": "SnitchAnimationConfig.asset — nhóm di chuyển",
+      "type": "ScriptableObject",
+      "value": "SnitchMoveSpeed, SnitchMoveSpeedBetweenBottles, MoveTime, SnitchHitTargetMoveMinMaxDuration, MaxDistanceCap, MinMaxBezierDurationForHit/ForSit, MinMaxBezierLengthForHit/ForSit, CloseProximityThreshold, CloseProximityHitDuration, SnitchOutOfBottleArcHeight, OutOfBottleHitDurationMinMax",
+      "meaning": "Đường bay Bezier và tốc độ của Snitch",
+      "where": "Assets/MonoBehaviour/SnitchAnimationConfig.asset"
+    },
+    {
+      "source": "asset",
+      "key": "SnitchAnimationConfig.asset — nhóm delay theo thứ tự Snitch",
+      "type": "ScriptableObject",
+      "value": "FirstGraySnitchHitDelay, SecondGraySnitchHitDelay, ThirdGraySnitchHitDelay, FirstGraySnitchRiseDelay, SecondGraySnitchRiseDelay, ThirdGraySnitchRiseDelay, FirstYellowSnitchRiseDelay, SecondYellowSnitchRiseDelay, FirstYellowSnitchSitRiseDelay, SecondYellowSnitchSitRiseDelay, SortOrdersByIndex",
+      "meaning": "Tối đa 3 Snitch xám và 2 Snitch vàng có delay riêng, hàm ý số Snitch tối đa cùng lúc trong một ván",
+      "where": "Assets/MonoBehaviour/SnitchAnimationConfig.asset"
+    },
+    {
+      "source": "asset",
+      "key": "SnitchAnimationConfig.redSnitchPerformIntervals",
+      "type": "List<ItemTypeInterval>",
+      "value": "khoảng thời gian riêng theo ItemType của mục tiêu",
+      "meaning": "Snitch Đỏ chờ khác nhau tuỳ loại blocker (TryGetRedSnitchPerformInterval)",
+      "where": "SnitchAnimationConfig"
+    },
+    {
+      "source": "asset",
+      "key": "SnitchLobbyButtonAnimationConfig.asset",
+      "type": "ScriptableObject",
+      "value": "CircleProgressBarAnimationDuration/Delay/Curve, PunchRotation, PunchDelay, PunchDuration, PunchVibraton, PunchElasticity, PunchCurve, SitPosition",
+      "meaning": "Hoạt ảnh nút Snitch ở Home",
+      "where": "Assets/MonoBehaviour/SnitchLobbyButtonAnimationConfig.asset"
+    },
+    {
+      "source": "storage key",
+      "key": "SnitchModel",
+      "type": "sync name",
+      "value": "\"SnitchModel\"",
+      "meaning": "Khoá lưu/đồng bộ dữ liệu Snitch",
+      "where": "SnitchDataService.GetSyncName"
+    },
+    {
+      "source": "code field",
+      "key": "SnitchModel",
+      "type": "class",
+      "value": "Progress, LastSeenLobbyButtonProgress, IsInfoPopUpIntroduced, IsLevelTutorialIntroduced, EventShownInLifeTime",
+      "meaning": "Toàn bộ dữ liệu lưu của tính năng",
+      "where": "SnitchModel"
+    },
+    {
+      "source": "code const",
+      "key": "Tên popup",
+      "type": "string",
+      "value": "\"SnitchJoinPopUp\", \"SnitchInfoPopUp\", \"SnitchLevelTutorialPopUp\"",
+      "meaning": "Khoá mở popup qua IPopUpService",
+      "where": "SnitchJoinPopUpArguments, SnitchInfoPopUpArguments, SnitchInGameManager.StartTutorial"
+    },
+    {
+      "source": "code const",
+      "key": "Khoá localization",
+      "type": "string",
+      "value": "SnitchJoinTitle, SnitchJoinProgressText, SnitchJoinProgressCompletedText, SnitchInfoStep1, SnitchInfoStep2, SnitchInfoStep3Power, SnitchInfoStep3Silver, SnitchInfoWarning, SnitchAreYouSure",
+      "meaning": "Toàn bộ chữ hiển thị của tính năng (11 ngôn ngữ)",
+      "where": "GameDesign/appendix/localization.tsv"
+    },
+    {
+      "source": "code const",
+      "key": "Clip hoạt ảnh",
+      "type": "string",
+      "value": "\"SnitchSit\"",
+      "meaning": "Clip Snitch đậu trên chai",
+      "where": "SnitchItem.PlaySnitchSitAnimation"
+    },
+    {
+      "source": "json default",
+      "key": "SnitchConfigModel.json: IsEnabled",
+      "type": "",
+      "value": "false",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/SnitchConfigModel.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "SnitchConfigModel.json: FirstLevelToShow",
+      "type": "",
+      "value": "290",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/SnitchConfigModel.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "SnitchConfigModel.json: TargetLevelProgress",
+      "type": "",
+      "value": "10",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/SnitchConfigModel.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "SnitchConfigModel.json: IsFallbackPremiumHitActive",
+      "type": "",
+      "value": "true",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/SnitchConfigModel.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "SnitchConfigModel.json: IsWaterColorChangeActive",
+      "type": "",
+      "value": "true",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/SnitchConfigModel.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "server cache (historical)",
+      "key": "SnitchConfigModel (live) = default?",
+      "type": "",
+      "value": "3/5 key trùng default, 2 key khác/thêm",
+      "meaning": "Đối chiếu config server thật (CachedRemoteConfigs) với SnitchConfigModel.json",
+      "where": "Configs/CachedRemoteConfigs + Firebase RC template 3197 — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server cache (historical)",
+      "key": "SnitchConfigModel: firstLevelToShow",
+      "type": "",
+      "value": "170",
+      "meaning": "server ghi đè (default = 290)",
+      "where": "Configs/CachedRemoteConfigs + Firebase RC template 3197 — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server cache (historical)",
+      "key": "SnitchConfigModel: isFallbackPremiumHitActive",
+      "type": "",
+      "value": "false",
+      "meaning": "server ghi đè (default = true)",
+      "where": "Configs/CachedRemoteConfigs + Firebase RC template 3197 — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    }
+  ],
+  "rewards": [
+    {
+      "context": "Snitch Thường (Silver) hành động",
+      "reward": "Lật mở 1 ô ẩn (có thể cả chai) và đổi màu nước tương ứng",
+      "evidence": "SnitchInGameManager.RevealCell; SnitchInGameManager.RevealBottleCells; SnitchInGameManager.ChangeSnitchWaterColor"
+    },
+    {
+      "context": "Snitch Đỏ (Power) hành động",
+      "reward": "Phá 1 vật cản (blocker) được ưu tiên cao nhất",
+      "evidence": "SnitchInGameManager.OnRedSnitchHitTarget; SnitchTargetFinder.GetBlockerPriorityScore"
+    }
+  ],
+  "backend": [
+    {
+      "command": "sync-data",
+      "direction": "client→server",
+      "purpose": "đồng bộ SnitchModel"
+    }
+  ],
+  "ui": [
+    {
+      "element": "SnitchLobbyButton",
+      "class": "Modules.Contexts.Home.Snitch.Scripts.UI.SnitchLobbyButton",
+      "purpose": "nút ở Home với vòng tiến độ {0}/{1} và hoạt ảnh thu thập"
+    },
+    {
+      "element": "SnitchJoinPopUp",
+      "class": "Modules.Contexts.Home.Snitch.Scripts.UI.SnitchJoinPopUp",
+      "purpose": "giới thiệu + thanh tiến độ (SnitchProgressView)"
+    },
+    {
+      "element": "SnitchInfoPopUp",
+      "class": "Modules.Contexts.Home.Snitch.Scripts.UI.SnitchInfoPopUp",
+      "purpose": "3 bước hướng dẫn + cảnh báo mất khi thua"
+    },
+    {
+      "element": "SnitchActivationPopUp",
+      "class": "Modules.Contexts.Home.Snitch.Scripts.UI.SnitchActivationPopUp",
+      "purpose": "báo Snitch đã kích hoạt"
+    },
+    {
+      "element": "SnitchAreYouSureContainer",
+      "class": "Modules.Contexts.Home.Snitch.Scripts.UI.SnitchAreYouSureContainer",
+      "purpose": "cảnh báo sẽ mất Snitch"
+    },
+    {
+      "element": "SnitchBoxView",
+      "class": "Modules.Contexts.GamePlay.Snitch.Scripts.SnitchBoxView",
+      "purpose": "hộp thả Snitch đầu ván"
+    },
+    {
+      "element": "SnitchLevelTutorialPopUp",
+      "class": "Modules.Contexts.GamePlay.Snitch.Scripts.SnitchLevelTutorialPopUp",
+      "purpose": "hướng dẫn trong level lần đầu"
+    },
+    {
+      "element": "SnitchItemView",
+      "class": "Modules.Contexts.GamePlay.Board.Items.Scripts.Snitch.SnitchItemView",
+      "purpose": "hiển thị con Snitch trên bàn"
+    }
+  ],
+  "analytics": [
+    {
+      "event": "snitch_popup_impression",
+      "params": "impression_source, snitch_progress, progress",
+      "when": "mở SnitchJoinPopUp"
+    },
+    {
+      "event": "snitch_info_impression",
+      "params": "impression_source, snitch_progress, progress",
+      "when": "mở SnitchInfoPopUp"
+    },
+    {
+      "event": "snitch_activation_impression",
+      "params": "snitch_progress, progress",
+      "when": "mở SnitchActivationPopUp"
+    },
+    {
+      "event": "snitch_claim",
+      "params": "progress",
+      "when": "tiến độ đạt TargetLevelProgress (kích hoạt Snitch)"
+    },
+    {
+      "event": "snitch_lost",
+      "params": "progress",
+      "when": "mất Snitch do thua/không còn đủ điều kiện"
+    }
+  ],
+  "storage_keys": [
+    "SnitchModel (sync name; Progress, LastSeenLobbyButtonProgress, IsInfoPopUpIntroduced, IsLevelTutorialIntroduced, EventShownInLifeTime)"
+  ],
+  "related_features": [
+    "EventsFramework",
+    "SuperCharger",
+    "MagicBottle",
+    "Analytics",
+    "Obstacles"
+  ],
+  "gaps": [
+    "15/11 — partial_static_code_unresolved: OnLevelStart lưu externalSnitches và levelSnitchInfo; GetRedSnitchMoveTargetByIndex/GetNormalSnitchMoveTargetForIndex lọc/duyệt nguồn external+level lists. Không có literal max2/max3 trong các body target/entrance đã đọc; count phụ thuộc input, filtering và số target hợp lệ. Còn lại: Max thiết kế/global cap chưa được chứng minh; cần external grant consumer/config và stress board, không đổi thành unlimited.",
+    "15/11 — partial_static_code_unresolved: GetBlockerPriorityScore trả int.MinValue cho target khônghợp lệ; các nhánh có ưu tiên2/1 theo fillamount,15 khi waterpredicate và4 khi chaiempty; forceTarget bỏ một số gate. Khi đãchọn blocker type, score giảm1000×sốlần typeđãchọn. Nhiều nhánh typehierarchy/vtable chưa map đủ sang blocker names nên không phát một bảng heuristic hoànchỉnh. Còn lại: Map toàn bộ type-hierarchy branches và lambda predicates với ItemType; cần disassembly/board minimal xácminh từngnhánh.",
+    "15/11 — resolved_static_snapshot: Hai Snitch animation asset có numeric và curve inline đầy đủ; không phải chỉ có curve reference. Xuất toàn bộ keyframe/tangent/weight cùng giá trị duration. Còn lại: Kiểm chứng effective config/asset và nhánh runtime trên đúng build nếu cần.",
+    "15/11 — partial_actual_evidence: Đã survey4306board vàconverterId27→SnitchItemModel với ItemType/TargetCellIndices/TargetBottleIndices. Không thấyserializedSnitch27 hoặc top-levelexternalSnitchkey trong hai tậpboard này. Còn lại: Lấy đúngseedSL đã chọn khi featureactive và lưu rawmodel/mapping, không tạo dữ liệu thay thế.",
+    "15/11 — resolved_static_code_historical_build: OnLevelStart reset box state rồi state1. Box Update chờ new-blocker intro, entry animation, tutorial, rise/move red, rise/move normal theo states1..8. SnitchItem.OnBottleWatersUpdated chỉ complete khi belongingCell.WaterItem==topWaterItem; đánh dấu completed, lock bottle, tạo tween callback <Complete>b__18_0 dispatch normal/red manager effect. Không phải mỗi move bất kỳ đều tự kích Snitch. Còn lại: Đối chiếu nhánh này trên app0.0.3129 ARM64; chưa là runtime pass.",
+    "[Runtime 2026-09-10] Config server LIVE đã đọc trực tiếp từ cache máy (không cần request); các hàng 'server live' là giá trị server ghi đè/thêm so với default."
+  ],
+  "sources": [
+    "GameDesign/facts/facts.json (SnitchService, SnitchDataService, SnitchInGameManager, SnitchTargetFinder, SnitchItem, SnitchAnimationConfig, các popup UI)",
+    "RecoveredNative/PseudoC/Assembly-CSharp/Modules/Contexts/Home/Snitch/Scripts/SnitchService.c",
+    "UnityExport/ExportedProject/Assets/Resources/defaultconfigs/SnitchConfigModel.json",
+    "UnityExport/ExportedProject/Assets/MonoBehaviour/SnitchAnimationConfig.asset, SnitchLobbyButtonAnimationConfig.asset",
+    "GameDesign/appendix/localization.tsv (Snitch*)"
+  ],
+  "related_feature_aliases": [
+    {
+      "original": "Blockers",
+      "feature": "Obstacles"
+    }
+  ],
+  "audit_provenance": {
+    "review_date": "2026-11-15",
+    "mode": "offline_existing_files",
+    "code_build": "0.0.3063 ARMv7",
+    "runtime_build_observed_historically": "0.0.3129 ARM64 (audit 2026-10-18); not rechecked 2026-11-15",
+    "new_playtests": 0,
+    "uc_status": "See facts/audit_20261115/uc_registry.json; image reference is not pass",
+    "workbook_status": "Existing XLSX is historical; JSON and local web include 2026-11-15 corrections",
+    "static_review": "facts/local_code_gap_results_20261115.json; facts/local_asset_gap_results_20261115.json; facts/final_data_gap_decisions_20261115.json; facts/core_body_gap_decisions_20261115.json; facts/remaining_asset_gap_decisions_20261115.json"
+  },
+  "static_review_20261115": {
+    "date": "2026-11-15",
+    "scope": "Historical code/assets 0.0.3063, dated caches, device 0.0.3129 cached bundles and explicitly scoped runtime evidence. Not full runtime pass.",
+    "findings": [
+      {
+        "kind": "core_body",
+        "source_report": "facts/core_body_gap_decisions_20261115.json",
+        "id": "MS-CORE-BODY-13",
+        "gap_ids": [
+          "MS-Snitch-G001"
+        ],
+        "title": "Snitch count lấy list động",
+        "conclusion": "OnLevelStart lưu externalSnitches và levelSnitchInfo; GetRedSnitchMoveTargetByIndex/GetNormalSnitchMoveTargetForIndex lọc/duyệt nguồn external+level lists. Không có literal max2/max3 trong các body target/entrance đã đọc; count phụ thuộc input, filtering và số target hợp lệ.",
+        "evidence": [
+          {
+            "file": "../com.grandgames.magicsort_Unity_20260909_112501/RecoveredNative/PseudoC/Assembly-CSharp/Modules/Contexts/GamePlay/Snitch/Scripts/SnitchInGameManager.c",
+            "line": 751,
+            "end_line": 794,
+            "method": "// ===== SnitchInGameManager :: public void OnLevelStart(",
+            "sha256": "be84bb8bc8491db8a9c65d62e0d2656e147c96766217ab7d78f2d3a328d22441",
+            "body_checked": true,
+            "build": "0.0.3063 ARMv7",
+            "required_body_tokens": []
+          },
+          {
+            "file": "../com.grandgames.magicsort_Unity_20260909_112501/RecoveredNative/PseudoC/Assembly-CSharp/Modules/Contexts/GamePlay/Snitch/Scripts/SnitchInGameManager.c",
+            "line": 795,
+            "end_line": 1151,
+            "method": "// ===== SnitchInGameManager :: public RedSnitchMoveTarget GetRedSnitchMoveTargetByIndex(",
+            "sha256": "be84bb8bc8491db8a9c65d62e0d2656e147c96766217ab7d78f2d3a328d22441",
+            "body_checked": true,
+            "build": "0.0.3063 ARMv7",
+            "required_body_tokens": []
+          },
+          {
+            "file": "../com.grandgames.magicsort_Unity_20260909_112501/RecoveredNative/PseudoC/Assembly-CSharp/Modules/Contexts/GamePlay/Snitch/Scripts/SnitchInGameManager.c",
+            "line": 1152,
+            "end_line": 1440,
+            "method": "// ===== SnitchInGameManager :: public NormalSnitchMoveTarget GetNormalSnitchMoveTargetForIndex(",
+            "sha256": "be84bb8bc8491db8a9c65d62e0d2656e147c96766217ab7d78f2d3a328d22441",
+            "body_checked": true,
+            "build": "0.0.3063 ARMv7",
+            "required_body_tokens": []
+          }
+        ],
+        "status": "partial_static_code_unresolved",
+        "remaining": "Max thiết kế/global cap chưa được chứng minh; cần external grant consumer/config và stress board, không đổi thành unlimited.",
+        "runtime_verified": false,
+        "scope": "recovered_native_0.0.3063_only"
+      },
+      {
+        "kind": "core_body",
+        "source_report": "facts/core_body_gap_decisions_20261115.json",
+        "id": "MS-CORE-BODY-14",
+        "gap_ids": [
+          "MS-Snitch-G005"
+        ],
+        "title": "Snitch có entrance và cell-top callback",
+        "conclusion": "OnLevelStart reset box state rồi state1. Box Update chờ new-blocker intro, entry animation, tutorial, rise/move red, rise/move normal theo states1..8. SnitchItem.OnBottleWatersUpdated chỉ complete khi belongingCell.WaterItem==topWaterItem; đánh dấu completed, lock bottle, tạo tween callback <Complete>b__18_0 dispatch normal/red manager effect. Không phải mỗi move bất kỳ đều tự kích Snitch.",
+        "evidence": [
+          {
+            "file": "../com.grandgames.magicsort_Unity_20260909_112501/RecoveredNative/PseudoC/Assembly-CSharp/Modules/Contexts/GamePlay/Snitch/Scripts/SnitchBoxView.c",
+            "line": 650,
+            "end_line": 819,
+            "method": "// ===== SnitchBoxView :: private void Update(",
+            "sha256": "46b8af5166fe18541ebb0a87b48440329fc61538660e7a57123efcd0a05b1f44",
+            "body_checked": true,
+            "build": "0.0.3063 ARMv7",
+            "required_body_tokens": []
+          },
+          {
+            "file": "../com.grandgames.magicsort_Unity_20260909_112501/RecoveredNative/PseudoC/Assembly-CSharp/Modules/Contexts/GamePlay/Board/Items/Scripts/Snitch/SnitchItem.c",
+            "line": 460,
+            "end_line": 593,
+            "method": "// ===== SnitchItem :: public override void OnBottleWatersUpdated(",
+            "sha256": "032f9aca3f62ef23834ba9538e81e7e9d8af05d059aa0e4f0fdae354e56f7889",
+            "body_checked": true,
+            "build": "0.0.3063 ARMv7",
+            "required_body_tokens": []
+          },
+          {
+            "file": "../com.grandgames.magicsort_Unity_20260909_112501/RecoveredNative/PseudoC/Assembly-CSharp/Modules/Contexts/GamePlay/Board/Items/Scripts/Snitch/SnitchItem.c",
+            "line": 1311,
+            "end_line": 1507,
+            "method": "// ===== SnitchItem :: private void <Complete>b__18_0(",
+            "sha256": "032f9aca3f62ef23834ba9538e81e7e9d8af05d059aa0e4f0fdae354e56f7889",
+            "body_checked": true,
+            "build": "0.0.3063 ARMv7",
+            "required_body_tokens": []
+          }
+        ],
+        "status": "resolved_static_code_historical_build",
+        "remaining": "Đối chiếu nhánh này trên app0.0.3129 ARM64; chưa là runtime pass.",
+        "runtime_verified": false,
+        "scope": "recovered_native_0.0.3063_only"
+      },
+      {
+        "kind": "final_data",
+        "source_report": "facts/final_data_gap_decisions_20261115.json",
+        "id": "MS-FDG-039",
+        "gap_ids": [
+          "MS-Snitch-G004"
+        ],
+        "title": "SnitchSpawnInfo (dữ liệu đặt Snitch trong level) nằm trong định dạng level, chưa khảo sát ở tài liệu này",
+        "status": "partial_actual_evidence",
+        "conclusion": "Đã survey4306board vàconverterId27→SnitchItemModel với ItemType/TargetCellIndices/TargetBottleIndices. Không thấyserializedSnitch27 hoặc top-levelexternalSnitchkey trong hai tậpboard này.",
+        "evidence": [
+          "facts/final_data_review_20261115/duck_snitch_board_survey.json",
+          "facts/final_data_review_20261115/serialized_item_mapping.json"
+        ],
+        "remaining": "Chưa có mẫuSnitchSpawnInfo thực từseedSL/newerboard ngoài tập đã tải; không kết luậnSnitch không tồn tại tronggame.",
+        "next_action": "Lấy đúngseedSL đã chọn khi featureactive và lưu rawmodel/mapping, không tạo dữ liệu thay thế.",
+        "scope": "question-specific source/observed branch only; no full-UC or production claim",
+        "source_records": []
+      },
+      {
+        "kind": "code",
+        "source_report": "facts/local_code_gap_results_20261115.json",
+        "id": "MS-CODE-50",
+        "gap_ids": [
+          "MS-Snitch-G002"
+        ],
+        "title": "Snitch priority có constants nhưng chưa đủ full table",
+        "status": "partial_static_code",
+        "conclusion": "GetBlockerPriorityScore trả int.MinValue cho target khônghợp lệ; các nhánh có ưu tiên2/1 theo fillamount,15 khi waterpredicate và4 khi chaiempty; forceTarget bỏ một số gate. Khi đãchọn blocker type, score giảm1000×sốlần typeđãchọn. Nhiều nhánh typehierarchy/vtable chưa map đủ sang blocker names nên không phát một bảng heuristic hoànchỉnh.",
+        "evidence": [
+          {
+            "file": "../com.grandgames.magicsort_Unity_20260909_112501/RecoveredNative/PseudoC/Assembly-CSharp/Modules/Contexts/GamePlay/Snitch/Scripts/SnitchTargetFinder.c",
+            "line": 6660,
+            "end_line": 7014,
+            "method": "// ===== SnitchTargetFinder :: private int GetBlockerPriorityScore(",
+            "sha256": "744533b369b6ac4b64d2ed3a4905befa5b10bc9a16710fda80858476d8044a03",
+            "body_checked": true,
+            "build": "0.0.3063 ARMv7",
+            "required_body_tokens": [
+              "return -0x80000000",
+              "iVar4 = 0xf",
+              "iVar6 * -1000 + iVar4"
+            ]
+          }
+        ],
+        "remaining": "Map toàn bộ type-hierarchy branches và lambda predicates với ItemType; cần disassembly/board minimal xácminh từngnhánh.",
+        "scope": "recovered_native_0.0.3063_only",
+        "runtime_verified": false
+      },
+      {
+        "kind": "asset",
+        "source_report": "facts/local_asset_gap_results_20261115.json",
+        "id": "MS-Snitch-G003",
+        "status": "resolved_static_snapshot",
+        "conclusion": "Hai Snitch animation asset có numeric và curve inline đầy đủ; không phải chỉ có curve reference. Xuất toàn bộ keyframe/tangent/weight cùng giá trị duration.",
+        "evidence": [
+          {
+            "source": "MonoBehaviour\\SnitchAnimationConfig.asset",
+            "root": "UnityExport Assets 0.0.3063",
+            "sha256": "2ae582b6f2867ac702740d13a14e435c5f5409e4d89fd36388da37607092b33c",
+            "line": 1,
+            "build": "0.0.3063 ARMv7"
+          },
+          {
+            "source": "MonoBehaviour\\SnitchLobbyButtonAnimationConfig.asset",
+            "root": "UnityExport Assets 0.0.3063",
+            "sha256": "3b6b30a81911451c41baae59f760a17eac90cd91789339701154aced1954dbea",
+            "line": 1,
+            "build": "0.0.3063 ARMv7"
+          }
+        ],
+        "data": "asset_catalog.json",
+        "scope": "static_export0.0.3063_or_historical_cache_not_runtime_pass",
+        "reviewed": "2026-11-15",
+        "next_action": "Kiểm chứng effective config/asset và nhánh runtime trên đúng build nếu cần."
+      }
+    ]
+  },
+  "acceptance_review_20261115": {
+    "source": "facts/feature_acceptance_20261115.json",
+    "feature_id": "Snitch",
+    "scope": "All eleven dossier dimensions reviewed; full_feature_verified is not implied; read per-dimension gaps and actual runtime evidence."
+  },
+  "segment_ab_review_20261115": {
+    "status": "not_identified_in_sources",
+    "segment_ids": [],
+    "matching_basis": "explicit_gd_config_map_or_exact_model_token_in_gdd_configs_where_key_sources; rootfieldscoped",
+    "rows": [],
+    "classifications": {},
+    "assignment_verified": false,
+    "uplift_verified": false,
+    "note": "No matchingrow does not prove no segmentation/AB. Rewardbucketfalsepositives remain explicitly classified."
+  },
+  "continuation_review_20261116": {
+    "date": "2026-11-16",
+    "build": "0.0.3129 ARM64 host APK",
+    "build_scope": "Host APK version3129 matches LAST observed installed version15/11 only; installed bytes/live device16/11 not verified.",
+    "runtime_status": "device_unavailable",
+    "runtime_case_ids": [],
+    "current_apk_model_links": {
+      "feature": "Snitch",
+      "models": [
+        {
+          "model": "SnitchConfigModel",
+          "current_default_file": "facts/review_20261116/public_current_config_3129/defaults/SnitchConfigModel.json",
+          "resource_path": "defaultconfigs/snitchconfigmodel",
+          "sha256": "a0a6f571f04f2c1b094a88e0f7ff9c91612cfdad87702f42a4111beafb838571",
+          "matching_basis": [
+            "gdd/Snitch.json#/configs",
+            "gdd/Snitch.json#/sources",
+            "gdd/Snitch.json#/summary",
+            "gdd/Snitch.json#/managers"
+          ],
+          "scope": "Packaged default3129, not effective server config.",
+          "site_data_path": "data/current_config_3129/defaults/SnitchConfigModel.json",
+          "original_source_sha256": "a0a6f571f04f2c1b094a88e0f7ff9c91612cfdad87702f42a4111beafb838571",
+          "public_artifact_sha256": "b8a71ad0d539117439efceabe0a5c18f922373de8c86ca467e69fdf5ae05c015",
+          "sha256_scope": "sha256 is original raw model; public_artifact_sha256 is the sanitized download"
+        }
+      ],
+      "status": "exact_model_source_association",
+      "distribution": "sanitized_public",
+      "public_mapping_pending": false
+    },
+    "current_packaged_defaults": [
+      {
+        "model": "SnitchConfigModel",
+        "source": "facts/review_20261116/public_current_config_3129/defaults/SnitchConfigModel.json",
+        "site_data_path": "data/current_config_3129/defaults/SnitchConfigModel.json",
+        "public_artifact_sha256": "b8a71ad0d539117439efceabe0a5c18f922373de8c86ca467e69fdf5ae05c015",
+        "original_source_sha256": "a0a6f571f04f2c1b094a88e0f7ff9c91612cfdad87702f42a4111beafb838571",
+        "source_class": "static_asset",
+        "build": "0.0.3129 host APK",
+        "scope": "Sanitized packaged default fullvalues only; not effective remote/selected config or runtime.",
+        "values": {
+          "IsEnabled": false,
+          "FirstLevelToShow": 290,
+          "TargetLevelProgress": 10,
+          "IsFallbackPremiumHitActive": true,
+          "IsWaterColorChangeActive": true
+        }
+      }
+    ],
+    "native_finding_ids": [],
+    "documentation_source_coverage": {
+      "dossier_present": true,
+      "use_case_catalog_count": 18,
+      "config_catalog_rows": 27,
+      "current_apk_default_model_links": 1,
+      "current_native_findings": 0,
+      "scope": "Documentation/source coverage only; not complete runtime verification."
+    },
+    "runtime_completion": {
+      "date": "2026-11-16",
+      "status": "device_unavailable",
+      "executed_case_count": 0,
+      "full_feature_runtime_verified": false
+    },
+    "planned_branch": "Cuối lượt core: info popup/icon và gate hunt nếu hiện; sau đó chọn level có cơ chế tự nhiên.",
+    "target_uc_ids": [
+      "UC-05",
+      "UC-18"
+    ],
+    "execution_phase": "core_and_levels_last",
+    "core_or_levels_last": true,
+    "actionability_full_json": "facts/continuation_20261116/current/feature_actionability.json",
+    "actionability_site_data_path": "data/continuation_20261116/feature_actionability.json",
+    "source_classes": [
+      "static_asset"
+    ],
+    "full_feature_verified": false
+  }
+}

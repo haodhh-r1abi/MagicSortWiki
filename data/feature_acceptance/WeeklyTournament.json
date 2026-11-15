@@ -1,0 +1,719 @@
+{
+  "id": "WeeklyTournament",
+  "feature": "WeeklyTournament",
+  "name": "Giải đấu tuần (Weekly)",
+  "category": "Event",
+  "category_label": "Sự kiện",
+  "core_levels_last": false,
+  "acceptance_status": "documented_with_explicit_remaining_scope",
+  "full_feature_verified": false,
+  "checks": {
+    "purpose": {
+      "status": "documented_static_scope",
+      "source": "gdd/WeeklyTournament.json#/summary",
+      "claim_excerpt": "Weekly Tournament là bảng xếp hạng thi đua theo tuần, chạy liên tục và tự động lặp lại. Mỗi lần thắng một level người chơi được +1 điểm (score) vào bảng xếp hạng tuần của mình; bảng gồm cả người thật lẫn bot (WeeklyLeaderBoardPlayer.IsBot). Khi tuần kết thúc, người chơi mở bảng để xem kết quả và nhận thưởng coin theo hạng: hạng 1 = 1000, hạng 2 = 500, hạng 3 = 250 (mặc định client); từ hạng 4 trở "
+    },
+    "unlock": {
+      "status": "described_historical_conditions_runtime_boundary_unverified",
+      "source": "gdd/WeeklyTournament.json#/unlock",
+      "content": "WeeklyTournamentStateService.IsUnlocked()/IsVisible(): WeeklyTournamentConfigModel.IsTournamentEnable == true && level người chơi >= FirstLevelToShow. Client default: IsTournamentEnable = true, FirstLevelToShow = 40 (Resources/defaultconfigs/WeeklyTournamentConfigModel.json). Nếu chưa đủ level → WeeklyTournamentStateType.InsufficientLevel(3); nếu tắt → Disable(2); nếu chưa có bảng cache → NoCachedTournament(4)."
+    },
+    "entry_flow": {
+      "status": "documented_paths_not_all_executed",
+      "entry_points": [
+        "Nút Leaderboard / cúp ở lobby (WeeklyTournamentLeaderboardController)",
+        "WeeklyNewFeatureAlertView — highlight lần đầu mở khóa (ShouldShowNewFeatureAlertView)",
+        "WeeklyTournamentHomeWelcomingCommand — chèn vào chuỗi welcome khi vào Home",
+        "Tự mở bảng kết quả khi về lobby (ShouldOpenAutomaticallyOnLobbyReturnOnResult) hoặc khi mở app (ShouldOpenAutomaticallyOnSessionStartOnResult)",
+        "WeeklyTournamentInfoPopup — nút info giải thích luật",
+        "Local notification WeeklyTournamentEndNotificationSo (Id 1124) khi giải kết thúc"
+      ],
+      "flow_source": "gdd/WeeklyTournament.json#/flow",
+      "acceptance_scope": "Period/users/bots/rank/score/reward/claim; reset, offline settlement và server authority"
+    },
+    "config": {
+      "status": "source_bound_catalog_present",
+      "gdd_rows": 129,
+      "full_leaf_rows_associated": 32,
+      "snapshots": {
+        "default_0.0.3063": 7,
+        "cache_20260910": 7,
+        "cache_20261010": 7,
+        "firebase_20260910": 7,
+        "instance_cache_observed_20261115": 4
+      },
+      "models": [
+        {
+          "model": "weeklyTournamentConfigModel",
+          "matching_basis": [
+            {
+              "kind": "explicit_gd_config_model_map",
+              "source": "gd_config.json#/defaultconfigs/map/WeeklyTournament"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/WeeklyTournament.json#/sources/6"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/WeeklyTournament.json#/configs/0/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/WeeklyTournament.json#/configs/1/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/WeeklyTournament.json#/configs/2/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/WeeklyTournament.json#/configs/3/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/WeeklyTournament.json#/configs/4/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/WeeklyTournament.json#/configs/5/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/WeeklyTournament.json#/configs/6/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/WeeklyTournament.json#/configs/21/key_where"
+            }
+          ]
+        },
+        {
+          "model": "WeeklyTournamentModel",
+          "matching_basis": [
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/WeeklyTournament.json#/sources/3"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/WeeklyTournament.json#/sources/9"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/WeeklyTournament.json#/configs/19/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/WeeklyTournament.json#/configs/22/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/WeeklyTournament.json#/configs/23/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/WeeklyTournament.json#/configs/24/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/WeeklyTournament.json#/configs/25/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/WeeklyTournament.json#/configs/26/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/WeeklyTournament.json#/configs/27/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/WeeklyTournament.json#/configs/28/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/WeeklyTournament.json#/configs/29/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/WeeklyTournament.json#/configs/30/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/WeeklyTournament.json#/configs/31/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/WeeklyTournament.json#/configs/32/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/WeeklyTournament.json#/configs/33/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/WeeklyTournament.json#/configs/34/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/WeeklyTournament.json#/configs/35/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/WeeklyTournament.json#/configs/36/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/WeeklyTournament.json#/configs/37/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/WeeklyTournament.json#/configs/38/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/WeeklyTournament.json#/configs/39/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/WeeklyTournament.json#/configs/40/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/WeeklyTournament.json#/configs/41/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/WeeklyTournament.json#/configs/42/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/WeeklyTournament.json#/configs/43/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/WeeklyTournament.json#/configs/44/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/WeeklyTournament.json#/configs/45/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/WeeklyTournament.json#/configs/46/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/WeeklyTournament.json#/configs/47/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/WeeklyTournament.json#/configs/48/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/WeeklyTournament.json#/configs/49/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/WeeklyTournament.json#/configs/50/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/WeeklyTournament.json#/configs/51/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/WeeklyTournament.json#/configs/52/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/WeeklyTournament.json#/configs/53/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/WeeklyTournament.json#/configs/54/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/WeeklyTournament.json#/configs/55/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/WeeklyTournament.json#/configs/56/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/WeeklyTournament.json#/configs/57/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/WeeklyTournament.json#/configs/58/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/WeeklyTournament.json#/configs/59/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/WeeklyTournament.json#/configs/60/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/WeeklyTournament.json#/configs/61/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/WeeklyTournament.json#/configs/62/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/WeeklyTournament.json#/configs/63/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/WeeklyTournament.json#/configs/64/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/WeeklyTournament.json#/configs/65/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/WeeklyTournament.json#/configs/66/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/WeeklyTournament.json#/configs/67/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/WeeklyTournament.json#/configs/68/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/WeeklyTournament.json#/configs/69/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/WeeklyTournament.json#/configs/70/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/WeeklyTournament.json#/configs/71/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/WeeklyTournament.json#/configs/72/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/WeeklyTournament.json#/configs/73/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/WeeklyTournament.json#/configs/74/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/WeeklyTournament.json#/configs/75/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/WeeklyTournament.json#/configs/76/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/WeeklyTournament.json#/configs/77/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/WeeklyTournament.json#/configs/78/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/WeeklyTournament.json#/configs/79/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/WeeklyTournament.json#/configs/80/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/WeeklyTournament.json#/configs/81/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/WeeklyTournament.json#/configs/82/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/WeeklyTournament.json#/configs/83/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/WeeklyTournament.json#/configs/84/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/WeeklyTournament.json#/configs/85/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/WeeklyTournament.json#/configs/86/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/WeeklyTournament.json#/configs/87/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/WeeklyTournament.json#/configs/88/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/WeeklyTournament.json#/configs/89/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/WeeklyTournament.json#/configs/90/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/WeeklyTournament.json#/configs/91/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/WeeklyTournament.json#/configs/92/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/WeeklyTournament.json#/configs/93/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/WeeklyTournament.json#/configs/94/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/WeeklyTournament.json#/configs/95/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/WeeklyTournament.json#/configs/96/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/WeeklyTournament.json#/configs/97/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/WeeklyTournament.json#/configs/98/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/WeeklyTournament.json#/configs/99/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/WeeklyTournament.json#/configs/100/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/WeeklyTournament.json#/configs/101/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/WeeklyTournament.json#/configs/102/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/WeeklyTournament.json#/configs/103/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/WeeklyTournament.json#/configs/104/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/WeeklyTournament.json#/configs/105/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/WeeklyTournament.json#/configs/106/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/WeeklyTournament.json#/configs/107/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/WeeklyTournament.json#/configs/108/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/WeeklyTournament.json#/configs/109/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/WeeklyTournament.json#/configs/110/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/WeeklyTournament.json#/configs/111/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/WeeklyTournament.json#/configs/112/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/WeeklyTournament.json#/configs/113/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/WeeklyTournament.json#/configs/114/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/WeeklyTournament.json#/configs/115/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/WeeklyTournament.json#/configs/116/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/WeeklyTournament.json#/configs/117/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/WeeklyTournament.json#/configs/118/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/WeeklyTournament.json#/configs/119/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/WeeklyTournament.json#/configs/120/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/WeeklyTournament.json#/configs/121/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/WeeklyTournament.json#/configs/122/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/WeeklyTournament.json#/configs/123/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/WeeklyTournament.json#/configs/124/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/WeeklyTournament.json#/configs/125/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/WeeklyTournament.json#/configs/126/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/WeeklyTournament.json#/configs/127/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/WeeklyTournament.json#/configs/128/key_where"
+            }
+          ]
+        }
+      ],
+      "declared_models_without_catalog_data": [],
+      "placeholder_rows_requiring_source_review": [],
+      "exact_placeholder_snapshot_values": [],
+      "dossier_abbreviated_values": [],
+      "note": "Model association uses explicitmap or exacttoken citations; fieldpresence does not prove allproductiondata. GDDsummaryrows and fullcatalogrows have separate counts. Abbreviated source summaries are not full arrays; catalog/source links remain authoritative."
+    },
+    "reward": {
+      "status": "documented_static_rewards_runtime_grant_not_fully_verified",
+      "entries": 4,
+      "tables_in_site_meta": 3,
+      "source": "gdd/WeeklyTournament.json#/rewards"
+    },
+    "use_cases": {
+      "status": "specified_not_executed_in15nov_ledger",
+      "specified": 14,
+      "reviewed_uc_branch_count": 0,
+      "reviewed_uc_ids": [],
+      "not_reviewed_in_new_ledger": [
+        "UC-01",
+        "UC-02",
+        "UC-03",
+        "UC-04",
+        "UC-05",
+        "UC-06",
+        "UC-07",
+        "UC-08",
+        "UC-09",
+        "UC-10",
+        "UC-11",
+        "UC-12",
+        "UC-13",
+        "UC-14"
+      ],
+      "full_uc_pass_claimed": false
+    },
+    "screenshots": {
+      "historical_gallery_entries": 3,
+      "historical_uc_with_image_reference": 3,
+      "curated_new_images": [],
+      "curated_new_image_count": 0,
+      "status": "historical_references_only",
+      "source": "screens/web/screens.json#/WeeklyTournament",
+      "note": "Image presence does not prove execution result or completeness."
+    },
+    "runtime_actual": {
+      "status": "not_observed_in15nov_ledger",
+      "case_count": 0,
+      "cases": [],
+      "mode": "offline_existing_fixture",
+      "build": "0.0.3129 ARM64"
+    },
+    "segment_ab": {
+      "status": "not_identified_in_sources",
+      "segment_ids": [],
+      "matching_basis": "explicit_gd_config_map_or_exact_model_token_in_gdd_configs_where_key_sources; rootfieldscoped",
+      "rows": [],
+      "classifications": {},
+      "assignment_verified": false,
+      "uplift_verified": false,
+      "note": "No matchingrow does not prove no segmentation/AB. Rewardbucketfalsepositives remain explicitly classified."
+    },
+    "storage_backend_analytics": {
+      "storage_keys": {
+        "entries": 8,
+        "status": "documented_static_contract_runtime_not_verified",
+        "source": "gdd/WeeklyTournament.json#/storage_keys"
+      },
+      "backend": {
+        "entries": 4,
+        "status": "documented_static_contract_runtime_not_verified",
+        "source": "gdd/WeeklyTournament.json#/backend"
+      },
+      "analytics": {
+        "entries": 1,
+        "status": "documented_static_contract_runtime_not_verified",
+        "source": "gdd/WeeklyTournament.json#/analytics"
+      }
+    },
+    "remaining_next_step": {
+      "gap_count": 5,
+      "static_scoped_resolutions": 0,
+      "remaining_count": 5,
+      "all_gap_dispositions": [
+        {
+          "id": "MS-WeeklyTournament-G001",
+          "feature": "WeeklyTournament",
+          "source": "gdd/WeeklyTournament.json#/gaps/0",
+          "original": "Độ dài chu kỳ giải (7 ngày) không có hằng số trong client — startTime/finishTime hoàn toàn do server quyết định.",
+          "current_note": "Độ dài chu kỳ giải (7 ngày) không có hằng số trong client — startTime/finishTime hoàn toàn do server quyết định.",
+          "status": "open_review_plan",
+          "review_status": "open_review_plan",
+          "dependency": "event_rotation_or_fresh_instance",
+          "next_action": "Trích period startfinish của snapshot; cần ít nhất hai vòng để kiểm7ngày và reset, không suy từ tên Weekly.",
+          "remaining": "Độ dài chu kỳ giải (7 ngày) không có hằng số trong client — startTime/finishTime hoàn toàn do server quyết định."
+        },
+        {
+          "id": "MS-WeeklyTournament-G002",
+          "feature": "WeeklyTournament",
+          "source": "gdd/WeeklyTournament.json#/gaps/1",
+          "original": "Số lượng người chơi trong một bảng và tỉ lệ bot do server quyết định (Players[] chỉ có cờ IsBot).",
+          "current_note": "Số lượng người chơi trong một bảng và tỉ lệ bot do server quyết định (Players[] chỉ có cờ IsBot).",
+          "status": "open_review_plan",
+          "review_status": "open_review_plan",
+          "dependency": "backend_contract_or_response",
+          "next_action": "Đếm user/bot observed; server grouping/ratio không thể chứng minh từ một snapshot.",
+          "remaining": "Số lượng người chơi trong một bảng và tỉ lệ bot do server quyết định (Players[] chỉ có cờ IsBot)."
+        },
+        {
+          "id": "MS-WeeklyTournament-G003",
+          "feature": "WeeklyTournament",
+          "source": "gdd/WeeklyTournament.json#/gaps/2",
+          "original": "Không thấy thưởng vật phẩm ngoài coin cho giải tuần trong build này.",
+          "current_note": "Không thấy thưởng vật phẩm ngoài coin cho giải tuần trong build này.",
+          "status": "open_review_plan",
+          "review_status": "open_review_plan",
+          "dependency": "event_rotation_or_fresh_instance",
+          "next_action": "Trích reward types của từng rank trong instance, không kết luận chỉcoin toàn production từ một build.",
+          "remaining": "Không thấy thưởng vật phẩm ngoài coin cho giải tuần trong build này."
+        },
+        {
+          "id": "MS-WeeklyTournament-G004",
+          "feature": "WeeklyTournament",
+          "source": "gdd/WeeklyTournament.json#/gaps/3",
+          "original": "[Runtime 2026-09-10] Config server LIVE đã đọc trực tiếp từ cache máy (không cần request); các hàng 'server live' là giá trị server ghi đè/thêm so với default.",
+          "current_note": "[Runtime 2026-09-10] Config server LIVE đã đọc trực tiếp từ cache máy (không cần request); các hàng 'server live' là giá trị server ghi đè/thêm so với default.",
+          "status": "historical_evidence_annotation_not_test_result",
+          "review_status": "historical_evidence_annotation_not_test_result",
+          "dependency": "historical_note_requires_qualified_use",
+          "next_action": "Ghi chú cache đã đọc tháng9, từ LIVE phải hiểu snapshot lịch sử. Đối chiếu config catalog/source, giữ default/cache/production hiện tại riêng; không coi là fresh fetch15/11.",
+          "remaining": "[Runtime 2026-09-10] Config server LIVE đã đọc trực tiếp từ cache máy (không cần request); các hàng 'server live' là giá trị server ghi đè/thêm so với default."
+        },
+        {
+          "id": "MS-WeeklyTournament-G005",
+          "feature": "WeeklyTournament",
+          "source": "gdd/WeeklyTournament.json#/gaps/4",
+          "original": "[Runtime 2026-09-10] Instance phiên event đang chạy đã đọc (WeeklyTournamentModel); phần từng ghi 'do server gửi' nay có giá trị thật trong các hàng 'server instance'.",
+          "current_note": "[Runtime 2026-09-10] Instance phiên event đang chạy đã đọc (WeeklyTournamentModel); phần từng ghi 'do server gửi' nay có giá trị thật trong các hàng 'server instance'.",
+          "status": "historical_evidence_annotation_not_test_result",
+          "review_status": "historical_evidence_annotation_not_test_result",
+          "dependency": "historical_note_requires_qualified_use",
+          "next_action": "Ghi chú instance đã đọc tháng9: kiểm model/snapshot trong GDD configs và báo cáo lịch sử; không đóng gap thuật toán/claim/rotation từ sự hiện diện model. Vòng mới cần event hợp lệ.",
+          "remaining": "[Runtime 2026-09-10] Instance phiên event đang chạy đã đọc (WeeklyTournamentModel); phần từng ghi 'do server gửi' nay có giá trị thật trong các hàng 'server instance'."
+        }
+      ],
+      "feature_specific_acceptance_questions": [
+        "Period/users/bots/rank/score/reward/claim",
+        " reset, offline settlement và server authority"
+      ],
+      "next_steps": [
+        "Trích period startfinish của snapshot; cần ít nhất hai vòng để kiểm7ngày và reset, không suy từ tên Weekly.",
+        "Đếm user/bot observed; server grouping/ratio không thể chứng minh từ một snapshot.",
+        "Trích reward types của từng rank trong instance, không kết luận chỉcoin toàn production từ một build.",
+        "Ghi chú cache đã đọc tháng9, từ LIVE phải hiểu snapshot lịch sử. Đối chiếu config catalog/source, giữ default/cache/production hiện tại riêng; không coi là fresh fetch15/11.",
+        "Ghi chú instance đã đọc tháng9: kiểm model/snapshot trong GDD configs và báo cáo lịch sử; không đóng gap thuật toán/claim/rotation từ sự hiện diện model. Vòng mới cần event hợp lệ."
+      ]
+    }
+  },
+  "use_cases": 14,
+  "configs": 129,
+  "new_review_case_count": 0,
+  "reviewed_uc_branch_count": 0,
+  "curated_new_image_count": 0,
+  "segment_ids": [],
+  "matching_basis": "explicit_gd_config_map_or_exact_model_token_in_gdd_configs_where_key_sources; rootfieldscoped",
+  "unmatched_segment_status": "not_identified_in_sources",
+  "local_document_repairs": [],
+  "sources": [
+    "GameDesign/features/WeeklyTournamentService.md",
+    "GameDesign/features/WeeklyTournamentStateService.md",
+    "GameDesign/features/WeeklyTournamentDataService.md",
+    "GameDesign/features/WeeklyTournamentModel.md",
+    "RecoveredNative/PseudoC/Assembly-CSharp/Modules/Contexts/Home/WeeklyTournament/Scripts/*.c",
+    "RecoveredNative/Il2CppDumper/dump.cs (TypeDefIndex 1796-1840)",
+    "UnityExport/ExportedProject/Assets/Resources/defaultconfigs/WeeklyTournamentConfigModel.json",
+    "UnityExport/ExportedProject/Assets/MonoBehaviour/WeeklyTournamentEndNotificationSo.asset",
+    "UnityExport/ExportedProject/Assets/MonoBehaviour/BackendEnvironmentConfig.asset",
+    "facts/runtime/review_20261115/event_instances/WeeklyTournamentModel.json"
+  ],
+  "source_hashes": {
+    "gdd_sha256": "fee8937c3c8eaa2fa50a41053e61b858ef0eb2e91091ef76623d8093497c198c",
+    "site_meta_sha256": "e67c9bdebf3f73ea1fb456ac47ff067e7e367abdb4860d979420ff5a9a619972"
+  }
+}

@@ -1,0 +1,556 @@
+{
+  "id": "NoAdsOffer",
+  "title": "No Ads Offer (Gói gỡ quảng cáo)",
+  "tagline": "Bán quyền gỡ quảng cáo bắt buộc vĩnh viễn, chào bán đúng lúc người chơi vừa xem quảng cáo xen kẽ.",
+  "infobox": [
+    [
+      "Loại",
+      "Offer"
+    ],
+    [
+      "Mở khóa",
+      "Không có mốc level; cần NoAdsOfferConfigModel.IsEnabled = true và chưa sở hữu No Ads"
+    ],
+    [
+      "Chu kỳ / lịch",
+      "Popup bật sau mỗi 2 quảng cáo xen kẽ (PopupIntervalAsAdCount, mặc định client)"
+    ],
+    [
+      "Tham gia",
+      "Người chơi đơn"
+    ],
+    [
+      "Tiền tệ",
+      "IAP (7.99 USD tương đương, mặc định client)"
+    ],
+    [
+      "Thưởng chính",
+      "Quyền No Ads vĩnh viễn (CurrencyType.NoAds = 7) kèm bộ thưởng khởi động"
+    ],
+    [
+      "Điều kiện / phụ thuộc",
+      "InAppPurchaseHistoryService xác định đã sở hữu hay chưa; ba tầng giới hạn số lần hiện popup"
+    ],
+    [
+      "Manager",
+      "NoAdsOfferService (kèm NoAdsOfferDataService, NoAdsOfferStateService, NoAdsOfferRemoteService, BundleNoAdsAvailabilityService)"
+    ]
+  ],
+  "description": [
+    "No Ads Offer bán gói gỡ quảng cáo vĩnh viễn — 'Remove all forced ads forever!' — kèm một bộ thưởng khởi động.",
+    "Điểm khác biệt so với các offer khác là thời điểm chào bán: popup chỉ bật sau khi người chơi vừa xem một số quảng cáo xen kẽ.",
+    "Thông điệp tách bạch rất rõ: chỉ gỡ quảng cáo bắt buộc, vẫn giữ quảng cáo tự nguyện đổi thưởng ('Keep optional ads for rewards!').",
+    "Số lần hiện popup bị chặn ba tầng: theo phiên (3 lần), theo ngày (7 lần) và theo cả đời tài khoản (server).",
+    "Hạn mức ngày reset theo giờ server lấy từ RemoteTimeService, không lách được bằng cách chỉnh giờ máy.",
+    "Người đã sở hữu No Ads không bao giờ thấy lại offer — trạng thái tra từ InAppPurchaseHistoryService.",
+    "Quyền No Ads được mô hình hoá như một loại tiền tệ (CurrencyType.NoAds = 7) trong InventoryService.",
+    "BundleNoAdsAvailabilityService quyết định các bundle 'kèm No Ads' trong Store còn bán được hay không.",
+    "Là sản phẩm non-consumable nên bắt buộc có nút Restore Purchase trong Settings theo chính sách hai store.",
+    "Bộ đếm popup là cục bộ từng thiết bị (không đồng bộ), chỉ quyền No Ads mới xuyên thiết bị."
+  ],
+  "notes": [
+    "Lưu ý: mặc định client IsEnabled = false, EventType = 1 — server ghi đè.",
+    "Lưu ý: LifetimePopupShowLimit không có giá trị mặc định trong client, hoàn toàn do server (server).",
+    "Lưu ý: LifetimePopupShowCount không bị reset theo ngày, chỉ PopupShowCount trong ngày được đặt lại.",
+    "Lưu ý: PopupIntervalAsAdCount là khoảng cách tính bằng số quảng cáo, không phải thời gian.",
+    "Lưu ý: NoAdsOfferResponse rất gọn (chỉ EventId, EventType) vì nội dung gói nằm trong remote config chứ không theo phân khúc.",
+    "Lưu ý: NoAdsOfferDataService không implement ISyncable — đổi máy có thể thấy lại popup dù đã đạt hạn mức (gaps).",
+    "Lưu ý: mua thất bại hoặc chưa verify được thì không cấp CurrencyType.NoAds; giao dịch treo xử lý ở lần vào game sau.",
+    "Lưu ý: ProductId 'sort.noadsoffer' và giá 7.99 là giá trị mặc định client; bản phát hành lấy từ server."
+  ],
+  "how_it_works": [
+    "NoAdsOfferService.Initialize() đăng ký lắng nghe sự kiện quảng cáo.",
+    "NoAdsOfferStateService.GetState() phân loại: IsEnabled = false → Disabled(0); đã mua → NoAdsAlreadyActive(1); chưa có response → NoCache(2); còn lại → Active(3).",
+    "Khi ShouldSendGetRequest(), NoAdsOfferRemoteService lấy NoAdsOfferResponse { EventId, EventType } và CacheBackendResponse() lưu lại.",
+    "Mỗi lần một quảng cáo xen kẽ hiển thị, MarkInterShown(source) tăng _sessionInterstitialCount.",
+    "_nextPopupTargetCount được đặt bằng số hiện tại cộng PopupIntervalAsAdCount (2 mặc định).",
+    "ShouldForceShowPopup() trả true khi _sessionInterstitialCount chạm mốc và chưa vượt hạn mức.",
+    "CanShowPopup() tổng hợp ba tầng: số lần trong phiên vs SessionPopupShowLimit (3), trong ngày vs DailyPopupShowLimit (7), cả đời vs LifetimePopupShowLimit.",
+    "Popup mở qua OnPlayButtonClicked() hoặc TryToShowNoAdsOfferLobbyReturnCommand khi quay lại Home.",
+    "GetViewModel() trả NoAdsOfferViewModel { IAPConfigModel, RewardModels } để hiển thị giá và bộ thưởng kèm.",
+    "PopupShown() gọi IncreasePopupShownCount() và SetLastPopupShownTime(time), đồng thời tăng cả bộ đếm phiên và bộ đếm lifetime; bắn no_ads_popup_impression.",
+    "Mỗi lần vào game, TryResetDailyPopupCount() so LastUsedTime với giờ từ RemoteTimeService; sang ngày mới thì ResetPopupShownCount(now).",
+    "Bấm mua: IAPService xử lý với IAPOrigin.NoAdsOffer (6) và IAPReason.NoAdsOffer (8), rồi IAPPurchaseVerificationService xác thực.",
+    "Thành công: Claim() trao GetRewards() với CurrencyEarnReason.NoAdsOffer (27) và cấp CurrencyType.NoAds (7); bắn no_ads_offer_purchased.",
+    "InAppPurchaseHistoryService ghi lịch sử nên state chuyển NoAdsAlreadyActive và AdService ngừng phát quảng cáo bắt buộc.",
+    "BundleNoAdsAvailabilityService0.0.3063 đánh giá thành phầnNoAds bằng adsEnabledExceptRewarded && !IsAnyNormalBundlePurchased && (!IsSelectiveNoAdsBundleEnabled || bundle.ShouldCloseAds). Caller quyết định BasicBundleWithNoAds hoặcBasicBundle; cần kiểm UI riêng."
+  ],
+  "reward_tables": [
+    {
+      "title": "NỘI DUNG GÓI NO ADS",
+      "columns": [
+        "Mốc",
+        "Điều kiện",
+        "Phần thưởng"
+      ],
+      "rows": [
+        [
+          "Mua gói No Ads",
+          "Hoàn tất giao dịch IAP và verify thành công",
+          "1 quyền No Ads vĩnh viễn (CurrencyType 7), kèm NoAdsOfferConfigModel.RewardModels (server)"
+        ],
+        [
+          "RewardModels[0] mặc định client",
+          "-",
+          "1 No Ads (CurrencyType 7, Amount 1)"
+        ]
+      ]
+    },
+    {
+      "title": "BA TẦNG GIỚI HẠN SỐ LẦN HIỆN POPUP",
+      "columns": [
+        "Tầng",
+        "Khoá cấu hình",
+        "Giá trị mặc định"
+      ],
+      "rows": [
+        [
+          "Theo phiên chơi",
+          "SessionPopupShowLimit",
+          "3 lần"
+        ],
+        [
+          "Theo ngày (reset giờ server)",
+          "DailyPopupShowLimit",
+          "7 lần"
+        ],
+        [
+          "Theo cả đời tài khoản",
+          "LifetimePopupShowLimit",
+          "(server) — không có mặc định client"
+        ],
+        [
+          "Khoảng cách theo quảng cáo",
+          "PopupIntervalAsAdCount",
+          "2 quảng cáo xen kẽ"
+        ]
+      ]
+    },
+    {
+      "title": "CẤU HÌNH MẶC ĐỊNH (NoAdsOfferConfigModel.json)",
+      "columns": [
+        "Khoá",
+        "Giá trị mặc định",
+        "Ý nghĩa"
+      ],
+      "rows": [
+        [
+          "IsEnabled",
+          "false",
+          "Bật/tắt offer"
+        ],
+        [
+          "EventType",
+          "1",
+          "Loại sự kiện"
+        ],
+        [
+          "DailyPopupShowLimit",
+          "7",
+          "Số lần hiện popup tối đa mỗi ngày"
+        ],
+        [
+          "SessionPopupShowLimit",
+          "3",
+          "Số lần hiện popup tối đa mỗi phiên"
+        ],
+        [
+          "PopupIntervalAsAdCount",
+          "2",
+          "Cứ 2 quảng cáo xen kẽ thì được hiện popup một lần"
+        ],
+        [
+          "IAPConfigModel.ProductId",
+          "sort.noadsoffer",
+          "Mã sản phẩm IAP"
+        ],
+        [
+          "IAPConfigModel.ProductType",
+          "0",
+          "Loại sản phẩm"
+        ],
+        [
+          "IAPConfigModel.DollarEquivalent",
+          "7.99",
+          "Giá quy đổi USD"
+        ],
+        [
+          "RewardModels[0]",
+          "CurrencyType 7, Amount 1",
+          "Quyền No Ads"
+        ],
+        [
+          "NoAdsBundleFeatureFlag.IsSelectiveNoAdsBundleEnabled",
+          "false",
+          "Cờ bật bundle No Ads chọn lọc"
+        ]
+      ]
+    },
+    {
+      "title": "MÁY TRẠNG THÁI (NoAdsOfferState)",
+      "columns": [
+        "Giá trị",
+        "Trạng thái",
+        "Ý nghĩa"
+      ],
+      "rows": [
+        [
+          "0",
+          "Disabled",
+          "Server tắt offer"
+        ],
+        [
+          "1",
+          "NoAdsAlreadyActive",
+          "Người chơi đã sở hữu No Ads"
+        ],
+        [
+          "2",
+          "NoCache",
+          "Chưa có NoAdsOfferResponse"
+        ],
+        [
+          "3",
+          "Active",
+          "Đang bán được"
+        ]
+      ]
+    },
+    {
+      "title": "MÃ PHÂN LOẠI LIÊN QUAN",
+      "columns": [
+        "Enum",
+        "Giá trị",
+        "Ý nghĩa"
+      ],
+      "rows": [
+        [
+          "CurrencyType.NoAds",
+          "7",
+          "Quyền gỡ quảng cáo như một loại tiền tệ"
+        ],
+        [
+          "CurrencyEarnReason.NoAdsOffer",
+          "27",
+          "Lý do nhận thưởng"
+        ],
+        [
+          "IAPOrigin.NoAdsOffer",
+          "6",
+          "Nguồn giao dịch"
+        ],
+        [
+          "IAPReason.NoAdsOffer",
+          "8",
+          "Lý do giao dịch"
+        ],
+        [
+          "StoreViewType.BasicBundleWithNoAds",
+          "6",
+          "Dòng cửa hàng bán bundle kèm No Ads"
+        ],
+        [
+          "StoreViewType.BasicBundle",
+          "1",
+          "Dòng thay thế cho người đã sở hữu No Ads"
+        ],
+        [
+          "StorePurchaseFailureReason.CouldNotVerifyFromBackend",
+          "5",
+          "Lỗi không xác thực được từ backend"
+        ]
+      ]
+    },
+    {
+      "title": "SỰ KIỆN ANALYTICS",
+      "columns": [
+        "Event",
+        "Tham số",
+        "Khi nào"
+      ],
+      "rows": [
+        [
+          "no_ads_popup_impression",
+          "progress, segment",
+          "Mở popup No Ads"
+        ],
+        [
+          "no_ads_offer_purchased",
+          "price, currency, dollar_equivalent, progress, segment",
+          "Mua thành công"
+        ],
+        [
+          "earned",
+          "reason = NoAdsOffer, danh sách thưởng",
+          "Trao thưởng kèm"
+        ],
+        [
+          "iap_purchase / purchase_failed / purchase_not_verified",
+          "origin = NoAdsOffer, source = NoAdsOffer, product_id",
+          "Vòng đời giao dịch"
+        ]
+      ]
+    }
+  ],
+  "key_numbers": [
+    {
+      "label": "Giá quy đổi USD",
+      "value": "7.99",
+      "source": "NoAdsOfferConfigModel.json: IAPConfigModel.DollarEquivalent"
+    },
+    {
+      "label": "Mã sản phẩm IAP",
+      "value": "sort.noadsoffer",
+      "source": "NoAdsOfferConfigModel.json: IAPConfigModel.ProductId"
+    },
+    {
+      "label": "Loại sản phẩm",
+      "value": "ProductType = 0",
+      "source": "NoAdsOfferConfigModel.json"
+    },
+    {
+      "label": "Giới hạn popup mỗi phiên",
+      "value": "3",
+      "source": "NoAdsOfferConfigModel.json: SessionPopupShowLimit"
+    },
+    {
+      "label": "Giới hạn popup mỗi ngày",
+      "value": "7",
+      "source": "NoAdsOfferConfigModel.json: DailyPopupShowLimit"
+    },
+    {
+      "label": "Giới hạn popup cả đời",
+      "value": "(server)",
+      "source": "NoAdsOfferConfigModel.LifetimePopupShowLimit"
+    },
+    {
+      "label": "Khoảng cách theo quảng cáo",
+      "value": "2 quảng cáo xen kẽ",
+      "source": "NoAdsOfferConfigModel.json: PopupIntervalAsAdCount"
+    },
+    {
+      "label": "Bật/tắt mặc định",
+      "value": "IsEnabled = false",
+      "source": "NoAdsOfferConfigModel.json"
+    },
+    {
+      "label": "Loại sự kiện",
+      "value": "EventType = 1",
+      "source": "NoAdsOfferConfigModel.json"
+    },
+    {
+      "label": "Thưởng mặc định client",
+      "value": "1 No Ads (CurrencyType 7, Amount 1)",
+      "source": "NoAdsOfferConfigModel.json: RewardModels[0]"
+    },
+    {
+      "label": "Loại tiền tệ No Ads",
+      "value": "CurrencyType.NoAds = 7",
+      "source": "Modules.Contexts.Application.Inventory.Scripts.CurrencyType"
+    },
+    {
+      "label": "Lý do nhận thưởng",
+      "value": "CurrencyEarnReason.NoAdsOffer = 27",
+      "source": "CurrencyEarnReason"
+    },
+    {
+      "label": "Phân loại giao dịch",
+      "value": "IAPOrigin 6, IAPReason 8",
+      "source": "Modules.Contexts.Application.IAP.Scripts"
+    },
+    {
+      "label": "Dòng cửa hàng liên quan",
+      "value": "StoreViewType.BasicBundleWithNoAds = 6, BasicBundle = 1",
+      "source": "Modules.Contexts.Home.Store.Scripts.StoreViewType"
+    },
+    {
+      "label": "Số trạng thái offer",
+      "value": "4 (0–3)",
+      "source": "NoAdsOfferState"
+    },
+    {
+      "label": "Cờ bundle No Ads chọn lọc",
+      "value": "IsSelectiveNoAdsBundleEnabled = false",
+      "source": "NoAdsBundleFeatureFlag.json"
+    },
+    {
+      "label": "Mã lỗi không verify được",
+      "value": "StorePurchaseFailureReason.CouldNotVerifyFromBackend = 5",
+      "source": "Modules.Contexts.Application.IAP.Scripts"
+    },
+    {
+      "label": "Nguồn sự thật về quyền sở hữu",
+      "value": "InAppPurchaseHistoryService (không lưu trong NoAdsOfferModel)",
+      "source": "NoAdsOfferStateService..ctor"
+    },
+    {
+      "label": "Nguồn giờ để reset hạn mức ngày",
+      "value": "RemoteTimeService",
+      "source": "NoAdsOfferService.TryResetDailyPopupCount"
+    },
+    {
+      "label": "Số trường lưu trong NoAdsOfferModel",
+      "value": "4 (PopupShowCount, LifetimePopupShowCount, LastUsedTime, NoAdsOfferResponse)",
+      "source": "NoAdsOfferModel"
+    },
+    {
+      "label": "Đồng bộ giữa thiết bị",
+      "value": "Không (NoAdsOfferDataService không implement ISyncable)",
+      "source": "NoAdsOfferDataService"
+    }
+  ],
+  "config_highlights": [
+    {
+      "key": "NoAdsOfferConfigModel.json: IsEnabled",
+      "value": "false",
+      "meaning": "Bật/tắt offer (client default, remote config ghi đè)"
+    },
+    {
+      "key": "NoAdsOfferConfigModel.json: EventType",
+      "value": "1",
+      "meaning": "Loại sự kiện"
+    },
+    {
+      "key": "NoAdsOfferConfigModel.json: DailyPopupShowLimit",
+      "value": "7",
+      "meaning": "Số lần hiện popup tối đa mỗi ngày, reset theo giờ server"
+    },
+    {
+      "key": "NoAdsOfferConfigModel.json: SessionPopupShowLimit",
+      "value": "3",
+      "meaning": "Số lần hiện popup tối đa mỗi phiên chơi"
+    },
+    {
+      "key": "NoAdsOfferConfigModel.LifetimePopupShowLimit",
+      "value": "(server)",
+      "meaning": "Số lần hiện popup tối đa cả đời tài khoản"
+    },
+    {
+      "key": "NoAdsOfferConfigModel.json: PopupIntervalAsAdCount",
+      "value": "2",
+      "meaning": "Cứ bao nhiêu quảng cáo xen kẽ thì được hiện popup một lần"
+    },
+    {
+      "key": "NoAdsOfferConfigModel.json: IAPConfigModel.ProductId",
+      "value": "sort.noadsoffer",
+      "meaning": "Sản phẩm IAP gỡ quảng cáo"
+    },
+    {
+      "key": "NoAdsOfferConfigModel.json: IAPConfigModel.ProductType",
+      "value": "0",
+      "meaning": "Loại sản phẩm"
+    },
+    {
+      "key": "NoAdsOfferConfigModel.json: IAPConfigModel.DollarEquivalent",
+      "value": "7.99",
+      "meaning": "Giá quy đổi USD"
+    },
+    {
+      "key": "NoAdsOfferConfigModel.json: RewardModels[0]",
+      "value": "CurrencyType 7, Amount 1",
+      "meaning": "Bộ thưởng kèm khi mua No Ads"
+    },
+    {
+      "key": "NoAdsOfferResponse",
+      "value": "EventId, EventType (server)",
+      "meaning": "Định danh đợt offer"
+    },
+    {
+      "key": "NoAdsOfferState",
+      "value": "Disabled=0, NoAdsAlreadyActive=1, NoCache=2, Active=3",
+      "meaning": "Máy trạng thái offer"
+    },
+    {
+      "key": "CurrencyType.NoAds",
+      "value": "7",
+      "meaning": "Quyền gỡ quảng cáo mô hình hoá như một loại tiền tệ"
+    },
+    {
+      "key": "CurrencyEarnReason.NoAdsOffer",
+      "value": "27",
+      "meaning": "Lý do nhận thưởng"
+    },
+    {
+      "key": "IAPOrigin.NoAdsOffer / IAPReason.NoAdsOffer",
+      "value": "6 / 8",
+      "meaning": "Phân loại giao dịch"
+    },
+    {
+      "key": "StoreViewType.BasicBundleWithNoAds",
+      "value": "6",
+      "meaning": "Loại dòng cửa hàng bán bundle kèm quyền No Ads"
+    },
+    {
+      "key": "NoAdsBundleFeatureFlag.json: IsSelectiveNoAdsBundleEnabled",
+      "value": "false",
+      "meaning": "Cờ bật bundle No Ads chọn lọc"
+    },
+    {
+      "key": "NoAdsOfferService._sessionInterstitialCount / _nextPopupTargetCount",
+      "value": "runtime",
+      "meaning": "Số quảng cáo xen kẽ đã xem trong phiên và mốc hiện popup kế tiếp"
+    },
+    {
+      "key": "NoAdsOfferModel.PopupShowCount",
+      "value": "client (không đồng bộ)",
+      "meaning": "Bộ đếm popup trong ngày"
+    },
+    {
+      "key": "NoAdsOfferModel.LifetimePopupShowCount",
+      "value": "client (không đồng bộ)",
+      "meaning": "Bộ đếm popup cả đời, không bị reset"
+    },
+    {
+      "key": "NoAdsOfferModel.LastUsedTime",
+      "value": "client",
+      "meaning": "Mốc thời gian để reset hạn mức ngày"
+    },
+    {
+      "key": "NoAdsOfferModel.NoAdsOfferResponse",
+      "value": "cache",
+      "meaning": "Cache response của backend"
+    },
+    {
+      "key": "noads_title",
+      "value": "\"Remove ADS\"",
+      "meaning": "Tiêu đề popup"
+    },
+    {
+      "key": "noads_description_1",
+      "value": "\"Remove all forced ads forever!\"",
+      "meaning": "Lời chào bán chính"
+    },
+    {
+      "key": "noads_description_2",
+      "value": "\"Keep optional ads for rewards!\"",
+      "meaning": "Làm rõ vẫn giữ quảng cáo tự nguyện đổi thưởng"
+    },
+    {
+      "key": "BundleNoAdsAvailabilityService",
+      "value": "_inAppPurchaseHistoryService, _storeModelService, _adService",
+      "meaning": "Quyết định bundle kèm No Ads còn bán được không"
+    },
+    {
+      "key": "RestorePurchaseButton",
+      "value": "Modules.Contexts.Home.SettingsPopUp.Scripts",
+      "meaning": "Khôi phục quyền No Ads sau khi cài lại game"
+    },
+    {
+      "key": "Lớp UI và prefab đã đối chiếu (0.0.3063)",
+      "value": "NoAdsOfferPopUp (MonoBehaviour,IPopUp), GUID script e20e9767ee0c225feaeb1c0163281130; khớp NoAdsOfferPopUp.prefab",
+      "meaning": "Class, type, GUID và component thực đã được đối chiếu; không suy từ tên ViewModel hoặc thư mục. Bằng chứng đầy đủ nằm trong facts/remaining_asset_review_20261115/ui_class_prefab_proof.json"
+    }
+  ],
+  "tips": [
+    "Chào bán ngay sau quảng cáo xen kẽ là ví dụ mẫu mực của contextual offer: đúng nỗi đau, đúng thời điểm.",
+    "Tách bạch forced ads và rewarded ads giữ nguyên kênh doanh thu quảng cáo tự nguyện sau khi người chơi mua gói.",
+    "Ba tầng giới hạn khiến offer không bao giờ trở thành phiền toái, kể cả với người xem rất nhiều quảng cáo.",
+    "Đặt quyền sở hữu ở InAppPurchaseHistoryService thay vì model riêng giúp khôi phục dễ dàng qua Restore Purchase.",
+    "Bộ đếm popup không đồng bộ giữa thiết bị là điểm yếu nhỏ có thể khiến người đổi máy thấy lại offer."
+  ],
+  "categories": [
+    "Offer/IAP",
+    "Kinh tế",
+    "Live-ops"
+  ]
+}

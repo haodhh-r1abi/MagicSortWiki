@@ -1,0 +1,681 @@
+{
+  "id": "Journey",
+  "title": "Hành trình (Journey)",
+  "tagline": "Bản đồ tiến trình theo level: mốc thưởng, mốc mở poster làm nền Home, và bộ thưởng lặp vô hạn sau khi hết bảng.",
+  "infobox": [
+    [
+      "Loại",
+      "Tiến trình"
+    ],
+    [
+      "Mở khóa",
+      "Theo cờ JourneyConfigModel.IsEnabled (json default true); mốc nhỏ nhất trong bảng poster là level 1"
+    ],
+    [
+      "Chu kỳ / lịch",
+      "Bám theo level người chơi, không có thời hạn"
+    ],
+    [
+      "Tham gia",
+      "Cá nhân"
+    ],
+    [
+      "Vật phẩm thu thập",
+      "Poster nền Home (poster1 đến poster10)"
+    ],
+    [
+      "Thưởng chính",
+      "100–300 coin, Undo, Shuffle, Extra Bottle, 30 phút đến 2 giờ Unlimited Lives"
+    ],
+    [
+      "Điều kiện / phụ thuộc",
+      "Tích hợp Champions League (poster Master League) và Collection (thưởng thay thế khi Collection tắt)"
+    ],
+    [
+      "Manager",
+      "JourneyService"
+    ]
+  ],
+  "description": [
+    "Journey là bản đồ tiến trình theo level: một dải cuộn dọc gồm các mốc thưởng và các mốc mở poster.",
+    "Mỗi poster là một bức tranh nền cho màn Home, mở khóa theo level và người chơi tự chọn poster nào để trưng bày.",
+    "Sau khi vượt hết bảng thưởng cấu hình sẵn, hệ thống tự sinh thêm mốc lặp vô hạn nên Journey không bao giờ hết nội dung.",
+    "Bộ thưởng lặp gồm 18 mốc, phát lại tuần hoàn với khoảng cách mặc định 10 level một mốc.",
+    "Giữa các mốc, danh sách chèn thêm phần tử mây trang trí để dải cuộn không bị trống.",
+    "Poster được tải dần từ CDN theo phạm vi 20 level quanh vị trí hiện tại, có ảnh tạm trong lúc chờ.",
+    "Journey tích hợp Champions League qua poster Master League Area và Collection qua cơ chế thưởng thay thế.",
+    "Khi Collection không chạy, mọi phần thưởng gói thẻ trong bảng bị thay bằng phần thưởng dự phòng tương ứng.",
+    "Journey không có DataService riêng và không đồng bộ; trạng thái đã nhận suy ra từ level, chỉ poster đang chọn được lưu."
+  ],
+  "notes": [
+    "Lưu ý: bảng mốc dưới đây là bản mặc định trong Resources/defaultconfigs/JourneyConfigModel.json; remote config có thể ghi đè toàn bộ (server).",
+    "Lưu ý: khi poster đang chọn không còn trong config, hệ thống rơi về poster1.",
+    "Lưu ý: phần thưởng dự phòng mặc định khi thiếu cấu hình là 1 Undo.",
+    "Lưu ý: không rõ phạm vi tải poster 20 level là cộng trừ 20 hay 20 level phía trước (gaps).",
+    "Lưu ý: ý nghĩa của LevelRange (đoạn level poster có hiệu lực) là suy luận từ tên trường (gaps).",
+    "Export 0.0.3063 có JourneySpriteAtlas cho UI. Cache app 0.0.3129 đọc ngày 15/11 có poster 4–10 và thumbnail, đã giải mã đủ sprite, texture và graph. Không gọi toàn bộ hình poster là thiếu; phạm vi là các bundle và phiên bản đã kiểm kê.",
+    "Lưu ý: JourneyConfigModel là config duy nhất trong nhóm này có json default IsEnabled = true.",
+    "Lưu ý: bộ đo thời gian xem poster gửi giá trị 'locked' cho những poster chưa mở."
+  ],
+  "how_it_works": [
+    "Khi khởi tạo, Journey làm ba việc: đọc poster đang chọn, tải trước poster và cập nhật bảng thưởng theo trạng thái Collection (InitializeData).",
+    "Poster đang chọn đọc từ khóa lưu SelectedPosterId; nếu rỗng hoặc không còn trong config thì rơi về poster1.",
+    "Thumbnail được tải trước theo quy ước tên id kèm hậu tố _thumbnail, cùng ảnh chờ poster_loading_thumbnail.",
+    "Phạm vi tải trước là 20 level quanh level hiện tại, và trong lúc chờ hiển thị ảnh tạm poster_loading.",
+    "Danh sách hiển thị được ghép từ ba nguồn: bảng mốc thưởng, bộ thưởng lặp và bảng mốc poster, rồi sắp xếp theo level.",
+    "Mỗi mốc thưởng thành một item có level, danh sách thưởng và cờ đã nhận; mỗi mốc poster thành item có level, LevelRange, posterId cùng cờ đã mở và đang chọn.",
+    "Khi mốc cấu hình đã hết, hệ thống sinh thêm mốc theo bộ lặp với bộ đệm 50 level phía trước (GenerateAdditionalRewardsFromLoop).",
+    "Mỗi lần thắng level, tiến độ Journey được cập nhật và poster mới được tải trước (OnLevelWin, UpdateJourneyProgress).",
+    "Nếu vừa chạm một mốc thưởng, animation trao thưởng chạy với CurrencyEarnReason.Journey (22) và analytics journey_reward_given bắn.",
+    "Nếu vừa mở một poster mới, analytics journey_poster_unlocked ghi lại id poster và level hiện tại.",
+    "Khi người chơi đổi poster, hệ thống lưu id mới, phát tín hiệu và bắn journey_poster_selected kèm poster cũ, poster mới và điều kiện Master League.",
+    "Bảng thưởng được quét để tìm phần thưởng gói thẻ Collection; nếu Collection không chạy thì thay bằng phần thưởng dự phòng theo loại gói.",
+    "Phần thưởng dự phòng lấy theo chỉ số loại gói trừ 1 trong bảng CollectionBackoffRewards, mặc định là 1 Undo khi thiếu phần tử.",
+    "Bộ đo thời gian xem poster gom số liệu rồi gửi journey_poster_time_tracking dưới dạng bảng id và thời gian.",
+    "Popup mở khóa Journey lần đầu không do Journey tự phát mà do Jetpack Race gọi lệnh mở.",
+    "Nút Journey ở Home cùng thanh tiến độ cho biết còn bao xa tới mốc kế tiếp."
+  ],
+  "reward_tables": [
+    {
+      "title": "MỐC THƯỞNG THEO LEVEL (JourneyConfigModel.json: JourneyRewardsConfigs, 31 mốc)",
+      "columns": [
+        "Mốc",
+        "Level",
+        "Phần thưởng"
+      ],
+      "rows": [
+        [
+          "Mốc 1",
+          "Level 10",
+          "100 coin"
+        ],
+        [
+          "Mốc 2",
+          "Level 15",
+          "30 phút Unlimited Lives"
+        ],
+        [
+          "Mốc 3",
+          "Level 25",
+          "1 Undo"
+        ],
+        [
+          "Mốc 4",
+          "Level 30",
+          "1 giờ Unlimited Lives"
+        ],
+        [
+          "Mốc 5",
+          "Level 35",
+          "1 Shuffle"
+        ],
+        [
+          "Mốc 6",
+          "Level 45",
+          "1 Extra Bottle"
+        ],
+        [
+          "Mốc 7",
+          "Level 50",
+          "200 coin"
+        ],
+        [
+          "Mốc 8",
+          "Level 55",
+          "1 giờ Unlimited Lives"
+        ],
+        [
+          "Mốc 9",
+          "Level 65",
+          "1 Undo, 1 Shuffle"
+        ],
+        [
+          "Mốc 10",
+          "Level 70",
+          "1 Extra Bottle"
+        ],
+        [
+          "Mốc 11",
+          "Level 75",
+          "1 giờ Unlimited Lives"
+        ],
+        [
+          "Mốc 12",
+          "Level 85",
+          "1 Undo"
+        ],
+        [
+          "Mốc 13",
+          "Level 90",
+          "1 giờ Unlimited Lives"
+        ],
+        [
+          "Mốc 14",
+          "Level 95",
+          "1 Shuffle"
+        ],
+        [
+          "Mốc 15",
+          "Level 110",
+          "30 phút Unlimited Lives"
+        ],
+        [
+          "Mốc 16",
+          "Level 120",
+          "1 Extra Bottle"
+        ],
+        [
+          "Mốc 17",
+          "Level 130",
+          "1 Shuffle"
+        ],
+        [
+          "Mốc 18",
+          "Level 140",
+          "1 giờ Unlimited Lives"
+        ],
+        [
+          "Mốc 19",
+          "Level 160",
+          "250 coin"
+        ],
+        [
+          "Mốc 20",
+          "Level 170",
+          "1 Shuffle"
+        ],
+        [
+          "Mốc 21",
+          "Level 180",
+          "1 Undo"
+        ],
+        [
+          "Mốc 22",
+          "Level 190",
+          "1 Extra Bottle"
+        ],
+        [
+          "Mốc 23",
+          "Level 210",
+          "1 giờ Unlimited Lives"
+        ],
+        [
+          "Mốc 24",
+          "Level 220",
+          "1 Undo, 1 Shuffle"
+        ],
+        [
+          "Mốc 25",
+          "Level 230",
+          "1 Extra Bottle"
+        ],
+        [
+          "Mốc 26",
+          "Level 240",
+          "30 phút Unlimited Lives"
+        ],
+        [
+          "Mốc 27",
+          "Level 260",
+          "300 coin"
+        ],
+        [
+          "Mốc 28",
+          "Level 270",
+          "1 Undo"
+        ],
+        [
+          "Mốc 29",
+          "Level 280",
+          "1 giờ Unlimited Lives"
+        ],
+        [
+          "Mốc 30",
+          "Level 290",
+          "1 Shuffle"
+        ],
+        [
+          "Mốc 31",
+          "Level 310",
+          "1 Undo"
+        ]
+      ]
+    },
+    {
+      "title": "BỘ THƯỞNG LẶP SAU KHI HẾT BẢNG (JourneyLoopRewardsConfig.Rewards, 18 mốc, mỗi 10 level)",
+      "columns": [
+        "Vòng lặp",
+        "Điều kiện",
+        "Phần thưởng"
+      ],
+      "rows": [
+        [
+          "Mốc lặp 1",
+          "Mỗi LevelInterval = 10 level",
+          "1 giờ Unlimited Lives"
+        ],
+        [
+          "Mốc lặp 2",
+          "Mỗi LevelInterval = 10 level",
+          "1 Extra Bottle"
+        ],
+        [
+          "Mốc lặp 3",
+          "Mỗi LevelInterval = 10 level",
+          "1 Shuffle"
+        ],
+        [
+          "Mốc lặp 4",
+          "Mỗi LevelInterval = 10 level",
+          "30 phút Unlimited Lives"
+        ],
+        [
+          "Mốc lặp 5",
+          "Mỗi LevelInterval = 10 level",
+          "1 Undo"
+        ],
+        [
+          "Mốc lặp 6",
+          "Mỗi LevelInterval = 10 level",
+          "1 Extra Bottle"
+        ],
+        [
+          "Mốc lặp 7",
+          "Mỗi LevelInterval = 10 level",
+          "2 giờ Unlimited Lives"
+        ],
+        [
+          "Mốc lặp 8",
+          "Mỗi LevelInterval = 10 level",
+          "1 Undo, 1 Shuffle"
+        ],
+        [
+          "Mốc lặp 9",
+          "Mỗi LevelInterval = 10 level",
+          "1 Extra Bottle"
+        ],
+        [
+          "Mốc lặp 10",
+          "Mỗi LevelInterval = 10 level",
+          "30 phút Unlimited Lives"
+        ],
+        [
+          "Mốc lặp 11",
+          "Mỗi LevelInterval = 10 level",
+          "1 Undo, 1 Shuffle"
+        ],
+        [
+          "Mốc lặp 12",
+          "Mỗi LevelInterval = 10 level",
+          "1 Extra Bottle"
+        ],
+        [
+          "Mốc lặp 13",
+          "Mỗi LevelInterval = 10 level",
+          "1 giờ Unlimited Lives"
+        ],
+        [
+          "Mốc lặp 14",
+          "Mỗi LevelInterval = 10 level",
+          "1 Undo"
+        ],
+        [
+          "Mốc lặp 15",
+          "Mỗi LevelInterval = 10 level",
+          "1 Shuffle"
+        ],
+        [
+          "Mốc lặp 16",
+          "Mỗi LevelInterval = 10 level",
+          "1 giờ Unlimited Lives"
+        ],
+        [
+          "Mốc lặp 17",
+          "Mỗi LevelInterval = 10 level",
+          "1 Extra Bottle"
+        ],
+        [
+          "Mốc lặp 18",
+          "Mỗi LevelInterval = 10 level",
+          "1 Shuffle, 1 Undo"
+        ]
+      ]
+    },
+    {
+      "title": "MỐC MỞ POSTER (JourneyConfigModel.json: JourneyPosterConfigs, 10 poster)",
+      "columns": [
+        "Poster",
+        "Level mở",
+        "LevelRange"
+      ],
+      "rows": [
+        [
+          "poster1",
+          "Level 1",
+          "18"
+        ],
+        [
+          "poster2",
+          "Level 20",
+          "19"
+        ],
+        [
+          "poster3",
+          "Level 40",
+          "19"
+        ],
+        [
+          "poster4",
+          "Level 60",
+          "19"
+        ],
+        [
+          "poster5",
+          "Level 80",
+          "19"
+        ],
+        [
+          "poster6",
+          "Level 100",
+          "49"
+        ],
+        [
+          "poster7",
+          "Level 150",
+          "49"
+        ],
+        [
+          "poster8",
+          "Level 200",
+          "49"
+        ],
+        [
+          "poster9",
+          "Level 250",
+          "49"
+        ],
+        [
+          "poster10",
+          "Level 300",
+          "0"
+        ]
+      ]
+    }
+  ],
+  "key_numbers": [
+    {
+      "label": "IsEnabled mặc định",
+      "value": "true",
+      "source": "JourneyConfigModel.json: IsEnabled"
+    },
+    {
+      "label": "Số mốc thưởng cấu hình sẵn",
+      "value": "31",
+      "source": "JourneyConfigModel.json: JourneyRewardsConfigs"
+    },
+    {
+      "label": "Mốc thưởng đầu tiên",
+      "value": "Level 10 đổi 100 coin",
+      "source": "JourneyConfigModel.json: JourneyRewardsConfigs[0]"
+    },
+    {
+      "label": "Mốc thưởng cuối trong bảng",
+      "value": "Level 310 đổi 1 Undo",
+      "source": "JourneyConfigModel.json: JourneyRewardsConfigs[30]"
+    },
+    {
+      "label": "Các mốc coin",
+      "value": "Level 10 (100), 50 (200), 160 (250), 260 (300)",
+      "source": "JourneyConfigModel.json: JourneyRewardsConfigs"
+    },
+    {
+      "label": "Số mốc trong bộ thưởng lặp",
+      "value": "18",
+      "source": "JourneyConfigModel.json: JourneyLoopRewardsConfig.Rewards"
+    },
+    {
+      "label": "Khoảng cách giữa hai mốc lặp",
+      "value": "10 level",
+      "source": "JourneyConfigModel.json: JourneyLoopRewardsConfig.LevelInterval"
+    },
+    {
+      "label": "Bộ đệm khi sinh mốc lặp",
+      "value": "50 level (0x32)",
+      "source": "JourneyService.GenerateAdditionalRewardsFromLoop"
+    },
+    {
+      "label": "Số poster trong bảng",
+      "value": "10 (poster1 … poster10)",
+      "source": "JourneyConfigModel.json: JourneyPosterConfigs"
+    },
+    {
+      "label": "Level mở poster",
+      "value": "1, 20, 40, 60, 80, 100, 150, 200, 250, 300",
+      "source": "JourneyConfigModel.json: JourneyPosterConfigs"
+    },
+    {
+      "label": "LevelRange của poster",
+      "value": "18 cho poster1; 19 cho poster2–5; 49 cho poster6–9; 0 cho poster10",
+      "source": "JourneyConfigModel.json: JourneyPosterConfigs"
+    },
+    {
+      "label": "Poster dự phòng",
+      "value": "poster1",
+      "source": "JourneyService.fallback_poster_id"
+    },
+    {
+      "label": "Ảnh tạm trong lúc tải",
+      "value": "poster_loading",
+      "source": "JourneyService.loading_poster_id"
+    },
+    {
+      "label": "Phạm vi tải trước poster",
+      "value": "20 level",
+      "source": "JourneyService.poster_download_range"
+    },
+    {
+      "label": "Hậu tố thumbnail",
+      "value": "_thumbnail và poster_loading_thumbnail",
+      "source": "JourneyService.PreDownloadAndLoadThumbnails"
+    },
+    {
+      "label": "Phần thưởng dự phòng mặc định",
+      "value": "1 Undo (CurrencyType 4)",
+      "source": "JourneyService.GetBackoffRewardForBackType"
+    },
+    {
+      "label": "Lý do nhận thưởng",
+      "value": "CurrencyEarnReason.Journey = 22",
+      "source": "Modules.Contexts.Application.Inventory.Scripts.CurrencyEarnReason"
+    },
+    {
+      "label": "Khóa lưu duy nhất",
+      "value": "SelectedPosterId",
+      "source": "JourneyService.InitializeSelectedPosterId"
+    },
+    {
+      "label": "Số trường của config animation mở khóa",
+      "value": "21",
+      "source": "JourneyUnlockAnimationConfig"
+    },
+    {
+      "label": "Số trường của view poster",
+      "value": "40",
+      "source": "JourneyPosterElementView"
+    },
+    {
+      "label": "Số tên poster có localization",
+      "value": "19 khóa từ JourneyPoster1 tới JourneyPoster17a",
+      "source": "appendix/localization.tsv"
+    },
+    {
+      "label": "Số sự kiện analytics",
+      "value": "7",
+      "source": "Journey analytics"
+    }
+  ],
+  "config_highlights": [
+    {
+      "key": "JourneyConfigModel.json: IsEnabled",
+      "value": "true",
+      "meaning": "Journey bật sẵn ở client, khác hầu hết sự kiện khác"
+    },
+    {
+      "key": "JourneyConfigModel.json: JourneyLoopRewardsConfig.LevelInterval",
+      "value": "10",
+      "meaning": "Cứ 10 level lại có một mốc thưởng lặp"
+    },
+    {
+      "key": "JourneyConfigModel.json: JourneyRewardsConfigs",
+      "value": "31 mốc từ level 10 tới level 310",
+      "meaning": "Bảng mốc thưởng cấu hình sẵn"
+    },
+    {
+      "key": "JourneyConfigModel.json: JourneyLoopRewardsConfig.Rewards",
+      "value": "18 bộ thưởng",
+      "meaning": "Chuỗi thưởng lặp lại sau khi hết bảng"
+    },
+    {
+      "key": "JourneyConfigModel.json: JourneyPosterConfigs",
+      "value": "10 poster tại level 1, 20, 40, 60, 80, 100, 150, 200, 250, 300",
+      "meaning": "Bảng mốc mở poster"
+    },
+    {
+      "key": "JourneyPosterConfig.LevelRange",
+      "value": "18 / 19 / 49 / 0",
+      "meaning": "Đoạn level poster có hiệu lực (suy luận từ tên trường)"
+    },
+    {
+      "key": "JourneyService.fallback_poster_id",
+      "value": "\"poster1\"",
+      "meaning": "Poster dự phòng khi id đang chọn không hợp lệ"
+    },
+    {
+      "key": "JourneyService.loading_poster_id",
+      "value": "\"poster_loading\"",
+      "meaning": "Ảnh tạm trong lúc tải poster"
+    },
+    {
+      "key": "JourneyService.poster_download_range",
+      "value": "20",
+      "meaning": "Số level quanh vị trí hiện tại được tải trước poster"
+    },
+    {
+      "key": "Thumbnail suffix",
+      "value": "\"_thumbnail\", \"poster_loading_thumbnail\"",
+      "meaning": "Quy ước tên asset thumbnail"
+    },
+    {
+      "key": "levelBuffer khi sinh mốc lặp",
+      "value": "50 (0x32)",
+      "meaning": "Số level sinh trước cho vòng lặp thưởng"
+    },
+    {
+      "key": "Backoff reward mặc định",
+      "value": "CurrencyType 4, Amount 1",
+      "meaning": "1 Undo thay cho gói thẻ khi bảng thay thế thiếu phần tử"
+    },
+    {
+      "key": "JourneyConfigModel.CollectionBackoffRewards",
+      "value": "server (index = packType − 1)",
+      "meaning": "Thưởng thay thế cho từng loại gói thẻ khi Collection tắt"
+    },
+    {
+      "key": "CurrencyEarnReason.Journey",
+      "value": "22",
+      "meaning": "Lý do nhận thưởng ghi vào analytics earned"
+    },
+    {
+      "key": "SelectedPosterId",
+      "value": "client",
+      "meaning": "Poster người chơi đang trưng bày, khóa lưu duy nhất của Journey"
+    },
+    {
+      "key": "JourneyUnlockAnimationConfig",
+      "value": "21 field",
+      "meaning": "Tham số animation mở khóa poster và mốc"
+    },
+    {
+      "key": "Localization JourneyPoster1",
+      "value": "\"Magic Trouble\"",
+      "meaning": "Tên hiển thị poster 1"
+    },
+    {
+      "key": "Localization JourneyPoster2",
+      "value": "\"Broom Flight\"",
+      "meaning": "Tên hiển thị poster 2"
+    },
+    {
+      "key": "Localization JourneyPoster3",
+      "value": "\"Purr-tal Jump\"",
+      "meaning": "Tên hiển thị poster 3"
+    },
+    {
+      "key": "Localization JourneyPoster4",
+      "value": "\"Sky is the Limit\"",
+      "meaning": "Tên hiển thị poster 4"
+    },
+    {
+      "key": "Localization JourneyPoster5",
+      "value": "\"Slimey\"",
+      "meaning": "Tên hiển thị poster 5"
+    },
+    {
+      "key": "Localization JourneyPoster10",
+      "value": "\"Grand Illusion\"",
+      "meaning": "Tên hiển thị poster 10"
+    },
+    {
+      "key": "Localization biến thể a",
+      "value": "JourneyPoster1a 'Sky is the Limit', 2a 'School Jam', 3a 'Star Seekers', 4a 'Creative Paws', 5a 'Potion Commotion'",
+      "meaning": "Bộ tên poster thay thế"
+    },
+    {
+      "key": "Localization poster mở rộng",
+      "value": "11a 'Bee Aware!', 12a 'Bedtime Spells', 13a 'Birthday Cake', 14a 'Treasure Tinkers', 15a 'Make a Wish', 16a 'Toyroom Hideout', 17a 'Circus Chaos'",
+      "meaning": "Các poster chỉ có tên trong localization"
+    },
+    {
+      "key": "analytics journey_reward_given",
+      "value": "current_level, current_poster_id, session_count",
+      "meaning": "Ghi lại mỗi lần nhận thưởng một mốc"
+    },
+    {
+      "key": "analytics journey_poster_unlocked",
+      "value": "unlocked_poster_id, current_level",
+      "meaning": "Ghi lại mỗi lần mở khóa poster mới"
+    },
+    {
+      "key": "analytics journey_poster_selected",
+      "value": "old_poster_id, selected_poster_id, master_league_poster_eligibility",
+      "meaning": "Ghi lại mỗi lần đổi poster"
+    },
+    {
+      "key": "analytics journey_poster_time_tracking",
+      "value": "bảng posterId và thời gian, 'locked' cho poster chưa mở",
+      "meaning": "Đo thời gian người chơi xem từng poster"
+    },
+    {
+      "key": "Signal của Journey",
+      "value": "JourneyPreProgressUpdateSignal, JourneyProgressUpdatedSignal, JourneyNewRewardsGeneratedSignal, PosterSelectedSignal",
+      "meaning": "Đồng bộ trạng thái giữa các hệ thống"
+    },
+    {
+      "key": "Nguồn asset poster",
+      "value": "AssetManager tải từ CDN theo posterId",
+      "meaning": "Cache ngày 15/11 có poster 4–10 và thumbnail đã xuất. Hình nguồn trong cache khác ảnh chụp runtime; không chứng minh mọi poster hoặc rotation."
+    }
+  ],
+  "tips": [
+    "Bộ thưởng lặp 18 mốc mỗi 10 level biến Journey thành đường tiến trình không có đáy, phù hợp cho người chơi lâu năm.",
+    "Poster là phần thưởng thẩm mỹ thuần túy nhưng đổi được nền Home, nên có giá trị thể hiện cá tính.",
+    "Mật độ mốc dày ở đoạn đầu (10, 15, 25, 30, 35) rồi thưa dần khớp với tốc độ lên level giảm dần.",
+    "Cơ chế thưởng thay thế cho gói thẻ đảm bảo Journey vẫn đầy đủ khi Collection không chạy.",
+    "Việc chỉ lưu poster đang chọn và suy mọi thứ khác từ level giúp Journey gần như không có chi phí đồng bộ."
+  ],
+  "categories": [
+    "Tiến trình",
+    "Meta",
+    "Cơ chế lõi"
+  ]
+}

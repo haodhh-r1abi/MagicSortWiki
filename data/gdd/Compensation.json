@@ -1,0 +1,540 @@
+{
+  "id": "Compensation",
+  "name": "Compensation (đền bù)",
+  "category": "Economy",
+  "managers": [
+    "Modules.Contexts.Home.Monetization.Compensation.Scripts.CompensationService",
+    "Modules.Contexts.Home.Monetization.Compensation.Scripts.CompensationDataService",
+    "Modules.Contexts.Home.Monetization.Compensation.Scripts.CompensationStateService",
+    "Modules.Contexts.Home.Monetization.Compensation.Scripts.CompensationRemoteService"
+  ],
+  "summary": "Compensation là kênh đền bù do vận hành (LiveOps) phát: khi có sự cố (mất tiến độ, lỗi giao dịch, bảo trì) hoặc khi bù cho gói Supercharger, backend tạo một CompensationPackage (CompensationId + RewardModels + cờ IsSuperchargerCompensation) và client lấy về khi vào game, hiển thị popup ở Home rồi trao thưởng. Cấu trúc gần như song sinh với Welcome Back nhưng khác mục đích và có thêm phân loại 'supercharger'. Client lưu danh sách CompensationId đã nhận để không đền bù trùng, và có cơ chế thử lại 5 lần cách nhau 30 giây khi gọi API thất bại.",
+  "unlock": "Không có level gate hay cờ remote config trong client. CompensationStateService.GetState() (enum nội bộ CompensationStateService.CompensationState) chỉ phụ thuộc việc có CompensationPackage chưa nhận hay không; toàn bộ quyết định phát gói nằm ở backend (schema magicsort.schemas.v1.liveops.compensation).",
+  "entry_points": [
+    "TryShowCompensationHomeWelcomingCommand — popup khi vào Home",
+    "Popup đền bù hiển thị danh sách RewardModels"
+  ],
+  "flow": "CompensationService.InitializeData() gọi TryFetchData(): nếu được phép thì SendGetCompensationRequest() → CompensationRemoteService (ServiceName = 'CompensationRemoteService') trả GetCompensationResponse{CompensationId, RewardModels, IsClaimed, IsSuperChargerCompensation}. Khi request lỗi, RetrySendGetCompensationRequest() dùng NewSecondTimer đặt lại sau RetryDelayInSeconds = 30 giây, tối đa RetryLimit = 5 lần (biến _retryCount, callback b__20_0). Nếu CompensationDataService.ContainsPreviousCompensation(compensationId) trả false thì AddCompensation(CompensationPackage{CompensationId, RewardModels, IsClaimed, IsSuperchargerCompensation}) lưu vào CompensationDataModel.LocalData. CompensationStateService.UpdateState() và ShouldShowPopup() cho phép TryShowCompensationHomeWelcomingCommand mở popup. Nhận: CompensationService.ClaimReward() lấy GetCompensationToClaim(), trao RewardModels qua RewardService với CurrencyEarnReason.Compensation (21), SetCompensationIsClaimed(true), AddPreviousCompensationId(compensationId) ghi vào CompensationDataModel.SyncableData (CompensationSyncableData), bắn EventSender.SendCompensationClaimStat(compensationId, rewardModels, isSuperChargerCompensation) → compensation_claim với is_super_charger. Sau đó TrySendClaimCompensationRequest() → SendClaimCompensationRequest(compensationId) gửi ClaimCompensationRequest{CompensationId}, nhận ClaimCompensationResponse, rồi RemoveCompensation() dọn gói. CompensationDataService là ISyncable với SyncName 'SyncableData' — chỉ danh sách id đã nhận được đồng bộ.",
+  "use_cases": [
+    {
+      "id": "UC-01",
+      "title": "Hỏi server có gói đền bù không",
+      "actor": "System",
+      "trigger": "Vào game / InitializeData",
+      "precondition": "-",
+      "steps": [
+        "CompensationService.InitializeData() → TryFetchData()",
+        "SendGetCompensationRequest() → CompensationRemoteService gửi request (ServiceName = 'CompensationRemoteService')",
+        "Nhận GetCompensationResponse{CompensationId, RewardModels, IsClaimed, IsSuperChargerCompensation}",
+        "CompensationDataService.ContainsPreviousCompensation(compensationId) kiểm tra đã nhận chưa",
+        "Chưa nhận → AddCompensation(CompensationPackage)"
+      ],
+      "result": "Gói đền bù nằm trong CompensationDataModel.LocalData chờ hiển thị",
+      "rules": "Backend quyết định ai nhận gói gì; client không lọc thêm",
+      "evidence": "CompensationService.TryFetchData; CompensationService.SendGetCompensationRequest; CompensationDataService.AddCompensation; CompensationDataService.ContainsPreviousCompensation"
+    },
+    {
+      "id": "UC-02",
+      "title": "Thử lại khi API lỗi",
+      "actor": "System",
+      "trigger": "SendGetCompensationRequest thất bại",
+      "precondition": "_retryCount < RetryLimit",
+      "steps": [
+        "CompensationService.RetrySendGetCompensationRequest() đặt NewSecondTimer chờ RetryDelayInSeconds = 30 giây",
+        "Callback b__20_0 gọi lại SendGetCompensationRequest()",
+        "Lặp tối đa RetryLimit = 5 lần",
+        "Dispose() gọi NewSecondTimer.Cancel()"
+      ],
+      "result": "Tối đa 5 lần thử trong khoảng 2,5 phút; kiên nhẫn hơn Welcome Back (10 giây/lần)",
+      "rules": "RetryLimit = 5, RetryDelayInSeconds = 30 (hằng số trong CompensationService)",
+      "evidence": "CompensationService.RetrySendGetCompensationRequest; CompensationService.RetryLimit; CompensationService.RetryDelayInSeconds; CompensationService.Dispose"
+    },
+    {
+      "id": "UC-03",
+      "title": "Hiển thị popup đền bù ở Home",
+      "actor": "System",
+      "trigger": "Vào màn Home",
+      "precondition": "CompensationStateService.ShouldShowPopup() == true",
+      "steps": [
+        "CompensationStateService.UpdateState() cập nhật CompensationState",
+        "TryShowCompensationHomeWelcomingCommand chạy trong chuỗi home welcoming",
+        "Popup hiển thị CompensationPackage.RewardModels và lý do đền bù"
+      ],
+      "result": "Người chơi biết mình được đền bù và nhận ngay",
+      "rules": "Metadata0.0.3129 định nghĩa CompensationStateService.CompensationState: AllClaimed=0,ShouldClaim=1. Giải exact symbolic labels còn thiếu; metadata không chứng minh grant/ack backend hoặc current GetState behavior.",
+      "evidence": "CompensationStateService.ShouldShowPopup; CompensationStateService.UpdateState; TryShowCompensationHomeWelcomingCommand"
+    },
+    {
+      "id": "UC-04",
+      "title": "Nhận thưởng đền bù",
+      "actor": "Player",
+      "trigger": "Bấm nút nhận trong popup",
+      "precondition": "CompensationDataService.HasCompensationToClaim() == true",
+      "steps": [
+        "CompensationService.ClaimReward()",
+        "CompensationDataService.GetCompensationToClaim() lấy gói",
+        "RewardService trao RewardModels với CurrencyEarnReason.Compensation (21)",
+        "SetCompensationIsClaimed(true); AddPreviousCompensationId(compensationId)",
+        "EventSender.SendCompensationClaimStat(compensationId, rewardModels, isSuperChargerCompensation) → compensation_claim với compensation_id, is_super_charger, progress"
+      ],
+      "result": "Thưởng vào kho, id ghi vào danh sách đã nhận",
+      "rules": "Analytics tách riêng tham số is_super_charger để phân biệt đền bù thường và đền bù gói Supercharger",
+      "evidence": "CompensationService.ClaimReward; CompensationDataService.GetCompensationToClaim; CompensationDataService.SetCompensationIsClaimed; CompensationDataService.AddPreviousCompensationId; EventSender.SendCompensationClaimStat"
+    },
+    {
+      "id": "UC-05",
+      "title": "Đền bù cho gói Supercharger",
+      "actor": "System",
+      "trigger": "Backend phát gói với IsSuperChargerCompensation = true",
+      "precondition": "-",
+      "steps": [
+        "GetCompensationResponse.IsSuperChargerCompensation được ánh xạ sang CompensationPackage.IsSuperchargerCompensation",
+        "Popup có thể đổi nội dung/hình ảnh theo cờ này",
+        "Analytics compensation_claim gửi is_super_charger = true"
+      ],
+      "result": "Phân biệt được đền bù do sự cố thường và đền bù liên quan gói Supercharger trong báo cáo",
+      "rules": "Lưu ý khác biệt chính tả giữa response (IsSuperChargerCompensation) và model nội bộ (IsSuperchargerCompensation)",
+      "evidence": "CompensationPackage.IsSuperchargerCompensation; GetCompensationResponse.IsSuperChargerCompensation; EventSender.SendCompensationClaimStat"
+    },
+    {
+      "id": "UC-06",
+      "title": "Báo server đã nhận đền bù",
+      "actor": "System",
+      "trigger": "Sau khi trao thưởng",
+      "precondition": "-",
+      "steps": [
+        "CompensationService.TrySendClaimCompensationRequest()",
+        "CompensationDataService.GetCompensationToSendClaimRequest() lấy gói cần báo",
+        "SendClaimCompensationRequest(compensationId) gửi ClaimCompensationRequest{CompensationId}",
+        "Nhận ClaimCompensationResponse",
+        "CompensationDataService.RemoveCompensation() dọn gói"
+      ],
+      "result": "Server đánh dấu gói đã dùng",
+      "rules": "Trao thưởng trước rồi mới báo server; nếu báo thất bại thì gói vẫn nằm trong GetCompensationToSendClaimRequest để thử lại lần sau",
+      "evidence": "CompensationService.TrySendClaimCompensationRequest; CompensationService.SendClaimCompensationRequest; CompensationDataService.GetCompensationToSendClaimRequest; CompensationDataService.RemoveCompensation"
+    },
+    {
+      "id": "UC-07",
+      "title": "Chặn nhận trùng gói cũ",
+      "actor": "System",
+      "trigger": "Server trả lại CompensationId đã nhận",
+      "precondition": "Id nằm trong CompensationSyncableData",
+      "steps": [
+        "CompensationDataService.ContainsPreviousCompensation(compensationId) trả true",
+        "Không AddCompensation, không mở popup",
+        "HasCompensation() giữ false"
+      ],
+      "result": "Không đền bù hai lần cho cùng một sự cố",
+      "rules": "Danh sách id nằm trong phần đồng bộ nên có hiệu lực trên mọi thiết bị",
+      "evidence": "CompensationDataService.ContainsPreviousCompensation; CompensationDataService.AddPreviousCompensationId; CompensationDataService.HasCompensation"
+    },
+    {
+      "id": "UC-08",
+      "title": "Đồng bộ và xoá dữ liệu",
+      "actor": "System",
+      "trigger": "SyncService / reset tài khoản",
+      "precondition": "-",
+      "steps": [
+        "CompensationDataService.GetSyncName() = 'SyncableData'",
+        "SerializeModelForSync() xuất CompensationDataModel.SyncableData (CompensationSyncableData — danh sách id đã nhận)",
+        "OverwriteModelFromSync(data) ghi đè; MarkDataForLateUpdate(shouldSyncWithBackend)",
+        "LateUpdate() lưu khi IsDataChangedSinceLastSave(); DeleteData() xoá toàn bộ"
+      ],
+      "result": "Lịch sử đền bù đồng nhất giữa thiết bị; CompensationLocalData (gói hiện tại) là cục bộ",
+      "rules": "CompensationDataModel tách rõ LocalData và SyncableData",
+      "evidence": "CompensationDataService.GetSyncName; CompensationDataService.SerializeModelForSync; CompensationDataService.OverwriteModelFromSync; CompensationDataService.DeleteData; CompensationDataModel"
+    },
+    {
+      "id": "UC-09",
+      "title": "Không có gói đền bù",
+      "actor": "System",
+      "trigger": "Server trả rỗng hoặc IsClaimed = true",
+      "precondition": "-",
+      "steps": [
+        "CompensationDataService.HasCompensation() trả false",
+        "CompensationStateService.ShouldShowPopup() trả false",
+        "Chuỗi home welcoming đi tiếp sang tính năng khác"
+      ],
+      "result": "Không có gián đoạn khi không có sự cố nào cần đền bù",
+      "rules": "Đây là trạng thái mặc định của hầu hết người chơi",
+      "evidence": "CompensationDataService.HasCompensation; CompensationStateService.ShouldShowPopup"
+    },
+    {
+      "id": "UC-10",
+      "title": "Offline khi vào game",
+      "actor": "System",
+      "trigger": "Không có mạng lúc khởi động",
+      "precondition": "-",
+      "steps": [
+        "SendGetCompensationRequest() thất bại ngay",
+        "RetrySendGetCompensationRequest() lặp 5 lần × 30 giây",
+        "Hết lượt thử → bỏ qua trong phiên này, thử lại ở lần vào game sau",
+        "Gói đã lấy được từ trước (nếu có) vẫn nằm trong LocalData và vẫn hiển thị popup"
+      ],
+      "result": "Đền bù không bị mất, chỉ bị trễ",
+      "rules": "Chu kỳ retry dài (30 giây) phù hợp với đặc thù đền bù không cần gấp",
+      "evidence": "CompensationService.RetrySendGetCompensationRequest; CompensationService.TryFetchData; CompensationDataService.HasCompensation"
+    }
+  ],
+  "configs": [
+    {
+      "source": "code const",
+      "key": "CompensationService.RetryLimit",
+      "type": "int",
+      "value": "5",
+      "meaning": "Số lần thử lại tối đa khi gọi API thất bại",
+      "where": "CompensationService"
+    },
+    {
+      "source": "code const",
+      "key": "CompensationService.RetryDelayInSeconds",
+      "type": "int",
+      "value": "30",
+      "meaning": "Khoảng cách giữa hai lần thử lại",
+      "where": "CompensationService"
+    },
+    {
+      "source": "code const",
+      "key": "CompensationRemoteService.ServiceName",
+      "type": "string",
+      "value": "\"CompensationRemoteService\"",
+      "meaning": "Tên service khi gọi HttpProxy",
+      "where": "CompensationRemoteService"
+    },
+    {
+      "source": "code const",
+      "key": "CompensationStateService.CompensationState",
+      "type": "enum (lồng)",
+      "value": "AllClaimed=0; ShouldClaim=1 (metadata hostAPK0.0.3129ARM64)",
+      "meaning": "Máy trạng thái nội bộ",
+      "where": "CompensationStateService"
+    },
+    {
+      "source": "code const",
+      "key": "CurrencyEarnReason.Compensation",
+      "type": "enum",
+      "value": "21",
+      "meaning": "Lý do nhận thưởng trong analytics 'earned'",
+      "where": "Modules.Contexts.Application.Inventory.Scripts.CurrencyEarnReason"
+    },
+    {
+      "source": "server info",
+      "key": "GetCompensationResponse.CompensationId / RewardModels / IsClaimed / IsSuperChargerCompensation",
+      "type": "response",
+      "value": "server",
+      "meaning": "Gói đền bù do LiveOps phát",
+      "where": "CompensationRemoteService"
+    },
+    {
+      "source": "server info",
+      "key": "ClaimCompensationRequest.CompensationId / ClaimCompensationResponse",
+      "type": "request/response",
+      "value": "server",
+      "meaning": "Báo đã nhận đền bù",
+      "where": "CompensationService.SendClaimCompensationRequest"
+    },
+    {
+      "source": "server info",
+      "key": "Schema magicsort.schemas.v1.liveops.compensation",
+      "type": "schema",
+      "value": "server",
+      "meaning": "Định nghĩa dữ liệu đền bù phía backend",
+      "where": "magicsort.schemas.v1.liveops.compensation"
+    },
+    {
+      "source": "storage key",
+      "key": "SyncableData",
+      "type": "sync name",
+      "value": "\"SyncableData\"",
+      "meaning": "Tên bản ghi đồng bộ (CompensationSyncableData)",
+      "where": "CompensationDataService.GetSyncName"
+    },
+    {
+      "source": "storage key",
+      "key": "CompensationDataModel.SyncableData (danh sách CompensationId đã nhận)",
+      "type": "object",
+      "value": "client + server",
+      "meaning": "Chống đền bù trùng",
+      "where": "CompensationDataService.AddPreviousCompensationId"
+    },
+    {
+      "source": "storage key",
+      "key": "CompensationDataModel.LocalData (CompensationLocalData)",
+      "type": "object",
+      "value": "client (không đồng bộ)",
+      "meaning": "Gói đền bù đang chờ nhận",
+      "where": "CompensationDataModel"
+    },
+    {
+      "source": "code const",
+      "key": "CompensationPackage",
+      "type": "object",
+      "value": "{CompensationId, RewardModels, IsClaimed, IsSuperchargerCompensation}",
+      "meaning": "Cấu trúc gói đền bù trong client",
+      "where": "CompensationPackage"
+    }
+  ],
+  "rewards": [
+    {
+      "context": "Gói đền bù",
+      "reward": "CompensationPackage.RewardModels (nội dung do LiveOps quyết định) — CurrencyEarnReason.Compensation (21)",
+      "evidence": "CompensationService.ClaimReward"
+    },
+    {
+      "context": "Đền bù Supercharger",
+      "reward": "Cùng cơ chế nhưng gắn cờ IsSuperchargerCompensation để tách báo cáo",
+      "evidence": "CompensationPackage.IsSuperchargerCompensation"
+    }
+  ],
+  "backend": [
+    {
+      "command": "CompensationRemoteService – get compensation",
+      "direction": "client→server",
+      "purpose": "hỏi có gói đền bù không (GetCompensationResponse)"
+    },
+    {
+      "command": "CompensationRemoteService – claim compensation",
+      "direction": "client→server",
+      "purpose": "báo đã nhận (ClaimCompensationRequest{CompensationId})"
+    },
+    {
+      "command": "SyncService – SyncName 'SyncableData'",
+      "direction": "hai chiều",
+      "purpose": "đồng bộ danh sách id đã nhận"
+    }
+  ],
+  "ui": [
+    {
+      "element": "Popup đền bù",
+      "class": "Modules.Contexts.Home.Monetization.Compensation.Scripts (popup hiển thị RewardModels)",
+      "purpose": "thông báo và trao đền bù"
+    },
+    {
+      "element": "Command",
+      "class": "Modules.Contexts.Home.Monetization.Compensation.Scripts.Commands.TryShowCompensationHomeWelcomingCommand",
+      "purpose": "mở popup trong chuỗi home welcoming"
+    }
+  ],
+  "analytics": [
+    {
+      "event": "compensation_claim",
+      "params": "compensation_id, is_super_charger, progress",
+      "when": "nhận gói đền bù"
+    },
+    {
+      "event": "earned",
+      "params": "reason=Compensation, danh sách thưởng",
+      "when": "trao thưởng"
+    }
+  ],
+  "storage_keys": [
+    "SyncableData (sync name)",
+    "CompensationDataModel.SyncableData — danh sách CompensationId đã nhận",
+    "CompensationDataModel.LocalData — gói đền bù hiện tại"
+  ],
+  "related_features": [
+    "WelcomeBack",
+    "Store"
+  ],
+  "gaps": [
+    "15/11 — partial_static_code_unresolved: GetState kiểm CompensationPackage rồi trả IsClaimed XOR1; package không khả dụng trả0, package chưa claimed trả1. Đã thấy giá trị vận hành0/1, nhưng metadata enum name vẫn rỗng; chưa tự đặt tên thành viên chính thức. Còn lại: Cần dump enum names hoặc giữ raw0/1 + mô tả hành vi; claim backend/currentbuild cần ca riêng.",
+    "Điều kiện phát gói và nội dung thưởng nằm hoàn toàn ở backend.",
+    "15/11 — resolved_historical_snapshot: TryShowCompensationHomeWelcomingCommand gọi CompensationService.ClaimReward rồi RewardService.GiveBulkRewards. Luồng dùng chung tiếp tục gọi BulkRewardAnimationService.ShowRewards. Vì vậy không cần một lớp popup mang tên Compensation để mô tả đúng đường hiển thị này. Còn lại: Giữ rõ build và phiên bản cache của nguồn; kiểm nhánh runtime riêng khi cần.",
+    "15/11 — partial_actual_evidence: Đã xác định luồng hiển thị thưởng dùng chung của Compensation. Một localization key riêng mang tên Compensation không phải điều kiện bắt buộc của luồng này. Bộ 1.471 term với 11 ngôn ngữ đã được xuất đầy đủ ở phần localization. Còn lại: Đọc binding nhãn trong BulkRewardAnimationService theo context, hoặc quan sát một payload Compensation hợp lệ; không tạo key giả.",
+    "Endpoint HTTP nằm trong BackendEnvironmentConfig."
+  ],
+  "sources": [
+    "features/CompensationService.md",
+    "features/CompensationDataService.md",
+    "features/CompensationStateService.md",
+    "features/CompensationRemoteService.md",
+    "features/CompensationDataModel.md",
+    "RecoveredNative/strings-by-type.tsv (EventSender.SendCompensationClaimStat)",
+    "GameDesign/facts/facts.json (CompensationPackage, GetCompensationResponse, ClaimCompensationRequest, CurrencyEarnReason)"
+  ],
+  "related_feature_aliases": [
+    {
+      "original": "IAP",
+      "feature": "Store"
+    }
+  ],
+  "audit_provenance": {
+    "review_date": "2026-11-15",
+    "mode": "offline_existing_files",
+    "code_build": "0.0.3063 ARMv7",
+    "runtime_build_observed_historically": "0.0.3129 ARM64 (audit 2026-10-18); not rechecked 2026-11-15",
+    "new_playtests": 0,
+    "uc_status": "See facts/audit_20261115/uc_registry.json; image reference is not pass",
+    "workbook_status": "Existing XLSX is historical; JSON and local web include 2026-11-15 corrections",
+    "static_review": "facts/local_code_gap_results_20261115.json; facts/local_asset_gap_results_20261115.json; facts/final_data_gap_decisions_20261115.json; facts/core_body_gap_decisions_20261115.json; facts/remaining_asset_gap_decisions_20261115.json"
+  },
+  "static_review_20261115": {
+    "date": "2026-11-15",
+    "scope": "Historical code/assets 0.0.3063, dated caches, device 0.0.3129 cached bundles and explicitly scoped runtime evidence. Not full runtime pass.",
+    "findings": [
+      {
+        "kind": "remaining_asset",
+        "source_report": "facts/remaining_asset_gap_decisions_20261115.json",
+        "id": "MS-RA-005",
+        "gap_ids": [
+          "MS-Compensation-G003"
+        ],
+        "title": "Không tìm thấy class UI riêng cho popup đền bù trong types-index — dùng khung popup thưởng dùng chung.",
+        "status": "resolved_historical_snapshot",
+        "conclusion": "TryShowCompensationHomeWelcomingCommand gọi CompensationService.ClaimReward rồi RewardService.GiveBulkRewards. Luồng dùng chung tiếp tục gọi BulkRewardAnimationService.ShowRewards. Vì vậy không cần một lớp popup mang tên Compensation để mô tả đúng đường hiển thị này.",
+        "evidence": [
+          "facts/remaining_asset_review_20261115/shared_reward_flow.json"
+        ],
+        "remaining": "",
+        "next_action": "Giữ rõ build và phiên bản cache của nguồn; kiểm nhánh runtime riêng khi cần.",
+        "scope": "Asset/native export 0.0.3063 và cache UnityFS đọc ngày 15/11 từ app 0.0.3129 được giữ riêng; ảnh render asset không phải ảnh chụp playtest.",
+        "reviewed": "2026-11-15",
+        "full_uc_pass": false
+      },
+      {
+        "kind": "remaining_asset",
+        "source_report": "facts/remaining_asset_gap_decisions_20261115.json",
+        "id": "MS-RA-006",
+        "gap_ids": [
+          "MS-Compensation-G004"
+        ],
+        "title": "Không có localization key riêng cho Compensation trong appendix/localization.tsv.",
+        "status": "partial_actual_evidence",
+        "conclusion": "Đã xác định luồng hiển thị thưởng dùng chung của Compensation. Một localization key riêng mang tên Compensation không phải điều kiện bắt buộc của luồng này. Bộ 1.471 term với 11 ngôn ngữ đã được xuất đầy đủ ở phần localization.",
+        "evidence": [
+          "facts/remaining_asset_review_20261115/shared_reward_flow.json"
+        ],
+        "remaining": "Chưa quan sát đầy đủ nhãn và tiêu đề được gắn vào một payload Compensation cụ thể. Không có key riêng không đồng nghĩa localization hỏng.",
+        "next_action": "Đọc binding nhãn trong BulkRewardAnimationService theo context, hoặc quan sát một payload Compensation hợp lệ; không tạo key giả.",
+        "scope": "Asset/native export 0.0.3063 và cache UnityFS đọc ngày 15/11 từ app 0.0.3129 được giữ riêng; ảnh render asset không phải ảnh chụp playtest.",
+        "reviewed": "2026-11-15",
+        "full_uc_pass": false
+      },
+      {
+        "kind": "code",
+        "source_report": "facts/local_code_gap_results_20261115.json",
+        "id": "MS-CODE-31",
+        "gap_ids": [
+          "MS-Compensation-G001"
+        ],
+        "title": "Compensation enum có operational values0/1",
+        "status": "partial_static_code",
+        "conclusion": "GetState kiểm CompensationPackage rồi trả IsClaimed XOR1; package không khả dụng trả0, package chưa claimed trả1. Đã thấy giá trị vận hành0/1, nhưng metadata enum name vẫn rỗng; chưa tự đặt tên thành viên chính thức.",
+        "evidence": [
+          {
+            "file": "../com.grandgames.magicsort_Unity_20260909_112501/RecoveredNative/PseudoC/Assembly-CSharp/Modules/Contexts/Home/Monetization/Compensation/Scripts/CompensationStateService.c",
+            "line": 164,
+            "end_line": 232,
+            "method": "// ===== CompensationStateService :: private CompensationStateService.CompensationState GetState()",
+            "sha256": "ce2a5989fa2f7e76b4ed85b4db360f114297d7614ba2d295587a77e84dd8e822",
+            "body_checked": true,
+            "build": "0.0.3063 ARMv7",
+            "required_body_tokens": [
+              "_IsClaimed_k__BackingField ^ 1",
+              "return 0;"
+            ]
+          }
+        ],
+        "remaining": "Cần dump enum names hoặc giữ raw0/1 + mô tả hành vi; claim backend/currentbuild cần ca riêng.",
+        "scope": "recovered_native_0.0.3063_only",
+        "runtime_verified": false
+      }
+    ]
+  },
+  "acceptance_review_20261115": {
+    "source": "facts/feature_acceptance_20261115.json",
+    "feature_id": "Compensation",
+    "scope": "All eleven dossier dimensions reviewed; full_feature_verified is not implied; read per-dimension gaps and actual runtime evidence."
+  },
+  "segment_ab_review_20261115": {
+    "status": "not_identified_in_sources",
+    "segment_ids": [],
+    "matching_basis": "explicit_gd_config_map_or_exact_model_token_in_gdd_configs_where_key_sources; rootfieldscoped",
+    "rows": [],
+    "classifications": {},
+    "assignment_verified": false,
+    "uplift_verified": false,
+    "note": "No matchingrow does not prove no segmentation/AB. Rewardbucketfalsepositives remain explicitly classified."
+  },
+  "current_native_review_20261116": {
+    "reviewed": "2026-11-16",
+    "scope": "file_only_host_APK_0.0.3129_ARM64_matches_last_observed_installed_version_2026-11-15",
+    "live_installed_20261116_verified": false,
+    "installed_binary_identity_verified": false,
+    "runtime_cases_new": 0,
+    "source_facts": "facts/review_20261116/code_findings.json",
+    "source_facts_sha256": "7adb0ab760cea248de7baaa76671082aff9231708782bc0bbcdadff38e2564ea",
+    "native_sha256": "d901f86380bdecae3a8ec5cf9a9b60acc5132d50dfcf7ec1f606de807e22b2d5",
+    "metadata_sha256": "d019f1787d94bcaf0e31508eea72a86dae8df2f422454f6263a2df7d56e3786a",
+    "findings": [
+      {
+        "id": "MS-CURRENT-20261116-04",
+        "gap_ids": [
+          "MS-Compensation-G001"
+        ],
+        "status": "partial_static_code_current_build",
+        "conclusion": "Metadata0.0.3129 định nghĩa CompensationStateService.CompensationState: AllClaimed=0,ShouldClaim=1. Giải exact symbolic labels còn thiếu; metadata không chứng minh grant/ack backend hoặc current GetState behavior.",
+        "remaining": "Current GetState/claim transport và runtime ack vẫn chưa review; chỉ giải phần tên enum, không blanket-close full lifecycle.",
+        "evidence": [
+          {
+            "file": "facts/review_20261116/current_build_dump/dump.cs",
+            "line": 126403,
+            "end_line": 126409,
+            "sha256": "47edf53b3a3e0e82dd81316c145d0cebde72ad2bc5d2dfe3a35492e9cfbd2df2",
+            "text": "private enum CompensationStateService.CompensationState // TypeDefIndex: 3150\n{\n\t// Fields\n\tpublic int value__; // 0x0\n\tpublic const CompensationStateService.CompensationState AllClaimed = 0;\n\tpublic const CompensationStateService.CompensationState ShouldClaim = 1;\n}",
+            "build": "0.0.3129 ARM64",
+            "kind": "metadata_declaration_not_method_body"
+          }
+        ]
+      }
+    ],
+    "historical_review_policy": "Existing15Nov fields/gap decisions retained unchanged. Current native review is independent; static evidence is not device acceptance."
+  },
+  "continuation_review_20261116": {
+    "date": "2026-11-16",
+    "build": "0.0.3129 ARM64 host APK",
+    "build_scope": "Host APK version3129 matches LAST observed installed version15/11 only; installed bytes/live device16/11 not verified.",
+    "runtime_status": "device_unavailable",
+    "runtime_case_ids": [],
+    "current_apk_model_links": {
+      "feature": "Compensation",
+      "models": [],
+      "status": "no_exact_model_token_identified",
+      "distribution": "sanitized_public",
+      "public_mapping_pending": false
+    },
+    "current_packaged_defaults": [],
+    "native_finding_ids": [
+      "MS-CURRENT-20261116-04"
+    ],
+    "documentation_source_coverage": {
+      "dossier_present": true,
+      "use_case_catalog_count": 10,
+      "config_catalog_rows": 12,
+      "current_apk_default_model_links": 0,
+      "current_native_findings": 1,
+      "scope": "Documentation/source coverage only; not complete runtime verification."
+    },
+    "runtime_completion": {
+      "date": "2026-11-16",
+      "status": "device_unavailable",
+      "executed_case_count": 0,
+      "full_feature_runtime_verified": false
+    },
+    "planned_branch": "Kiểm tra queue Home khi khởi động có popup compensation không; nếu không ghi rõ không thấy entry trong phiên, không ép grant.",
+    "target_uc_ids": [
+      "UC-03",
+      "UC-09",
+      "UC-10"
+    ],
+    "execution_phase": "noncore_first",
+    "core_or_levels_last": false,
+    "actionability_full_json": "facts/continuation_20261116/current/feature_actionability.json",
+    "actionability_site_data_path": "data/continuation_20261116/feature_actionability.json",
+    "source_classes": [
+      "external_dependency",
+      "recovered_code"
+    ],
+    "full_feature_verified": false
+  }
+}

@@ -1,0 +1,161 @@
+{
+  "id": "TowerWinStreak",
+  "title": "Tháp chuỗi thắng (Tower Win Streak)",
+  "tagline": "Thắng liên tiếp để leo tháp và mở rương ở các mốc 3, 6, 11, 16, 22, 30, 40.",
+  "infobox": [
+    ["Loại", "Sự kiện solo"],
+    ["Mở khóa", "Level 50 (FirstLevelToShow, client default)"],
+    ["Thời lượng", "Theo startTime/finishTime do server gửi (server)"],
+    ["Chu kỳ / lịch", "Live-ops, bật/tắt bằng IsEnabled (mặc định false)"],
+    ["Tham gia", "Cá nhân"],
+    ["Vật phẩm thu thập", "Chuỗi thắng (WinCount)"],
+    ["Tiền tệ", "Coin nhận từ rương"],
+    ["Thưởng chính", "7 rương mốc, cao nhất 2000 coin, 1 Extra Bottle, 1 Undo, 1 Shuffle, 2 giờ Unlimited Lives"],
+    ["Điều kiện / phụ thuộc", "Không chạy song song với BroomStreak (IsBroomStreakEnabled)"],
+    ["Manager", "TowerWinStreakService"]
+  ],
+  "description": [
+    "Mỗi level thắng liên tiếp đưa con mèo leo lên một bậc của tòa tháp; thua hoặc bỏ level làm mèo rơi và chuỗi reset về 0.",
+    "Bảy mốc chính 3, 6, 11, 16, 22, 30, 40 trả thưởng dạng rương chứa coin, booster và Unlimited Lives theo thời gian.",
+    "Người chơi giữ hai kỷ lục: MaxWinCount trong sự kiện hiện tại và MaxWinCountRecord xuyên mọi sự kiện.",
+    "Sự kiện chạy theo khung thời gian server lấy từ endpoint /v1/get-winstreak-tournament.",
+    "Bảng mốc thưởng được chụp lại khi sự kiện bắt đầu, nên đổi remote config giữa chừng không ảnh hưởng người đang chơi.",
+    "Toàn bộ tính toán chuỗi nằm ở client, nên mất mạng giữa chừng vẫn không mất tiến độ.",
+    "Sự kiện xuất hiện ở nhiều điểm chạm: nút lobby có vòng tròn tiến độ, banner tháp, icon trong màn chơi và popup tự mở.",
+    "Màn hình 'Are You Sure' riêng hiển thị tháp cùng số chuỗi sắp mất để giữ chân người chơi trước khi thoát.",
+    "Nút Try Again sau khi thua mở lại popup tháp với nguồn TryAgain(5), thúc đẩy chơi tiếp ngay.",
+    "Trong analytics, sự kiện này dùng tên 'broom_streak_*' (bản v1), khác với BroomStreak dùng hậu tố '_v2'."
+  ],
+  "notes": [
+    "Lưu ý: mốc Step 0 không có RewardModel nên không trả thưởng gì.",
+    "Lưu ý: chuỗi chỉ reset khi trạng thái sự kiện là InProgress(2); ngoài khoảng đó thua không bị reset.",
+    "Lưu ý: khi đạt mốc cuối 40, không còn mốc thưởng mới nhưng chuỗi vẫn tiếp tục đếm cho kỷ lục.",
+    "Lưu ý: MaxWinCountRecord là kỷ lục xuyên sự kiện, không bị reset khi thua.",
+    "Lưu ý: nếu sự kiện BroomStreak (v2) đang bật thì Tower nhường chỗ, hai sự kiện không chạy song song.",
+    "Lưu ý: khi chưa fetch được sự kiện (NoCachedEvent), toàn bộ UI bị ẩn.",
+    "Lưu ý: các mốc chưa vượt qua khi chuỗi reset sẽ mất, phải leo lại từ đầu.",
+    "Lưu ý: phần thưởng được trao khi về lobby cho mọi mốc nằm giữa LastSeenWinCount và WinCount hiện tại, với EarnReason = 10."
+  ],
+  "how_it_works": [
+    "Kiểm tra điều kiện: trạng thái Disable(7) nếu IsEnabled = false, InsufficientLevel(6) nếu level < 50, NoCachedEvent(0) nếu chưa có cache (GetEventState).",
+    "Loại trừ: nếu BroomStreak đang bật thì Tower không hiển thị (IsBroomStreakEnabled).",
+    "Lấy sự kiện: gọi /v1/get-winstreak-tournament với payload {tournamentType = EventType 1} và nhận về tournamentID, startTime, finishTime.",
+    "Bắt đầu tháp mới: nếu tournamentID khác cache thì tạo TowerWinStreakCache và chụp lại bảng Steps; gửi analytics broom_streak_joined.",
+    "Giới thiệu: popup tự mở khi về lobby hoặc mở app, với TowerWinStreakPopUpState FirstShowEver(0)/FirstShow(1)/InProgress(2)/Result(3).",
+    "Thắng level: WinCount tăng 1, cập nhật MaxWinCount và MaxWinCountRecord nếu vượt kỷ lục; mèo chạy hoạt ảnh Rise(0).",
+    "Thua hoặc bỏ level: lưu LastSeenWinCountBeforeReset rồi đưa WinCount về 0; mèo chạy hoạt ảnh Fall(2).",
+    "Trước khi thoát level, popup Are You Sure hiển thị tháp và số chuỗi sắp mất để cản người chơi bỏ cuộc.",
+    "Về lobby: duyệt các mốc nằm giữa LastSeenWinCount và WinCount, trao thưởng từng mốc qua RewardService với EarnReason = 10.",
+    "Sau khi trao thưởng, LastSeenWinCount được cập nhật bằng WinCount để không trả trùng.",
+    "Vòng tròn tiến độ trên nút lobby chạy từ tỉ lệ đã hiển thị lần trước tới tỉ lệ mới (thời lượng 1 giây, delay 0.7 giây).",
+    "Banner tháp dựng các bậc chính và bậc trung gian, khoảng cách giữa hai mốc chính là 7.5 đơn vị.",
+    "Mốc chính khi mở khoá được nhấn mạnh bằng hiệu ứng phóng to tỉ lệ 1.25 trong 0.2 giây.",
+    "Hết giờ: trạng thái chuyển TimeIsUp(3); người chơi bấm nhận → IsClaimed = true → Claimed(4) hoặc ClaimedAndTimeIsUp(5).",
+    "Kết thúc: gửi analytics broom_streak_finished, phát TowerWinStreakEventStateChangedSignal và chờ sự kiện kế tiếp từ server."
+  ],
+  "reward_tables": [
+    {
+      "title": "PHẦN THƯỞNG MỐC THÁP (TowerWinStreakConfigModel.json, client default)",
+      "columns": ["Mốc", "Điều kiện", "Phần thưởng"],
+      "rows": [
+        ["Step 0", "Mốc gốc", "Không có phần thưởng"],
+        ["Mốc 1 (Step 3)", "Thắng 3 level liên tiếp", "1 rương: 30 coin"],
+        ["Mốc 2 (Step 6)", "Thắng 6 level liên tiếp", "1 rương: 15 phút Unlimited Lives"],
+        ["Mốc 3 (Step 11)", "Thắng 11 level liên tiếp", "1 rương: 300 coin"],
+        ["Mốc 4 (Step 16)", "Thắng 16 level liên tiếp", "1 rương: 1 Undo"],
+        ["Mốc 5 (Step 22)", "Thắng 22 level liên tiếp", "1 rương: 1 Extra Bottle, 1 Shuffle"],
+        ["Mốc 6 (Step 30)", "Thắng 30 level liên tiếp", "1 rương: 1000 coin, 1 Undo"],
+        ["Mốc 7 (Step 40)", "Thắng 40 level liên tiếp (mốc cuối)", "1 rương: 2000 coin, 1 Extra Bottle, 1 Undo, 1 Shuffle, 2 giờ Unlimited Lives"]
+      ]
+    },
+    {
+      "title": "MÃ CURRENCY TRONG BẢNG THƯỞNG",
+      "columns": ["Mã", "Loại", "Ghi chú"],
+      "rows": [
+        ["1", "Coin", "Amount là số coin"],
+        ["2", "Life", "amount = 0 kèm timeSpan → Unlimited Lives theo thời gian"],
+        ["4", "Undo", "Booster"],
+        ["5", "Shuffle", "Booster"],
+        ["6", "ExtraBottle", "Booster"],
+        ["13", "Chest", "Vỏ rương chứa danh sách Rewards"]
+      ]
+    },
+    {
+      "title": "TRẠNG THÁI SỰ KIỆN (TowerWinStreakStateType)",
+      "columns": ["Mã", "Trạng thái", "Ý nghĩa"],
+      "rows": [
+        ["0", "NoCachedEvent", "Chưa fetch được sự kiện"],
+        ["1", "NotIntroduced", "Chưa giới thiệu cho người chơi"],
+        ["2", "InProgress", "Đang chạy, chuỗi tăng/giảm bình thường"],
+        ["3", "TimeIsUp", "Hết giờ, chờ nhận"],
+        ["4", "Claimed", "Đã nhận"],
+        ["5", "ClaimedAndTimeIsUp", "Đã nhận và hết giờ"],
+        ["6", "InsufficientLevel", "Level dưới FirstLevelToShow"],
+        ["7", "Disable", "IsEnabled = false"]
+      ]
+    }
+  ],
+  "key_numbers": [
+    {"label": "Level mở khoá", "value": "50", "source": "TowerWinStreakConfigModel.FirstLevelToShow"},
+    {"label": "Trạng thái bật/tắt mặc định", "value": "false", "source": "TowerWinStreakConfigModel.IsEnabled"},
+    {"label": "EventType (tournamentType gửi backend)", "value": "1", "source": "TowerWinStreakConfigModel.EventType"},
+    {"label": "Hiện icon trong màn chơi", "value": "true", "source": "TowerWinStreakConfigModel.ShouldShowInLevelIcon"},
+    {"label": "Danh sách mốc chính", "value": "3, 6, 11, 16, 22, 30, 40", "source": "TowerWinStreakConfigModel.json Steps[1..7]"},
+    {"label": "Coin mốc 3", "value": "30", "source": "Steps[1].RewardModel.Rewards[0].Amount"},
+    {"label": "Unlimited Lives mốc 6", "value": "00:15:00", "source": "Steps[2].RewardModel.Rewards[0].timeSpan"},
+    {"label": "Coin mốc 11", "value": "300", "source": "Steps[3].RewardModel.Rewards[0].Amount"},
+    {"label": "Coin mốc 30", "value": "1000", "source": "Steps[6].RewardModel.Rewards[0].Amount"},
+    {"label": "Coin mốc 40", "value": "2000", "source": "Steps[7].RewardModel.Rewards[0].Amount"},
+    {"label": "Unlimited Lives mốc 40", "value": "02:00:00", "source": "Steps[7].RewardModel.Rewards[4].timeSpan"},
+    {"label": "EarnReason khi trả thưởng mốc", "value": "10", "source": "TowerWinStreakService.GiveRewardsBetweenLastSeenAndCurrentWinCount"},
+    {"label": "Điều kiện reset chuỗi", "value": "GetEventState() == 2 (InProgress)", "source": "TowerWinStreakService.TryResetWinStreak"},
+    {"label": "Số trạng thái sự kiện", "value": "8 (NoCachedEvent=0 … Disable=7)", "source": "TowerWinStreakStateType"},
+    {"label": "Số nguồn mở popup", "value": "6 (None=0 … TryAgain=5)", "source": "TowerWinStreakSource"},
+    {"label": "Trạng thái hoạt ảnh mèo", "value": "Rise=0, Idle=1, Fall=2", "source": "TowerActionState"},
+    {"label": "Khoảng cách giữa 2 mốc chính", "value": "7.5", "source": "TowerWinStreakBannerConfig.DistanceBetweenMainSteps"},
+    {"label": "Thời gian mở khoá mốc", "value": "0.6 giây", "source": "TowerWinStreakBannerConfig.RevealMainStepTime"},
+    {"label": "Tỉ lệ phóng to mốc chính", "value": "1.25", "source": "TowerWinStreakBannerConfig.MainStepEnlargeScale"},
+    {"label": "Animation vòng tròn nút lobby", "value": "1 giây, delay 0.7 giây", "source": "TowerWinStreakLobbyButtonAnimationConfig"},
+    {"label": "Tên khối sync", "value": "TowerWinStreakModel", "source": "TowerWinStreakDataService.GetSyncName"},
+    {"label": "Endpoint lấy sự kiện", "value": "/v1/get-winstreak-tournament", "source": "towerWinStreakEventInfoUrl"}
+  ],
+  "config_highlights": [
+    {"key": "IsEnabled", "value": "false", "meaning": "Bật/tắt sự kiện tháp (json default)"},
+    {"key": "FirstLevelToShow", "value": "50", "meaning": "Level tối thiểu để thấy sự kiện"},
+    {"key": "EventType", "value": "1", "meaning": "tournamentType gửi lên backend"},
+    {"key": "ShouldShowInLevelIcon", "value": "true", "meaning": "Hiện icon tháp trong màn chơi"},
+    {"key": "Steps[0].Step", "value": "0, không có RewardModel", "meaning": "Mốc gốc, không thưởng"},
+    {"key": "Steps[1] Step 3", "value": "Chest(13) x1: 30 Coin(1)", "meaning": "Thưởng chuỗi 3 thắng"},
+    {"key": "Steps[2] Step 6", "value": "Chest(13) x1: Life(2) vô hạn 00:15:00", "meaning": "Thưởng chuỗi 6 thắng"},
+    {"key": "Steps[3] Step 11", "value": "Chest(13) x1: 300 Coin(1)", "meaning": "Thưởng chuỗi 11 thắng"},
+    {"key": "Steps[4] Step 16", "value": "Chest(13) x1: 1 Undo(4)", "meaning": "Thưởng chuỗi 16 thắng"},
+    {"key": "Steps[5] Step 22", "value": "Chest(13) x1: 1 ExtraBottle(6) + 1 Shuffle(5)", "meaning": "Thưởng chuỗi 22 thắng"},
+    {"key": "Steps[6] Step 30", "value": "Chest(13) x1: 1000 Coin(1) + 1 Undo(4)", "meaning": "Thưởng chuỗi 30 thắng"},
+    {"key": "Steps[7] Step 40", "value": "Chest(13) x1: 2000 Coin(1) + 1 ExtraBottle(6) + 1 Undo(4) + 1 Shuffle(5) + Life(2) vô hạn 02:00:00", "meaning": "Mốc cuối, thưởng lớn nhất"},
+    {"key": "EarnReason", "value": "10", "meaning": "Mã lý do nhận thưởng gửi RewardService"},
+    {"key": "TowerWinStreakStateType", "value": "NoCachedEvent=0, NotIntroduced=1, InProgress=2, TimeIsUp=3, Claimed=4, ClaimedAndTimeIsUp=5, InsufficientLevel=6, Disable=7", "meaning": "Trạng thái sự kiện"},
+    {"key": "TowerWinStreakSource", "value": "None=0, LobbyIcon=1, EventStart=2, EventFinish=3, EventClaimRewards=4, TryAgain=5", "meaning": "Nguồn mở popup (impression_source)"},
+    {"key": "TowerWinStreakPopUpState", "value": "FirstShowEver=0, FirstShow=1, InProgress=2, Result=3", "meaning": "Layout popup"},
+    {"key": "TowerActionState", "value": "Rise=0, Idle=1, Fall=2", "meaning": "Hoạt ảnh mèo leo/đứng/rơi"},
+    {"key": "TowerWinStreakEventInfoResponse", "value": "tournamentID, tournamentType, startTime, finishTime", "meaning": "Khung thời gian sự kiện (server)"},
+    {"key": "TowerWinStreakEventInfoRequestModel", "value": "tournamentType", "meaning": "Payload request lấy sự kiện"},
+    {"key": "TowerWinStreakModel", "value": "MaxWinCountRecord, MaxWinCount, WinCount, LastSeenWinCount, LastSeenWinCountBeforeReset, IsEventIntroducedEverInLifeTime, CircleProgressBarFillRatio", "meaning": "Trạng thái chuỗi thắng lưu local"},
+    {"key": "TowerWinStreakCache", "value": "EventId, StartTime, FinishTime, IsEventIntroduced, IsClaimed, TowerWinStreakConfigModel", "meaning": "Ảnh chụp sự kiện + bảng mốc thưởng"},
+    {"key": "TowerWinStreakBannerConfig.DistanceBetweenMainSteps", "value": "7.5", "meaning": "Khoảng cách giữa 2 mốc chính trên banner"},
+    {"key": "TowerWinStreakBannerConfig.CatMoveDuration / CatPrepareDuration / CatTiltRotationZ", "value": "0.7 / 0.25 / -22", "meaning": "Hoạt ảnh mèo leo tháp"},
+    {"key": "TowerWinStreakBannerConfig.RevealMainStepTime / TickScaleDuration / TickStartTime", "value": "0.6 / 0.4 / 0.65", "meaning": "Hoạt ảnh mở khoá mốc"},
+    {"key": "TowerWinStreakBannerConfig.MainStepEnlargeScale / StartTime / Duration / ShrinkDuration", "value": "(1.25,1.25,0) / 0.35 / 0.2 / 0.2", "meaning": "Nhấn mạnh mốc chính khi đạt"},
+    {"key": "TowerWinStreakBannerConfig.ContainerMoveDuration / IncreaseAnimDelay / ParticlePlayTime / SpriteSwapTime", "value": "1.25 / 0.35 / 0.55 / 0.35", "meaning": "Nhịp hoạt ảnh banner"},
+    {"key": "TowerWinStreakLobbyButtonAnimationConfig._circleProgressBarAnimationDuration / Delay", "value": "1 / 0.7", "meaning": "Animation vòng tròn tiến độ nút lobby"},
+    {"key": "TowerWinStreakLobbyButtonAnimationConfig.BroomPunch*", "value": "Delay 0.8, Duration 0.3, Vibrato 3, Elasticity 15, PunchRotation (0,0,8), BroomSitPosition (0.329,-0.205,0)", "meaning": "Hiệu ứng cây chổi trên nút lobby"},
+    {"key": "towerWinStreakEventInfoUrl", "value": "{base}/v1/get-winstreak-tournament", "meaning": "Lấy khung thời gian sự kiện"}
+  ],
+  "tips": [
+    "Mốc dày ở đầu (3 và 6) rồi thưa dần (30, 40) tạo cảm giác tiến bộ nhanh lúc đầu và mục tiêu dài hạn về sau.",
+    "Popup Are You Sure gắn tháp vào đúng khoảnh khắc người chơi định bỏ cuộc — điểm bán booster hiệu quả nhất.",
+    "Chụp bảng mốc vào cache khi bắt đầu sự kiện giúp tránh tranh cãi khi live-ops đổi cấu hình giữa chừng.",
+    "Hai kỷ lục riêng biệt (trong sự kiện và mọi thời đại) cho người chơi cả mục tiêu ngắn hạn lẫn niềm tự hào lâu dài.",
+    "Việc dùng tên analytics 'broom_streak_*' cho cả Tower v1 dễ gây nhầm dữ liệu với BroomStreak v2."
+  ],
+  "categories": ["Sự kiện", "Live-ops", "Tiến trình", "Booster"]
+}

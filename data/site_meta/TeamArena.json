@@ -1,0 +1,196 @@
+{
+  "id": "TeamArena",
+  "title": "Đấu trường đội (Team Arena)",
+  "tagline": "Sự kiện đội đấu đội: thắng level góp điểm cho đội, mở thang thưởng cá nhân 10 mốc và tranh top 3 đội.",
+  "infobox": [
+    ["Loại", "Sự kiện đội"],
+    ["Mở khóa", "Level 45 (TeamArenaConfigModel.FirstLevelToShow, client default), IsEnabled mặc định false"],
+    ["Thời lượng", "Theo startTime / finishTime do server đặt"],
+    ["Chu kỳ / lịch", "Từng giải với cửa sổ tham gia riêng (isJoinWindowEnded)"],
+    ["Tham gia", "Đội — cần tối thiểu 10 thành viên (MinimumUserToJoinEvent)"],
+    ["Vật phẩm thu thập", "Điểm đóng góp: Normal 1, Hard 3, SuperHard 5 điểm mỗi level thắng"],
+    ["Tiền tệ", "Coin, Unlimited Lives, Shuffle, Undo, Extra Bottle, Collection Pack"],
+    ["Thưởng chính", "Thang 10 mốc cá nhân (10→100 điểm); top 3 đội nhận 2000/1000/500 coin"],
+    ["Điều kiện / phụ thuộc", "Phải có đội và đội đủ 10 thành viên; gắn chặt với Teams, Leaderboards, Collection"],
+    ["Manager", "TeamArenaService, TeamArenaDataService, TeamArenaStateService, TeamArenaRemoteService, TeamArenaConfigModel"]
+  ],
+  "description": [
+    "Team Arena (backend gọi là 'team competition') là sự kiện đội đấu đội, lớp cạnh tranh xã hội cao nhất của game.",
+    "Người chơi đóng góp điểm cho đội bằng cách thắng level: Normal 1 điểm, Hard 3 điểm, SuperHard 5 điểm.",
+    "Điểm cá nhân vừa mở khoá thang phần thưởng cá nhân 10 mốc (từ 10 tới 100 điểm), vừa cộng vào tổng điểm đội.",
+    "Tổng điểm đội quyết định hạng trên bảng xếp hạng đội, tranh với các đội khác cùng trình.",
+    "Kết thúc, top 3 đội nhận 2000, 1000 và 500 coin; top 3 người đóng góp trong đội nhận Extra Bottle, Shuffle và Undo.",
+    "Khi Collection bật, ba mốc 15, 35 và 100 điểm đổi thành Collection Pack loại 2, 3 và 4, thưởng top 3 cá nhân đổi thành Collection Pack loại 3, 2 và 1.",
+    "Đội phải có tối thiểu 10 thành viên mới được tham gia, nếu không thì trạng thái là NotHaveEnoughMembers.",
+    "Sự kiện dùng hệ Elo của đội (previousElo / currentElo) để ghép các đội cùng trình.",
+    "Popup sự kiện có hai bảng xếp hạng: bảng đội và bảng đóng góp của thành viên trong đội."
+  ],
+  "notes": [
+    "Lưu ý: Điều kiện tham gia phân loại bằng TeamArenaEligibility: Eligible(1), NoTeam(2) chưa có đội, NotHaveEnoughMembers(3) đội dưới 10 người.",
+    "Lưu ý: Có cảnh báo riêng khi người chơi định rời đội giữa sự kiện (ShouldShowWarningLeaveTeam).",
+    "Lưu ý: Nếu tournamentID đổi thì client gọi ResetEventData() và ResetTournamentCache() để dọn dữ liệu cũ.",
+    "Lưu ý: Thưởng đội bản Collection giống hệt bản thường (2000 / 1000 / 500 coin).",
+    "Lưu ý: Thuật toán ghép đội theo Elo và cách tính previousElo → currentElo nằm hoàn toàn ở server (gap).",
+    "Lưu ý: Số đội trong một bảng và độ dài sự kiện do server quyết định qua startTime/finishTime (gap).",
+    "Lưu ý: TeamArenaTeamData.activityType không có enum trong client, chỉ là int từ server (gap).",
+    "Lưu ý: TryJoinEvent() và TryClaimEvent() trả mã kết quả kiểu int nhưng bảng mã không đọc được rõ (gap)."
+  ],
+  "how_it_works": [
+    "Initialize() đăng ký signal đội (OnUserTeamDataUpdated) để cập nhật khi thành phần đội thay đổi.",
+    "InitializeData/IntervalUpdate → TeamArenaStateService.ShouldGetEvent() → TryFetchCurrentEvent() → GetEvent() gọi FetchEvent tới /v1/get-team-competition.",
+    "Payload TeamArenaRequestModel{tournamentID, tournamentType, teamID, score} vừa lấy dữ liệu vừa đẩy điểm hiện tại.",
+    "Response TeamArenaEventResponse gồm eventStatusResponse (tournamentID, teamID, startTime, finishTime, isFinished, isJoined, isJoinWindowEnded) và eventLeaderboardResponse.",
+    "eventLeaderboardResponse mang isClaimed, totalScore, canContribute, teamRank, previousElo, elo cùng hai mảng teamCompetitionLeaderboard và teamCompetitionUserLeaderboard.",
+    "RequestProfileImages() tải avatar thành viên qua ProfileSpriteCacheService để vẽ hai bảng xếp hạng.",
+    "TeamArenaStateService.GetState() phân trạng thái: Disabled(0), InsufficientProgress(1) khi level < 45, NoCache(2), NotIntroduced(3), PreJoin(4), InProgress(5), LocalEnd(6), RemoteEnd(7), Claimed(8).",
+    "Tham gia: UserTeamHasEnoughMemberToJoin() và GetEligibility() kiểm tra, rồi TryJoinEvent() gọi /v1/join-team-competition; analytics bắn team_arena_joined kèm eligibility.",
+    "Đóng góp: mỗi lần thắng level, TryIncreaseProgress(LevelDifficultyType) quy đổi 1 / 3 / 5 điểm theo độ khó.",
+    "TeamArenaDataService.IncreaseProgress(progress) cập nhật TeamArenaProgressCacheModel{Progress, CurrentStep, CurrentProgressInStep}.",
+    "Thang thưởng cá nhân: GetSteps() dựng TeamArenaProgressStepViewModel từ Steps, hoặc từ StepsWithCollection khi Collection bật.",
+    "GetClaimableProgressRewards() trả thưởng của các mốc đã vượt kể từ LastClaimedStep; mỗi mốc vượt qua bắn analytics team_arena_step_completed.",
+    "ProgressRewardsClaimed() gọi UpdateLastClaimedStep() và phát signal TeamArenaProgressRewardsClaimed để đồng bộ UI.",
+    "Trong lúc sự kiện chạy, TeamArenaEventPopup hiển thị bảng đội, bảng đóng góp thành viên và thang thưởng; TeamArenaInfoView quảng bá trong chat đội.",
+    "Kết thúc: state chuyển sang LocalEnd(6) hoặc RemoteEnd(7) tuỳ client hay server phát hiện trước.",
+    "TryGetEventResult() dựng TeamArenaEventResultViewModel gồm TeamRank, Elo trước và sau, thưởng đội theo hạng 1/2/3 và thưởng cá nhân theo hạng đóng góp 1/2/3.",
+    "TryClaimEvent() gọi ClaimEvent tới /v1/claim-team-competition, state chuyển sang Claimed(8).",
+    "Analytics team_arena_finished ghi previous_elo, current_elo, team_rank, rank, reward, team_reward; toàn bộ tiến độ đồng bộ qua khối 'TeamArenaSyncModel'."
+  ],
+  "reward_tables": [
+    {
+      "title": "THANG THƯỞNG CÁ NHÂN (TeamArenaConfigModel.json: Steps, client default)",
+      "columns": ["Mốc", "Điều kiện", "Phần thưởng"],
+      "rows": [
+        ["Mốc 1", "10 điểm", "15 phút Unlimited Lives"],
+        ["Mốc 2", "15 điểm", "1 Shuffle"],
+        ["Mốc 3", "20 điểm", "1 Undo"],
+        ["Mốc 4", "25 điểm", "100 coin"],
+        ["Mốc 5", "30 điểm", "30 phút Unlimited Lives"],
+        ["Mốc 6", "35 điểm", "1 Undo"],
+        ["Mốc 7", "40 điểm", "1 Shuffle"],
+        ["Mốc 8", "50 điểm", "200 coin"],
+        ["Mốc 9", "70 điểm", "1 Extra Bottle"],
+        ["Mốc 10", "100 điểm", "250 coin"]
+      ]
+    },
+    {
+      "title": "THANG THƯỞNG CÁ NHÂN — BẢN COLLECTION (StepsWithCollection, client default)",
+      "columns": ["Mốc", "Điều kiện", "Phần thưởng"],
+      "rows": [
+        ["Mốc 1", "10 điểm", "15 phút Unlimited Lives"],
+        ["Mốc 2", "15 điểm", "1 Collection Pack loại 2"],
+        ["Mốc 3", "20 điểm", "1 Undo"],
+        ["Mốc 4", "25 điểm", "100 coin"],
+        ["Mốc 5", "30 điểm", "30 phút Unlimited Lives"],
+        ["Mốc 6", "35 điểm", "1 Collection Pack loại 3"],
+        ["Mốc 7", "40 điểm", "1 Shuffle"],
+        ["Mốc 8", "50 điểm", "200 coin"],
+        ["Mốc 9", "70 điểm", "1 Extra Bottle"],
+        ["Mốc 10", "100 điểm", "1 Collection Pack loại 4"]
+      ]
+    },
+    {
+      "title": "THƯỞNG XẾP HẠNG ĐỘI (TeamLeaderboardRewards, client default)",
+      "columns": ["Mốc", "Điều kiện", "Phần thưởng"],
+      "rows": [
+        ["Hạng 1", "Đội đứng đầu bảng xếp hạng đội", "2.000 coin"],
+        ["Hạng 2", "Đội hạng nhì", "1.000 coin"],
+        ["Hạng 3", "Đội hạng ba", "500 coin"],
+        ["Hạng 1 (bản Collection)", "Đội đứng đầu, Collection bật", "2.000 coin"],
+        ["Hạng 2 (bản Collection)", "Đội hạng nhì, Collection bật", "1.000 coin"],
+        ["Hạng 3 (bản Collection)", "Đội hạng ba, Collection bật", "500 coin"]
+      ]
+    },
+    {
+      "title": "THƯỞNG TOP NGƯỜI ĐÓNG GÓP TRONG ĐỘI (LeaderboardRewards, client default)",
+      "columns": ["Mốc", "Điều kiện", "Phần thưởng"],
+      "rows": [
+        ["Hạng 1", "Đóng góp nhiều nhất đội", "1 Extra Bottle"],
+        ["Hạng 2", "Đóng góp thứ hai", "1 Shuffle"],
+        ["Hạng 3", "Đóng góp thứ ba", "1 Undo"],
+        ["Hạng 1 (bản Collection)", "Đóng góp nhiều nhất, Collection bật", "1 Collection Pack loại 3"],
+        ["Hạng 2 (bản Collection)", "Đóng góp thứ hai, Collection bật", "1 Collection Pack loại 2"],
+        ["Hạng 3 (bản Collection)", "Đóng góp thứ ba, Collection bật", "1 Collection Pack loại 1"]
+      ]
+    },
+    {
+      "title": "ĐIỂM ĐÓNG GÓP THEO ĐỘ KHÓ LEVEL",
+      "columns": ["Độ khó", "Điểm", "Khoá cấu hình"],
+      "rows": [
+        ["Normal", "1 điểm", "NormalScore"],
+        ["Hard", "3 điểm", "HardScore"],
+        ["SuperHard", "5 điểm", "SuperHardScore"]
+      ]
+    },
+    {
+      "title": "TRẠNG THÁI VÀ ĐIỀU KIỆN THAM GIA",
+      "columns": ["Enum", "Giá trị", "Ý nghĩa"],
+      "rows": [
+        ["TeamArenaStateType", "Disabled=0, InsufficientProgress=1, NoCache=2, NotIntroduced=3, PreJoin=4, InProgress=5, LocalEnd=6, RemoteEnd=7, Claimed=8", "Trạng thái sự kiện"],
+        ["TeamArenaEligibility", "None=0, Eligible=1, NoTeam=2, NotHaveEnoughMembers=3", "Điều kiện tham gia, ghi vào analytics 'eligibility'"]
+      ]
+    }
+  ],
+  "key_numbers": [
+    {"label": "Bật mặc định (client)", "value": "false", "source": "TeamArenaConfigModel.json: IsEnabled"},
+    {"label": "TournamentType", "value": "1", "source": "TeamArenaConfigModel.json: TournamentType"},
+    {"label": "Level tối thiểu", "value": "45", "source": "TeamArenaConfigModel.json: FirstLevelToShow"},
+    {"label": "Số thành viên tối thiểu của đội", "value": "10", "source": "TeamArenaConfigModel.json: MinimumUserToJoinEvent"},
+    {"label": "Điểm level Normal", "value": "1", "source": "TeamArenaConfigModel.json: NormalScore"},
+    {"label": "Điểm level Hard", "value": "3", "source": "TeamArenaConfigModel.json: HardScore"},
+    {"label": "Điểm level SuperHard", "value": "5", "source": "TeamArenaConfigModel.json: SuperHardScore"},
+    {"label": "Số mốc thưởng cá nhân", "value": "10", "source": "TeamArenaConfigModel.json: Steps"},
+    {"label": "Mốc đầu tiên", "value": "10 điểm", "source": "Steps[0].RequiredProgress"},
+    {"label": "Mốc cuối cùng", "value": "100 điểm", "source": "Steps[9].RequiredProgress"},
+    {"label": "Tổng coin từ thang cá nhân", "value": "550 coin (100 + 200 + 250)", "source": "Steps[3], Steps[7], Steps[9]"},
+    {"label": "Tổng thời gian Unlimited Lives từ thang", "value": "45 phút (15 + 30)", "source": "Steps[0], Steps[4]"},
+    {"label": "Thưởng đội hạng 1", "value": "2.000 coin", "source": "TeamLeaderboardRewards[0].Amount"},
+    {"label": "Thưởng đội hạng 2", "value": "1.000 coin", "source": "TeamLeaderboardRewards[1].Amount"},
+    {"label": "Thưởng đội hạng 3", "value": "500 coin", "source": "TeamLeaderboardRewards[2].Amount"},
+    {"label": "Thưởng top 1 đóng góp", "value": "1 Extra Bottle (CurrencyType 6)", "source": "LeaderboardRewards[0]"},
+    {"label": "Số trạng thái sự kiện", "value": "9 (Disabled=0 … Claimed=8)", "source": "TeamArenaStateType"},
+    {"label": "Số giá trị điều kiện tham gia", "value": "4 (None=0 … NotHaveEnoughMembers=3)", "source": "TeamArenaEligibility"},
+    {"label": "Endpoint lấy trạng thái giải", "value": "/v1/get-team-competition", "source": "teamArenaLeaderboard"},
+    {"label": "Endpoint tham gia", "value": "/v1/join-team-competition", "source": "teamArenaJoin"},
+    {"label": "Endpoint nhận thưởng", "value": "/v1/claim-team-competition", "source": "teamArenaClaim"},
+    {"label": "Tên khối đồng bộ", "value": "TeamArenaSyncModel", "source": "TeamArena.storage_keys"},
+    {"label": "Số điểm vào tính năng", "value": "6", "source": "TeamArena.entry_points"},
+    {"label": "Số sự kiện analytics", "value": "7", "source": "TeamArena.analytics"}
+  ],
+  "config_highlights": [
+    {"key": "TeamArenaConfigModel.json: IsEnabled", "value": "false", "meaning": "Bật/tắt Team Arena (client default, remote config ghi đè)"},
+    {"key": "TeamArenaConfigModel.json: TournamentType", "value": "1", "meaning": "Mã loại giải gửi backend"},
+    {"key": "TeamArenaConfigModel.json: FirstLevelToShow", "value": "45", "meaning": "Level tối thiểu để thấy sự kiện"},
+    {"key": "TeamArenaConfigModel.json: MinimumUserToJoinEvent", "value": "10", "meaning": "Số thành viên tối thiểu của đội để tham gia"},
+    {"key": "TeamArenaConfigModel.json: NormalScore / HardScore / SuperHardScore", "value": "1 / 3 / 5", "meaning": "Điểm đóng góp theo độ khó level"},
+    {"key": "TeamArenaConfigModel.json: Steps", "value": "10 mốc ở 10, 15, 20, 25, 30, 35, 40, 50, 70, 100 điểm", "meaning": "Thang thưởng cá nhân bản thường"},
+    {"key": "TeamArenaConfigModel.json: StepsWithCollection", "value": "Đổi mốc 15, 35, 100 thành Collection Pack loại 2, 3, 4", "meaning": "Thang thưởng cá nhân khi Collection bật"},
+    {"key": "TeamArenaConfigModel.json: Steps[0]", "value": "RequiredProgress 10, CurrencyType 2, TimeSpan 00:15:00", "meaning": "Mốc 10 điểm: 15 phút Unlimited Lives"},
+    {"key": "TeamArenaConfigModel.json: Steps[4]", "value": "RequiredProgress 30, CurrencyType 2, TimeSpan 00:30:00", "meaning": "Mốc 30 điểm: 30 phút Unlimited Lives"},
+    {"key": "TeamArenaConfigModel.json: Steps[9]", "value": "RequiredProgress 100, CurrencyType 1, Amount 250", "meaning": "Mốc cuối: 250 coin"},
+    {"key": "TeamArenaConfigModel.json: LeaderboardRewards", "value": "CurrencyType 6, 5, 4 — mỗi loại Amount 1", "meaning": "Thưởng top 1/2/3 người đóng góp: 1 Extra Bottle, 1 Shuffle, 1 Undo"},
+    {"key": "TeamArenaConfigModel.json: LeaderboardRewardsWithCollection", "value": "CurrencyType 14, CollectionPackType 3 / 2 / 1", "meaning": "Bản Collection của thưởng cá nhân"},
+    {"key": "TeamArenaConfigModel.json: TeamLeaderboardRewards", "value": "2000 / 1000 / 500 coin", "meaning": "Thưởng cho đội hạng 1/2/3"},
+    {"key": "TeamArenaConfigModel.json: TeamLeaderboardRewardsWithCollection", "value": "2000 / 1000 / 500 coin (giống bản thường)", "meaning": "Bản Collection của thưởng đội"},
+    {"key": "TeamArenaStateType", "value": "Disabled=0, InsufficientProgress=1, NoCache=2, NotIntroduced=3, PreJoin=4, InProgress=5, LocalEnd=6, RemoteEnd=7, Claimed=8", "meaning": "Trạng thái sự kiện"},
+    {"key": "TeamArenaEligibility", "value": "None=0, Eligible=1, NoTeam=2, NotHaveEnoughMembers=3", "meaning": "Điều kiện tham gia (ghi vào analytics 'eligibility')"},
+    {"key": "TeamArenaEventStatusData", "value": "tournamentID, teamID, startTime, finishTime, isFinished, isJoined, isJoinWindowEnded", "meaning": "Trạng thái sự kiện của đội"},
+    {"key": "TeamArenaTournamentData", "value": "isClaimed, totalScore, canContribute, teamRank, previousElo, elo, teamCompetitionLeaderboard[], teamCompetitionUserLeaderboard[]", "meaning": "Dữ liệu bảng xếp hạng và Elo"},
+    {"key": "TeamArenaTeamData", "value": "name, teamID, badge, memberCount, activityType, score", "meaning": "Một đội trong bảng xếp hạng"},
+    {"key": "TeamArenaUserData", "value": "userPublicId, userName, score, fbImageUrl, imageID, tokenID, frameID, nameStyle, isMe", "meaning": "Một thành viên trong bảng đóng góp"},
+    {"key": "TeamArenaRequestModel", "value": "tournamentID, tournamentType, teamID, score", "meaning": "Payload chung cho fetch, join và claim"},
+    {"key": "TeamArenaStatusCacheModel", "value": "StartTime, EndTime, TournamentId, TeamId, IsJoinWindowEnded, IsFinished, IsJoined", "meaning": "Cache trạng thái sự kiện"},
+    {"key": "TeamArenaTournamentCacheModel", "value": "IsClaimed, CanContribute, PreviousElo, CurrentElo, TeamRank, TeamLeaderboard, PlayerLeaderboard", "meaning": "Cache bảng xếp hạng và Elo"},
+    {"key": "TeamArenaProgressCacheModel", "value": "Progress, LastClaimedStep, CurrentStep, CurrentProgressInStep, LastSeenStep, LastSeenProgressInStep, LobbyProgressCount", "meaning": "Tiến độ đóng góp cá nhân"},
+    {"key": "Sync block 'TeamArenaSyncModel'", "value": "client↔server", "meaning": "Đồng bộ tiến độ và trạng thái tham gia"},
+    {"key": "TeamArenaLobbyButtonAnimationConfig", "value": "ScriptableObject", "meaning": "Hoạt ảnh nút lobby"},
+    {"key": "Endpoint Team Arena", "value": "/v1/get-team-competition, /v1/join-team-competition, /v1/claim-team-competition", "meaning": "Ba API chính của sự kiện"}
+  ],
+  "tips": [
+    "Chia điểm theo độ khó (1/3/5) thưởng người chơi dám chọn level khó thay vì cày level dễ.",
+    "Ngưỡng 10 thành viên buộc người chơi tuyển và giữ đội đông, thúc đẩy vòng lặp xã hội của Teams.",
+    "Hai lớp thưởng — mốc cá nhân và hạng đội — bảo đảm ai cũng có phần dù đội thua.",
+    "Ghép đội theo Elo giữ trận đấu cân bằng, tránh đội mạnh nghiền nát đội mới.",
+    "Bảng đóng góp trong đội tạo áp lực xã hội tích cực: thành viên thấy rõ ai đang kéo đội."
+  ],
+  "categories": ["Sự kiện", "Sự kiện đội", "Có bảng xếp hạng", "Xã hội", "Live-ops"]
+}

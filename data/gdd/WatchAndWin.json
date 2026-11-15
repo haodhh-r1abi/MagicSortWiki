@@ -1,0 +1,1099 @@
+{
+  "id": "WatchAndWin",
+  "name": "Watch and Win",
+  "category": "Economy",
+  "managers": [
+    "Modules.Contexts.Home.Monetization.WatchAndWin.Scripts.WatchAndWinService",
+    "Modules.Contexts.Home.Monetization.WatchAndWin.Scripts.WatchAndWinDataService",
+    "Modules.Contexts.Home.Monetization.WatchAndWin.Scripts.WatchAndWinStateService",
+    "Modules.Contexts.Home.Monetization.WatchAndWin.Scripts.WatchAndWinRemoteService",
+    "Modules.Contexts.Home.Monetization.WatchAndWin.Scripts.WatchAndWinConfigModel"
+  ],
+  "summary": "Watch and Win là hệ thống thưởng theo số quảng cáo đã xem: người chơi xem quảng cáo có thưởng (rewarded ad), mỗi lần xem cộng 1 vào tiến độ; khi đạt các mốc trong RequiredAdCountsToWatch thì nhận phần thưởng tương ứng trong Rewards, mốc cuối là Grand Prize. Có hai chế độ: chế độ tĩnh (RequiredAdCountsToWatch + Rewards song song) và chế độ động (IsDynamicStagesEnabled + DynamicStages với WatchAndWinStep{TargetAdCount, Reward}). Đây là kênh kiếm doanh thu quảng cáo có động lực rõ ràng cho người chơi không chi tiền, và được bật/tắt qua cả remote config lẫn cấu hình quảng cáo từ backend (AdConfigModel).",
+  "unlock": "WatchAndWinStateService.CanShowWatchAndWin() kết hợp: WatchAndWinConfigModel.IsEnabled, level >= WatchAndWinConfigModel.FirstLevelToShow (IPlayerService), IsEnabledFromBackendAdConfigModel() (cờ trong cấu hình quảng cáo do backend gửi), và có cache WatchAndWinResponse. Trạng thái thiếu điều kiện phản ánh trong WatchAndWinState: Disable(0), ProgressNotEnough(1), NoCache(2).",
+  "entry_points": [
+    "WatchAndWinLobbyButton (+WatchAndWinLobbyButtonAnimationView) — icon ở Home với vòng tiến độ",
+    "OpenWatchAndWinPopupCommand — mở WatchAndWinPopup",
+    "WatchAndWinHomeWelcomingCommand — tự bật khi vào Home",
+    "TryToShowWatchAndWinLobbyReturnCommand — tự bật khi quay lại Home",
+    "Popup tự mở sau khi nhận thưởng (CanOpenPopupAfterReward)"
+  ],
+  "flow": "WatchAndWinStateService.GetState() cho ra WatchAndWinState: Disable(0) → ProgressNotEnough(1) → NoCache(2) → Enable(3) → LocalTimeIsUp(4) → Claimed(6). Khi ShouldSendGetRequest() (và popup 'WatchAndWinPopup' không mở), WatchAndWinService.TryFetchCurrentEvent() gửi WatchAndWinRequestModel{EventType} và HandleWatchAndWinResponse(response) → UpdateAndCacheBackendOfferResponse() lưu WatchAndWinResponse{EventId, EventType, StartTime, FinishTime, Segment} qua WatchAndWinDataService.CacheBackendResponse(). ScheduleWatchAndWinFetch() dùng SecondTimer để lấy lại khi hết hạn. Tiến độ: mỗi lần xem xong một quảng cáo có thưởng (AdRequestSource.WatchAndWin = 8), WatchAndWinService.TryIncreaseAdProgress() tăng WatchAndWinModel.AdProgress qua WatchAndWinDataService.SetAdProgress() và Invoke Signal; GetAdProgress() cho UI. Mốc: GetRequiredAdCountsToWatch() trả WatchAndWinConfigModel.RequiredAdCountsToWatch; GetTotalRequiredAdCount() là mốc cuối; GetStepProgressByWatchedAdCount() quy đổi số quảng cáo đã xem thành bước; IsOnRewardStep() báo vừa chạm mốc; GetRewardByProgress(stepProgress) trả RewardModel tương ứng trong Rewards; HasReachedTotalRequiredAdCount() báo đã hoàn thành. Chế độ động: IsDynamicStagesEnabled() bật DynamicStages (List<WatchAndWinStep>{TargetAdCount, Reward}) và UI DynamicWatchAndWinView / WatchAndWinDynamicRewardView. Thưởng trao qua RewardService với CurrencyEarnReason.WatchAndWin (32). Popup: WatchAndWinService.ShouldForceShowPopup() dùng WatchAndWinModel.PopupTriggerCount (IncrementPopupTriggerCount / ClearPopupTriggerCount) và IsPopupShown để không spam; OnPopupOpened() ghi nhận. Analytics: watchandwin_popup_impression (impression source) và watchandwin_ad_impression (ad_number).",
+  "use_cases": [
+    {
+      "id": "UC-01",
+      "title": "Kiểm tra điều kiện hiện Watch and Win",
+      "actor": "System",
+      "trigger": "Vào Home / IntervalUpdate",
+      "precondition": "Có remote config và cấu hình quảng cáo",
+      "steps": [
+        "WatchAndWinStateService.GetConfig() lấy WatchAndWinConfigModel",
+        "IsWatchAndWinEnabled() kiểm tra WatchAndWinConfigModel.IsEnabled",
+        "IsEnabledFromBackendAdConfigModel() kiểm tra cờ trong AdConfigModel do backend gửi",
+        "So level người chơi với FirstLevelToShow → ProgressNotEnough nếu chưa đủ",
+        "Kiểm tra có WatchAndWinResponse trong cache → NoCache nếu chưa",
+        "CanShowWatchAndWin() tổng hợp; UpdateState() phát Signal khi trạng thái đổi"
+      ],
+      "result": "Icon và popup chỉ hiện khi cả game lẫn hệ thống quảng cáo cho phép",
+      "rules": "WatchAndWinState: Disable=0, ProgressNotEnough=1, NoCache=2, Enable=3, LocalTimeIsUp=4, Claimed=6 (không có giá trị 5)",
+      "evidence": "WatchAndWinStateService.CanShowWatchAndWin; WatchAndWinStateService.IsEnabledFromBackendAdConfigModel; WatchAndWinStateService.IsWatchAndWinEnabled; WatchAndWinStateService.GetState; WatchAndWinStateService.UpdateState"
+    },
+    {
+      "id": "UC-02",
+      "title": "Lấy cấu hình sự kiện từ server",
+      "actor": "System",
+      "trigger": "WatchAndWinStateService.ShouldSendGetRequest() == true",
+      "precondition": "Popup 'WatchAndWinPopup' không đang mở",
+      "steps": [
+        "WatchAndWinService.TryFetchCurrentEvent() → GetRequestModel() dựng WatchAndWinRequestModel{EventType}",
+        "WatchAndWinRemoteService gửi request; HandleWatchAndWinResponse(ApiResponse<WatchAndWinResponse>) xử lý",
+        "UpdateAndCacheBackendOfferResponse(response) → WatchAndWinDataService.CacheBackendResponse(responseData)",
+        "Invoke Signal cập nhật UI",
+        "ScheduleWatchAndWinFetch() đặt SecondTimer để lấy lại khi hết hạn (callback b__23_0)"
+      ],
+      "result": "EventId, thời gian và segment sẵn sàng; GetEndDate()/GetRemainingSeconds() dùng cho đồng hồ",
+      "rules": "Dispose() gọi SecondTimer.Cancel()",
+      "evidence": "WatchAndWinService.TryFetchCurrentEvent; WatchAndWinService.GetRequestModel; WatchAndWinService.HandleWatchAndWinResponse; WatchAndWinService.UpdateAndCacheBackendOfferResponse; WatchAndWinService.ScheduleWatchAndWinFetch"
+    },
+    {
+      "id": "UC-03",
+      "title": "Xem một quảng cáo và tăng tiến độ",
+      "actor": "Player",
+      "trigger": "Bấm nút xem quảng cáo trong WatchAndWinPopup",
+      "precondition": "State = Enable, còn mốc chưa đạt",
+      "steps": [
+        "AdService phát rewarded ad với AdRequestSource.WatchAndWin (8)",
+        "Xem hết → WatchAndWinService.TryIncreaseAdProgress()",
+        "WatchAndWinDataService.SetAdProgress(adProgress + 1); Invoke Signal",
+        "GetStepProgressByWatchedAdCount() quy đổi sang bước hiện tại",
+        "EventSender.SendWatchAndWinAdImpressionEvent(adId) → watchandwin_ad_impression với ad_number, segment"
+      ],
+      "result": "Vòng tiến độ trên icon và popup tiến thêm một nấc",
+      "rules": "Tiến độ lưu ở WatchAndWinModel.AdProgress, đồng bộ qua 'WatchAndWinSyncableDataModel'",
+      "evidence": "WatchAndWinService.TryIncreaseAdProgress; WatchAndWinService.GetAdProgress; WatchAndWinDataService.SetAdProgress; WatchAndWinService.GetStepProgressByWatchedAdCount; EventSender.SendWatchAndWinAdImpressionEvent"
+    },
+    {
+      "id": "UC-04",
+      "title": "Đạt một mốc và nhận thưởng",
+      "actor": "Player",
+      "trigger": "AdProgress chạm một giá trị trong RequiredAdCountsToWatch",
+      "precondition": "WatchAndWinService.IsOnRewardStep() == true",
+      "steps": [
+        "GetRequiredAdCountsToWatch() trả List<int> các mốc",
+        "GetRewardByProgress(stepProgress) tra WatchAndWinConfigModel.Rewards theo bước",
+        "RewardService trao với CurrencyEarnReason.WatchAndWin (32)",
+        "WatchAndWinStateService.CanOpenPopupAfterReward() / WatchAndWinService.CanOpenPopupAfterReward() cho phép mở lại popup ngay sau khi nhận",
+        "WatchAndWinAnimationConfig chạy hiệu ứng trên WatchAndWinStageView / WatchAndWinProgressItemHolder"
+      ],
+      "result": "Nhận thưởng và được mời xem tiếp mốc sau",
+      "rules": "GetRewards() trả toàn bộ danh sách; GetCurrentStage() / GetTotalStageCount() cho WatchAndWinStagesViewModel{CurrentStage, TotalStageCount, ProgressViewModels}",
+      "evidence": "WatchAndWinService.IsOnRewardStep; WatchAndWinService.GetRewardByProgress; WatchAndWinService.GetRewards; WatchAndWinService.CanOpenPopupAfterReward; WatchAndWinService.GetStageViewModel"
+    },
+    {
+      "id": "UC-05",
+      "title": "Chế độ mốc động (Dynamic Stages)",
+      "actor": "System",
+      "trigger": "WatchAndWinConfigModel.IsDynamicStagesEnabled == true",
+      "precondition": "-",
+      "steps": [
+        "WatchAndWinService.IsDynamicStagesEnabled() trả true",
+        "Dùng WatchAndWinConfigModel.DynamicStages (List<WatchAndWinStep>{TargetAdCount, Reward}) thay cho cặp RequiredAdCountsToWatch + Rewards",
+        "UI đổi sang DynamicWatchAndWinView + WatchAndWinDynamicRewardView",
+        "WatchAndWinGrandPrizeView hiển thị mốc cuối"
+      ],
+      "result": "Cho phép server đổi số quảng cáo và thưởng từng mốc linh hoạt hơn",
+      "rules": "Hai chế độ loại trừ nhau, chọn bằng cờ IsDynamicStagesEnabled",
+      "evidence": "WatchAndWinService.IsDynamicStagesEnabled; WatchAndWinConfigModel.DynamicStages; DynamicWatchAndWinView; WatchAndWinDynamicRewardView"
+    },
+    {
+      "id": "UC-06",
+      "title": "Hoàn thành toàn bộ mốc",
+      "actor": "Player",
+      "trigger": "AdProgress đạt GetTotalRequiredAdCount()",
+      "precondition": "-",
+      "steps": [
+        "WatchAndWinService.HasReachedTotalRequiredAdCount() trả true",
+        "Nhận Grand Prize (mốc cuối trong Rewards / DynamicStages)",
+        "State chuyển WatchAndWinState.Claimed (6)",
+        "Icon lobby ẩn hoặc chuyển trạng thái hoàn thành"
+      ],
+      "result": "Chu kỳ Watch and Win kết thúc, chờ chu kỳ mới từ server",
+      "rules": "ClearWatchAndWinData() dọn dữ liệu khi bắt đầu chu kỳ mới",
+      "evidence": "WatchAndWinService.HasReachedTotalRequiredAdCount; WatchAndWinService.GetTotalRequiredAdCount; WatchAndWinService.ClearWatchAndWinData"
+    },
+    {
+      "id": "UC-07",
+      "title": "Tự mở popup có kiểm soát tần suất",
+      "actor": "System",
+      "trigger": "Vào Home hoặc quay lại Home",
+      "precondition": "WatchAndWinService.ShouldForceShowPopup() == true",
+      "steps": [
+        "WatchAndWinDataService.IncrementPopupTriggerCount() đếm số lần đủ điều kiện mở",
+        "GetPopupTriggerCount() so với ngưỡng để quyết định có mở không",
+        "IsPopupShown() / SetIsPopupShown(true) tránh mở hai lần trong cùng phiên",
+        "WatchAndWinHomeWelcomingCommand hoặc TryToShowWatchAndWinLobbyReturnCommand mở WatchAndWinPopup",
+        "WatchAndWinService.OnPopupOpened(); EventSender.SendWatchAndWinPopupImpressionEvent(source) → watchandwin_popup_impression",
+        "ClearPopupTriggerCount() reset bộ đếm sau khi mở"
+      ],
+      "result": "Popup xuất hiện đúng nhịp, không gây khó chịu",
+      "rules": "WatchAndWinPopupImpressionSource: None=0, LobbyIcon=1, ForceShow=2",
+      "evidence": "WatchAndWinService.ShouldForceShowPopup; WatchAndWinDataService.IncrementPopupTriggerCount; WatchAndWinDataService.ClearPopupTriggerCount; WatchAndWinDataService.SetIsPopupShown; WatchAndWinService.OnPopupOpened; EventSender.SendWatchAndWinPopupImpressionEvent"
+    },
+    {
+      "id": "UC-08",
+      "title": "Mở popup từ icon lobby",
+      "actor": "Player",
+      "trigger": "Bấm WatchAndWinLobbyButton",
+      "precondition": "CanShowWatchAndWin() == true",
+      "steps": [
+        "WatchAndWinService.GetLobbyButtonViewModel() trả WatchAndWinLobbyButtonViewModel{CurrentProgress, TotalProgress}",
+        "WatchAndWinLobbyButtonAnimationView + WatchAndWinLobbyButtonAnimationConfig chạy hiệu ứng",
+        "OpenWatchAndWinPopupCommand mở popup với impression source LobbyIcon (1)",
+        "WatchAndWinController + WatchAndWinPopup dựng danh sách mốc (GetStageViewModels → IWatchAndWinStageScrollViewModel, WatchAndWinEmptyScrollItem cho khoảng trống)"
+      ],
+      "result": "Người chơi thấy tiến độ và các mốc thưởng",
+      "rules": "LobbyEventsService điều phối thứ tự icon ở Home (IsLobbyShown / IsLobbyGoingToBeShown)",
+      "evidence": "WatchAndWinService.GetLobbyButtonViewModel; WatchAndWinService.GetStageViewModel; WatchAndWinService.IsLobbyShown; OpenWatchAndWinPopupCommand"
+    },
+    {
+      "id": "UC-09",
+      "title": "Quảng cáo không có sẵn / xem dở",
+      "actor": "System",
+      "trigger": "AdService không nạp được ad hoặc người chơi bỏ giữa chừng",
+      "precondition": "-",
+      "steps": [
+        "AdService bắn ad_show_fail (EventSender.SendAdShowFailEvent) với impression_source",
+        "TryIncreaseAdProgress() không được gọi → tiến độ không tăng",
+        "Nút xem quảng cáo chuyển trạng thái chờ tới khi có ad mới"
+      ],
+      "result": "Không cộng tiến độ khi chưa xem trọn quảng cáo",
+      "rules": "Phụ thuộc hoàn toàn vào AdService/AdConfigService; nếu IsEnabledFromBackendAdConfigModel() tắt thì cả tính năng ẩn",
+      "evidence": "WatchAndWinService.TryIncreaseAdProgress; WatchAndWinStateService.IsEnabledFromBackendAdConfigModel; EventSender.SendAdShowFailEvent"
+    },
+    {
+      "id": "UC-10",
+      "title": "Hết hạn chu kỳ",
+      "actor": "System",
+      "trigger": "Quá WatchAndWinResponse.FinishTime",
+      "precondition": "-",
+      "steps": [
+        "GetRemainingSeconds() về 0 → WatchAndWinState.LocalTimeIsUp (4)",
+        "ScheduleWatchAndWinFetch() gọi lại API lấy chu kỳ mới",
+        "ClearWatchAndWinData() dọn AdProgress và cache cũ"
+      ],
+      "result": "Tiến độ reset cho chu kỳ mới",
+      "rules": "Tiến độ chưa đạt mốc bị mất khi hết hạn (suy luận từ ClearWatchAndWinData)",
+      "evidence": "WatchAndWinService.GetRemainingSeconds; WatchAndWinService.ScheduleWatchAndWinFetch; WatchAndWinService.ClearWatchAndWinData; WatchAndWinStateService.GetState"
+    },
+    {
+      "id": "UC-11",
+      "title": "Đồng bộ và xoá dữ liệu",
+      "actor": "System",
+      "trigger": "SyncService / reset tài khoản",
+      "precondition": "-",
+      "steps": [
+        "WatchAndWinDataService.GetSyncName() = 'WatchAndWinSyncableDataModel'",
+        "SerializeModelForSync() / OverwriteModelFromSync(data)",
+        "MarkDataForLateUpdate(shouldSyncWithBackend); LateUpdate() lưu khi IsDataChangedSinceLastSave()",
+        "DeleteData() xoá toàn bộ"
+      ],
+      "result": "Số quảng cáo đã xem không bị reset khi đổi thiết bị",
+      "rules": "WatchAndWinDataService implement ISyncable, IDeletable, ILateUpdate",
+      "evidence": "WatchAndWinDataService.GetSyncName; WatchAndWinDataService.SerializeModelForSync; WatchAndWinDataService.LateUpdate; WatchAndWinDataService.DeleteData"
+    }
+  ],
+  "configs": [
+    {
+      "source": "code const",
+      "key": "WatchAndWinState",
+      "type": "enum",
+      "value": "Disable=0, ProgressNotEnough=1, NoCache=2, Enable=3, LocalTimeIsUp=4, Claimed=6",
+      "meaning": "Máy trạng thái (thiếu giá trị 5)",
+      "where": "WatchAndWinStateService.GetState"
+    },
+    {
+      "source": "code const",
+      "key": "WatchAndWinPopupImpressionSource",
+      "type": "enum",
+      "value": "None=0, LobbyIcon=1, ForceShow=2",
+      "meaning": "Nguồn mở popup cho analytics",
+      "where": "Modules.Contexts.Home.Monetization.WatchAndWin.Scripts.UI"
+    },
+    {
+      "source": "code const",
+      "key": "AdRequestSource.WatchAndWin",
+      "type": "enum",
+      "value": "8",
+      "meaning": "Nguồn yêu cầu quảng cáo, dùng để phân loại doanh thu",
+      "where": "Modules.Contexts.Application.Ads.Scripts.AdRequestSource"
+    },
+    {
+      "source": "code const",
+      "key": "CurrencyEarnReason.WatchAndWin",
+      "type": "enum",
+      "value": "32",
+      "meaning": "Lý do nhận thưởng",
+      "where": "Modules.Contexts.Application.Inventory.Scripts.CurrencyEarnReason"
+    },
+    {
+      "source": "code const",
+      "key": "Popup key",
+      "type": "string",
+      "value": "\"WatchAndWinPopup\"",
+      "meaning": "Tên popup kiểm tra trong IPopUpService trước khi fetch",
+      "where": "WatchAndWinStateService.ShouldSendGetRequest"
+    },
+    {
+      "source": "server info",
+      "key": "WatchAndWinConfigModel.IsEnabled / FirstLevelToShow / EventType",
+      "type": "bool/int",
+      "value": "server",
+      "meaning": "Bật tắt, level mở khoá, loại sự kiện",
+      "where": "RemoteConfigs → WatchAndWinConfigModel (IRemoteConfigValidatable)"
+    },
+    {
+      "source": "server info",
+      "key": "WatchAndWinConfigModel.RequiredAdCountsToWatch",
+      "type": "List<int>",
+      "value": "server",
+      "meaning": "Các mốc số quảng cáo phải xem",
+      "where": "WatchAndWinService.GetRequiredAdCountsToWatch"
+    },
+    {
+      "source": "server info",
+      "key": "WatchAndWinConfigModel.Rewards",
+      "type": "List<RewardModel>",
+      "value": "server",
+      "meaning": "Thưởng tương ứng từng mốc (mốc cuối là Grand Prize)",
+      "where": "WatchAndWinService.GetRewards / GetRewardByProgress"
+    },
+    {
+      "source": "server info",
+      "key": "WatchAndWinConfigModel.IsDynamicStagesEnabled / DynamicStages",
+      "type": "bool / List<WatchAndWinStep{TargetAdCount, Reward}>",
+      "value": "server",
+      "meaning": "Chế độ mốc động thay cho cặp RequiredAdCountsToWatch + Rewards",
+      "where": "WatchAndWinService.IsDynamicStagesEnabled"
+    },
+    {
+      "source": "server info",
+      "key": "AdConfigModel – cờ bật Watch and Win",
+      "type": "bool",
+      "value": "server",
+      "meaning": "Cổng thứ hai: cấu hình quảng cáo backend phải cho phép",
+      "where": "WatchAndWinStateService.IsEnabledFromBackendAdConfigModel"
+    },
+    {
+      "source": "server info",
+      "key": "WatchAndWinResponse.EventId / EventType / StartTime / FinishTime / Segment",
+      "type": "response",
+      "value": "server",
+      "meaning": "Chu kỳ sự kiện",
+      "where": "WatchAndWinService.HandleWatchAndWinResponse"
+    },
+    {
+      "source": "storage key",
+      "key": "WatchAndWinSyncableDataModel",
+      "type": "sync name",
+      "value": "\"WatchAndWinSyncableDataModel\"",
+      "meaning": "Tên bản ghi đồng bộ",
+      "where": "WatchAndWinDataService.GetSyncName"
+    },
+    {
+      "source": "storage key",
+      "key": "WatchAndWinModel.AdProgress",
+      "type": "int",
+      "value": "client + server",
+      "meaning": "Số quảng cáo đã xem trong chu kỳ",
+      "where": "WatchAndWinDataService.GetAdProgress"
+    },
+    {
+      "source": "storage key",
+      "key": "WatchAndWinModel.PopupTriggerCount / IsPopupShown",
+      "type": "int / bool",
+      "value": "client",
+      "meaning": "Kiểm soát tần suất mở popup",
+      "where": "WatchAndWinDataService.IncrementPopupTriggerCount / SetIsPopupShown"
+    },
+    {
+      "source": "storage key",
+      "key": "WatchAndWinModel.WatchAndWinResponse",
+      "type": "object",
+      "value": "client cache",
+      "meaning": "Cache phản hồi backend",
+      "where": "WatchAndWinDataService.CacheBackendResponse"
+    },
+    {
+      "source": "asset",
+      "key": "WatchAndWinAnimationConfig (14 field) / WatchAndWinLobbyButtonAnimationConfig (13 field)",
+      "type": "ScriptableObject",
+      "value": "asset",
+      "meaning": "Cấu hình hoạt ảnh popup và icon",
+      "where": "Modules.Contexts.Home.Monetization.WatchAndWin.Scripts.UI"
+    },
+    {
+      "source": "json default",
+      "key": "WatchAndWinConfigModel.json: IsEnabled",
+      "type": "",
+      "value": "false",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/WatchAndWinConfigModel.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "WatchAndWinConfigModel.json: FirstLevelToShow",
+      "type": "",
+      "value": "30",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/WatchAndWinConfigModel.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "WatchAndWinConfigModel.json: EventType",
+      "type": "",
+      "value": "1",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/WatchAndWinConfigModel.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "WatchAndWinConfigModel.json: RequiredAdCountsToWatch",
+      "type": "",
+      "value": "[1, 2, 3]",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/WatchAndWinConfigModel.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "WatchAndWinConfigModel.json: Rewards[0].CurrencyType",
+      "type": "",
+      "value": "1",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/WatchAndWinConfigModel.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "WatchAndWinConfigModel.json: Rewards[0].Amount",
+      "type": "",
+      "value": "100",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/WatchAndWinConfigModel.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "WatchAndWinConfigModel.json: Rewards[1].CurrencyType",
+      "type": "",
+      "value": "1",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/WatchAndWinConfigModel.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "WatchAndWinConfigModel.json: Rewards[1].Amount",
+      "type": "",
+      "value": "200",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/WatchAndWinConfigModel.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "WatchAndWinConfigModel.json: Rewards[2].CurrencyType",
+      "type": "",
+      "value": "1",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/WatchAndWinConfigModel.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "WatchAndWinConfigModel.json: Rewards[2].Amount",
+      "type": "",
+      "value": "500",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/WatchAndWinConfigModel.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "server cache (historical)",
+      "key": "WatchAndWinConfigModel (live) = default?",
+      "type": "",
+      "value": "9/20 key trùng default, 11 key khác/thêm",
+      "meaning": "Đối chiếu config server thật (CachedRemoteConfigs) với WatchAndWinConfigModel.json",
+      "where": "Configs/CachedRemoteConfigs + Firebase RC template 3197 — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server cache (historical)",
+      "key": "WatchAndWinConfigModel: isEnabled",
+      "type": "",
+      "value": "true",
+      "meaning": "server ghi đè (default = false)",
+      "where": "Configs/CachedRemoteConfigs + Firebase RC template 3197 — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server cache (historical)",
+      "key": "WatchAndWinConfigModel: rewards[0].timeSpan",
+      "type": "",
+      "value": "00:00:00",
+      "meaning": "server-only (không có trong default)",
+      "where": "Configs/CachedRemoteConfigs + Firebase RC template 3197 — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server cache (historical)",
+      "key": "WatchAndWinConfigModel: rewards[0].chestType",
+      "type": "",
+      "value": "0",
+      "meaning": "server-only (không có trong default)",
+      "where": "Configs/CachedRemoteConfigs + Firebase RC template 3197 — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server cache (historical)",
+      "key": "WatchAndWinConfigModel: rewards[0].collectionPackType",
+      "type": "",
+      "value": "0",
+      "meaning": "server-only (không có trong default)",
+      "where": "Configs/CachedRemoteConfigs + Firebase RC template 3197 — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server cache (historical)",
+      "key": "WatchAndWinConfigModel: rewards[1].timeSpan",
+      "type": "",
+      "value": "00:00:00",
+      "meaning": "server-only (không có trong default)",
+      "where": "Configs/CachedRemoteConfigs + Firebase RC template 3197 — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server cache (historical)",
+      "key": "WatchAndWinConfigModel: rewards[1].chestType",
+      "type": "",
+      "value": "0",
+      "meaning": "server-only (không có trong default)",
+      "where": "Configs/CachedRemoteConfigs + Firebase RC template 3197 — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server cache (historical)",
+      "key": "WatchAndWinConfigModel: rewards[1].collectionPackType",
+      "type": "",
+      "value": "0",
+      "meaning": "server-only (không có trong default)",
+      "where": "Configs/CachedRemoteConfigs + Firebase RC template 3197 — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server cache (historical)",
+      "key": "WatchAndWinConfigModel: rewards[2].timeSpan",
+      "type": "",
+      "value": "00:00:00",
+      "meaning": "server-only (không có trong default)",
+      "where": "Configs/CachedRemoteConfigs + Firebase RC template 3197 — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server cache (historical)",
+      "key": "WatchAndWinConfigModel: rewards[2].chestType",
+      "type": "",
+      "value": "0",
+      "meaning": "server-only (không có trong default)",
+      "where": "Configs/CachedRemoteConfigs + Firebase RC template 3197 — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server cache (historical)",
+      "key": "WatchAndWinConfigModel: rewards[2].collectionPackType",
+      "type": "",
+      "value": "0",
+      "meaning": "server-only (không có trong default)",
+      "where": "Configs/CachedRemoteConfigs + Firebase RC template 3197 — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server cache (historical)",
+      "key": "WatchAndWinConfigModel: isDynamicStagesEnabled",
+      "type": "",
+      "value": "false",
+      "meaning": "server-only (không có trong default)",
+      "where": "Configs/CachedRemoteConfigs + Firebase RC template 3197 — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    }
+  ],
+  "rewards": [
+    {
+      "context": "Mốc quảng cáo (chế độ tĩnh)",
+      "reward": "WatchAndWinConfigModel.Rewards theo bước — CurrencyEarnReason.WatchAndWin (32)",
+      "evidence": "WatchAndWinService.GetRewardByProgress"
+    },
+    {
+      "context": "Mốc quảng cáo (chế độ động)",
+      "reward": "WatchAndWinStep{TargetAdCount, Reward} trong DynamicStages",
+      "evidence": "WatchAndWinConfigModel.DynamicStages"
+    },
+    {
+      "context": "Grand Prize",
+      "reward": "Mốc cuối cùng, hiển thị bằng WatchAndWinGrandPrizeView",
+      "evidence": "WatchAndWinService.HasReachedTotalRequiredAdCount; WatchAndWinGrandPrizeView"
+    }
+  ],
+  "backend": [
+    {
+      "command": "WatchAndWinRemoteService (get event)",
+      "direction": "client→server",
+      "purpose": "lấy WatchAndWinResponse (request WatchAndWinRequestModel{EventType})"
+    },
+    {
+      "command": "AdConfigService / AdConfigRemoteService",
+      "direction": "server→client",
+      "purpose": "cờ bật tắt Watch and Win trong AdConfigModel"
+    },
+    {
+      "command": "AdService (MAX/AdMob/Moloco)",
+      "direction": "client→ad network",
+      "purpose": "phát rewarded ad với AdRequestSource.WatchAndWin"
+    },
+    {
+      "command": "SyncService – SyncName 'WatchAndWinSyncableDataModel'",
+      "direction": "hai chiều",
+      "purpose": "đồng bộ AdProgress"
+    }
+  ],
+  "ui": [
+    {
+      "element": "Icon lobby",
+      "class": "Modules.Contexts.Home.Monetization.WatchAndWin.Scripts.UI.WatchAndWinLobbyButton / WatchAndWinLobbyButtonAnimationView / WatchAndWinLobbyButtonViewModel",
+      "purpose": "vòng tiến độ số quảng cáo đã xem"
+    },
+    {
+      "element": "Popup",
+      "class": "WatchAndWinPopup / WatchAndWinController",
+      "purpose": "danh sách mốc và nút xem quảng cáo"
+    },
+    {
+      "element": "Danh sách mốc",
+      "class": "IWatchAndWinStageScrollViewModel / WatchAndWinStagesViewModel / WatchAndWinProgressViewModel / WatchAndWinStageView (struct WatchAndWinProgressItemHolder) / WatchAndWinEmptyScrollItem (+ViewModel)",
+      "purpose": "cuộn qua các mốc"
+    },
+    {
+      "element": "Chế độ động",
+      "class": "DynamicWatchAndWinView / WatchAndWinDynamicRewardView",
+      "purpose": "hiển thị DynamicStages"
+    },
+    {
+      "element": "Grand Prize",
+      "class": "WatchAndWinGrandPrizeView",
+      "purpose": "mốc cuối"
+    },
+    {
+      "element": "Command",
+      "class": "Modules.Contexts.Home.Monetization.WatchAndWin.Scripts.Commands.OpenWatchAndWinPopupCommand / WatchAndWinHomeWelcomingCommand / TryToShowWatchAndWinLobbyReturnCommand",
+      "purpose": "mở popup thủ công và tự động"
+    }
+  ],
+  "analytics": [
+    {
+      "event": "watchandwin_popup_impression",
+      "params": "segment (kèm impression source)",
+      "when": "mở WatchAndWinPopup"
+    },
+    {
+      "event": "watchandwin_ad_impression",
+      "params": "ad_number, segment",
+      "when": "xem xong một quảng cáo trong Watch and Win"
+    },
+    {
+      "event": "ad_impression / ad_revenue / ad_shown / ad_show_fail",
+      "params": "impression_source=WatchAndWin, ad_unit_name, ad_source, value, currency…",
+      "when": "vòng đời quảng cáo"
+    },
+    {
+      "event": "earned",
+      "params": "reason=WatchAndWin, danh sách thưởng",
+      "when": "nhận thưởng mốc"
+    }
+  ],
+  "storage_keys": [
+    "WatchAndWinSyncableDataModel (sync name)",
+    "WatchAndWinModel.AdProgress",
+    "WatchAndWinModel.PopupTriggerCount",
+    "WatchAndWinModel.IsPopupShown",
+    "WatchAndWinModel.WatchAndWinResponse (cache)"
+  ],
+  "related_features": [
+    "Ads",
+    "Store",
+    "DailyReward"
+  ],
+  "gaps": [
+    "15/11 — partial_actual_evidence: Default có RequiredAdCountsToWatch/Rewards; DynamicStages cần nguồn riêng nếu absent. Còn lại: Đọc selector/caller dynamic stage và source payload; kiểm một instance hợp lệ nếu nhánh dynamic bật, không coi flagfalse là payload đầy đủ.",
+    "15/11 — resolved_static_code_historical_build: ShouldForceShowPopup trả true đúng khi state==3 và model.IsPopupShown==false; body không đọc PopupTriggerCount. WatchAndWinService reset PopupTriggerCount=0 khi clear nhưng presence counter/accessor không chứng minh ngưỡng ép popup. Không tự đưa một con số threshold vào GDD. Còn lại: Cần đối chiếu method/consumer trên app0.0.3129 ARM64; chưa là runtime pass.",
+    "15/11 — resolved_static_code_historical_build: WatchAndWinStateService.IsEnabledFromBackendAdConfigModel resolve AdConfigService từ container, gọi GetAdConfigModel rồi trả IsWatchAndWinEnabled của applied AdConfigModel. GetState dùng predicate này. Eligibility còn gate/state khác; SDK fill không phải cờ này. Còn lại: Cần đối chiếu method/consumer trên app0.0.3129 ARM64; chưa là runtime pass.",
+    "15/11 — partial_static_reconciliation: Có Watch&Win! và hai key Watch/Watch! trong localization11ngôn ngữ. Chưa đủ để xác nhận mọi textpopup hoặc bundleUI đã có. Còn lại: Resolve WatchAndWin popup prefab/controller và I2 term references, giữ missing bundle/version rõ ràng nếu chưa có file.",
+    "Không rõ AdProgress có được giữ lại qua chu kỳ mới hay bị ClearWatchAndWinData() xoá.",
+    "[Runtime 2026-09-10] Config server LIVE đã đọc trực tiếp từ cache máy (không cần request); các hàng 'server live' là giá trị server ghi đè/thêm so với default."
+  ],
+  "sources": [
+    "features/WatchAndWinService.md",
+    "features/WatchAndWinDataService.md",
+    "features/WatchAndWinStateService.md",
+    "features/WatchAndWinRemoteService.md",
+    "features/WatchAndWinConfigModel.md",
+    "features/WatchAndWinModel.md",
+    "features/WatchAndWinController.md",
+    "RecoveredNative/strings-by-type.tsv (EventSender.SendWatchAndWin*)",
+    "GameDesign/facts/facts.json (WatchAndWinState, WatchAndWinPopupImpressionSource, WatchAndWinStep, WatchAndWinResponse, AdRequestSource, CurrencyEarnReason)"
+  ],
+  "audit_provenance": {
+    "review_date": "2026-11-15",
+    "mode": "offline_existing_files",
+    "code_build": "0.0.3063 ARMv7",
+    "runtime_build_observed_historically": "0.0.3129 ARM64 (audit 2026-10-18); not rechecked 2026-11-15",
+    "new_playtests": 0,
+    "uc_status": "See facts/audit_20261115/uc_registry.json; image reference is not pass",
+    "workbook_status": "Existing XLSX is historical; JSON and local web include 2026-11-15 corrections",
+    "static_review": "facts/local_code_gap_results_20261115.json; facts/local_asset_gap_results_20261115.json; facts/final_data_gap_decisions_20261115.json; facts/core_body_gap_decisions_20261115.json; facts/remaining_asset_gap_decisions_20261115.json"
+  },
+  "static_review_20261115": {
+    "date": "2026-11-15",
+    "scope": "Historical code/assets 0.0.3063, dated caches, device 0.0.3129 cached bundles and explicitly scoped runtime evidence. Not full runtime pass.",
+    "findings": [
+      {
+        "kind": "final_data",
+        "source_report": "facts/final_data_gap_decisions_20261115.json",
+        "id": "MS-FDG-024",
+        "gap_ids": [
+          "MS-WatchAndWin-G001"
+        ],
+        "title": "Các mốc số quảng cáo và thưởng tương ứng nằm hoàn toàn trong remote config (RequiredAdCountsToWatch / Rewards / DynamicStages).",
+        "status": "partial_actual_evidence",
+        "conclusion": "Default có RequiredAdCountsToWatch/Rewards; DynamicStages cần nguồn riêng nếu absent.",
+        "evidence": [
+          "facts/local_asset_review_20261115/config_catalog.json"
+        ],
+        "remaining": "RequiredAdCountsToWatch/Rewards có full data; cache isDynamicStagesEnabled=false nhưng không có DynamicStages payload đã xác minh.",
+        "next_action": "Đọc selector/caller dynamic stage và source payload; kiểm một instance hợp lệ nếu nhánh dynamic bật, không coi flagfalse là payload đầy đủ.",
+        "scope": "question-specific source/observed branch only; no full-UC or production claim",
+        "source_records": [
+          {
+            "snapshot": "default0.0.3063",
+            "model": "WatchAndWinConfigModel",
+            "source": "Resources\\defaultconfigs\\WatchAndWinConfigModel.json",
+            "root": "UnityExport Assets 0.0.3063",
+            "sha256": "ff62eb651611e73aca52b7a356d8d346808341a9a3f09edc8480a77e74f43095",
+            "line": 1,
+            "build": "0.0.3063 ARMv7"
+          },
+          {
+            "snapshot": "cache20260910",
+            "model": "WatchAndWinConfigModel",
+            "source": "facts\\runtime\\server_configs\\watchAndWinConfigModel.json",
+            "root": "GameDesign",
+            "sha256": "afb4f41e1948f1dbf63ca6a87c1392fe8ced62bd9b6c4c495297cf04fa442dee",
+            "line": 1,
+            "build": "snapshot provenance at path"
+          },
+          {
+            "snapshot": "cache20261010",
+            "model": "WatchAndWinConfigModel",
+            "source": "facts\\runtime\\test_20261010\\before\\CachedRemoteConfigs",
+            "root": "GameDesign",
+            "sha256": "433164d4877b2dee55d2bbd79ef2fe83d3fe9519492fe15e3cb0926daf216050",
+            "line": 1,
+            "build": "snapshot provenance at path"
+          }
+        ]
+      },
+      {
+        "kind": "code",
+        "source_report": "facts/local_code_gap_results_20261115.json",
+        "id": "MS-CODE-19",
+        "gap_ids": [
+          "MS-WatchAndWin-G002"
+        ],
+        "title": "Force popup không dùng PopupTriggerCount trong body",
+        "status": "resolved_static_code",
+        "conclusion": "ShouldForceShowPopup trả true đúng khi state==3 và model.IsPopupShown==false; body không đọc PopupTriggerCount. WatchAndWinService reset PopupTriggerCount=0 khi clear nhưng presence counter/accessor không chứng minh ngưỡng ép popup. Không tự đưa một con số threshold vào GDD.",
+        "evidence": [
+          {
+            "file": "../com.grandgames.magicsort_Unity_20260909_112501/RecoveredNative/PseudoC/Assembly-CSharp/Modules/Contexts/Home/Monetization/WatchAndWin/Scripts/WatchAndWinService.c",
+            "line": 1493,
+            "end_line": 1534,
+            "method": "// ===== WatchAndWinService :: public bool ShouldForceShowPopup()",
+            "sha256": "f3d737f0f4934f8986ba34303e8833e27583f964d85d98ad7c83b8da35e5b80a",
+            "body_checked": true,
+            "build": "0.0.3063 ARMv7",
+            "required_body_tokens": [
+              "iVar2 == 3",
+              "_IsPopupShown_k__BackingField == false"
+            ]
+          }
+        ],
+        "remaining": "Cần đối chiếu method/consumer trên app0.0.3129 ARM64; chưa là runtime pass.",
+        "scope": "recovered_native_0.0.3063_only",
+        "runtime_verified": false
+      },
+      {
+        "kind": "code",
+        "source_report": "facts/local_code_gap_results_20261115.json",
+        "id": "MS-CODE-20",
+        "gap_ids": [
+          "MS-WatchAndWin-G003"
+        ],
+        "title": "WatchAndWin ad-config flag xác định",
+        "status": "resolved_static_code",
+        "conclusion": "WatchAndWinStateService.IsEnabledFromBackendAdConfigModel resolve AdConfigService từ container, gọi GetAdConfigModel rồi trả IsWatchAndWinEnabled của applied AdConfigModel. GetState dùng predicate này. Eligibility còn gate/state khác; SDK fill không phải cờ này.",
+        "evidence": [
+          {
+            "file": "../com.grandgames.magicsort_Unity_20260909_112501/RecoveredNative/PseudoC/Assembly-CSharp/Modules/Contexts/Home/Monetization/WatchAndWin/Scripts/WatchAndWinStateService.c",
+            "line": 623,
+            "end_line": 677,
+            "method": "// ===== WatchAndWinStateService :: private bool IsEnabledFromBackendAdConfigModel()",
+            "sha256": "116c31464e75c66ca1dfdbc891e685b260c2c632da6a4a2809128fb75431d9ed",
+            "body_checked": true,
+            "build": "0.0.3063 ARMv7",
+            "required_body_tokens": [
+              "AdConfigService__GetAdConfigModel",
+              "_IsWatchAndWinEnabled_k__BackingField"
+            ]
+          },
+          {
+            "file": "../com.grandgames.magicsort_Unity_20260909_112501/RecoveredNative/PseudoC/Assembly-CSharp/Modules/Contexts/Home/Monetization/WatchAndWin/Scripts/WatchAndWinStateService.c",
+            "line": 137,
+            "end_line": 314,
+            "method": "// ===== WatchAndWinStateService :: private WatchAndWinState GetState()",
+            "sha256": "116c31464e75c66ca1dfdbc891e685b260c2c632da6a4a2809128fb75431d9ed",
+            "body_checked": true,
+            "build": "0.0.3063 ARMv7",
+            "required_body_tokens": [
+              "__IsEnabledFromBackendAdConfigModel"
+            ]
+          }
+        ],
+        "remaining": "Cần đối chiếu method/consumer trên app0.0.3129 ARM64; chưa là runtime pass.",
+        "scope": "recovered_native_0.0.3063_only",
+        "runtime_verified": false
+      },
+      {
+        "kind": "asset",
+        "source_report": "facts/local_asset_gap_results_20261115.json",
+        "id": "MS-WatchAndWin-G001",
+        "status": "partial_static_reconciliation",
+        "conclusion": "Default có RequiredAdCountsToWatch/Rewards; DynamicStages cần nguồn riêng nếu absent.",
+        "evidence": [
+          {
+            "snapshot": "default0.0.3063",
+            "model": "WatchAndWinConfigModel",
+            "source": "Resources\\defaultconfigs\\WatchAndWinConfigModel.json",
+            "root": "UnityExport Assets 0.0.3063",
+            "sha256": "ff62eb651611e73aca52b7a356d8d346808341a9a3f09edc8480a77e74f43095",
+            "line": 1,
+            "build": "0.0.3063 ARMv7"
+          },
+          {
+            "snapshot": "cache20260910",
+            "model": "WatchAndWinConfigModel",
+            "source": "facts\\runtime\\server_configs\\watchAndWinConfigModel.json",
+            "root": "GameDesign",
+            "sha256": "afb4f41e1948f1dbf63ca6a87c1392fe8ced62bd9b6c4c495297cf04fa442dee",
+            "line": 1,
+            "build": "snapshot provenance at path"
+          },
+          {
+            "snapshot": "cache20261010",
+            "model": "WatchAndWinConfigModel",
+            "source": "facts\\runtime\\test_20261010\\before\\CachedRemoteConfigs",
+            "root": "GameDesign",
+            "sha256": "433164d4877b2dee55d2bbd79ef2fe83d3fe9519492fe15e3cb0926daf216050",
+            "line": 1,
+            "build": "snapshot provenance at path"
+          }
+        ],
+        "data": "config_catalog.json",
+        "scope": "static_export0.0.3063_or_historical_cache_not_runtime_pass",
+        "reviewed": "2026-11-15",
+        "next_action": "Đọc selector/caller dynamic stage và source payload; kiểm một instance hợp lệ nếu nhánh dynamic bật, không coi flagfalse là payload đầy đủ.",
+        "remaining": "RequiredAdCountsToWatch/Rewards có full data; cache isDynamicStagesEnabled=false nhưng không có DynamicStages payload đã xác minh.",
+        "superseded_or_refined_by": "MS-FDG-024"
+      },
+      {
+        "kind": "asset",
+        "source_report": "facts/local_asset_gap_results_20261115.json",
+        "id": "MS-WatchAndWin-G004",
+        "status": "partial_static_reconciliation",
+        "conclusion": "Có Watch&Win! và hai key Watch/Watch! trong localization11ngôn ngữ. Chưa đủ để xác nhận mọi textpopup hoặc bundleUI đã có.",
+        "evidence": [
+          {
+            "source": "Resources\\I2Languages.asset",
+            "root": "UnityExport Assets 0.0.3063",
+            "sha256": "f47e776c45405ffc672ff57296f2c48a67b3455a3f6304ce1bd9a166e2c0894f",
+            "line": 11428,
+            "build": "0.0.3063 ARMv7"
+          },
+          {
+            "source": "Resources\\I2Languages.asset",
+            "root": "UnityExport Assets 0.0.3063",
+            "sha256": "f47e776c45405ffc672ff57296f2c48a67b3455a3f6304ce1bd9a166e2c0894f",
+            "line": 11444,
+            "build": "0.0.3063 ARMv7"
+          },
+          {
+            "source": "Resources\\I2Languages.asset",
+            "root": "UnityExport Assets 0.0.3063",
+            "sha256": "f47e776c45405ffc672ff57296f2c48a67b3455a3f6304ce1bd9a166e2c0894f",
+            "line": 11460,
+            "build": "0.0.3063 ARMv7"
+          }
+        ],
+        "data": "gap_localization_terms.json",
+        "scope": "static_export0.0.3063_or_historical_cache_not_runtime_pass",
+        "reviewed": "2026-11-15",
+        "next_action": "Resolve WatchAndWin popup prefab/controller và I2 term references, giữ missing bundle/version rõ ràng nếu chưa có file.",
+        "remaining": "Có ba key Watch/Watch!/Watch&Win! với11locale; chưa trace tất cả popup label/caller hoặc bundle asset mapping."
+      }
+    ]
+  },
+  "acceptance_review_20261115": {
+    "source": "facts/feature_acceptance_20261115.json",
+    "feature_id": "WatchAndWin",
+    "scope": "All eleven dossier dimensions reviewed; full_feature_verified is not implied; read per-dimension gaps and actual runtime evidence."
+  },
+  "segment_ab_review_20261115": {
+    "status": "reviewed_rows_associated_assignment_not_proven",
+    "segment_ids": [
+      "MS-SEG-001",
+      "MS-SEG-060",
+      "MS-SEG-112"
+    ],
+    "matching_basis": "explicit_gd_config_map_or_exact_model_token_in_gdd_configs_where_key_sources; rootfieldscoped",
+    "rows": [
+      {
+        "snapshot": "default_0.0.3063",
+        "model": "AdConfigModel",
+        "key": "PlayOnWithRewardedVariantType",
+        "value": 0,
+        "type": "int",
+        "source": "../com.grandgames.magicsort_Unity_20260909_112501/UnityExport/ExportedProject/Assets/Resources/defaultconfigs/AdConfigModel.json",
+        "classification": "config_candidate_not_backend_assignment_proof",
+        "review_id": "MS-SEG-001",
+        "review_classification": "variant_config",
+        "review_status": "missing_experiment_assignment_and_outcome",
+        "consumer": {
+          "source": "com.grandgames.magicsort_Unity_20260909_112501/RecoveredNative/PseudoC/Assembly-CSharp/Modules/Contexts/Application/Ads/Scripts/ConfigService/AdConfigService.c",
+          "line": 830,
+          "marker": "// ===== AdConfigService :: public void SetAdConfigModels",
+          "build": "0.0.3063 ARMv7",
+          "evidence": "recovered_native_historical_version"
+        },
+        "interpretation": "Giá trị variant được cache/default/Firebase; chưa có experimentID hoặc traffic split.",
+        "next_action": "Cần experimentID, variant, allocation, activation timestamp, consumer effect và đối chứng cùng điều kiện.",
+        "assignment_proof": false,
+        "uplift_proof": false,
+        "matching_basis": [
+          {
+            "kind": "exact_model_token_in_dossier_source_or_config",
+            "source": "gdd/WatchAndWin.json#/configs/9/key_where"
+          }
+        ]
+      },
+      {
+        "snapshot": "cache_20260910",
+        "model": "adConfigModel",
+        "key": "playOnWithRewardedVariantType",
+        "value": 0,
+        "type": "int",
+        "source": "facts/runtime/server_configs/adConfigModel.json",
+        "classification": "config_candidate_not_backend_assignment_proof",
+        "review_id": "MS-SEG-060",
+        "review_classification": "variant_config",
+        "review_status": "missing_experiment_assignment_and_outcome",
+        "consumer": {
+          "source": "com.grandgames.magicsort_Unity_20260909_112501/RecoveredNative/PseudoC/Assembly-CSharp/Modules/Contexts/Application/Ads/Scripts/ConfigService/AdConfigService.c",
+          "line": 830,
+          "marker": "// ===== AdConfigService :: public void SetAdConfigModels",
+          "build": "0.0.3063 ARMv7",
+          "evidence": "recovered_native_historical_version"
+        },
+        "interpretation": "Giá trị variant được cache/default/Firebase; chưa có experimentID hoặc traffic split.",
+        "next_action": "Cần experimentID, variant, allocation, activation timestamp, consumer effect và đối chứng cùng điều kiện.",
+        "assignment_proof": false,
+        "uplift_proof": false,
+        "matching_basis": [
+          {
+            "kind": "exact_model_token_in_dossier_source_or_config",
+            "source": "gdd/WatchAndWin.json#/configs/9/key_where"
+          }
+        ]
+      },
+      {
+        "snapshot": "cache_20261010",
+        "model": "adConfigModel",
+        "key": "playOnWithRewardedVariantType",
+        "value": 0,
+        "type": "int",
+        "source": "facts/runtime/test_20261010/before/CachedRemoteConfigs",
+        "classification": "config_candidate_not_backend_assignment_proof",
+        "review_id": "MS-SEG-112",
+        "review_classification": "variant_config",
+        "review_status": "missing_experiment_assignment_and_outcome",
+        "consumer": {
+          "source": "com.grandgames.magicsort_Unity_20260909_112501/RecoveredNative/PseudoC/Assembly-CSharp/Modules/Contexts/Application/Ads/Scripts/ConfigService/AdConfigService.c",
+          "line": 830,
+          "marker": "// ===== AdConfigService :: public void SetAdConfigModels",
+          "build": "0.0.3063 ARMv7",
+          "evidence": "recovered_native_historical_version"
+        },
+        "interpretation": "Giá trị variant được cache/default/Firebase; chưa có experimentID hoặc traffic split.",
+        "next_action": "Cần experimentID, variant, allocation, activation timestamp, consumer effect và đối chứng cùng điều kiện.",
+        "assignment_proof": false,
+        "uplift_proof": false,
+        "matching_basis": [
+          {
+            "kind": "exact_model_token_in_dossier_source_or_config",
+            "source": "gdd/WatchAndWin.json#/configs/9/key_where"
+          }
+        ]
+      }
+    ],
+    "classifications": {
+      "variant_config": 3
+    },
+    "assignment_verified": false,
+    "uplift_verified": false,
+    "note": "No matchingrow does not prove no segmentation/AB. Rewardbucketfalsepositives remain explicitly classified."
+  },
+  "continuation_review_20261116": {
+    "date": "2026-11-16",
+    "build": "0.0.3129 ARM64 host APK",
+    "build_scope": "Host APK version3129 matches LAST observed installed version15/11 only; installed bytes/live device16/11 not verified.",
+    "runtime_status": "device_unavailable",
+    "runtime_case_ids": [],
+    "current_apk_model_links": {
+      "feature": "WatchAndWin",
+      "models": [
+        {
+          "model": "AdConfigModel",
+          "current_default_file": "facts/review_20261116/public_current_config_3129/defaults/AdConfigModel.json",
+          "resource_path": "defaultconfigs/adconfigmodel",
+          "sha256": "acf16b97659a1c2117eb4416382c82dade85f528edef6eebefd472047e9e728b",
+          "matching_basis": [
+            "gdd/WatchAndWin.json#/configs",
+            "gdd/WatchAndWin.json#/summary"
+          ],
+          "scope": "Packaged default3129, not effective server config.",
+          "site_data_path": "data/current_config_3129/defaults/AdConfigModel.json",
+          "original_source_sha256": "acf16b97659a1c2117eb4416382c82dade85f528edef6eebefd472047e9e728b",
+          "public_artifact_sha256": "2c1ecb6b58fb7de904bc6456cebd88126477b42f490e712952dcb80d3ebaafbf",
+          "sha256_scope": "sha256 is original raw model; public_artifact_sha256 is the sanitized download"
+        },
+        {
+          "model": "WatchAndWinConfigModel",
+          "current_default_file": "facts/review_20261116/public_current_config_3129/defaults/WatchAndWinConfigModel.json",
+          "resource_path": "defaultconfigs/watchandwinconfigmodel",
+          "sha256": "ff62eb651611e73aca52b7a356d8d346808341a9a3f09edc8480a77e74f43095",
+          "matching_basis": [
+            "gdd/WatchAndWin.json#/configs",
+            "gdd/WatchAndWin.json#/sources",
+            "gdd/WatchAndWin.json#/flow",
+            "gdd/WatchAndWin.json#/managers"
+          ],
+          "scope": "Packaged default3129, not effective server config.",
+          "site_data_path": "data/current_config_3129/defaults/WatchAndWinConfigModel.json",
+          "original_source_sha256": "ff62eb651611e73aca52b7a356d8d346808341a9a3f09edc8480a77e74f43095",
+          "public_artifact_sha256": "e4c9ab89db7eee4a4b26bd78b825e23b5c7e226600f9fad36b4461d3d2c7c34f",
+          "sha256_scope": "sha256 is original raw model; public_artifact_sha256 is the sanitized download"
+        }
+      ],
+      "status": "exact_model_source_association",
+      "distribution": "sanitized_public",
+      "public_mapping_pending": false
+    },
+    "current_packaged_defaults": [
+      {
+        "model": "AdConfigModel",
+        "source": "facts/review_20261116/public_current_config_3129/defaults/AdConfigModel.json",
+        "site_data_path": "data/current_config_3129/defaults/AdConfigModel.json",
+        "public_artifact_sha256": "2c1ecb6b58fb7de904bc6456cebd88126477b42f490e712952dcb80d3ebaafbf",
+        "original_source_sha256": "acf16b97659a1c2117eb4416382c82dade85f528edef6eebefd472047e9e728b",
+        "source_class": "static_asset",
+        "build": "0.0.3129 host APK",
+        "scope": "Sanitized packaged default fullvalues only; not effective remote/selected config or runtime.",
+        "values": {
+          "IsMaxSdkEnabled": true,
+          "IsInterEnabled": true,
+          "FirstLevelToShowInter": 61,
+          "InterShowFrequencyInSeconds": 240,
+          "IsBannerEnabled": false,
+          "FirstLevelToShowBanner": 10,
+          "Is2xRewardedEnabled": false,
+          "FirstLevelToShow2xRewarded": 20,
+          "IsLifeRewardedEnabled": true,
+          "Is2xEnabledForRegularLevels": false,
+          "Is2xEnabledForHardLevels": false,
+          "RegularLevelWinCoinReward": 20,
+          "HardLevelWinCoinReward": 60,
+          "SuperHardLevelWinCoinReward": 100,
+          "IsLaterInterEnabled": false,
+          "IsEndlessEventDisabled": false,
+          "IsChooseOneOfferDisabled": false,
+          "PlayOnWithRewardedEnabled": false,
+          "WheelOfFortuneConfigType": 0,
+          "IsWheelOfFortuneEnabled": false,
+          "PlayOnWithRewardedDailyLimit": 20,
+          "FirstLevelToShowPlayOnWithRewarded": 100,
+          "PlayOnWithRewardedVariantType": 0
+        }
+      },
+      {
+        "model": "WatchAndWinConfigModel",
+        "source": "facts/review_20261116/public_current_config_3129/defaults/WatchAndWinConfigModel.json",
+        "site_data_path": "data/current_config_3129/defaults/WatchAndWinConfigModel.json",
+        "public_artifact_sha256": "e4c9ab89db7eee4a4b26bd78b825e23b5c7e226600f9fad36b4461d3d2c7c34f",
+        "original_source_sha256": "ff62eb651611e73aca52b7a356d8d346808341a9a3f09edc8480a77e74f43095",
+        "source_class": "static_asset",
+        "build": "0.0.3129 host APK",
+        "scope": "Sanitized packaged default fullvalues only; not effective remote/selected config or runtime.",
+        "values": {
+          "IsEnabled": false,
+          "FirstLevelToShow": 30,
+          "EventType": 1,
+          "RequiredAdCountsToWatch": [
+            1,
+            2,
+            3
+          ],
+          "Rewards": [
+            {
+              "CurrencyType": 1,
+              "Amount": 100
+            },
+            {
+              "CurrencyType": 1,
+              "Amount": 200
+            },
+            {
+              "CurrencyType": 1,
+              "Amount": 500
+            }
+          ]
+        }
+      }
+    ],
+    "native_finding_ids": [],
+    "documentation_source_coverage": {
+      "dossier_present": true,
+      "use_case_catalog_count": 11,
+      "config_catalog_rows": 38,
+      "current_apk_default_model_links": 2,
+      "current_native_findings": 0,
+      "scope": "Documentation/source coverage only; not complete runtime verification."
+    },
+    "runtime_completion": {
+      "date": "2026-11-16",
+      "status": "device_unavailable",
+      "executed_case_count": 0,
+      "full_feature_runtime_verified": false
+    },
+    "planned_branch": "Tìm icon Watch and Win, mở bảng mốc, bấm rewarded nếu chỉ tạo unavailable offline rồi đóng; chụp tiến độ trước/sau.",
+    "target_uc_ids": [
+      "UC-08",
+      "UC-09"
+    ],
+    "execution_phase": "noncore_first",
+    "core_or_levels_last": false,
+    "actionability_full_json": "facts/continuation_20261116/current/feature_actionability.json",
+    "actionability_site_data_path": "data/continuation_20261116/feature_actionability.json",
+    "source_classes": [
+      "static_asset"
+    ],
+    "full_feature_verified": false
+  }
+}

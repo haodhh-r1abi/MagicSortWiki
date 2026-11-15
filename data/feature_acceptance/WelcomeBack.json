@@ -1,0 +1,266 @@
+{
+  "id": "WelcomeBack",
+  "feature": "WelcomeBack",
+  "name": "Welcome Back",
+  "category": "Economy",
+  "category_label": "Kinh tế & Shop",
+  "core_levels_last": false,
+  "acceptance_status": "documented_with_explicit_remaining_scope",
+  "full_feature_verified": false,
+  "checks": {
+    "purpose": {
+      "status": "documented_static_scope",
+      "source": "gdd/WelcomeBack.json#/summary",
+      "claim_excerpt": "Welcome Back là gói quà tái tương tác: khi người chơi quay lại sau một thời gian nghỉ, server phát một WelcomeBackPackage (WelcomeBackId + danh sách RewardModels). Client hỏi server mỗi lần vào game, nếu có gói chưa nhận thì bật popup chào mừng ở Home và trao thưởng. Toàn bộ điều kiện (nghỉ bao lâu, thưởng gì) do backend quyết định qua schema magicsort.schemas.v1.liveops.welcome_back — client chỉ "
+    },
+    "unlock": {
+      "status": "described_historical_conditions_runtime_boundary_unverified",
+      "source": "gdd/WelcomeBack.json#/unlock",
+      "content": "Không có level gate hay remote config bật/tắt riêng trong client. WelcomeBackStateService.GetState() trả WelcomeBackState.IsDisabled khi không có gói, ShouldClaim khi WelcomeBackDataService.HasWelcomeBackToClaim(), AllClaimed khi đã nhận. Điều kiện phát gói nằm hoàn toàn ở backend."
+    },
+    "entry_flow": {
+      "status": "documented_paths_not_all_executed",
+      "entry_points": [
+        "TryShowWelcomeBackHomeWelcomingCommand — popup khi vừa vào Home",
+        "TryShowWelcomeBackReturnToHomeCommand — popup khi quay lại Home từ level",
+        "Local notification do NotificationService đặt lịch (ScheduleWelcomeBackNotification)"
+      ],
+      "flow_source": "gdd/WelcomeBack.json#/flow",
+      "acceptance_scope": "Absence threshold/segment/package/reward; trigger/common claimpopup/duplicate/restart và server eligibility"
+    },
+    "config": {
+      "status": "source_bound_catalog_present",
+      "gdd_rows": 14,
+      "full_leaf_rows_associated": 1,
+      "snapshots": {
+        "firebase_20260910": 1
+      },
+      "models": [
+        {
+          "model": "IsWelcomeBackEnabled",
+          "matching_basis": [
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/WelcomeBack.json#/configs/13/key_where"
+            }
+          ]
+        }
+      ],
+      "declared_models_without_catalog_data": [],
+      "placeholder_rows_requiring_source_review": [
+        {
+          "index": 6,
+          "key": "GetWelcomeBackResponse.WelcomeBackId / RewardModels / IsClaimed",
+          "value": "server",
+          "source": "server info"
+        },
+        {
+          "index": 7,
+          "key": "ClaimWelcomeBackRequest.WelcomeBackId / ClaimWelcomeBackResponse.WelcomeBackId",
+          "value": "server",
+          "source": "server info"
+        }
+      ],
+      "exact_placeholder_snapshot_values": [
+        {
+          "gdd_config_index": 6,
+          "key": "GetWelcomeBackResponse.WelcomeBackId / RewardModels / IsClaimed",
+          "status": "no_unambiguous_exact_field_match",
+          "matches": [],
+          "basis": "Model explicitly cited in key/where, or sole declaredmodel; fieldpath exactcasefold, no alias guessing."
+        },
+        {
+          "gdd_config_index": 7,
+          "key": "ClaimWelcomeBackRequest.WelcomeBackId / ClaimWelcomeBackResponse.WelcomeBackId",
+          "status": "no_unambiguous_exact_field_match",
+          "matches": [],
+          "basis": "Model explicitly cited in key/where, or sole declaredmodel; fieldpath exactcasefold, no alias guessing."
+        }
+      ],
+      "dossier_abbreviated_values": [],
+      "note": "Model association uses explicitmap or exacttoken citations; fieldpresence does not prove allproductiondata. GDDsummaryrows and fullcatalogrows have separate counts. Abbreviated source summaries are not full arrays; catalog/source links remain authoritative."
+    },
+    "reward": {
+      "status": "documented_static_rewards_runtime_grant_not_fully_verified",
+      "entries": 1,
+      "tables_in_site_meta": 3,
+      "source": "gdd/WelcomeBack.json#/rewards"
+    },
+    "use_cases": {
+      "status": "specified_not_executed_in15nov_ledger",
+      "specified": 10,
+      "reviewed_uc_branch_count": 0,
+      "reviewed_uc_ids": [],
+      "not_reviewed_in_new_ledger": [
+        "UC-01",
+        "UC-02",
+        "UC-03",
+        "UC-04",
+        "UC-05",
+        "UC-06",
+        "UC-07",
+        "UC-08",
+        "UC-09",
+        "UC-10"
+      ],
+      "full_uc_pass_claimed": false
+    },
+    "screenshots": {
+      "historical_gallery_entries": 0,
+      "historical_uc_with_image_reference": 0,
+      "curated_new_images": [],
+      "curated_new_image_count": 0,
+      "status": "not_present_in_reviewed_gallery",
+      "source": "screens/web/screens.json#/WelcomeBack",
+      "note": "Image presence does not prove execution result or completeness."
+    },
+    "runtime_actual": {
+      "status": "not_observed_in15nov_ledger",
+      "case_count": 0,
+      "cases": [],
+      "mode": "offline_existing_fixture",
+      "build": "0.0.3129 ARM64"
+    },
+    "segment_ab": {
+      "status": "not_identified_in_sources",
+      "segment_ids": [],
+      "matching_basis": "explicit_gd_config_map_or_exact_model_token_in_gdd_configs_where_key_sources; rootfieldscoped",
+      "rows": [],
+      "classifications": {},
+      "assignment_verified": false,
+      "uplift_verified": false,
+      "note": "No matchingrow does not prove no segmentation/AB. Rewardbucketfalsepositives remain explicitly classified."
+    },
+    "storage_backend_analytics": {
+      "storage_keys": {
+        "entries": 3,
+        "status": "documented_static_contract_runtime_not_verified",
+        "source": "gdd/WelcomeBack.json#/storage_keys"
+      },
+      "backend": {
+        "entries": 4,
+        "status": "documented_static_contract_runtime_not_verified",
+        "source": "gdd/WelcomeBack.json#/backend"
+      },
+      "analytics": {
+        "entries": 2,
+        "status": "documented_static_contract_runtime_not_verified",
+        "source": "gdd/WelcomeBack.json#/analytics"
+      }
+    },
+    "remaining_next_step": {
+      "gap_count": 5,
+      "static_scoped_resolutions": 1,
+      "remaining_count": 4,
+      "all_gap_dispositions": [
+        {
+          "id": "MS-WelcomeBack-G001",
+          "feature": "WelcomeBack",
+          "source": "gdd/WelcomeBack.json#/gaps/0",
+          "original": "Điều kiện phát gói (nghỉ bao nhiêu ngày, phân khúc người chơi) và nội dung thưởng nằm hoàn toàn ở backend; client không có config nào.",
+          "current_note": "Điều kiện phát gói (nghỉ bao nhiêu ngày, phân khúc người chơi) và nội dung thưởng nằm hoàn toàn ở backend; client không có config nào.",
+          "status": "open_review_plan",
+          "review_status": "open_review_plan",
+          "dependency": "backend_contract_or_response",
+          "next_action": "Cần audience/absence duration contract và response hợp lệ; không đổi đồng hồ để giả eligibility server.",
+          "remaining": "Điều kiện phát gói (nghỉ bao nhiêu ngày, phân khúc người chơi) và nội dung thưởng nằm hoàn toàn ở backend; client không có config nào."
+        },
+        {
+          "id": "MS-WelcomeBack-G002",
+          "feature": "WelcomeBack",
+          "source": "gdd/WelcomeBack.json#/gaps/1",
+          "original": "Không có class UI riêng cho popup Welcome Back trong types-index — popup có thể dùng khung popup thưởng dùng chung.",
+          "current_note": "15/11 — resolved_historical_snapshot: TryShowWelcomeBackHomeWelcomingCommand gọi ClaimReward rồi đi qua GiveBulkRewards → BulkRewardAnimationService.ShowRewards. Luồng dùng chung đã được xác định; không cần giả định một lớp popup riêng mang tên WelcomeBack. Còn lại: Giữ rõ build và phiên bản cache của nguồn; kiểm nhánh runtime riêng khi cần.",
+          "status": "resolved_historical_snapshot",
+          "review_status": "preserved_resolved_historical_snapshot",
+          "dependency": "local_asset_or_missing_bundle",
+          "next_action": "TryShowWelcomeBackHomeWelcomingCommand gọi ClaimReward rồi đi qua GiveBulkRewards → BulkRewardAnimationService.ShowRewards. Luồng dùng chung đã được xác định; không cần giả định một lớp popup riêng mang tên WelcomeBack. Giữ rõ build và phiên bản cache của nguồn; kiểm nhánh runtime riêng khi cần.",
+          "conclusion": "TryShowWelcomeBackHomeWelcomingCommand gọi ClaimReward rồi đi qua GiveBulkRewards → BulkRewardAnimationService.ShowRewards. Luồng dùng chung đã được xác định; không cần giả định một lớp popup riêng mang tên WelcomeBack.",
+          "evidence": [
+            "facts/remaining_asset_review_20261115/shared_reward_flow.json"
+          ],
+          "remaining": "15/11 — resolved_historical_snapshot: TryShowWelcomeBackHomeWelcomingCommand gọi ClaimReward rồi đi qua GiveBulkRewards → BulkRewardAnimationService.ShowRewards. Luồng dùng chung đã được xác định; không cần giả định một lớp popup riêng mang tên WelcomeBack. Còn lại: Giữ rõ build và phiên bản cache của nguồn; kiểm nhánh runtime riêng khi cần.",
+          "scope": "Asset/native export 0.0.3063 và cache UnityFS đọc ngày 15/11 từ app 0.0.3129 được giữ riêng; ảnh render asset không phải ảnh chụp playtest.",
+          "reviewed": "2026-11-15",
+          "full_uc_pass": false
+        },
+        {
+          "id": "MS-WelcomeBack-G003",
+          "feature": "WelcomeBack",
+          "source": "gdd/WelcomeBack.json#/gaps/2",
+          "original": "Nội dung và thời điểm của local notification không đọc được từ pseudo-C (chỉ thấy ký hiệu ' NEWLINE ').",
+          "current_note": "15/11 — partial_static_code_unresolved: SendWelcomeBackNotification(int delayAsSeconds) lấy _welcomeBackNotificationSo.Title/Body, Replace token NEWLINE trước setbody, và schedule DateTime.Now.AddSeconds(delayAsSeconds). Nội dungcụthể do asset, thờiđiểm do caller; markerNEWLINE không là toàntextnotification. Còn lại: Trích đúng LocalNotificationSo asset và SendWelcomeBackNotification caller delay; không xem LocalScheduling như deliveryconfirmed.",
+          "status": "partial_static_code_unresolved",
+          "review_status": "preserved_partial_static_code_unresolved",
+          "dependency": "local_code_review",
+          "next_action": "SendWelcomeBackNotification(int delayAsSeconds) lấy _welcomeBackNotificationSo.Title/Body, Replace token NEWLINE trước setbody, và schedule DateTime.Now.AddSeconds(delayAsSeconds). Nội dungcụthể do asset, thờiđiểm do caller; markerNEWLINE không là toàntextnotification. Trích đúng LocalNotificationSo asset và SendWelcomeBackNotification caller delay; không xem LocalScheduling như deliveryconfirmed.",
+          "conclusion": "SendWelcomeBackNotification(int delayAsSeconds) lấy _welcomeBackNotificationSo.Title/Body, Replace token NEWLINE trước setbody, và schedule DateTime.Now.AddSeconds(delayAsSeconds). Nội dungcụthể do asset, thờiđiểm do caller; markerNEWLINE không là toàntextnotification.",
+          "evidence": [
+            "../com.grandgames.magicsort_Unity_20260909_112501/RecoveredNative/PseudoC/Assembly-CSharp/Modules/Contexts/Application/Notification/Scripts/NotificationService.c:1919"
+          ],
+          "reviewed": "2026-11-15",
+          "mode": "file_only_recovered_native_0.0.3063",
+          "remaining": "15/11 — partial_static_code_unresolved: SendWelcomeBackNotification(int delayAsSeconds) lấy _welcomeBackNotificationSo.Title/Body, Replace token NEWLINE trước setbody, và schedule DateTime.Now.AddSeconds(delayAsSeconds). Nội dungcụthể do asset, thờiđiểm do caller; markerNEWLINE không là toàntextnotification. Còn lại: Trích đúng LocalNotificationSo asset và SendWelcomeBackNotification caller delay; không xem LocalScheduling như deliveryconfirmed."
+        },
+        {
+          "id": "MS-WelcomeBack-G004",
+          "feature": "WelcomeBack",
+          "source": "gdd/WelcomeBack.json#/gaps/3",
+          "original": "Endpoint HTTP nằm trong BackendEnvironmentConfig.",
+          "current_note": "Endpoint HTTP nằm trong BackendEnvironmentConfig.",
+          "status": "qualified_note_not_runtime_verification",
+          "review_status": "qualified_note_not_runtime_verification",
+          "dependency": "intentional_omission_or_scope_note",
+          "next_action": "Mô tả endpoint purpose, không cần environment URL.",
+          "remaining": "Endpoint HTTP nằm trong BackendEnvironmentConfig."
+        },
+        {
+          "id": "MS-WelcomeBack-G005",
+          "feature": "WelcomeBack",
+          "source": "gdd/WelcomeBack.json#/gaps/4",
+          "original": "[Runtime 2026-09-10] Cờ AB/tinh chỉnh server-only đọc từ Firebase Remote Config (template 3197).",
+          "current_note": "[Runtime 2026-09-10] Cờ AB/tinh chỉnh server-only đọc từ Firebase Remote Config (template 3197).",
+          "status": "historical_evidence_annotation_not_test_result",
+          "review_status": "historical_evidence_annotation_not_test_result",
+          "dependency": "historical_note_requires_qualified_use",
+          "next_action": "Ghi chú Firebase template3197 lịch sử, chưa có experiment assignment/traffic/outcome; dùng bài21 và row classifications, không gọi mọi key là A/B.",
+          "remaining": "[Runtime 2026-09-10] Cờ AB/tinh chỉnh server-only đọc từ Firebase Remote Config (template 3197)."
+        }
+      ],
+      "feature_specific_acceptance_questions": [
+        "Absence threshold/segment/package/reward",
+        " trigger/common claimpopup/duplicate/restart và server eligibility"
+      ],
+      "next_steps": [
+        "Cần audience/absence duration contract và response hợp lệ; không đổi đồng hồ để giả eligibility server.",
+        "SendWelcomeBackNotification(int delayAsSeconds) lấy _welcomeBackNotificationSo.Title/Body, Replace token NEWLINE trước setbody, và schedule DateTime.Now.AddSeconds(delayAsSeconds). Nội dungcụthể do asset, thờiđiểm do caller; markerNEWLINE không là toàntextnotification. Trích đúng LocalNotificationSo asset và SendWelcomeBackNotification caller delay; không xem LocalScheduling như deliveryconfirmed.",
+        "Mô tả endpoint purpose, không cần environment URL.",
+        "Ghi chú Firebase template3197 lịch sử, chưa có experiment assignment/traffic/outcome; dùng bài21 và row classifications, không gọi mọi key là A/B."
+      ]
+    }
+  },
+  "use_cases": 10,
+  "configs": 14,
+  "new_review_case_count": 0,
+  "reviewed_uc_branch_count": 0,
+  "curated_new_image_count": 0,
+  "segment_ids": [],
+  "matching_basis": "explicit_gd_config_map_or_exact_model_token_in_gdd_configs_where_key_sources; rootfieldscoped",
+  "unmatched_segment_status": "not_identified_in_sources",
+  "local_document_repairs": [],
+  "sources": [
+    "features/WelcomeBackService.md",
+    "features/WelcomeBackDataService.md",
+    "features/WelcomeBackStateService.md",
+    "features/WelcomeBackRemoteService.md",
+    "features/WelcomeBackDataModel.md",
+    "features/WelcomeBackSyncableDataModel.md",
+    "RecoveredNative/strings-by-type.tsv (EventSender.SendWelcomeBackClaimStat)",
+    "GameDesign/appendix/localization.tsv (WelcomeBackTitle)",
+    "GameDesign/facts/facts.json (WelcomeBackState, WelcomeBackPackage, GetWelcomeBackResponse, CurrencyEarnReason)"
+  ],
+  "source_hashes": {
+    "gdd_sha256": "354b789d691bec61144489c881c2f9ad3569a6b53a5472bde9facf663caa7e09",
+    "site_meta_sha256": "628f0f74a571a8bc441cf05674b9c5798189c65c34e3b36227aac971d51bf3d0"
+  }
+}

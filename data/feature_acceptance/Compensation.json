@@ -1,0 +1,271 @@
+{
+  "id": "Compensation",
+  "feature": "Compensation",
+  "name": "Compensation (đền bù)",
+  "category": "Economy",
+  "category_label": "Kinh tế & Shop",
+  "core_levels_last": false,
+  "acceptance_status": "documented_with_explicit_remaining_scope",
+  "full_feature_verified": false,
+  "checks": {
+    "purpose": {
+      "status": "documented_static_scope",
+      "source": "gdd/Compensation.json#/summary",
+      "claim_excerpt": "Compensation là kênh đền bù do vận hành (LiveOps) phát: khi có sự cố (mất tiến độ, lỗi giao dịch, bảo trì) hoặc khi bù cho gói Supercharger, backend tạo một CompensationPackage (CompensationId + RewardModels + cờ IsSuperchargerCompensation) và client lấy về khi vào game, hiển thị popup ở Home rồi trao thưởng. Cấu trúc gần như song sinh với Welcome Back nhưng khác mục đích và có thêm phân loại 'sup"
+    },
+    "unlock": {
+      "status": "described_historical_conditions_runtime_boundary_unverified",
+      "source": "gdd/Compensation.json#/unlock",
+      "content": "Không có level gate hay cờ remote config trong client. CompensationStateService.GetState() (enum nội bộ CompensationStateService.CompensationState) chỉ phụ thuộc việc có CompensationPackage chưa nhận hay không; toàn bộ quyết định phát gói nằm ở backend (schema magicsort.schemas.v1.liveops.compensation)."
+    },
+    "entry_flow": {
+      "status": "documented_paths_not_all_executed",
+      "entry_points": [
+        "TryShowCompensationHomeWelcomingCommand — popup khi vào Home",
+        "Popup đền bù hiển thị danh sách RewardModels"
+      ],
+      "flow_source": "gdd/Compensation.json#/flow",
+      "acceptance_scope": "Eligibility/package/state/reward; backend grant, UI entry/claim/retry/duplicate và storage"
+    },
+    "config": {
+      "status": "dossier_values_present_full_model_catalog_not_associated",
+      "gdd_rows": 12,
+      "full_leaf_rows_associated": 0,
+      "snapshots": {},
+      "models": [],
+      "declared_models_without_catalog_data": [],
+      "placeholder_rows_requiring_source_review": [
+        {
+          "index": 5,
+          "key": "GetCompensationResponse.CompensationId / RewardModels / IsClaimed / IsSuperChargerCompensation",
+          "value": "server",
+          "source": "server info"
+        },
+        {
+          "index": 6,
+          "key": "ClaimCompensationRequest.CompensationId / ClaimCompensationResponse",
+          "value": "server",
+          "source": "server info"
+        },
+        {
+          "index": 7,
+          "key": "Schema magicsort.schemas.v1.liveops.compensation",
+          "value": "server",
+          "source": "server info"
+        }
+      ],
+      "exact_placeholder_snapshot_values": [
+        {
+          "gdd_config_index": 5,
+          "key": "GetCompensationResponse.CompensationId / RewardModels / IsClaimed / IsSuperChargerCompensation",
+          "status": "no_unambiguous_exact_field_match",
+          "matches": [],
+          "basis": "Model explicitly cited in key/where, or sole declaredmodel; fieldpath exactcasefold, no alias guessing."
+        },
+        {
+          "gdd_config_index": 6,
+          "key": "ClaimCompensationRequest.CompensationId / ClaimCompensationResponse",
+          "status": "no_unambiguous_exact_field_match",
+          "matches": [],
+          "basis": "Model explicitly cited in key/where, or sole declaredmodel; fieldpath exactcasefold, no alias guessing."
+        },
+        {
+          "gdd_config_index": 7,
+          "key": "Schema magicsort.schemas.v1.liveops.compensation",
+          "status": "no_unambiguous_exact_field_match",
+          "matches": [],
+          "basis": "Model explicitly cited in key/where, or sole declaredmodel; fieldpath exactcasefold, no alias guessing."
+        }
+      ],
+      "dossier_abbreviated_values": [],
+      "note": "Model association uses explicitmap or exacttoken citations; fieldpresence does not prove allproductiondata. GDDsummaryrows and fullcatalogrows have separate counts. Abbreviated source summaries are not full arrays; catalog/source links remain authoritative."
+    },
+    "reward": {
+      "status": "documented_static_rewards_runtime_grant_not_fully_verified",
+      "entries": 2,
+      "tables_in_site_meta": 2,
+      "source": "gdd/Compensation.json#/rewards"
+    },
+    "use_cases": {
+      "status": "specified_not_executed_in15nov_ledger",
+      "specified": 10,
+      "reviewed_uc_branch_count": 0,
+      "reviewed_uc_ids": [],
+      "not_reviewed_in_new_ledger": [
+        "UC-01",
+        "UC-02",
+        "UC-03",
+        "UC-04",
+        "UC-05",
+        "UC-06",
+        "UC-07",
+        "UC-08",
+        "UC-09",
+        "UC-10"
+      ],
+      "full_uc_pass_claimed": false
+    },
+    "screenshots": {
+      "historical_gallery_entries": 0,
+      "historical_uc_with_image_reference": 0,
+      "curated_new_images": [],
+      "curated_new_image_count": 0,
+      "status": "not_present_in_reviewed_gallery",
+      "source": "screens/web/screens.json#/Compensation",
+      "note": "Image presence does not prove execution result or completeness."
+    },
+    "runtime_actual": {
+      "status": "not_observed_in15nov_ledger",
+      "case_count": 0,
+      "cases": [],
+      "mode": "offline_existing_fixture",
+      "build": "0.0.3129 ARM64"
+    },
+    "segment_ab": {
+      "status": "not_identified_in_sources",
+      "segment_ids": [],
+      "matching_basis": "explicit_gd_config_map_or_exact_model_token_in_gdd_configs_where_key_sources; rootfieldscoped",
+      "rows": [],
+      "classifications": {},
+      "assignment_verified": false,
+      "uplift_verified": false,
+      "note": "No matchingrow does not prove no segmentation/AB. Rewardbucketfalsepositives remain explicitly classified."
+    },
+    "storage_backend_analytics": {
+      "storage_keys": {
+        "entries": 3,
+        "status": "documented_static_contract_runtime_not_verified",
+        "source": "gdd/Compensation.json#/storage_keys"
+      },
+      "backend": {
+        "entries": 3,
+        "status": "documented_static_contract_runtime_not_verified",
+        "source": "gdd/Compensation.json#/backend"
+      },
+      "analytics": {
+        "entries": 2,
+        "status": "documented_static_contract_runtime_not_verified",
+        "source": "gdd/Compensation.json#/analytics"
+      }
+    },
+    "remaining_next_step": {
+      "gap_count": 5,
+      "static_scoped_resolutions": 1,
+      "remaining_count": 4,
+      "all_gap_dispositions": [
+        {
+          "id": "MS-Compensation-G001",
+          "feature": "Compensation",
+          "source": "gdd/Compensation.json#/gaps/0",
+          "original": "Giá trị của enum CompensationStateService.CompensationState không có trong metadata đã trích xuất (enum lồng, danh sách rỗng trong facts.json).",
+          "current_note": "15/11 — partial_static_code_unresolved: GetState kiểm CompensationPackage rồi trả IsClaimed XOR1; package không khả dụng trả0, package chưa claimed trả1. Đã thấy giá trị vận hành0/1, nhưng metadata enum name vẫn rỗng; chưa tự đặt tên thành viên chính thức. Còn lại: Cần dump enum names hoặc giữ raw0/1 + mô tả hành vi; claim backend/currentbuild cần ca riêng.",
+          "status": "partial_static_code_unresolved",
+          "review_status": "preserved_partial_static_code_unresolved",
+          "dependency": "local_code_review",
+          "next_action": "GetState kiểm CompensationPackage rồi trả IsClaimed XOR1; package không khả dụng trả0, package chưa claimed trả1. Đã thấy giá trị vận hành0/1, nhưng metadata enum name vẫn rỗng; chưa tự đặt tên thành viên chính thức. Cần dump enum names hoặc giữ raw0/1 + mô tả hành vi; claim backend/currentbuild cần ca riêng.",
+          "conclusion": "GetState kiểm CompensationPackage rồi trả IsClaimed XOR1; package không khả dụng trả0, package chưa claimed trả1. Đã thấy giá trị vận hành0/1, nhưng metadata enum name vẫn rỗng; chưa tự đặt tên thành viên chính thức.",
+          "evidence": [
+            "../com.grandgames.magicsort_Unity_20260909_112501/RecoveredNative/PseudoC/Assembly-CSharp/Modules/Contexts/Home/Monetization/Compensation/Scripts/CompensationStateService.c:164"
+          ],
+          "reviewed": "2026-11-15",
+          "mode": "file_only_recovered_native_0.0.3063",
+          "remaining": "15/11 — partial_static_code_unresolved: GetState kiểm CompensationPackage rồi trả IsClaimed XOR1; package không khả dụng trả0, package chưa claimed trả1. Đã thấy giá trị vận hành0/1, nhưng metadata enum name vẫn rỗng; chưa tự đặt tên thành viên chính thức. Còn lại: Cần dump enum names hoặc giữ raw0/1 + mô tả hành vi; claim backend/currentbuild cần ca riêng."
+        },
+        {
+          "id": "MS-Compensation-G002",
+          "feature": "Compensation",
+          "source": "gdd/Compensation.json#/gaps/1",
+          "original": "Điều kiện phát gói và nội dung thưởng nằm hoàn toàn ở backend.",
+          "current_note": "Điều kiện phát gói và nội dung thưởng nằm hoàn toàn ở backend.",
+          "status": "open_review_plan",
+          "review_status": "open_review_plan",
+          "dependency": "backend_contract_or_response",
+          "next_action": "Cần response compensation hợp lệ từ backend/sandbox, điều kiện audience và claim idempotency.",
+          "remaining": "Điều kiện phát gói và nội dung thưởng nằm hoàn toàn ở backend."
+        },
+        {
+          "id": "MS-Compensation-G003",
+          "feature": "Compensation",
+          "source": "gdd/Compensation.json#/gaps/2",
+          "original": "Không tìm thấy class UI riêng cho popup đền bù trong types-index — dùng khung popup thưởng dùng chung.",
+          "current_note": "15/11 — resolved_historical_snapshot: TryShowCompensationHomeWelcomingCommand gọi CompensationService.ClaimReward rồi RewardService.GiveBulkRewards. Luồng dùng chung tiếp tục gọi BulkRewardAnimationService.ShowRewards. Vì vậy không cần một lớp popup mang tên Compensation để mô tả đúng đường hiển thị này. Còn lại: Giữ rõ build và phiên bản cache của nguồn; kiểm nhánh runtime riêng khi cần.",
+          "status": "resolved_historical_snapshot",
+          "review_status": "preserved_resolved_historical_snapshot",
+          "dependency": "local_asset_or_missing_bundle",
+          "next_action": "TryShowCompensationHomeWelcomingCommand gọi CompensationService.ClaimReward rồi RewardService.GiveBulkRewards. Luồng dùng chung tiếp tục gọi BulkRewardAnimationService.ShowRewards. Vì vậy không cần một lớp popup mang tên Compensation để mô tả đúng đường hiển thị này. Giữ rõ build và phiên bản cache của nguồn; kiểm nhánh runtime riêng khi cần.",
+          "conclusion": "TryShowCompensationHomeWelcomingCommand gọi CompensationService.ClaimReward rồi RewardService.GiveBulkRewards. Luồng dùng chung tiếp tục gọi BulkRewardAnimationService.ShowRewards. Vì vậy không cần một lớp popup mang tên Compensation để mô tả đúng đường hiển thị này.",
+          "evidence": [
+            "facts/remaining_asset_review_20261115/shared_reward_flow.json"
+          ],
+          "remaining": "15/11 — resolved_historical_snapshot: TryShowCompensationHomeWelcomingCommand gọi CompensationService.ClaimReward rồi RewardService.GiveBulkRewards. Luồng dùng chung tiếp tục gọi BulkRewardAnimationService.ShowRewards. Vì vậy không cần một lớp popup mang tên Compensation để mô tả đúng đường hiển thị này. Còn lại: Giữ rõ build và phiên bản cache của nguồn; kiểm nhánh runtime riêng khi cần.",
+          "scope": "Asset/native export 0.0.3063 và cache UnityFS đọc ngày 15/11 từ app 0.0.3129 được giữ riêng; ảnh render asset không phải ảnh chụp playtest.",
+          "reviewed": "2026-11-15",
+          "full_uc_pass": false
+        },
+        {
+          "id": "MS-Compensation-G004",
+          "feature": "Compensation",
+          "source": "gdd/Compensation.json#/gaps/3",
+          "original": "Không có localization key riêng cho Compensation trong appendix/localization.tsv.",
+          "current_note": "15/11 — partial_actual_evidence: Đã xác định luồng hiển thị thưởng dùng chung của Compensation. Một localization key riêng mang tên Compensation không phải điều kiện bắt buộc của luồng này. Bộ 1.471 term với 11 ngôn ngữ đã được xuất đầy đủ ở phần localization. Còn lại: Đọc binding nhãn trong BulkRewardAnimationService theo context, hoặc quan sát một payload Compensation hợp lệ; không tạo key giả.",
+          "status": "partial_actual_evidence",
+          "review_status": "preserved_partial_actual_evidence",
+          "dependency": "local_asset_or_missing_bundle",
+          "next_action": "Đã xác định luồng hiển thị thưởng dùng chung của Compensation. Một localization key riêng mang tên Compensation không phải điều kiện bắt buộc của luồng này. Bộ 1.471 term với 11 ngôn ngữ đã được xuất đầy đủ ở phần localization. Đọc binding nhãn trong BulkRewardAnimationService theo context, hoặc quan sát một payload Compensation hợp lệ; không tạo key giả.",
+          "conclusion": "Đã xác định luồng hiển thị thưởng dùng chung của Compensation. Một localization key riêng mang tên Compensation không phải điều kiện bắt buộc của luồng này. Bộ 1.471 term với 11 ngôn ngữ đã được xuất đầy đủ ở phần localization.",
+          "evidence": [
+            "facts/remaining_asset_review_20261115/shared_reward_flow.json"
+          ],
+          "remaining": "15/11 — partial_actual_evidence: Đã xác định luồng hiển thị thưởng dùng chung của Compensation. Một localization key riêng mang tên Compensation không phải điều kiện bắt buộc của luồng này. Bộ 1.471 term với 11 ngôn ngữ đã được xuất đầy đủ ở phần localization. Còn lại: Đọc binding nhãn trong BulkRewardAnimationService theo context, hoặc quan sát một payload Compensation hợp lệ; không tạo key giả.",
+          "scope": "Asset/native export 0.0.3063 và cache UnityFS đọc ngày 15/11 từ app 0.0.3129 được giữ riêng; ảnh render asset không phải ảnh chụp playtest.",
+          "reviewed": "2026-11-15",
+          "full_uc_pass": false
+        },
+        {
+          "id": "MS-Compensation-G005",
+          "feature": "Compensation",
+          "source": "gdd/Compensation.json#/gaps/4",
+          "original": "Endpoint HTTP nằm trong BackendEnvironmentConfig.",
+          "current_note": "Endpoint HTTP nằm trong BackendEnvironmentConfig.",
+          "status": "qualified_note_not_runtime_verification",
+          "review_status": "qualified_note_not_runtime_verification",
+          "dependency": "intentional_omission_or_scope_note",
+          "next_action": "Mô tả get/claim purpose và field endpoint; không cần secret.",
+          "remaining": "Endpoint HTTP nằm trong BackendEnvironmentConfig."
+        }
+      ],
+      "feature_specific_acceptance_questions": [
+        "Eligibility/package/state/reward",
+        " backend grant, UI entry/claim/retry/duplicate và storage"
+      ],
+      "next_steps": [
+        "GetState kiểm CompensationPackage rồi trả IsClaimed XOR1; package không khả dụng trả0, package chưa claimed trả1. Đã thấy giá trị vận hành0/1, nhưng metadata enum name vẫn rỗng; chưa tự đặt tên thành viên chính thức. Cần dump enum names hoặc giữ raw0/1 + mô tả hành vi; claim backend/currentbuild cần ca riêng.",
+        "Cần response compensation hợp lệ từ backend/sandbox, điều kiện audience và claim idempotency.",
+        "Đã xác định luồng hiển thị thưởng dùng chung của Compensation. Một localization key riêng mang tên Compensation không phải điều kiện bắt buộc của luồng này. Bộ 1.471 term với 11 ngôn ngữ đã được xuất đầy đủ ở phần localization. Đọc binding nhãn trong BulkRewardAnimationService theo context, hoặc quan sát một payload Compensation hợp lệ; không tạo key giả.",
+        "Mô tả get/claim purpose và field endpoint; không cần secret."
+      ]
+    }
+  },
+  "use_cases": 10,
+  "configs": 12,
+  "new_review_case_count": 0,
+  "reviewed_uc_branch_count": 0,
+  "curated_new_image_count": 0,
+  "segment_ids": [],
+  "matching_basis": "explicit_gd_config_map_or_exact_model_token_in_gdd_configs_where_key_sources; rootfieldscoped",
+  "unmatched_segment_status": "not_identified_in_sources",
+  "local_document_repairs": [],
+  "sources": [
+    "features/CompensationService.md",
+    "features/CompensationDataService.md",
+    "features/CompensationStateService.md",
+    "features/CompensationRemoteService.md",
+    "features/CompensationDataModel.md",
+    "RecoveredNative/strings-by-type.tsv (EventSender.SendCompensationClaimStat)",
+    "GameDesign/facts/facts.json (CompensationPackage, GetCompensationResponse, ClaimCompensationRequest, CurrencyEarnReason)"
+  ],
+  "source_hashes": {
+    "gdd_sha256": "f93184f4f776ae2fb9b61f700b77ff98e7fc25893c6472cc7810f2f093f4c025",
+    "site_meta_sha256": "2fd8c88a9b39f21506e072502fc1eac31ecf3b40cbf6ca3cc1420423feee978e"
+  }
+}

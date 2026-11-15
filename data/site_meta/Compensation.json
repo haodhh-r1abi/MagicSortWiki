@@ -1,0 +1,422 @@
+{
+  "id": "Compensation",
+  "title": "Compensation (Đền bù)",
+  "tagline": "Kênh đền bù do vận hành phát khi có sự cố hoặc khi bù cho gói Supercharger.",
+  "infobox": [
+    [
+      "Loại",
+      "Live-ops"
+    ],
+    [
+      "Mở khóa",
+      "Không có level gate; phụ thuộc backend có phát gói hay không"
+    ],
+    [
+      "Tham gia",
+      "Cá nhân"
+    ],
+    [
+      "Thưởng chính",
+      "CompensationPackage.RewardModels do vận hành quyết định (server)"
+    ],
+    [
+      "Điều kiện / phụ thuộc",
+      "Chỉ hiển thị khi có CompensationPackage chưa nhận; hiện trong chuỗi home welcoming"
+    ],
+    [
+      "Manager",
+      "CompensationService, CompensationDataService, CompensationStateService, CompensationRemoteService"
+    ]
+  ],
+  "description": [
+    "Compensation là kênh đền bù do vận hành (LiveOps) phát khi có sự cố như mất tiến độ, lỗi giao dịch hoặc bảo trì.",
+    "Backend tạo một CompensationPackage gồm CompensationId, danh sách RewardModels và cờ IsSuperchargerCompensation.",
+    "Client hỏi server khi vào game, nếu có gói chưa nhận thì lưu vào bộ nhớ cục bộ và mở popup ở Home.",
+    "Người chơi bấm nhận, phần thưởng được trao ngay rồi client mới báo lại cho server.",
+    "Client lưu danh sách CompensationId đã nhận và đồng bộ danh sách này để không đền bù trùng trên thiết bị khác.",
+    "Có cơ chế thử lại 5 lần cách nhau 30 giây khi gọi API thất bại.",
+    "Cấu trúc gần như song sinh với Welcome Back nhưng khác mục đích và có thêm phân loại đền bù Supercharger.",
+    "Không có level gate hay cờ remote config trong client — toàn bộ quyết định phát gói nằm ở backend.",
+    "Analytics tách riêng tham số is_super_charger để phân biệt đền bù thường và đền bù gói Supercharger.",
+    "Trạng thái mặc định của hầu hết người chơi là không có gói nào, chuỗi home welcoming đi tiếp sang tính năng khác."
+  ],
+  "notes": [
+    "Lưu ý: thứ tự là trao thưởng trước rồi mới báo server; nếu báo thất bại thì gói vẫn nằm chờ để thử lại lần sau.",
+    "Lưu ý: danh sách id đã nhận nằm trong phần đồng bộ nên chặn nhận trùng trên mọi thiết bị.",
+    "Lưu ý: CompensationDataModel tách rõ LocalData (gói đang chờ, không đồng bộ) và SyncableData (danh sách id, có đồng bộ).",
+    "Lưu ý: khi offline, gói đã lấy được từ trước vẫn nằm trong LocalData và vẫn hiển thị popup bình thường.",
+    "Lưu ý: hết 5 lượt thử lại thì bỏ qua trong phiên này, thử lại ở lần vào game sau.",
+    "Lưu ý: chu kỳ thử lại dài (30 giây) phù hợp với đặc thù đền bù không cần gấp.",
+    "Lưu ý: response dùng chính tả IsSuperChargerCompensation còn model nội bộ dùng IsSuperchargerCompensation.",
+    "Metadata0.0.3129ARM64: CompensationState.AllClaimed=0,ShouldClaim=1. Chưa xác minh grant/ack runtime.",
+    "Lưu ý: không có class UI riêng cho popup đền bù — dùng khung popup thưởng dùng chung (gap)."
+  ],
+  "how_it_works": [
+    "CompensationService.InitializeData() gọi TryFetchData() khi vào game.",
+    "SendGetCompensationRequest() gửi request qua CompensationRemoteService (ServiceName = 'CompensationRemoteService').",
+    "Server trả GetCompensationResponse{CompensationId, RewardModels, IsClaimed, IsSuperChargerCompensation}.",
+    "Request lỗi thì RetrySendGetCompensationRequest() đặt NewSecondTimer chờ 30 giây rồi gọi lại, tối đa 5 lần.",
+    "ContainsPreviousCompensation(compensationId) kiểm tra id đã nhận trước đó chưa; đã nhận thì bỏ qua hoàn toàn.",
+    "Chưa nhận thì AddCompensation(CompensationPackage{CompensationId, RewardModels, IsClaimed, IsSuperchargerCompensation}) lưu vào LocalData.",
+    "CompensationStateService.UpdateState() cập nhật trạng thái và ShouldShowPopup() cho phép mở popup.",
+    "TryShowCompensationHomeWelcomingCommand chạy trong chuỗi home welcoming và mở popup hiển thị danh sách phần thưởng.",
+    "Bấm nhận: ClaimReward() lấy GetCompensationToClaim() rồi RewardService trao RewardModels với CurrencyEarnReason.Compensation (21).",
+    "SetCompensationIsClaimed(true) và AddPreviousCompensationId(compensationId) ghi id vào CompensationSyncableData.",
+    "EventSender.SendCompensationClaimStat() bắn compensation_claim kèm compensation_id, is_super_charger và progress.",
+    "TrySendClaimCompensationRequest() lấy GetCompensationToSendClaimRequest() rồi gửi ClaimCompensationRequest{CompensationId}.",
+    "Nhận ClaimCompensationResponse thành công thì RemoveCompensation() dọn gói khỏi LocalData.",
+    "CompensationDataService là ISyncable với SyncName 'SyncableData'; MarkDataForLateUpdate() rồi LateUpdate() lưu khi dữ liệu đổi.",
+    "Với gói Supercharger, cờ IsSuperchargerCompensation đổi nội dung popup và gắn is_super_charger = true vào analytics."
+  ],
+  "reward_tables": [
+    {
+      "title": "PHẦN THƯỞNG ĐỀN BÙ (cấu trúc, nội dung do vận hành quyết định)",
+      "columns": [
+        "Mốc",
+        "Điều kiện",
+        "Phần thưởng"
+      ],
+      "rows": [
+        [
+          "Đền bù thường",
+          "Backend phát CompensationPackage với IsSuperchargerCompensation = false",
+          "CompensationPackage.RewardModels (server)"
+        ],
+        [
+          "Đền bù Supercharger",
+          "Backend phát gói với IsSuperchargerCompensation = true",
+          "CompensationPackage.RewardModels (server), analytics gắn is_super_charger = true"
+        ],
+        [
+          "Đã nhận trước đó",
+          "ContainsPreviousCompensation(compensationId) = true",
+          "Không trao gì, không mở popup"
+        ],
+        [
+          "Không có gói",
+          "HasCompensation() = false",
+          "Không hiển thị, chuỗi home welcoming đi tiếp"
+        ]
+      ]
+    },
+    {
+      "title": "THAM SỐ THỬ LẠI KHI GỌI API",
+      "columns": [
+        "Mốc",
+        "Điều kiện",
+        "Phần thưởng"
+      ],
+      "rows": [
+        [
+          "Lần thử 1",
+          "Request đầu tiên thất bại",
+          "Chờ 30 giây rồi gọi lại"
+        ],
+        [
+          "Lần thử 2",
+          "Vẫn thất bại",
+          "Chờ 30 giây rồi gọi lại"
+        ],
+        [
+          "Lần thử 3",
+          "Vẫn thất bại",
+          "Chờ 30 giây rồi gọi lại"
+        ],
+        [
+          "Lần thử 4",
+          "Vẫn thất bại",
+          "Chờ 30 giây rồi gọi lại"
+        ],
+        [
+          "Lần thử 5",
+          "Vẫn thất bại",
+          "Chờ 30 giây rồi gọi lại"
+        ],
+        [
+          "Hết lượt",
+          "Đạt RetryLimit = 5",
+          "Bỏ qua trong phiên này, thử lại lần vào game sau"
+        ]
+      ]
+    }
+  ],
+  "key_numbers": [
+    {
+      "label": "Số lần thử lại tối đa",
+      "value": "5",
+      "source": "CompensationService.RetryLimit"
+    },
+    {
+      "label": "Khoảng cách giữa hai lần thử lại",
+      "value": "30 giây",
+      "source": "CompensationService.RetryDelayInSeconds"
+    },
+    {
+      "label": "Tổng thời gian thử lại tối đa",
+      "value": "150 giây (5 × 30 giây)",
+      "source": "RetryLimit × RetryDelayInSeconds"
+    },
+    {
+      "label": "Lý do nhận thưởng",
+      "value": "CurrencyEarnReason.Compensation = 21",
+      "source": "CurrencyEarnReason"
+    },
+    {
+      "label": "Tên service khi gọi HttpProxy",
+      "value": "CompensationRemoteService",
+      "source": "CompensationRemoteService.ServiceName"
+    },
+    {
+      "label": "Tên bản ghi đồng bộ",
+      "value": "SyncableData",
+      "source": "CompensationDataService.GetSyncName"
+    },
+    {
+      "label": "Số trường của GetCompensationResponse",
+      "value": "4 (CompensationId, RewardModels, IsClaimed, IsSuperChargerCompensation)",
+      "source": "CompensationRemoteService"
+    },
+    {
+      "label": "Số trường của CompensationPackage",
+      "value": "4 (CompensationId, RewardModels, IsClaimed, IsSuperchargerCompensation)",
+      "source": "CompensationPackage"
+    },
+    {
+      "label": "Payload báo đã nhận",
+      "value": "1 trường (CompensationId)",
+      "source": "ClaimCompensationRequest"
+    },
+    {
+      "label": "Level tối thiểu để nhận đền bù",
+      "value": "Không có (không có level gate)",
+      "source": "gdd/Compensation.json unlock"
+    },
+    {
+      "label": "Cờ remote config bật/tắt",
+      "value": "Không có trong client",
+      "source": "gdd/Compensation.json unlock"
+    },
+    {
+      "label": "Schema backend",
+      "value": "magicsort.schemas.v1.liveops.compensation",
+      "source": "gdd/Compensation.json configs"
+    },
+    {
+      "label": "Số lần nhận cho mỗi CompensationId",
+      "value": "1 (chặn bằng danh sách id đã nhận)",
+      "source": "CompensationDataService.ContainsPreviousCompensation"
+    },
+    {
+      "label": "Số sự kiện analytics riêng",
+      "value": "1 (compensation_claim), cộng sự kiện 'earned' chung",
+      "source": "gdd/Compensation.json analytics"
+    },
+    {
+      "label": "Số API của tính năng",
+      "value": "2 (get compensation, claim compensation)",
+      "source": "CompensationRemoteService"
+    },
+    {
+      "label": "Nội dung phần thưởng",
+      "value": "(server) — do LiveOps quyết định",
+      "source": "GetCompensationResponse.RewardModels"
+    }
+  ],
+  "config_highlights": [
+    {
+      "key": "CompensationService.RetryLimit",
+      "value": "5",
+      "meaning": "Số lần thử lại tối đa khi gọi API thất bại"
+    },
+    {
+      "key": "CompensationService.RetryDelayInSeconds",
+      "value": "30",
+      "meaning": "Khoảng cách giữa hai lần thử lại"
+    },
+    {
+      "key": "CompensationRemoteService.ServiceName",
+      "value": "CompensationRemoteService",
+      "meaning": "Tên service khi gọi HttpProxy"
+    },
+    {
+      "key": "CompensationStateService.CompensationState",
+      "value": "AllClaimed=0; ShouldClaim=1 (metadata0.0.3129ARM64)",
+      "meaning": "Máy trạng thái nội bộ của tính năng"
+    },
+    {
+      "key": "CurrencyEarnReason.Compensation",
+      "value": "21",
+      "meaning": "Lý do nhận thưởng ghi vào analytics 'earned'"
+    },
+    {
+      "key": "GetCompensationResponse.CompensationId",
+      "value": "(server)",
+      "meaning": "Định danh gói đền bù, dùng để chặn nhận trùng"
+    },
+    {
+      "key": "GetCompensationResponse.RewardModels",
+      "value": "(server)",
+      "meaning": "Danh sách phần thưởng do vận hành quyết định"
+    },
+    {
+      "key": "GetCompensationResponse.IsClaimed",
+      "value": "(server)",
+      "meaning": "Server báo gói đã được nhận hay chưa"
+    },
+    {
+      "key": "GetCompensationResponse.IsSuperChargerCompensation",
+      "value": "(server)",
+      "meaning": "Đánh dấu đây là đền bù cho gói Supercharger"
+    },
+    {
+      "key": "ClaimCompensationRequest.CompensationId",
+      "value": "(client→server)",
+      "meaning": "Payload báo đã nhận đền bù"
+    },
+    {
+      "key": "ClaimCompensationResponse",
+      "value": "(server)",
+      "meaning": "Xác nhận của server, thành công thì client dọn gói"
+    },
+    {
+      "key": "Schema magicsort.schemas.v1.liveops.compensation",
+      "value": "(server)",
+      "meaning": "Định nghĩa dữ liệu đền bù phía backend"
+    },
+    {
+      "key": "CompensationPackage",
+      "value": "CompensationId, RewardModels, IsClaimed, IsSuperchargerCompensation",
+      "meaning": "Cấu trúc gói đền bù trong client"
+    },
+    {
+      "key": "CompensationDataService.GetSyncName",
+      "value": "SyncableData",
+      "meaning": "Tên bản ghi đồng bộ (CompensationSyncableData)"
+    },
+    {
+      "key": "CompensationDataModel.SyncableData",
+      "value": "danh sách CompensationId đã nhận (client + server)",
+      "meaning": "Chống đền bù trùng trên mọi thiết bị"
+    },
+    {
+      "key": "CompensationDataModel.LocalData",
+      "value": "CompensationLocalData (client, không đồng bộ)",
+      "meaning": "Gói đền bù đang chờ nhận"
+    },
+    {
+      "key": "CompensationDataService.GetCompensationToClaim",
+      "value": "runtime",
+      "meaning": "Lấy gói cần trao thưởng"
+    },
+    {
+      "key": "CompensationDataService.GetCompensationToSendClaimRequest",
+      "value": "runtime",
+      "meaning": "Lấy gói cần báo server, cho phép thử lại nếu báo thất bại"
+    },
+    {
+      "key": "CompensationDataService.HasCompensation",
+      "value": "bool",
+      "meaning": "Có gói đền bù đang chờ hay không"
+    },
+    {
+      "key": "CompensationDataService.ContainsPreviousCompensation",
+      "value": "bool",
+      "meaning": "Id này đã từng được nhận chưa"
+    },
+    {
+      "key": "CompensationDataService.AddPreviousCompensationId",
+      "value": "runtime",
+      "meaning": "Ghi id vào danh sách đã nhận sau khi trao thưởng"
+    },
+    {
+      "key": "CompensationDataService.RemoveCompensation",
+      "value": "runtime",
+      "meaning": "Dọn gói khỏi LocalData sau khi server xác nhận"
+    },
+    {
+      "key": "CompensationStateService.ShouldShowPopup",
+      "value": "bool",
+      "meaning": "Quyết định có mở popup đền bù ở Home không"
+    },
+    {
+      "key": "TryShowCompensationHomeWelcomingCommand",
+      "value": "command",
+      "meaning": "Mở popup trong chuỗi home welcoming"
+    },
+    {
+      "key": "CompensationService._retryCount",
+      "value": "runtime (int)",
+      "meaning": "Đếm số lần đã thử lại trong phiên"
+    },
+    {
+      "key": "NewSecondTimer",
+      "value": "runtime",
+      "meaning": "Bộ đếm dùng cho thử lại; Dispose() gọi Cancel()"
+    },
+    {
+      "key": "Analytics compensation_claim",
+      "value": "compensation_id, is_super_charger, progress",
+      "meaning": "Ghi nhận mỗi lần nhận đền bù"
+    },
+    {
+      "key": "Analytics earned",
+      "value": "reason = Compensation, danh sách thưởng",
+      "meaning": "Ghi nhận tài nguyên nhận được"
+    },
+    {
+      "key": "Endpoint HTTP",
+      "value": "nằm trong BackendEnvironmentConfig",
+      "meaning": "Hai API get và claim compensation"
+    },
+    {
+      "key": "Tính năng liên quan",
+      "value": "WelcomeBack, Store, IAP",
+      "meaning": "Cấu trúc song sinh với Welcome Back; bù cho lỗi giao dịch của IAP"
+    }
+  ],
+  "tips": [
+    "Trao thưởng trước khi báo server đảm bảo người chơi luôn nhận được đền bù dù mạng chập chờn.",
+    "Đồng bộ danh sách id đã nhận thay vì trạng thái gói giúp chống nhận trùng mà vẫn giữ payload nhỏ.",
+    "Tách cờ Supercharger cho phép báo cáo riêng chi phí đền bù do lỗi sản phẩm trả phí.",
+    "Không đặt level gate cho đền bù là đúng: sự cố có thể xảy ra với người chơi ở bất kỳ giai đoạn nào."
+  ],
+  "categories": [
+    "Live-ops",
+    "Kinh tế",
+    "Meta"
+  ],
+  "current_native_review_20261116": {
+    "reviewed": "2026-11-16",
+    "scope": "file_only_host_APK_0.0.3129_ARM64_matches_last_observed_installed_version_2026-11-15",
+    "live_installed_20261116_verified": false,
+    "installed_binary_identity_verified": false,
+    "runtime_cases_new": 0,
+    "source_facts": "facts/review_20261116/code_findings.json",
+    "source_facts_sha256": "7adb0ab760cea248de7baaa76671082aff9231708782bc0bbcdadff38e2564ea",
+    "native_sha256": "d901f86380bdecae3a8ec5cf9a9b60acc5132d50dfcf7ec1f606de807e22b2d5",
+    "metadata_sha256": "d019f1787d94bcaf0e31508eea72a86dae8df2f422454f6263a2df7d56e3786a",
+    "findings": [
+      {
+        "id": "MS-CURRENT-20261116-04",
+        "gap_ids": [
+          "MS-Compensation-G001"
+        ],
+        "status": "partial_static_code_current_build",
+        "conclusion": "Metadata0.0.3129 định nghĩa CompensationStateService.CompensationState: AllClaimed=0,ShouldClaim=1. Giải exact symbolic labels còn thiếu; metadata không chứng minh grant/ack backend hoặc current GetState behavior.",
+        "remaining": "Current GetState/claim transport và runtime ack vẫn chưa review; chỉ giải phần tên enum, không blanket-close full lifecycle.",
+        "evidence": [
+          {
+            "file": "facts/review_20261116/current_build_dump/dump.cs",
+            "line": 126403,
+            "end_line": 126409,
+            "sha256": "47edf53b3a3e0e82dd81316c145d0cebde72ad2bc5d2dfe3a35492e9cfbd2df2",
+            "text": "private enum CompensationStateService.CompensationState // TypeDefIndex: 3150\n{\n\t// Fields\n\tpublic int value__; // 0x0\n\tpublic const CompensationStateService.CompensationState AllClaimed = 0;\n\tpublic const CompensationStateService.CompensationState ShouldClaim = 1;\n}",
+            "build": "0.0.3129 ARM64",
+            "kind": "metadata_declaration_not_method_body"
+          }
+        ]
+      }
+    ],
+    "historical_review_policy": "Existing15Nov fields/gap decisions retained unchanged. Current native review is independent; static evidence is not device acceptance."
+  }
+}

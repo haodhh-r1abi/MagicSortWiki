@@ -1,0 +1,579 @@
+{
+  "id": "Obstacles",
+  "title": "Vật cản & cơ chế đặc biệt (Obstacles)",
+  "tagline": "Hơn 25 loại vật cản gắn lên chai hoặc phủ nhóm chai, mở rộng luật water-sort cơ bản của Magic Sort.",
+  "infobox": [
+    [
+      "Loại",
+      "Cơ chế lõi"
+    ],
+    [
+      "Mở khóa",
+      "Theo thiết kế level; Curtain từ level 20, Clay từ level 60, Plaster từ level 110"
+    ],
+    [
+      "Tham gia",
+      "Người chơi đơn (trong màn chơi)"
+    ],
+    [
+      "Vật phẩm thu thập",
+      "Không (vật cản là chướng ngại, không thu thập)"
+    ],
+    [
+      "Thưởng chính",
+      "Không có thưởng riêng; mở vật cản để hoàn thành level"
+    ],
+    [
+      "Điều kiện / phụ thuộc",
+      "BottleSortMechanics, LevelFlow, LevelGeneration, Boosters, Tutorial"
+    ],
+    [
+      "Manager",
+      "ABlockerItem, BottleCollection, ItemFactory, ItemGenerator, NewBlockerIntroPopUp"
+    ]
+  ],
+  "description": [
+    "Magic Sort mở rộng luật water-sort bằng hơn 25 loại vật cản; mọi vật cản kế thừa ABlockerItem (kế thừa AItem).",
+    "Vật cản chia hai nhóm: BlockerModel gắn vào một ô hoặc một chai, và OverlayBlockerModel phủ lên nhiều chai (Carpet, Woodbox, Duck House, Safe, Mosaic).",
+    "Các hook chung quyết định hành vi: IsSelectableAsOrigin / IsSelectableAsTarget chặn thao tác, HidesWaterColors che màu nước.",
+    "Điều kiện phá phổ biến nhất là hoàn thành một chai đúng màu: OnBottleCompleted, OnAnyBottleCompleted, OnNeighbourBottleCompleted.",
+    "IsAllowShuffle và IsRevealable quyết định booster Shuffle/Reveal có tác dụng lên chai bị chặn hay không.",
+    "Snitch có thể phá hộ vật cản qua IsSelectableAsSnitchTarget và OnSnitchPerformed (mặc định IsEnabled = false, FirstLevelToShow = 290).",
+    "Level mô tả vật cản trong model magicsort.schemas.v1.level: mỗi BottleItemModel có Cells (CellModel + BlockerModel), OverItemModels và OverlayItemModel.",
+    "Khi người chơi lần đầu gặp một loại vật cản, NewBlockerIntroPopUp dạy cách xử lý và cờ '{ItemType}Introduced' được ghi lại.",
+    "LevelStats đếm riêng từng loại (ví dụ _curtainCount/_curtainOpened) và gửi kèm event obstacle_stats khi kết thúc level."
+  ],
+  "notes": [
+    "Lưu ý: Plaster khác Clay ở chỗ điều kiện phá là chai HÀNG XÓM hoàn thành, chứ không phải chính chai đó.",
+    "Lưu ý: Woodbox và chìa khoá phải khớp WoodboxKeyType; Duck phải khớp DuckType của chuồng; Lock & Key phải cùng KeyLockType.",
+    "Lưu ý: Safe và Bag dùng RequiredAmount — số lần hoàn thành chai cần thiết, giá trị đặt theo từng level.",
+    "Lưu ý: Shelf (ItemType = 22) không chặn thao tác, chỉ là kệ đỡ bố cục.",
+    "Lưu ý: Nếu bàn kẹt vì blocker trạng thái (Toggle), LevelWinOrStuckSystem.TrySolveSpecialStuck gọi ToggleItem.ResolveSpecialStuck để gỡ.",
+    "Lưu ý: Snitch (IsEnabled = false) và Super Charger (IsEnabled = false) mặc định tắt, server bật khi cần.",
+    "Lưu ý: RootLevelConfigModel.IsNewBlockerVisualsEnabled (server) chọn bộ hình ảnh vật cản mới qua BottleCollection.GetBlockerVariant."
+  ],
+  "how_it_works": [
+    "Server gửi model level (magicsort.schemas.v1.level); Trong seed JSON rút gọn, ItemModelConverter.ReadJson đọc trường Id là serialized discriminator rồi tạo model và gán Type enum runtime; hai bộ số khác nhau. Ví dụ serialized18→GeneratorItemModel→ItemType9, serialized32→DuckItemModel→ItemType18 (source0.0.3063).",
+    "Trước khi vào level, nếu có loại vật cản chưa gặp, NewBlockerIntroPopUp hiện hướng dẫn và PlayerService ghi cờ đã giới thiệu (ItemType = 0 thì bỏ qua).",
+    "BottleCollection.GenerateBottles duyệt từng chai và gọi hàm Add tương ứng: AddCurtainItem, AddPlasterItem, AddClayItem, AddTagItem, AddGeneratorItem, AddIceItem, AddWoodboxKeyItem, AddCarpetItem, AddToggleItem, AddIvyItem, AddBagItem, AddFrogItem, AddMagicSealItem, AddIcicleItem, AddDuckAndDuckHouseItem, AddSafeItem, AddMosaicItem, AddChargeableBottleItem, AddFireworkItem, AddRainbowItem, AddQuestionMarkItem, AddSnitchItem.",
+    "ItemFactory/ItemGenerator lấy instance từ pool theo ItemType; ItemPartFactory/ItemPartGenerator lo phần phụ (WaterLine, Blob, FrogPath, Shadow).",
+    "Mỗi item được Prepare(...) với sorting lấy từ SortingService và danh sách chai liên quan; AddShelvesIfNeeded dựng thêm kệ đỡ nếu cần.",
+    "Trong khi chơi, BottleItem.AddBlocker gắn item vào chai; IsSelectableAsOrigin/AsTarget duyệt danh sách _blockers và trả false nếu bị chặn.",
+    "CacheBlockedIndexes tính _firstUnblockedCellIndex để biết ô nào còn dùng được trong chai.",
+    "Vật cản che màu (Question Mark, Curtain, Clay, Magic Seal) dùng HidesWaterColors; khi lớp nước phía trên bị lấy đi, BottleItem.RevealBottleCells() gọi Complete() để lộ màu thật.",
+    "Vật cản theo mục tiêu màu (Curtain, Tag, Ivy, Mosaic) so ColorId của chai vừa hoàn thành với ColorId khai báo trong model (Curtain dùng ObjectiveModel, JSON key \"CI\").",
+    "Vật cản theo số lần (Bag RequiredAmount, Safe RequiredAmount) đếm số chai hoàn thành cho tới khi đủ ngưỡng của level.",
+    "Generator bơm nước theo mảng GeneratorItemModel.ColorIds đúng thứ tự; Firework kích hoạt bắn FireworkCount quả pháo mở nhiều ô cùng lúc.",
+    "Toggle đổi trạng thái theo mỗi nước đi qua OnAnyMoveStarted / OnAnyMoveFinished; IsAllowShuffle và IsRevealable chặn booster tương ứng.",
+    "Ice vỡ theo IceConfig: animation từ 1.03 s đến 2.3 s, gỡ blocker ở 1.2 s, độ trễ giữa các mảnh 0.063 s.",
+    "Khi điều kiện phá thoả, item gọi Complete() → PlayCompleteAnimation() → tự Recycle và gỡ khỏi chai; LevelStats tăng bộ đếm *_opened tương ứng.",
+    "Kết thúc level, LevelStats.GetLevelStats() gửi chuỗi obstacle_stats kèm event level_*; lần đầu gặp vật cản gửi thêm new_blocker_introduced (EventSender.SendNewBlockerIntroducedStat)."
+  ],
+  "reward_tables": [
+    {
+      "title": "MỐC LEVEL GIỚI THIỆU VẬT CẢN (BlockerIntroConfigModel)",
+      "columns": [
+        "Vật cản",
+        "Level giới thiệu",
+        "Ghi chú"
+      ],
+      "rows": [
+        [
+          "Curtain (rèm)",
+          "Level 20",
+          "Client default, server ghi đè"
+        ],
+        [
+          "Clay (đất sét)",
+          "Level 60",
+          "Client default, server ghi đè"
+        ],
+        [
+          "Plaster (thạch cao)",
+          "Level 110",
+          "Client default, server ghi đè"
+        ],
+        [
+          "Lock & Key",
+          "(server)",
+          "Trường LockAndKey có trong model nhưng không có trong JSON mặc định"
+        ],
+        [
+          "Snitch",
+          "Level 290",
+          "SnitchConfigModel.FirstLevelToShow, IsEnabled = false mặc định"
+        ],
+        [
+          "Chargeable Bottle / Super Charger",
+          "Level 5",
+          "SuperChargerConfigModel.FirstLevelToShow, IsEnabled = false mặc định"
+        ]
+      ]
+    },
+    {
+      "title": "BẢNG MÃ LOẠI VẬT CẢN (enum ItemType)",
+      "columns": [
+        "Mã",
+        "Tên",
+        "Nhóm"
+      ],
+      "rows": [
+        [
+          "0",
+          "None",
+          "-"
+        ],
+        [
+          "1",
+          "Bottle",
+          "Chai cơ bản"
+        ],
+        [
+          "2",
+          "Water",
+          "Nước"
+        ],
+        [
+          "3",
+          "QuestionMark",
+          "Ô ẩn màu"
+        ],
+        [
+          "4",
+          "Curtain",
+          "Blocker theo chai"
+        ],
+        [
+          "5",
+          "Clay",
+          "Blocker theo chai"
+        ],
+        [
+          "6",
+          "Plaster",
+          "Blocker theo chai"
+        ],
+        [
+          "7",
+          "Tag",
+          "Blocker theo màu"
+        ],
+        [
+          "8",
+          "Ice",
+          "Phủ nhiều chai (theo Id nhóm)"
+        ],
+        [
+          "9",
+          "Generator",
+          "Máy sinh nước"
+        ],
+        [
+          "10",
+          "Woodbox",
+          "Overlay phủ nhóm chai"
+        ],
+        [
+          "11",
+          "WoodboxKey",
+          "Chìa khoá hộp gỗ"
+        ],
+        [
+          "12",
+          "Carpet",
+          "Overlay phủ nhóm chai"
+        ],
+        [
+          "13",
+          "Snitch",
+          "Chim phá vật cản hộ"
+        ],
+        [
+          "14",
+          "Toggle",
+          "Công tắc theo nước đi"
+        ],
+        [
+          "15",
+          "Ivy",
+          "Dây leo theo màu"
+        ],
+        [
+          "16",
+          "Frog",
+          "Ếch nhảy giữa các chai"
+        ],
+        [
+          "17",
+          "MagicSeal",
+          "Niêm phong dải ô"
+        ],
+        [
+          "18",
+          "Duck",
+          "Vịt"
+        ],
+        [
+          "19",
+          "DuckHouse",
+          "Overlay chuồng vịt"
+        ],
+        [
+          "20",
+          "Safe",
+          "Overlay két sắt (RequiredAmount)"
+        ],
+        [
+          "21",
+          "LongBottle",
+          "Chai dài"
+        ],
+        [
+          "22",
+          "Shelf",
+          "Kệ đỡ (không chặn thao tác)"
+        ],
+        [
+          "23",
+          "Bag",
+          "Túi (RequiredAmount)"
+        ],
+        [
+          "24",
+          "Firework",
+          "Pháo hoa (FireworkCount)"
+        ],
+        [
+          "25",
+          "Rainbow",
+          "Nước cầu vồng đa năng"
+        ],
+        [
+          "26",
+          "Icicle",
+          "Nhũ băng trong ô"
+        ],
+        [
+          "27",
+          "Mosaic",
+          "Overlay khảm nhiều màu"
+        ],
+        [
+          "28",
+          "ChargeableBottle",
+          "Chai tích năng lượng"
+        ]
+      ]
+    },
+    {
+      "title": "BẢNG MÀU PHẢI KHỚP (enum theo từng vật cản)",
+      "columns": [
+        "Enum",
+        "Các giá trị",
+        "Ý nghĩa"
+      ],
+      "rows": [
+        [
+          "WoodboxKeyType",
+          "Orange=1, Green=2, Yellow=3, Gray=4, White=5, Wine=6",
+          "Màu chìa phải khớp màu hộp gỗ"
+        ],
+        [
+          "DuckType",
+          "Blue=1, Orange=2, Wine=3, Green=4, Red=5, Yellow=6",
+          "Vịt phải khớp màu chuồng"
+        ],
+        [
+          "FrogType",
+          "Orange=1, Green=2, Yellow=3, Gray=4, White=5, Wine=6",
+          "Màu ếch"
+        ],
+        [
+          "SafeType",
+          "Orange=1, Green=2, Yellow=3, Gray=4, White=5, Wine=6, Blue=7, Pink=8",
+          "Màu két sắt"
+        ],
+        [
+          "MosaicType",
+          "Orange=1, Green=2, Yellow=3, Gray=4, White=5, Wine=6, Blue=7, Pink=8",
+          "Màu khảm"
+        ],
+        [
+          "KeyLockType",
+          "None=0, Metal=1, Wood=2, Gold=3",
+          "Chìa phải cùng loại với khoá"
+        ],
+        [
+          "MosaicTargetType",
+          "ExtraHigh=0, High=1, MidHigh=2, Mid=3, MidLow=4, Low=5, ExtraLow=6",
+          "Vị trí ô mục tiêu trên khảm"
+        ],
+        [
+          "SnitchItemType",
+          "Normal=0, Red=1",
+          "Biến thể Snitch"
+        ],
+        [
+          "ItemPartType",
+          "None=0, WaterLine=1, Blob=2, FrogPath=3, Shadow=4",
+          "Thành phần phụ vẽ kèm vật cản"
+        ]
+      ]
+    }
+  ],
+  "key_numbers": [
+    {
+      "label": "Số loại vật cản mô tả",
+      "value": "25+ loại (ItemType đến 28)",
+      "source": "Obstacles.summary / ItemType.cs"
+    },
+    {
+      "label": "Level giới thiệu Curtain",
+      "value": "20",
+      "source": "BlockerIntroConfigModel.Curtain"
+    },
+    {
+      "label": "Level giới thiệu Clay",
+      "value": "60",
+      "source": "BlockerIntroConfigModel.Clay"
+    },
+    {
+      "label": "Level giới thiệu Plaster",
+      "value": "110",
+      "source": "BlockerIntroConfigModel.Plaster"
+    },
+    {
+      "label": "Snitch bật mặc định",
+      "value": "false",
+      "source": "SnitchConfigModel.IsEnabled"
+    },
+    {
+      "label": "Snitch level đầu tiên",
+      "value": "290",
+      "source": "SnitchConfigModel.FirstLevelToShow"
+    },
+    {
+      "label": "Snitch TargetLevelProgress",
+      "value": "10",
+      "source": "SnitchConfigModel.TargetLevelProgress"
+    },
+    {
+      "label": "Super Charger bật mặc định",
+      "value": "false",
+      "source": "SuperChargerConfigModel.IsEnabled"
+    },
+    {
+      "label": "Super Charger level đầu tiên",
+      "value": "5",
+      "source": "SuperChargerConfigModel.FirstLevelToShow"
+    },
+    {
+      "label": "Super Charger ChargeMatchCount",
+      "value": "[1]",
+      "source": "SuperChargerConfigModel.ChargeMatchCount"
+    },
+    {
+      "label": "BestSortMaxEffectedBottleCap",
+      "value": "4",
+      "source": "SuperChargerConfigModel"
+    },
+    {
+      "label": "BestSortBottleCapByCandidateCount",
+      "value": "{\"7\": 4}",
+      "source": "SuperChargerConfigModel"
+    },
+    {
+      "label": "Ice — bắt đầu animation vỡ",
+      "value": "1.03 s",
+      "source": "IceConfig.IceBreakAnimationStartTime"
+    },
+    {
+      "label": "Ice — kết thúc animation vỡ",
+      "value": "2.3 s",
+      "source": "IceConfig.IceBreakAnimationEndTime"
+    },
+    {
+      "label": "Ice — thời điểm gỡ blocker",
+      "value": "1.2 s",
+      "source": "IceConfig.RemoveBlockerTime"
+    },
+    {
+      "label": "Ice — trễ vỡ giữa các mảnh",
+      "value": "0.063 s",
+      "source": "IceConfig.IceBreakConsecutiveDelay"
+    },
+    {
+      "label": "Ice — MaskScaleIncrement / InnerMaskScaleIncrement",
+      "value": "2.03 / 2.03",
+      "source": "IceConfig"
+    },
+    {
+      "label": "Ice — InnerStartScale",
+      "value": "0.9",
+      "source": "IceConfig.InnerStartScale"
+    },
+    {
+      "label": "Curtain — độ trễ lộ chai",
+      "value": "revealDelay = 0.2 s",
+      "source": "CurtainItem.Complete"
+    },
+    {
+      "label": "Shelf — Scale",
+      "value": "3",
+      "source": "ShelfConfig.Scale"
+    },
+    {
+      "label": "Snitch — sort order lớp vẽ",
+      "value": "3100",
+      "source": "SortingService.SnitchSortOrder"
+    },
+    {
+      "label": "Số nhóm vật cản",
+      "value": "2 (BlockerModel theo ô/chai và OverlayBlockerModel phủ nhiều chai)",
+      "source": "Obstacles.summary"
+    }
+  ],
+  "config_highlights": [
+    {
+      "key": "BlockerIntroConfigModel.Curtain / Clay / Plaster",
+      "value": "20 / 60 / 110",
+      "meaning": "Level bắt đầu giới thiệu từng vật cản (client default, server ghi đè)"
+    },
+    {
+      "key": "BlockerIntroConfigModel.LockAndKey",
+      "value": "(không có trong JSON mặc định)",
+      "meaning": "Level giới thiệu khoá & chìa"
+    },
+    {
+      "key": "SnitchConfigModel",
+      "value": "IsEnabled=false, FirstLevelToShow=290, TargetLevelProgress=10, IsFallbackPremiumHitActive=true, IsWaterColorChangeActive=true",
+      "meaning": "Bật/tắt và ngưỡng của cơ chế Snitch"
+    },
+    {
+      "key": "SuperChargerConfigModel",
+      "value": "IsEnabled=false, Type=2, FirstLevelToShow=5, TargetLevelProgress=0, ChargeWithMove=false, CanIncreaseHealth=false, ShouldHaveInitialCharge=false, ChargeMatchCount=[1]",
+      "meaning": "Cấu hình chai tích năng lượng (ChargeableBottle)"
+    },
+    {
+      "key": "IceConfig.IceBreakAnimationStartTime / EndTime",
+      "value": "1.03 / 2.3 (giây)",
+      "meaning": "Khung thời gian animation vỡ băng"
+    },
+    {
+      "key": "IceConfig.RemoveBlockerTime",
+      "value": "1.2 s",
+      "meaning": "Thời điểm gỡ blocker băng khỏi chai"
+    },
+    {
+      "key": "IceConfig.IceBreakConsecutiveDelay",
+      "value": "0.063 s",
+      "meaning": "Độ trễ vỡ giữa các mảnh băng liên tiếp"
+    },
+    {
+      "key": "IceConfig.LeftMaskOffset / RightMaskOffset",
+      "value": "(1.18, 2.2, 0) / (-1.18, 2.2, 0)",
+      "meaning": "Lệch vị trí mặt nạ băng"
+    },
+    {
+      "key": "ShelfConfig.Scale / Offset / ScaleAccordingToBottleCount",
+      "value": "3 / (0,0,0) / [] (rỗng)",
+      "meaning": "Kích thước và vị trí kệ đỡ chai"
+    },
+    {
+      "key": "ItemType",
+      "value": "None=0 … ChargeableBottle=28",
+      "meaning": "Mã loại vật cản dùng trong model level và analytics"
+    },
+    {
+      "key": "BagItemModel.RequiredAmount",
+      "value": "theo level",
+      "meaning": "Số lần hoàn thành chai để mở túi"
+    },
+    {
+      "key": "SafeItemModel.RequiredAmount + SafeType",
+      "value": "theo level",
+      "meaning": "Số lần hoàn thành chai và màu két"
+    },
+    {
+      "key": "FireworkItemModel.FireworkCount",
+      "value": "theo level",
+      "meaning": "Số quả pháo bắn ra khi kích hoạt"
+    },
+    {
+      "key": "GeneratorItemModel.ColorIds",
+      "value": "theo level",
+      "meaning": "Chuỗi màu mà máy sinh nước sẽ bơm ra"
+    },
+    {
+      "key": "CurtainItemModel.ObjectiveModel.ColorId",
+      "value": "theo level (JSON key \"CI\")",
+      "meaning": "Màu chai phải hoàn thành để mở rèm"
+    },
+    {
+      "key": "TagItemModel.ColorId / IvyItemModel.ColorId",
+      "value": "theo level",
+      "meaning": "Màu bắt buộc của thẻ và dây leo"
+    },
+    {
+      "key": "IceItemModel.Id / CarpetItemModel.Id",
+      "value": "theo level",
+      "meaning": "Id nhóm để gom các chai bị cùng một tảng băng / tấm thảm"
+    },
+    {
+      "key": "ToggleItemModel.IsOn",
+      "value": "theo level",
+      "meaning": "Trạng thái ban đầu của công tắc"
+    },
+    {
+      "key": "ChargeableBottleItemModel.HasInitialCharge",
+      "value": "theo level",
+      "meaning": "Chai đã có sẵn năng lượng khi vào bàn"
+    },
+    {
+      "key": "SnitchItemModel.ItemType / TargetCellIndices / TargetBottleIndices",
+      "value": "theo level",
+      "meaning": "Loại Snitch và các ô/chai mục tiêu định sẵn"
+    },
+    {
+      "key": "MosaicItemModel.MosaicType / ColorIds",
+      "value": "theo level",
+      "meaning": "Màu khảm và danh sách màu phải hoàn thành"
+    },
+    {
+      "key": "\"{0}Introduced\" (ví dụ CurtainIntroduced)",
+      "value": "client",
+      "meaning": "Cờ đã giới thiệu một loại vật cản (định dạng cũ, PlayerService.IsBlockerIntroducedOld)"
+    },
+    {
+      "key": "PlayerService.IsBlockerIntroduced / SetIsBlockerIntroduced",
+      "value": "client (bitmask theo blockerId)",
+      "meaning": "Cờ giới thiệu vật cản định dạng mới"
+    },
+    {
+      "key": "RootLevelConfigModel.IsNewBlockerVisualsEnabled",
+      "value": "(server)",
+      "meaning": "Chọn bộ hình ảnh vật cản mới (BottleCollection.GetBlockerVariant)"
+    },
+    {
+      "key": "*ConfigsForSize / *SizeContainer",
+      "value": "Export 0.0.3063 có 6 preset animation theo size trong mỗi WoodBox/Mosaic/Safe/DuckHouse AnimationConfig. Toàn bộ scalar, vector và curve đã được trích. Getter của WoodBox/Mosaic/Safe dùng phần tử 0 khi size âm hoặc vượt Count; không suy 6 preset là giới hạn tối đa 6 chai.",
+      "meaning": "Biến thể hình ảnh theo số chai bị phủ"
+    },
+    {
+      "key": "*AnimationConfig",
+      "value": "BagAnimationConfig, CarpetAnimationConfig, ChargeableBottleAnimationConfig, DuckAnimationConfig, FireworkAnimationConfig, MosaicAnimationConfig, SafeAnimationConfig, ToggleAnimationConfig, WoodBoxAnimationConfig, QuestionMarkAnimationConfig",
+      "meaning": "Tham số hoạt hoạ riêng của từng vật cản"
+    }
+  ],
+  "tips": [
+    "Ba vật cản cơ bản (Curtain 20, Clay 60, Plaster 110) tạo đường cong độ khó dạng bậc thang, mỗi lần thêm một luật mới.",
+    "Nhóm Overlay (Carpet, Woodbox, Duck House, Safe, Mosaic) khoá nhiều chai cùng lúc nên tăng độ khó mạnh hơn blocker đơn lẻ.",
+    "Cặp màu phải khớp (Woodbox–Key, Duck–DuckHouse, Lock–Key) buộc người chơi lập kế hoạch theo thứ tự, không chỉ theo màu nước.",
+    "Snitch và Super Charger mặc định tắt, cho phép bật dần theo A/B test qua remote config."
+  ],
+  "categories": [
+    "Cơ chế lõi",
+    "Tiến trình",
+    "Meta"
+  ]
+}

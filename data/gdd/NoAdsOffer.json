@@ -1,0 +1,1116 @@
+{
+  "id": "NoAdsOffer",
+  "name": "No Ads Offer",
+  "category": "Economy",
+  "managers": [
+    "Modules.Contexts.Home.Monetization.NoAdsOffer.Scripts.NoAdsOfferService",
+    "Modules.Contexts.Home.Monetization.NoAdsOffer.Scripts.NoAdsOfferDataService",
+    "Modules.Contexts.Home.Monetization.NoAdsOffer.Scripts.NoAdsOfferStateService",
+    "Modules.Contexts.Home.Monetization.NoAdsOffer.Scripts.NoAdsOfferRemoteService",
+    "Modules.Contexts.Home.Monetization.NoAdsOffer.Scripts.NoAdsOfferConfigModel",
+    "Modules.Contexts.Home.Store.Scripts.BundleNoAdsAvailabilityService"
+  ],
+  "summary": "No Ads Offer bán gói gỡ quảng cáo vĩnh viễn ('Remove all forced ads forever!'), kèm một bộ thưởng khởi động. Điểm khác biệt so với các offer khác là thời điểm chào bán: popup chỉ bật sau khi người chơi vừa xem một số quảng cáo xen kẽ (interstitial) — đúng lúc họ bực nhất với quảng cáo. Số lần hiện bị chặn ba tầng: theo phiên (SessionPopupShowLimit), theo ngày (DailyPopupShowLimit, reset theo giờ server) và theo cả đời tài khoản (LifetimePopupShowLimit). Người đã sở hữu No Ads (kiểm tra qua InAppPurchaseHistoryService) sẽ không thấy offer nữa; BundleNoAdsAvailabilityService quyết định các bundle 'kèm No Ads' trong Store còn bán được hay không.",
+  "unlock": "NoAdsOfferStateService.GetState() trả NoAdsOfferState: Disabled(0) khi NoAdsOfferConfigModel.IsEnabled == false, NoAdsAlreadyActive(1) khi InAppPurchaseHistoryService cho biết người chơi đã mua No Ads, NoCache(2) khi chưa có NoAdsOfferResponse, Active(3) khi bán được. CanShowPopup() còn kiểm tra ba hạn mức số lần hiện và khoảng cách theo số quảng cáo (PopupIntervalAsAdCount).",
+  "entry_points": [
+    "Popup No Ads tự bật sau khi xem đủ số quảng cáo xen kẽ (ShouldForceShowPopup)",
+    "TryToShowNoAdsOfferLobbyReturnCommand (nằm trong namespace SpecialOffer.Scripts.Commands) — bật khi quay lại Home",
+    "Store: StoreViewType.BasicBundleWithNoAds (6) — bundle kèm quyền No Ads",
+    "Nút Play ở Home (OnPlayButtonClicked)"
+  ],
+  "flow": "NoAdsOfferService.Initialize() đăng ký lắng nghe sự kiện quảng cáo; MarkInterShown(AdRequestSource source) tăng _sessionInterstitialCount mỗi lần một quảng cáo xen kẽ được hiển thị, và _nextPopupTargetCount là mốc kế tiếp = số hiện tại + NoAdsOfferConfigModel.PopupIntervalAsAdCount. Khi ShouldForceShowPopup() đúng (đạt mốc và chưa vượt hạn mức), popup mở qua OnPlayButtonClicked() hoặc TryToShowNoAdsOfferLobbyReturnCommand; PopupShown() gọi NoAdsOfferDataService.IncreasePopupShownCount() và SetLastPopupShownTime(time), đồng thời tăng _sessionPopupShowCount và NoAdsOfferModel.LifetimePopupShowCount. Reset theo ngày: TryResetDailyPopupCount() so NoAdsOfferModel.LastUsedTime với giờ hiện tại lấy từ RemoteTimeService rồi gọi ResetPopupShownCount(now). Dữ liệu offer: NoAdsOfferStateService.ShouldSendGetRequest() → NoAdsOfferService.TryFetchCurrentEvent() → NoAdsOfferRemoteService; HandleResponse(ApiResponse<NoAdsOfferResponse>) lưu NoAdsOfferResponse{EventId, EventType} qua CacheBackendResponse(). Nội dung bán: GetViewModel() trả NoAdsOfferViewModel{IAPConfigModel, RewardModels} dựng từ NoAdsOfferConfigModel.IAPConfigModel và RewardModels; GetUniqueIAPConfigModels() / TryGetIAPModel(productId, out o) phục vụ IAPManager. Mua: IAPService với IAPOrigin.NoAdsOffer (6), IAPReason.NoAdsOffer (8); thành công thì Claim() trao GetRewards() với CurrencyEarnReason.NoAdsOffer (27) và cấp CurrencyType.NoAds (7); InAppPurchaseHistoryService ghi nhận nên state chuyển NoAdsAlreadyActive. Analytics: no_ads_popup_impression và no_ads_offer_purchased.",
+  "use_cases": [
+    {
+      "id": "UC-01",
+      "title": "Xác định có bán được No Ads không",
+      "actor": "System",
+      "trigger": "Vào Home / IntervalUpdate",
+      "precondition": "Có remote config",
+      "steps": [
+        "NoAdsOfferService.GetConfig() lấy NoAdsOfferConfigModel",
+        "NoAdsOfferStateService.GetState(): IsEnabled == false → Disabled(0)",
+        "InAppPurchaseHistoryService cho biết đã mua No Ads → NoAdsAlreadyActive(1)",
+        "Chưa có NoAdsOfferResponse → NoCache(2)",
+        "Đủ điều kiện → Active(3)"
+      ],
+      "result": "Người đã mua No Ads không bao giờ thấy lại offer",
+      "rules": "NoAdsOfferState: Disabled=0, NoAdsAlreadyActive=1, NoCache=2, Active=3",
+      "evidence": "NoAdsOfferStateService.GetState; NoAdsOfferStateService.CanShowPopup; NoAdsOfferService.GetConfig; InAppPurchaseHistoryService"
+    },
+    {
+      "id": "UC-02",
+      "title": "Lấy dữ liệu offer từ server",
+      "actor": "System",
+      "trigger": "NoAdsOfferStateService.ShouldSendGetRequest() == true",
+      "precondition": "-",
+      "steps": [
+        "NoAdsOfferService.TryFetchCurrentEvent() → NoAdsOfferRemoteService gửi request",
+        "HandleResponse(ApiResponse<NoAdsOfferResponse>) xử lý",
+        "NoAdsOfferDataService.CacheBackendResponse(NoAdsOfferResponse{EventId, EventType})",
+        "SecondTimer lên lịch fetch lại; Dispose() gọi SecondTimer.Cancel()"
+      ],
+      "result": "EventId/EventType sẵn sàng cho analytics và claim",
+      "rules": "NoAdsOfferResponse rất gọn (chỉ EventId, EventType) vì nội dung gói nằm trong remote config chứ không theo phân khúc",
+      "evidence": "NoAdsOfferService.TryFetchCurrentEvent; NoAdsOfferService.HandleResponse; NoAdsOfferDataService.CacheBackendResponse; NoAdsOfferDataService.ClearBackendResponse"
+    },
+    {
+      "id": "UC-03",
+      "title": "Đếm quảng cáo xen kẽ để chọn thời điểm chào bán",
+      "actor": "System",
+      "trigger": "Một quảng cáo interstitial được hiển thị",
+      "precondition": "State = Active",
+      "steps": [
+        "NoAdsOfferService.MarkInterShown(AdRequestSource source) tăng _sessionInterstitialCount",
+        "_nextPopupTargetCount = mốc kế tiếp theo NoAdsOfferConfigModel.PopupIntervalAsAdCount",
+        "ShouldForceShowPopup() trả true khi _sessionInterstitialCount đạt _nextPopupTargetCount"
+      ],
+      "result": "Offer xuất hiện đúng lúc người chơi vừa bị quảng cáo làm phiền",
+      "rules": "PopupIntervalAsAdCount là khoảng cách tính bằng số quảng cáo, không phải thời gian",
+      "evidence": "NoAdsOfferService.MarkInterShown; NoAdsOfferService.ShouldForceShowPopup; NoAdsOfferConfigModel.PopupIntervalAsAdCount"
+    },
+    {
+      "id": "UC-04",
+      "title": "Ba tầng giới hạn số lần hiện popup",
+      "actor": "System",
+      "trigger": "Chuẩn bị mở popup",
+      "precondition": "-",
+      "steps": [
+        "NoAdsOfferDataService.GetSessionPopupShowCount() so với NoAdsOfferConfigModel.SessionPopupShowLimit",
+        "NoAdsOfferModel.PopupShowCount (trong ngày) so với DailyPopupShowLimit",
+        "NoAdsOfferDataService.GetLifetimePopupShowCount() so với LifetimePopupShowLimit",
+        "NoAdsOfferStateService.CanShowPopup() tổng hợp cả ba",
+        "Mở popup xong: PopupShown() → IncreasePopupShownCount() + SetLastPopupShownTime(time)"
+      ],
+      "result": "Offer không bao giờ trở thành phiền toái, kể cả với người chơi xem nhiều quảng cáo",
+      "rules": "_sessionPopupShowCount là biến runtime của NoAdsOfferDataService; PopupShowCount và LifetimePopupShowCount được lưu trong NoAdsOfferModel",
+      "evidence": "NoAdsOfferStateService.CanShowPopup; NoAdsOfferDataService.GetSessionPopupShowCount; NoAdsOfferDataService.GetLifetimePopupShowCount; NoAdsOfferService.PopupShown; NoAdsOfferDataService.IncreasePopupShownCount"
+    },
+    {
+      "id": "UC-05",
+      "title": "Reset bộ đếm theo ngày bằng giờ server",
+      "actor": "System",
+      "trigger": "Vào game / IntervalUpdate",
+      "precondition": "-",
+      "steps": [
+        "NoAdsOfferService.TryResetDailyPopupCount()",
+        "Lấy giờ hiện tại từ RemoteTimeService (chống chỉnh giờ máy)",
+        "So với NoAdsOfferDataService.GetLastUsedTime() (NoAdsOfferModel.LastUsedTime)",
+        "Sang ngày mới → NoAdsOfferDataService.ResetPopupShownCount(now) đặt PopupShowCount = 0"
+      ],
+      "result": "Hạn mức ngày reset đúng theo giờ server, không lách được bằng đổi giờ máy",
+      "rules": "LifetimePopupShowCount không bị reset",
+      "evidence": "NoAdsOfferService.TryResetDailyPopupCount; NoAdsOfferDataService.ResetPopupShownCount; NoAdsOfferDataService.GetLastUsedTime; NoAdsOfferService..ctor(remoteTimeService)"
+    },
+    {
+      "id": "UC-06",
+      "title": "Hiển thị popup No Ads",
+      "actor": "Player",
+      "trigger": "Popup tự bật hoặc bấm nút Play (OnPlayButtonClicked)",
+      "precondition": "CanShowPopup() == true",
+      "steps": [
+        "NoAdsOfferService.GetViewModel() trả NoAdsOfferViewModel{IAPConfigModel, RewardModels}",
+        "Popup hiển thị giá và bộ thưởng kèm; text noads_title 'Remove ADS', noads_description_1 'Remove all forced ads forever!', noads_description_2 'Keep optional ads for rewards!'",
+        "NoAdsOfferService.PopupShown() ghi nhận",
+        "EventSender.SendNoAdsOfferImpressionStat() → no_ads_popup_impression với progress, segment"
+      ],
+      "result": "Người chơi hiểu rõ: chỉ gỡ quảng cáo bắt buộc, vẫn giữ quảng cáo tự nguyện đổi thưởng",
+      "rules": "Thông điệp tách bạch forced ads và rewarded ads là điểm thiết kế quan trọng — không làm mất kênh doanh thu rewarded",
+      "evidence": "NoAdsOfferService.GetViewModel; NoAdsOfferService.PopupShown; NoAdsOfferService.OnPlayButtonClicked; EventSender.SendNoAdsOfferImpressionStat"
+    },
+    {
+      "id": "UC-07",
+      "title": "Mua gói No Ads",
+      "actor": "Player",
+      "trigger": "Bấm nút mua",
+      "precondition": "State = Active",
+      "steps": [
+        "NoAdsOfferService.TryGetIAPModel(productId, out IAPConfigModel o) / GetUniqueIAPConfigModels()",
+        "IAPService mua với IAPOrigin.NoAdsOffer (6), IAPReason.NoAdsOffer (8)",
+        "IAPPurchaseVerificationService xác thực",
+        "NoAdsOfferService.Claim() trao GetRewards() (NoAdsOfferConfigModel.RewardModels) với CurrencyEarnReason.NoAdsOffer (27)",
+        "Cấp CurrencyType.NoAds (7); InAppPurchaseHistoryService ghi lịch sử mua",
+        "EventSender.SendNoAdsOfferPurchasedStat(iapModel) → no_ads_offer_purchased với price, currency, dollar_equivalent, progress, segment"
+      ],
+      "result": "Quảng cáo bắt buộc bị tắt vĩnh viễn, nhận thêm bộ thưởng khởi động; state chuyển NoAdsAlreadyActive",
+      "rules": "Trạng thái 'đã mua No Ads' không lưu trong NoAdsOfferModel mà tra từ InAppPurchaseHistoryService — bền vững hơn và khôi phục được qua restore purchase",
+      "evidence": "NoAdsOfferService.Claim; NoAdsOfferService.GetRewards; NoAdsOfferService.TryGetIAPModel; NoAdsOfferStateService..ctor(inAppPurchaseHistoryService); EventSender.SendNoAdsOfferPurchasedStat"
+    },
+    {
+      "id": "UC-08",
+      "title": "Bundle 'kèm No Ads' trong Store",
+      "actor": "System",
+      "trigger": "Dựng danh sách cửa hàng",
+      "precondition": "-",
+      "steps": [
+        "BundleNoAdsAvailabilityService (Modules.Contexts.Home.Store.Scripts) hỏi _inAppPurchaseHistoryService, _storeModelService và _adService",
+        "Mã0.0.3063: IsNoAdsAvailableInBundle = adsEnabledExceptRewarded && !IsAnyNormalBundlePurchased && (!IsSelectiveNoAdsBundleEnabled || bundle.ShouldCloseAds). Đây là eligibility của thành phầnNoAds trongbundle; không đồng nghĩa ẩn toànbundle hoặc chỉ kiểm người đã muaNoAds.",
+        "StoreViewType.BasicBundleWithNoAds (6) bị loại hoặc thay bằng StoreViewType.BasicBundle (1)"
+      ],
+      "result": "Thành phần NoAds trong bundle được đánh giá theo applied ad-config, normal-purchase history và selective flag; thay/ẩn view còn phụ thuộc caller.",
+      "rules": "Đây là cầu nối giữa NoAdsOffer và Store",
+      "evidence": "Modules.Contexts.Home.Store.Scripts.BundleNoAdsAvailabilityService; Modules.Contexts.Home.Store.Scripts.StoreViewType"
+    },
+    {
+      "id": "UC-09",
+      "title": "Khôi phục quyền No Ads",
+      "actor": "Player",
+      "trigger": "Bấm Restore Purchase trong Settings",
+      "precondition": "Đã từng mua No Ads",
+      "steps": [
+        "RestorePurchaseButton (Modules.Contexts.Home.SettingsPopUp.Scripts) gọi IAPService khôi phục",
+        "InAppPurchaseHistoryService cập nhật lịch sử",
+        "NoAdsOfferStateService.GetState() trả NoAdsAlreadyActive (1)",
+        "AdService ngừng phát quảng cáo bắt buộc"
+      ],
+      "result": "Người chơi cài lại game vẫn giữ quyền No Ads",
+      "rules": "Bắt buộc với chính sách của App Store/Google Play cho sản phẩm non-consumable",
+      "evidence": "Modules.Contexts.Home.SettingsPopUp.Scripts.RestorePurchaseButton; NoAdsOfferStateService.GetState; InAppPurchaseHistoryService"
+    },
+    {
+      "id": "UC-10",
+      "title": "Mua thất bại hoặc không verify được",
+      "actor": "System",
+      "trigger": "Store từ chối hoặc backend không xác thực được",
+      "precondition": "-",
+      "steps": [
+        "IAPService trả StorePurchaseFailureReason (bao gồm CouldNotVerifyFromBackend = 5)",
+        "EventSender.SendPurchaseFailedEvent / SendPurchaseNotVerifiedEvent / SendPurchaseUnableToVerifyEvent",
+        "Không cấp CurrencyType.NoAds, quảng cáo vẫn chạy",
+        "Giao dịch treo xử lý ở lần vào game sau (not_requested_iap)"
+      ],
+      "result": "Không cấp quyền khi chưa xác thực; người chơi có thể Restore sau",
+      "rules": "Với sản phẩm vĩnh viễn, verify chặt là bắt buộc để tránh gian lận",
+      "evidence": "EventSender.SendPurchaseFailedEvent; EventSender.SendPurchaseNotVerifiedEvent; Modules.Contexts.Application.IAP.Scripts.StorePurchaseFailureReason"
+    },
+    {
+      "id": "UC-11",
+      "title": "Lưu và xoá dữ liệu",
+      "actor": "System",
+      "trigger": "Thoát game / reset tài khoản",
+      "precondition": "-",
+      "steps": [
+        "NoAdsOfferDataService.MarkForLateUpdate(); LateUpdate() lưu NoAdsOfferModel qua ISaveLoad",
+        "DeleteData() xoá khi reset",
+        "ClearBackendResponse() dọn cache response"
+      ],
+      "result": "Bộ đếm popup được giữ giữa các phiên",
+      "rules": "NoAdsOfferDataService KHÔNG implement ISyncable — bộ đếm popup là cục bộ từng thiết bị; chỉ quyền No Ads (qua InAppPurchaseHistoryService) là xuyên thiết bị",
+      "evidence": "NoAdsOfferDataService.LateUpdate; NoAdsOfferDataService.DeleteData; NoAdsOfferDataService.ClearBackendResponse"
+    }
+  ],
+  "configs": [
+    {
+      "source": "server info",
+      "key": "NoAdsOfferConfigModel.IsEnabled / EventType",
+      "type": "bool/int",
+      "value": "server",
+      "meaning": "Bật tắt và loại sự kiện",
+      "where": "RemoteConfigs → NoAdsOfferConfigModel (IRemoteConfigValidatable)"
+    },
+    {
+      "source": "server info",
+      "key": "NoAdsOfferConfigModel.IAPConfigModel",
+      "type": "IAPConfigModel",
+      "value": "server (ProductId, ProductType, DollarEquivalent)",
+      "meaning": "Sản phẩm IAP gỡ quảng cáo",
+      "where": "NoAdsOfferService.GetViewModel"
+    },
+    {
+      "source": "server info",
+      "key": "NoAdsOfferConfigModel.RewardModels",
+      "type": "List<RewardModel>",
+      "value": "server",
+      "meaning": "Bộ thưởng kèm khi mua No Ads",
+      "where": "NoAdsOfferService.GetRewards"
+    },
+    {
+      "source": "Default/code0.0.3063 and historical caches20260910/20261010; per-snapshot source/hash in snapshot_values; not effective-runtime proof",
+      "key": "NoAdsOfferConfigModel.DailyPopupShowLimit",
+      "type": "int",
+      "value": "default_0.0.3063: 7; cache_20260910: 0; cache_20261010: 0",
+      "meaning": "Số lần hiện popup tối đa mỗi ngày (reset theo giờ server) [15/11: giá trị theo snapshot cụ thể; thiếu field khác với false/0. Không xác nhận assignment hoặc effective runtime.]",
+      "where": "NoAdsOfferService.TryResetDailyPopupCount",
+      "previous_unresolved_value": "server",
+      "snapshot_values": [
+        {
+          "snapshot": "default_0.0.3063",
+          "model": "NoAdsOfferConfigModel",
+          "key": "DailyPopupShowLimit",
+          "value": 7,
+          "type": "int",
+          "source": "../com.grandgames.magicsort_Unity_20260909_112501/UnityExport/ExportedProject/Assets/Resources/defaultconfigs/NoAdsOfferConfigModel.json",
+          "value_type": "int",
+          "source_sha256": "2a4dd645722516f27f5de1de04637ee83982ef43432144cb206a1b8d6f706b28",
+          "field_present": true
+        },
+        {
+          "snapshot": "cache_20260910",
+          "model": "noAdsOfferConfigModel",
+          "key": "dailyPopupShowLimit",
+          "value": 0,
+          "type": "int",
+          "source": "facts/runtime/server_configs/noAdsOfferConfigModel.json",
+          "value_type": "int",
+          "source_sha256": "11394cf27d58f493807a7e7bef66bc73e5149608bf55535fd9c91cb3c3c71713",
+          "field_present": true
+        },
+        {
+          "snapshot": "cache_20261010",
+          "model": "noAdsOfferConfigModel",
+          "key": "dailyPopupShowLimit",
+          "value": 0,
+          "type": "int",
+          "source": "facts/runtime/test_20261010/before/CachedRemoteConfigs",
+          "value_type": "int",
+          "source_sha256": "433164d4877b2dee55d2bbd79ef2fe83d3fe9519492fe15e3cb0926daf216050",
+          "field_present": true
+        }
+      ],
+      "snapshot_review_id": "MS-CFG-NoAdsOffer-0003"
+    },
+    {
+      "source": "Default/code0.0.3063 and historical caches20260910/20261010; per-snapshot source/hash in snapshot_values; not effective-runtime proof",
+      "key": "NoAdsOfferConfigModel.SessionPopupShowLimit",
+      "type": "int",
+      "value": "default_0.0.3063: 3; cache_20260910: 0; cache_20261010: 0",
+      "meaning": "Số lần hiện popup tối đa mỗi phiên chơi [15/11: giá trị theo snapshot cụ thể; thiếu field khác với false/0. Không xác nhận assignment hoặc effective runtime.]",
+      "where": "NoAdsOfferDataService.GetSessionPopupShowCount",
+      "previous_unresolved_value": "server",
+      "snapshot_values": [
+        {
+          "snapshot": "default_0.0.3063",
+          "model": "NoAdsOfferConfigModel",
+          "key": "SessionPopupShowLimit",
+          "value": 3,
+          "type": "int",
+          "source": "../com.grandgames.magicsort_Unity_20260909_112501/UnityExport/ExportedProject/Assets/Resources/defaultconfigs/NoAdsOfferConfigModel.json",
+          "value_type": "int",
+          "source_sha256": "2a4dd645722516f27f5de1de04637ee83982ef43432144cb206a1b8d6f706b28",
+          "field_present": true
+        },
+        {
+          "snapshot": "cache_20260910",
+          "model": "noAdsOfferConfigModel",
+          "key": "sessionPopupShowLimit",
+          "value": 0,
+          "type": "int",
+          "source": "facts/runtime/server_configs/noAdsOfferConfigModel.json",
+          "value_type": "int",
+          "source_sha256": "11394cf27d58f493807a7e7bef66bc73e5149608bf55535fd9c91cb3c3c71713",
+          "field_present": true
+        },
+        {
+          "snapshot": "cache_20261010",
+          "model": "noAdsOfferConfigModel",
+          "key": "sessionPopupShowLimit",
+          "value": 0,
+          "type": "int",
+          "source": "facts/runtime/test_20261010/before/CachedRemoteConfigs",
+          "value_type": "int",
+          "source_sha256": "433164d4877b2dee55d2bbd79ef2fe83d3fe9519492fe15e3cb0926daf216050",
+          "field_present": true
+        }
+      ],
+      "snapshot_review_id": "MS-CFG-NoAdsOffer-0004"
+    },
+    {
+      "source": "Default/code0.0.3063 and historical caches20260910/20261010; per-snapshot source/hash in snapshot_values; not effective-runtime proof",
+      "key": "NoAdsOfferConfigModel.LifetimePopupShowLimit",
+      "type": "int",
+      "value": "cache_20260910: 0; cache_20261010: 0",
+      "meaning": "Số lần hiện popup tối đa cả đời tài khoản [15/11: giá trị theo snapshot cụ thể; thiếu field khác với false/0. Không xác nhận assignment hoặc effective runtime.]",
+      "where": "NoAdsOfferDataService.GetLifetimePopupShowCount",
+      "previous_unresolved_value": "server",
+      "snapshot_values": [
+        {
+          "snapshot": "cache_20260910",
+          "model": "noAdsOfferConfigModel",
+          "key": "lifetimePopupShowLimit",
+          "value": 0,
+          "type": "int",
+          "source": "facts/runtime/server_configs/noAdsOfferConfigModel.json",
+          "value_type": "int",
+          "source_sha256": "11394cf27d58f493807a7e7bef66bc73e5149608bf55535fd9c91cb3c3c71713",
+          "field_present": true
+        },
+        {
+          "snapshot": "cache_20261010",
+          "model": "noAdsOfferConfigModel",
+          "key": "lifetimePopupShowLimit",
+          "value": 0,
+          "type": "int",
+          "source": "facts/runtime/test_20261010/before/CachedRemoteConfigs",
+          "value_type": "int",
+          "source_sha256": "433164d4877b2dee55d2bbd79ef2fe83d3fe9519492fe15e3cb0926daf216050",
+          "field_present": true
+        }
+      ],
+      "snapshot_review_id": "MS-CFG-NoAdsOffer-0005"
+    },
+    {
+      "source": "Default/code0.0.3063 and historical caches20260910/20261010; per-snapshot source/hash in snapshot_values; not effective-runtime proof",
+      "key": "NoAdsOfferConfigModel.PopupIntervalAsAdCount",
+      "type": "int",
+      "value": "default_0.0.3063: 2; cache_20260910: 0; cache_20261010: 0",
+      "meaning": "Cứ bao nhiêu quảng cáo xen kẽ thì được hiện popup một lần [15/11: giá trị theo snapshot cụ thể; thiếu field khác với false/0. Không xác nhận assignment hoặc effective runtime.]",
+      "where": "NoAdsOfferService.MarkInterShown",
+      "previous_unresolved_value": "server",
+      "snapshot_values": [
+        {
+          "snapshot": "default_0.0.3063",
+          "model": "NoAdsOfferConfigModel",
+          "key": "PopupIntervalAsAdCount",
+          "value": 2,
+          "type": "int",
+          "source": "../com.grandgames.magicsort_Unity_20260909_112501/UnityExport/ExportedProject/Assets/Resources/defaultconfigs/NoAdsOfferConfigModel.json",
+          "value_type": "int",
+          "source_sha256": "2a4dd645722516f27f5de1de04637ee83982ef43432144cb206a1b8d6f706b28",
+          "field_present": true
+        },
+        {
+          "snapshot": "cache_20260910",
+          "model": "noAdsOfferConfigModel",
+          "key": "popupIntervalAsAdCount",
+          "value": 0,
+          "type": "int",
+          "source": "facts/runtime/server_configs/noAdsOfferConfigModel.json",
+          "value_type": "int",
+          "source_sha256": "11394cf27d58f493807a7e7bef66bc73e5149608bf55535fd9c91cb3c3c71713",
+          "field_present": true
+        },
+        {
+          "snapshot": "cache_20261010",
+          "model": "noAdsOfferConfigModel",
+          "key": "popupIntervalAsAdCount",
+          "value": 0,
+          "type": "int",
+          "source": "facts/runtime/test_20261010/before/CachedRemoteConfigs",
+          "value_type": "int",
+          "source_sha256": "433164d4877b2dee55d2bbd79ef2fe83d3fe9519492fe15e3cb0926daf216050",
+          "field_present": true
+        }
+      ],
+      "snapshot_review_id": "MS-CFG-NoAdsOffer-0006"
+    },
+    {
+      "source": "server info",
+      "key": "NoAdsOfferResponse.EventId / EventType",
+      "type": "response",
+      "value": "server",
+      "meaning": "Định danh đợt offer",
+      "where": "NoAdsOfferService.HandleResponse"
+    },
+    {
+      "source": "code const",
+      "key": "NoAdsOfferState",
+      "type": "enum",
+      "value": "Disabled=0, NoAdsAlreadyActive=1, NoCache=2, Active=3",
+      "meaning": "Máy trạng thái",
+      "where": "NoAdsOfferStateService.GetState"
+    },
+    {
+      "source": "code const",
+      "key": "CurrencyType.NoAds",
+      "type": "enum",
+      "value": "7",
+      "meaning": "Quyền gỡ quảng cáo được mô hình hoá như một loại tiền tệ trong InventoryService",
+      "where": "Modules.Contexts.Application.Inventory.Scripts.CurrencyType"
+    },
+    {
+      "source": "code const",
+      "key": "CurrencyEarnReason.NoAdsOffer",
+      "type": "enum",
+      "value": "27",
+      "meaning": "Lý do nhận thưởng",
+      "where": "Modules.Contexts.Application.Inventory.Scripts.CurrencyEarnReason"
+    },
+    {
+      "source": "code const",
+      "key": "IAPOrigin.NoAdsOffer / IAPReason.NoAdsOffer",
+      "type": "enum",
+      "value": "6 / 8",
+      "meaning": "Phân loại giao dịch",
+      "where": "Modules.Contexts.Application.IAP.Scripts"
+    },
+    {
+      "source": "code const",
+      "key": "StoreViewType.BasicBundleWithNoAds",
+      "type": "enum",
+      "value": "6",
+      "meaning": "Loại dòng cửa hàng bán bundle kèm quyền No Ads",
+      "where": "Modules.Contexts.Home.Store.Scripts.StoreViewType"
+    },
+    {
+      "source": "code field",
+      "key": "NoAdsOfferService._sessionInterstitialCount / _nextPopupTargetCount",
+      "type": "int",
+      "value": "runtime",
+      "meaning": "Số quảng cáo xen kẽ đã xem trong phiên và mốc hiện popup kế tiếp",
+      "where": "NoAdsOfferService"
+    },
+    {
+      "source": "storage key",
+      "key": "NoAdsOfferModel.PopupShowCount / LifetimePopupShowCount / LastUsedTime / NoAdsOfferResponse",
+      "type": "object",
+      "value": "client (không đồng bộ)",
+      "meaning": "Bộ đếm popup theo ngày và cả đời, mốc thời gian reset, cache response",
+      "where": "NoAdsOfferModel"
+    },
+    {
+      "source": "code const",
+      "key": "Localization",
+      "type": "string",
+      "value": "noads_title 'Remove ADS'; noads_description_1 'Remove all forced ads forever!'; noads_description_2 'Keep optional ads for rewards!'",
+      "meaning": "Text popup",
+      "where": "appendix/localization.tsv"
+    },
+    {
+      "source": "json default",
+      "key": "NoAdsOfferConfigModel.json: IsEnabled",
+      "type": "",
+      "value": "false",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/NoAdsOfferConfigModel.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "NoAdsOfferConfigModel.json: EventType",
+      "type": "",
+      "value": "1",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/NoAdsOfferConfigModel.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "NoAdsOfferConfigModel.json: DailyPopupShowLimit",
+      "type": "",
+      "value": "7",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/NoAdsOfferConfigModel.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "NoAdsOfferConfigModel.json: SessionPopupShowLimit",
+      "type": "",
+      "value": "3",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/NoAdsOfferConfigModel.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "NoAdsOfferConfigModel.json: PopupIntervalAsAdCount",
+      "type": "",
+      "value": "2",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/NoAdsOfferConfigModel.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "NoAdsOfferConfigModel.json: IAPConfigModel.ProductId",
+      "type": "",
+      "value": "sort.noadsoffer",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/NoAdsOfferConfigModel.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "NoAdsOfferConfigModel.json: IAPConfigModel.ProductType",
+      "type": "",
+      "value": "0",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/NoAdsOfferConfigModel.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "NoAdsOfferConfigModel.json: IAPConfigModel.DollarEquivalent",
+      "type": "",
+      "value": "7.99",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/NoAdsOfferConfigModel.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "NoAdsOfferConfigModel.json: RewardModels[0].CurrencyType",
+      "type": "",
+      "value": "7",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/NoAdsOfferConfigModel.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "NoAdsOfferConfigModel.json: RewardModels[0].Amount",
+      "type": "",
+      "value": "1",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/NoAdsOfferConfigModel.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "NoAdsBundleFeatureFlag.json: IsSelectiveNoAdsBundleEnabled",
+      "type": "",
+      "value": "false",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/NoAdsBundleFeatureFlag.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "server cache (historical)",
+      "key": "NoAdsOfferConfigModel (live) = default?",
+      "type": "",
+      "value": "7/24 key trùng default, 17 key khác/thêm",
+      "meaning": "Đối chiếu config server thật (CachedRemoteConfigs) với NoAdsOfferConfigModel.json",
+      "where": "Configs/CachedRemoteConfigs + Firebase RC template 3197 — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server cache (historical)",
+      "key": "NoAdsOfferConfigModel: rewardModels[0].timeSpan",
+      "type": "",
+      "value": "00:00:00",
+      "meaning": "server-only (không có trong default)",
+      "where": "Configs/CachedRemoteConfigs + Firebase RC template 3197 — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server cache (historical)",
+      "key": "NoAdsOfferConfigModel: rewardModels[0].chestType",
+      "type": "",
+      "value": "0",
+      "meaning": "server-only (không có trong default)",
+      "where": "Configs/CachedRemoteConfigs + Firebase RC template 3197 — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server cache (historical)",
+      "key": "NoAdsOfferConfigModel: rewardModels[0].collectionPackType",
+      "type": "",
+      "value": "0",
+      "meaning": "server-only (không có trong default)",
+      "where": "Configs/CachedRemoteConfigs + Firebase RC template 3197 — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server cache (historical)",
+      "key": "NoAdsOfferConfigModel: rewardModels[1].currencyType",
+      "type": "",
+      "value": "1",
+      "meaning": "server-only (không có trong default)",
+      "where": "Configs/CachedRemoteConfigs + Firebase RC template 3197 — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server cache (historical)",
+      "key": "NoAdsOfferConfigModel: rewardModels[1].amount",
+      "type": "",
+      "value": "2000",
+      "meaning": "server-only (không có trong default)",
+      "where": "Configs/CachedRemoteConfigs + Firebase RC template 3197 — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server cache (historical)",
+      "key": "NoAdsOfferConfigModel: rewardModels[1].timeSpan",
+      "type": "",
+      "value": "00:00:00",
+      "meaning": "server-only (không có trong default)",
+      "where": "Configs/CachedRemoteConfigs + Firebase RC template 3197 — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server cache (historical)",
+      "key": "NoAdsOfferConfigModel: rewardModels[1].chestType",
+      "type": "",
+      "value": "0",
+      "meaning": "server-only (không có trong default)",
+      "where": "Configs/CachedRemoteConfigs + Firebase RC template 3197 — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server cache (historical)",
+      "key": "NoAdsOfferConfigModel: rewardModels[1].collectionPackType",
+      "type": "",
+      "value": "0",
+      "meaning": "server-only (không có trong default)",
+      "where": "Configs/CachedRemoteConfigs + Firebase RC template 3197 — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server cache (historical)",
+      "key": "NoAdsOfferConfigModel: rewardModels[2].currencyType",
+      "type": "",
+      "value": "2",
+      "meaning": "server-only (không có trong default)",
+      "where": "Configs/CachedRemoteConfigs + Firebase RC template 3197 — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server cache (historical)",
+      "key": "NoAdsOfferConfigModel: rewardModels[2].amount",
+      "type": "",
+      "value": "0",
+      "meaning": "server-only (không có trong default)",
+      "where": "Configs/CachedRemoteConfigs + Firebase RC template 3197 — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server cache (historical)",
+      "key": "NoAdsOfferConfigModel: rewardModels[2].timeSpan",
+      "type": "",
+      "value": "12:00:00",
+      "meaning": "server-only (không có trong default)",
+      "where": "Configs/CachedRemoteConfigs + Firebase RC template 3197 — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server cache (historical)",
+      "key": "NoAdsOfferConfigModel: rewardModels[2].chestType",
+      "type": "",
+      "value": "0",
+      "meaning": "server-only (không có trong default)",
+      "where": "Configs/CachedRemoteConfigs + Firebase RC template 3197 — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server cache (historical)",
+      "key": "NoAdsOfferConfigModel: rewardModels[2].collectionPackType",
+      "type": "",
+      "value": "0",
+      "meaning": "server-only (không có trong default)",
+      "where": "Configs/CachedRemoteConfigs + Firebase RC template 3197 — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server cache (historical)",
+      "key": "NoAdsOfferConfigModel: dailyPopupShowLimit",
+      "type": "",
+      "value": "0",
+      "meaning": "server ghi đè (default = 7)",
+      "where": "Configs/CachedRemoteConfigs + Firebase RC template 3197 — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server cache (historical)",
+      "key": "NoAdsOfferConfigModel: sessionPopupShowLimit",
+      "type": "",
+      "value": "0",
+      "meaning": "server ghi đè (default = 3)",
+      "where": "Configs/CachedRemoteConfigs + Firebase RC template 3197 — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server cache (historical)",
+      "key": "NoAdsOfferConfigModel: lifetimePopupShowLimit",
+      "type": "",
+      "value": "0",
+      "meaning": "server-only (không có trong default)",
+      "where": "Configs/CachedRemoteConfigs + Firebase RC template 3197 — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server cache (historical)",
+      "key": "NoAdsOfferConfigModel: popupIntervalAsAdCount",
+      "type": "",
+      "value": "0",
+      "meaning": "server ghi đè (default = 2)",
+      "where": "Configs/CachedRemoteConfigs + Firebase RC template 3197 — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server cache (historical)",
+      "key": "NoAdsBundleFeatureFlag (live) = default?",
+      "type": "",
+      "value": "1/1 key trùng default, 0 key khác/thêm",
+      "meaning": "Đối chiếu config server thật (CachedRemoteConfigs) với NoAdsBundleFeatureFlag.json",
+      "where": "Configs/CachedRemoteConfigs + Firebase RC template 3197 — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    }
+  ],
+  "rewards": [
+    {
+      "context": "Mua No Ads",
+      "reward": "CurrencyType.NoAds (7) vĩnh viễn + NoAdsOfferConfigModel.RewardModels — CurrencyEarnReason.NoAdsOffer (27)",
+      "evidence": "NoAdsOfferService.Claim; NoAdsOfferService.GetRewards"
+    }
+  ],
+  "backend": [
+    {
+      "command": "NoAdsOfferRemoteService – get offer",
+      "direction": "client→server",
+      "purpose": "lấy NoAdsOfferResponse{EventId, EventType}"
+    },
+    {
+      "command": "IAPService + IAPPurchaseVerificationService",
+      "direction": "client→store→server",
+      "purpose": "mua và xác thực gói No Ads (non-consumable)"
+    },
+    {
+      "command": "InAppPurchaseHistoryService",
+      "direction": "client/server",
+      "purpose": "nguồn sự thật về việc đã sở hữu No Ads"
+    },
+    {
+      "command": "RemoteTimeService",
+      "direction": "server→client",
+      "purpose": "giờ server để reset hạn mức ngày"
+    }
+  ],
+  "ui": [
+    {
+      "element": "Popup No Ads",
+      "class": "Modules.Contexts.Home.Monetization.NoAdsOffer.Scripts.UI.NoAdsOfferViewModel{IAPConfigModel, RewardModels}",
+      "purpose": "hiển thị giá và thưởng kèm"
+    },
+    {
+      "element": "Command mở popup",
+      "class": "Modules.Contexts.Home.Monetization.SpecialOffer.Scripts.Commands.TryToShowNoAdsOfferLobbyReturnCommand",
+      "purpose": "bật popup khi quay lại Home"
+    },
+    {
+      "element": "Store",
+      "class": "Modules.Contexts.Home.Store.Scripts.BundleNoAdsAvailabilityService + StoreViewType.BasicBundleWithNoAds",
+      "purpose": "quyết định bundle kèm No Ads còn bán được không"
+    },
+    {
+      "element": "Restore",
+      "class": "Modules.Contexts.Home.SettingsPopUp.Scripts.RestorePurchaseButton",
+      "purpose": "khôi phục quyền No Ads"
+    }
+  ],
+  "analytics": [
+    {
+      "event": "no_ads_popup_impression",
+      "params": "progress, segment",
+      "when": "mở popup No Ads"
+    },
+    {
+      "event": "no_ads_offer_purchased",
+      "params": "price, currency, dollar_equivalent, progress, segment",
+      "when": "mua thành công"
+    },
+    {
+      "event": "earned",
+      "params": "reason=NoAdsOffer, danh sách thưởng",
+      "when": "trao thưởng kèm"
+    },
+    {
+      "event": "iap_purchase / purchase_failed / purchase_not_verified",
+      "params": "origin=NoAdsOffer, source=NoAdsOffer, product_id",
+      "when": "vòng đời giao dịch"
+    }
+  ],
+  "storage_keys": [
+    "NoAdsOfferModel.PopupShowCount",
+    "NoAdsOfferModel.LifetimePopupShowCount",
+    "NoAdsOfferModel.LastUsedTime",
+    "NoAdsOfferModel.NoAdsOfferResponse (cache)"
+  ],
+  "related_features": [
+    "Ads",
+    "Store",
+    "SpecialOffer"
+  ],
+  "gaps": [
+    "15/11 — partial_actual_evidence: Default có daily/session/interval; LifetimePopupShowLimit thiếu ở default, hai cache có lifetimePopupShowLimit=0. Không suy ra ý nghĩa0 hoặc default fallback khi chưa đọc consumer. Còn lại: Đọc constructor/serializer/counter LifetimePopupShowLimit; xác định absent-field behavior rồi kiểm session/day/lifetime scope.",
+    "ProductId của gói No Ads đến từ NoAdsOfferConfigModel.IAPConfigModel (server), không có trong Resources/IAPProductCatalog.json.",
+    "15/11 — resolved_historical_snapshot: NoAdsOfferPopUp có trong metadata, kế thừa MonoBehaviour, IPopUp và có prefab với GUID script khớp. Khác biệt cách viết PopUp đã góp phần làm lần khảo sát cũ bỏ sót lớp UI; tính năng không chỉ có ViewModel. Còn lại: Giữ rõ build và phiên bản cache của nguồn; kiểm nhánh runtime riêng khi cần.",
+    "15/11 — resolved_static_code_historical_build: IsNoAdsAvailableInBundle = adsEnabledExceptRewarded AND NOT IsAnyNormalBundlePurchased AND (NOT IsSelectiveNoAdsBundleEnabled OR bundle.ShouldCloseAds), cho cả overload StoreBundleModel/StoreViewModel. ShouldCloseAds: khi selective=false thì permanent bundle→true, bundle khác→false; khi selective=true dùng ShouldCloseAds của bundle. Đây là eligibility/hiển thị bundle; không chứng minh entitlement đã được store cấp. Còn lại: Cần đối chiếu method/consumer trên app0.0.3129 ARM64; chưa là runtime pass.",
+    "NoAdsOfferDataService không implement ISyncable nên bộ đếm popup không đồng bộ giữa thiết bị — người chơi đổi máy có thể thấy lại popup dù đã đạt hạn mức.",
+    "[Runtime 2026-09-10] Config server LIVE đã đọc trực tiếp từ cache máy (không cần request); các hàng 'server live' là giá trị server ghi đè/thêm so với default."
+  ],
+  "sources": [
+    "features/NoAdsOfferService.md",
+    "features/NoAdsOfferDataService.md",
+    "features/NoAdsOfferStateService.md",
+    "features/NoAdsOfferRemoteService.md",
+    "features/NoAdsOfferConfigModel.md",
+    "features/NoAdsOfferModel.md",
+    "RecoveredNative/strings-by-type.tsv (EventSender.SendNoAdsOffer*)",
+    "GameDesign/appendix/localization.tsv (noads_title, noads_description_1, noads_description_2)",
+    "GameDesign/facts/facts.json (NoAdsOfferState, NoAdsOfferResponse, NoAdsOfferViewModel, BundleNoAdsAvailabilityService, CurrencyType, CurrencyEarnReason, IAPOrigin, IAPReason)"
+  ],
+  "related_feature_aliases": [
+    {
+      "original": "IAP",
+      "feature": "Store"
+    }
+  ],
+  "audit_provenance": {
+    "review_date": "2026-11-15",
+    "mode": "offline_existing_files",
+    "code_build": "0.0.3063 ARMv7",
+    "runtime_build_observed_historically": "0.0.3129 ARM64 (audit 2026-10-18); not rechecked 2026-11-15",
+    "new_playtests": 0,
+    "uc_status": "See facts/audit_20261115/uc_registry.json; image reference is not pass",
+    "workbook_status": "Existing XLSX is historical; JSON and local web include 2026-11-15 corrections",
+    "static_review": "facts/local_code_gap_results_20261115.json; facts/local_asset_gap_results_20261115.json; facts/final_data_gap_decisions_20261115.json; facts/core_body_gap_decisions_20261115.json; facts/remaining_asset_gap_decisions_20261115.json"
+  },
+  "static_review_20261115": {
+    "date": "2026-11-15",
+    "scope": "Historical code/assets 0.0.3063, dated caches, device 0.0.3129 cached bundles and explicitly scoped runtime evidence. Not full runtime pass.",
+    "findings": [
+      {
+        "kind": "remaining_asset",
+        "source_report": "facts/remaining_asset_gap_decisions_20261115.json",
+        "id": "MS-RA-015",
+        "gap_ids": [
+          "MS-NoAdsOffer-G003"
+        ],
+        "title": "Không tìm thấy class popup cụ thể trong types-index — chỉ có NoAdsOfferViewModel trong namespace UI.",
+        "status": "resolved_historical_snapshot",
+        "conclusion": "NoAdsOfferPopUp có trong metadata, kế thừa MonoBehaviour, IPopUp và có prefab với GUID script khớp. Khác biệt cách viết PopUp đã góp phần làm lần khảo sát cũ bỏ sót lớp UI; tính năng không chỉ có ViewModel.",
+        "evidence": [
+          "facts/remaining_asset_review_20261115/ui_class_prefab_proof.json"
+        ],
+        "remaining": "",
+        "next_action": "Giữ rõ build và phiên bản cache của nguồn; kiểm nhánh runtime riêng khi cần.",
+        "scope": "Asset/native export 0.0.3063 và cache UnityFS đọc ngày 15/11 từ app 0.0.3129 được giữ riêng; ảnh render asset không phải ảnh chụp playtest.",
+        "reviewed": "2026-11-15",
+        "full_uc_pass": false
+      },
+      {
+        "kind": "final_data",
+        "source_report": "facts/final_data_gap_decisions_20261115.json",
+        "id": "MS-FDG-017",
+        "gap_ids": [
+          "MS-NoAdsOffer-G001"
+        ],
+        "title": "Giá trị thật của DailyPopupShowLimit / SessionPopupShowLimit / LifetimePopupShowLimit / PopupIntervalAsAdCount đều là remote config, không có mặc định trong cli",
+        "status": "partial_actual_evidence",
+        "conclusion": "Default có daily/session/interval; LifetimePopupShowLimit thiếu ở default, hai cache có lifetimePopupShowLimit=0. Không suy ra ý nghĩa0 hoặc default fallback khi chưa đọc consumer.",
+        "evidence": [
+          "facts/local_asset_review_20261115/config_catalog.json"
+        ],
+        "remaining": "Daily/session/interval có default/cache; LifetimePopupShowLimit thiếu ở default nhưng hai cache tháng9/10 có lifetimePopupShowLimit=0. Chưa xác minh ý nghĩa0 trong consumer/counter hoặc runtime mới.",
+        "next_action": "Đọc constructor/serializer/counter LifetimePopupShowLimit; xác định absent-field behavior rồi kiểm session/day/lifetime scope.",
+        "scope": "question-specific source/observed branch only; no full-UC or production claim",
+        "source_records": [
+          {
+            "snapshot": "default0.0.3063",
+            "model": "NoAdsOfferConfigModel",
+            "source": "Resources\\defaultconfigs\\NoAdsOfferConfigModel.json",
+            "root": "UnityExport Assets 0.0.3063",
+            "sha256": "2a4dd645722516f27f5de1de04637ee83982ef43432144cb206a1b8d6f706b28",
+            "line": 1,
+            "build": "0.0.3063 ARMv7"
+          },
+          {
+            "snapshot": "cache20260910",
+            "model": "NoAdsOfferConfigModel",
+            "source": "facts\\runtime\\server_configs\\noAdsOfferConfigModel.json",
+            "root": "GameDesign",
+            "sha256": "11394cf27d58f493807a7e7bef66bc73e5149608bf55535fd9c91cb3c3c71713",
+            "line": 1,
+            "build": "snapshot provenance at path"
+          },
+          {
+            "snapshot": "cache20261010",
+            "model": "NoAdsOfferConfigModel",
+            "source": "facts\\runtime\\test_20261010\\before\\CachedRemoteConfigs",
+            "root": "GameDesign",
+            "sha256": "433164d4877b2dee55d2bbd79ef2fe83d3fe9519492fe15e3cb0926daf216050",
+            "line": 1,
+            "build": "snapshot provenance at path"
+          }
+        ]
+      },
+      {
+        "kind": "code",
+        "source_report": "facts/local_code_gap_results_20261115.json",
+        "id": "MS-CODE-05",
+        "gap_ids": [
+          "MS-NoAdsOffer-G004"
+        ],
+        "title": "NoAds trong bundle có truth table rõ",
+        "status": "resolved_static_code",
+        "conclusion": "IsNoAdsAvailableInBundle = adsEnabledExceptRewarded AND NOT IsAnyNormalBundlePurchased AND (NOT IsSelectiveNoAdsBundleEnabled OR bundle.ShouldCloseAds), cho cả overload StoreBundleModel/StoreViewModel. ShouldCloseAds: khi selective=false thì permanent bundle→true, bundle khác→false; khi selective=true dùng ShouldCloseAds của bundle. Đây là eligibility/hiển thị bundle; không chứng minh entitlement đã được store cấp.",
+        "evidence": [
+          {
+            "file": "../com.grandgames.magicsort_Unity_20260909_112501/RecoveredNative/PseudoC/Assembly-CSharp/Modules/Contexts/Home/Store/Scripts/BundleNoAdsAvailabilityService.c",
+            "line": 43,
+            "end_line": 91,
+            "method": "// ===== BundleNoAdsAvailabilityService :: public bool IsNoAdsAvailableInBundle(StoreBundleModel",
+            "sha256": "bd6120f2229400bff8f8cc90cebea365b3819fa19a0d543996a5c48156c6f7f8",
+            "body_checked": true,
+            "build": "0.0.3063 ARMv7",
+            "required_body_tokens": [
+              "IsAnyAdsEnabledFromConfigExceptRewarded",
+              "_IsAnyNormalBundlePurchased_k__BackingField ^ 1",
+              "_IsSelectiveNoAdsBundleEnabled_k__BackingField"
+            ]
+          },
+          {
+            "file": "../com.grandgames.magicsort_Unity_20260909_112501/RecoveredNative/PseudoC/Assembly-CSharp/Modules/Contexts/Home/Store/Scripts/BundleNoAdsAvailabilityService.c",
+            "line": 140,
+            "end_line": 194,
+            "method": "// ===== BundleNoAdsAvailabilityService :: public bool ShouldCloseAds(StoreBundleModel",
+            "sha256": "bd6120f2229400bff8f8cc90cebea365b3819fa19a0d543996a5c48156c6f7f8",
+            "body_checked": true,
+            "build": "0.0.3063 ARMv7",
+            "required_body_tokens": [
+              "StorePermanentBundleModel_TypeInfo",
+              "return true;",
+              "return false;"
+            ]
+          }
+        ],
+        "remaining": "Cần đối chiếu method/consumer trên app0.0.3129 ARM64; chưa là runtime pass.",
+        "scope": "recovered_native_0.0.3063_only",
+        "runtime_verified": false
+      },
+      {
+        "kind": "asset",
+        "source_report": "facts/local_asset_gap_results_20261115.json",
+        "id": "MS-NoAdsOffer-G001",
+        "status": "partial_static_reconciliation",
+        "conclusion": "Default có daily/session/interval; LifetimePopupShowLimit thiếu ở default, hai cache có lifetimePopupShowLimit=0. Không suy ra ý nghĩa0 hoặc default fallback khi chưa đọc consumer.",
+        "evidence": [
+          {
+            "snapshot": "default0.0.3063",
+            "model": "NoAdsOfferConfigModel",
+            "source": "Resources\\defaultconfigs\\NoAdsOfferConfigModel.json",
+            "root": "UnityExport Assets 0.0.3063",
+            "sha256": "2a4dd645722516f27f5de1de04637ee83982ef43432144cb206a1b8d6f706b28",
+            "line": 1,
+            "build": "0.0.3063 ARMv7"
+          },
+          {
+            "snapshot": "cache20260910",
+            "model": "NoAdsOfferConfigModel",
+            "source": "facts\\runtime\\server_configs\\noAdsOfferConfigModel.json",
+            "root": "GameDesign",
+            "sha256": "11394cf27d58f493807a7e7bef66bc73e5149608bf55535fd9c91cb3c3c71713",
+            "line": 1,
+            "build": "snapshot provenance at path"
+          },
+          {
+            "snapshot": "cache20261010",
+            "model": "NoAdsOfferConfigModel",
+            "source": "facts\\runtime\\test_20261010\\before\\CachedRemoteConfigs",
+            "root": "GameDesign",
+            "sha256": "433164d4877b2dee55d2bbd79ef2fe83d3fe9519492fe15e3cb0926daf216050",
+            "line": 1,
+            "build": "snapshot provenance at path"
+          }
+        ],
+        "data": "config_catalog.json",
+        "scope": "static_export0.0.3063_or_historical_cache_not_runtime_pass",
+        "reviewed": "2026-11-15",
+        "next_action": "Đọc constructor/serializer/counter LifetimePopupShowLimit; xác định absent-field behavior rồi kiểm session/day/lifetime scope.",
+        "remaining": "Daily/session/interval có default/cache; LifetimePopupShowLimit thiếu ở default nhưng hai cache tháng9/10 có lifetimePopupShowLimit=0. Chưa xác minh ý nghĩa0 trong consumer/counter hoặc runtime mới.",
+        "superseded_or_refined_by": "MS-FDG-017"
+      }
+    ]
+  },
+  "acceptance_review_20261115": {
+    "source": "facts/feature_acceptance_20261115.json",
+    "feature_id": "NoAdsOffer",
+    "scope": "All eleven dossier dimensions reviewed; full_feature_verified is not implied; read per-dimension gaps and actual runtime evidence."
+  },
+  "segment_ab_review_20261115": {
+    "status": "not_identified_in_sources",
+    "segment_ids": [],
+    "matching_basis": "explicit_gd_config_map_or_exact_model_token_in_gdd_configs_where_key_sources; rootfieldscoped",
+    "rows": [],
+    "classifications": {},
+    "assignment_verified": false,
+    "uplift_verified": false,
+    "note": "No matchingrow does not prove no segmentation/AB. Rewardbucketfalsepositives remain explicitly classified."
+  },
+  "continuation_review_20261116": {
+    "date": "2026-11-16",
+    "build": "0.0.3129 ARM64 host APK",
+    "build_scope": "Host APK version3129 matches LAST observed installed version15/11 only; installed bytes/live device16/11 not verified.",
+    "runtime_status": "device_unavailable",
+    "runtime_case_ids": [],
+    "current_apk_model_links": {
+      "feature": "NoAdsOffer",
+      "models": [
+        {
+          "model": "NoAdsBundleFeatureFlag",
+          "current_default_file": "facts/review_20261116/public_current_config_3129/defaults/NoAdsBundleFeatureFlag.json",
+          "resource_path": "defaultconfigs/noadsbundlefeatureflag",
+          "sha256": "6f9fb5db3aad01d4500c0b3d6704d6df902a6f59b9f330faf145aa8ab400f05c",
+          "matching_basis": [
+            "gdd/NoAdsOffer.json#/configs"
+          ],
+          "scope": "Packaged default3129, not effective server config.",
+          "site_data_path": "data/current_config_3129/defaults/NoAdsBundleFeatureFlag.json",
+          "original_source_sha256": "6f9fb5db3aad01d4500c0b3d6704d6df902a6f59b9f330faf145aa8ab400f05c",
+          "public_artifact_sha256": "ab7a3c112d0273cf1854d8e4bde9b9f7641463952a969cfb0c99376667dcc420",
+          "sha256_scope": "sha256 is original raw model; public_artifact_sha256 is the sanitized download"
+        },
+        {
+          "model": "NoAdsOfferConfigModel",
+          "current_default_file": "facts/review_20261116/public_current_config_3129/defaults/NoAdsOfferConfigModel.json",
+          "resource_path": "defaultconfigs/noadsofferconfigmodel",
+          "sha256": "2a4dd645722516f27f5de1de04637ee83982ef43432144cb206a1b8d6f706b28",
+          "matching_basis": [
+            "gdd/NoAdsOffer.json#/configs",
+            "gdd/NoAdsOffer.json#/sources",
+            "gdd/NoAdsOffer.json#/flow",
+            "gdd/NoAdsOffer.json#/managers"
+          ],
+          "scope": "Packaged default3129, not effective server config.",
+          "site_data_path": "data/current_config_3129/defaults/NoAdsOfferConfigModel.json",
+          "original_source_sha256": "2a4dd645722516f27f5de1de04637ee83982ef43432144cb206a1b8d6f706b28",
+          "public_artifact_sha256": "515cddbfa86c75c80b0514d15cf152e1084216c48dc45613eca0620acda29e1a",
+          "sha256_scope": "sha256 is original raw model; public_artifact_sha256 is the sanitized download"
+        }
+      ],
+      "status": "exact_model_source_association",
+      "distribution": "sanitized_public",
+      "public_mapping_pending": false
+    },
+    "current_packaged_defaults": [
+      {
+        "model": "NoAdsBundleFeatureFlag",
+        "source": "facts/review_20261116/public_current_config_3129/defaults/NoAdsBundleFeatureFlag.json",
+        "site_data_path": "data/current_config_3129/defaults/NoAdsBundleFeatureFlag.json",
+        "public_artifact_sha256": "ab7a3c112d0273cf1854d8e4bde9b9f7641463952a969cfb0c99376667dcc420",
+        "original_source_sha256": "6f9fb5db3aad01d4500c0b3d6704d6df902a6f59b9f330faf145aa8ab400f05c",
+        "source_class": "static_asset",
+        "build": "0.0.3129 host APK",
+        "scope": "Sanitized packaged default fullvalues only; not effective remote/selected config or runtime.",
+        "values": {
+          "IsSelectiveNoAdsBundleEnabled": false
+        }
+      },
+      {
+        "model": "NoAdsOfferConfigModel",
+        "source": "facts/review_20261116/public_current_config_3129/defaults/NoAdsOfferConfigModel.json",
+        "site_data_path": "data/current_config_3129/defaults/NoAdsOfferConfigModel.json",
+        "public_artifact_sha256": "515cddbfa86c75c80b0514d15cf152e1084216c48dc45613eca0620acda29e1a",
+        "original_source_sha256": "2a4dd645722516f27f5de1de04637ee83982ef43432144cb206a1b8d6f706b28",
+        "source_class": "static_asset",
+        "build": "0.0.3129 host APK",
+        "scope": "Sanitized packaged default fullvalues only; not effective remote/selected config or runtime.",
+        "values": {
+          "IsEnabled": false,
+          "EventType": 1,
+          "DailyPopupShowLimit": 7,
+          "SessionPopupShowLimit": 3,
+          "PopupIntervalAsAdCount": 2,
+          "IAPConfigModel": {
+            "ProductId": "sort.noadsoffer",
+            "ProductType": 0,
+            "DollarEquivalent": 7.99
+          },
+          "RewardModels": [
+            {
+              "CurrencyType": 7,
+              "Amount": 1
+            }
+          ]
+        }
+      }
+    ],
+    "native_finding_ids": [],
+    "documentation_source_coverage": {
+      "dossier_present": true,
+      "use_case_catalog_count": 11,
+      "config_catalog_rows": 46,
+      "current_apk_default_model_links": 2,
+      "current_native_findings": 0,
+      "scope": "Documentation/source coverage only; not complete runtime verification."
+    },
+    "runtime_completion": {
+      "date": "2026-11-16",
+      "status": "device_unavailable",
+      "executed_case_count": 0,
+      "full_feature_runtime_verified": false
+    },
+    "planned_branch": "Chụp phần mô tả No Ads của bundle Apprentice và popup riêng nếu icon/trigger xuất hiện; đóng bằng X/back.",
+    "target_uc_ids": [
+      "UC-06",
+      "UC-08"
+    ],
+    "execution_phase": "noncore_first",
+    "core_or_levels_last": false,
+    "actionability_full_json": "facts/continuation_20261116/current/feature_actionability.json",
+    "actionability_site_data_path": "data/continuation_20261116/feature_actionability.json",
+    "source_classes": [
+      "static_asset"
+    ],
+    "full_feature_verified": false
+  }
+}

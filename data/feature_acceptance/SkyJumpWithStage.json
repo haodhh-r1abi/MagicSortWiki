@@ -1,0 +1,313 @@
+{
+  "id": "SkyJumpWithStage",
+  "feature": "SkyJumpWithStage",
+  "name": "Sky Jump 3 chặng (Staged)",
+  "category": "Event",
+  "category_label": "Sự kiện",
+  "core_levels_last": false,
+  "acceptance_status": "documented_with_explicit_remaining_scope",
+  "full_feature_verified": false,
+  "checks": {
+    "purpose": {
+      "status": "documented_static_scope",
+      "source": "gdd/SkyJumpWithStage.json#/summary",
+      "claim_excerpt": "Sky Jump With Stage là bản nâng cấp của Sky Jump: thay vì một thang 10 bậc duy nhất, giải chia thành 3 chặng (stage 0, 1, 2). Người chơi leo hết số bậc của chặng hiện tại thì được đẩy sang chặng kế (server trả trường 'stage' trong response), mỗi chặng có giải thưởng coin riêng: Stage1RewardsAsCoin = 5.000, Stage2RewardsAsCoin = 7.000, Stage3RewardsAsCoin = 10.000 (mặc định client). Chặng cuối (ind"
+    },
+    "unlock": {
+      "status": "described_historical_conditions_runtime_boundary_unverified",
+      "source": "gdd/SkyJumpWithStage.json#/unlock",
+      "content": "SkyJumpWithStageStateService.GetEventState(): Disable(0) nếu SkyJumpWithStageConfigModel.IsEnabled == false; ProgressNotEnough(1) nếu level < FirstLevelToShow; NoCache(2); Join(3); InProgress(4); FinishedByLocal(5); FinishedByRemote(6); ClaimedLocally(8). Client default: IsEnabled=false, EventType=1, FirstLevelToShow=120 (Resources/defaultconfigs/SkyJumpWithStageConfigModel.json)."
+    },
+    "entry_flow": {
+      "status": "documented_paths_not_all_executed",
+      "entry_points": [
+        "Nút lobby Sky Jump Staged (IsLobbyIconVisible)",
+        "Popup mời tham gia (ShouldShowJoinPopup / CanShowJoinPopupForce / ShouldOpenJoinPopUpAutomaticallyOnLobbyReturn)",
+        "Popup thang đua (GetPopUpState → SkyJumpWithStagePopUpState)",
+        "Tự mở khi lên bậc (ShouldOpenStepIncreasedOnLobbyReturn → source ScoreIncreased) hoặc khi có kết quả (ShouldOpenResultOnLobbyReturn → source EventEnd)",
+        "Tự mở khi mở app (ShouldOpenAutomaticallyOnSessionStart)",
+        "Popup xác nhận thoát level (ShouldShowAreYouSure)"
+      ],
+      "flow_source": "gdd/SkyJumpWithStage.json#/flow",
+      "acceptance_scope": "Three-stage ladder targets/reward/transition; coexistence with legacySkyJump, retry/claim/expiry"
+    },
+    "config": {
+      "status": "source_bound_catalog_present",
+      "gdd_rows": 119,
+      "full_leaf_rows_associated": 24,
+      "snapshots": {
+        "default_0.0.3063": 6,
+        "cache_20260910": 6,
+        "cache_20261010": 6,
+        "firebase_20260910": 6
+      },
+      "models": [
+        {
+          "model": "skyJumpWithStageConfigModel",
+          "matching_basis": [
+            {
+              "kind": "explicit_gd_config_model_map",
+              "source": "gd_config.json#/defaultconfigs/map/SkyJumpWithStage"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/SkyJumpWithStage.json#/sources/3"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/SkyJumpWithStage.json#/sources/6"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/SkyJumpWithStage.json#/configs/0/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/SkyJumpWithStage.json#/configs/1/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/SkyJumpWithStage.json#/configs/2/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/SkyJumpWithStage.json#/configs/3/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/SkyJumpWithStage.json#/configs/4/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/SkyJumpWithStage.json#/configs/5/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/SkyJumpWithStage.json#/configs/20/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/SkyJumpWithStage.json#/configs/21/key_where"
+            }
+          ]
+        }
+      ],
+      "declared_models_without_catalog_data": [],
+      "placeholder_rows_requiring_source_review": [],
+      "exact_placeholder_snapshot_values": [],
+      "dossier_abbreviated_values": [
+        {
+          "index": 117,
+          "key": "SkyJump playerImages",
+          "value": "60 id bot ↦ ảnh FB thật (static-grand-games.s3…/fb-images)",
+          "where": "PlayerPrefs SkyJumpWithStageModel (instance event đang chạy) — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)",
+          "qualification": "Dossier summary/enum/example abbreviation; inspect linked full source before claiming all values listed here."
+        }
+      ],
+      "note": "Model association uses explicitmap or exacttoken citations; fieldpresence does not prove allproductiondata. GDDsummaryrows and fullcatalogrows have separate counts. Abbreviated source summaries are not full arrays; catalog/source links remain authoritative."
+    },
+    "reward": {
+      "status": "documented_static_rewards_runtime_grant_not_fully_verified",
+      "entries": 4,
+      "tables_in_site_meta": 3,
+      "source": "gdd/SkyJumpWithStage.json#/rewards"
+    },
+    "use_cases": {
+      "status": "specified_not_executed_in15nov_ledger",
+      "specified": 14,
+      "reviewed_uc_branch_count": 0,
+      "reviewed_uc_ids": [],
+      "not_reviewed_in_new_ledger": [
+        "UC-01",
+        "UC-02",
+        "UC-03",
+        "UC-04",
+        "UC-05",
+        "UC-06",
+        "UC-07",
+        "UC-08",
+        "UC-09",
+        "UC-10",
+        "UC-11",
+        "UC-12",
+        "UC-13",
+        "UC-14"
+      ],
+      "full_uc_pass_claimed": false
+    },
+    "screenshots": {
+      "historical_gallery_entries": 8,
+      "historical_uc_with_image_reference": 6,
+      "curated_new_images": [],
+      "curated_new_image_count": 0,
+      "status": "historical_references_only",
+      "source": "screens/web/screens.json#/SkyJumpWithStage",
+      "note": "Image presence does not prove execution result or completeness."
+    },
+    "runtime_actual": {
+      "status": "not_observed_in15nov_ledger",
+      "case_count": 0,
+      "cases": [],
+      "mode": "offline_existing_fixture",
+      "build": "0.0.3129 ARM64"
+    },
+    "segment_ab": {
+      "status": "not_identified_in_sources",
+      "segment_ids": [],
+      "matching_basis": "explicit_gd_config_map_or_exact_model_token_in_gdd_configs_where_key_sources; rootfieldscoped",
+      "rows": [],
+      "classifications": {},
+      "assignment_verified": false,
+      "uplift_verified": false,
+      "note": "No matchingrow does not prove no segmentation/AB. Rewardbucketfalsepositives remain explicitly classified."
+    },
+    "storage_backend_analytics": {
+      "storage_keys": {
+        "entries": 9,
+        "status": "documented_static_contract_runtime_not_verified",
+        "source": "gdd/SkyJumpWithStage.json#/storage_keys"
+      },
+      "backend": {
+        "entries": 5,
+        "status": "documented_static_contract_runtime_not_verified",
+        "source": "gdd/SkyJumpWithStage.json#/backend"
+      },
+      "analytics": {
+        "entries": 2,
+        "status": "documented_static_contract_runtime_not_verified",
+        "source": "gdd/SkyJumpWithStage.json#/analytics"
+      }
+    },
+    "remaining_next_step": {
+      "gap_count": 6,
+      "static_scoped_resolutions": 3,
+      "remaining_count": 3,
+      "all_gap_dispositions": [
+        {
+          "id": "MS-SkyJumpWithStage-G001",
+          "feature": "SkyJumpWithStage",
+          "source": "gdd/SkyJumpWithStage.json#/gaps/0",
+          "original": "Số bậc của từng chặng nằm trong mảng tĩnh trong binary (UNK_04395e6c), không đọc được giá trị cụ thể — chỉ biết chặng cuối kết thúc ở bậc 10.",
+          "current_note": "15/11 — resolved_static_code_historical_build: GetStageStepCount chỉindex0..2 vào UNK04395e6c. Ghidra log xácnhậnbase00010000; trừbase→ELFVA04385e6c, PT_LOAD mapping→fileoffset04385e6c đọc littleendian int32[5,7,10]. Ngoàiindex0..2 bodytrả0. Không đọc rawUNKthẳng làmoffsetvì sẽlệch65536byte. Bảngbinary/hash/reproduction giữ trongsupporting_tables. Còn lại: Cần đối chiếu method/consumer trên app0.0.3129 ARM64; chưa là runtime pass.",
+          "status": "resolved_static_code_historical_build",
+          "review_status": "preserved_resolved_static_code_historical_build",
+          "dependency": "local_code_review",
+          "next_action": "GetStageStepCount chỉindex0..2 vào UNK04395e6c. Ghidra log xácnhậnbase00010000; trừbase→ELFVA04385e6c, PT_LOAD mapping→fileoffset04385e6c đọc littleendian int32[5,7,10]. Ngoàiindex0..2 bodytrả0. Không đọc rawUNKthẳng làmoffsetvì sẽlệch65536byte. Bảngbinary/hash/reproduction giữ trongsupporting_tables. Cần đối chiếu method/consumer trên app0.0.3129 ARM64; chưa là runtime pass.",
+          "conclusion": "GetStageStepCount chỉindex0..2 vào UNK04395e6c. Ghidra log xácnhậnbase00010000; trừbase→ELFVA04385e6c, PT_LOAD mapping→fileoffset04385e6c đọc littleendian int32[5,7,10]. Ngoàiindex0..2 bodytrả0. Không đọc rawUNKthẳng làmoffsetvì sẽlệch65536byte. Bảngbinary/hash/reproduction giữ trongsupporting_tables.",
+          "evidence": [
+            "../com.grandgames.magicsort_Unity_20260909_112501/RecoveredNative/PseudoC/Assembly-CSharp/Modules/Contexts/Home/SkyJumpWithStage/Scripts/SkyJumpWithStageService.c:6110"
+          ],
+          "reviewed": "2026-11-15",
+          "mode": "file_only_recovered_native_0.0.3063",
+          "remaining": "15/11 — resolved_static_code_historical_build: GetStageStepCount chỉindex0..2 vào UNK04395e6c. Ghidra log xácnhậnbase00010000; trừbase→ELFVA04385e6c, PT_LOAD mapping→fileoffset04385e6c đọc littleendian int32[5,7,10]. Ngoàiindex0..2 bodytrả0. Không đọc rawUNKthẳng làmoffsetvì sẽlệch65536byte. Bảngbinary/hash/reproduction giữ trongsupporting_tables. Còn lại: Cần đối chiếu method/consumer trên app0.0.3129 ARM64; chưa là runtime pass."
+        },
+        {
+          "id": "MS-SkyJumpWithStage-G002",
+          "feature": "SkyJumpWithStage",
+          "source": "gdd/SkyJumpWithStage.json#/gaps/1",
+          "original": "Không rõ SkyJump và SkyJumpWithStage có chạy song song hay loại trừ nhau (cả hai đều EventType=1 nhưng khác endpoint).",
+          "current_note": "Không rõ SkyJump và SkyJumpWithStage có chạy song song hay loại trừ nhau (cả hai đều EventType=1 nhưng khác endpoint).",
+          "status": "open_review_plan",
+          "review_status": "open_review_plan",
+          "dependency": "event_rotation_or_fresh_instance",
+          "next_action": "Đối chiếu service registration/enable/endpoint và observed rotation hai bản; EventType1 không đủ nói loại trừ.",
+          "remaining": "Không rõ SkyJump và SkyJumpWithStage có chạy song song hay loại trừ nhau (cả hai đều EventType=1 nhưng khác endpoint)."
+        },
+        {
+          "id": "MS-SkyJumpWithStage-G003",
+          "feature": "SkyJumpWithStage",
+          "source": "gdd/SkyJumpWithStage.json#/gaps/2",
+          "original": "Không tìm thấy analytics riêng cho join/lost của bản staged (chỉ có screen/info impression) — có thể dùng chung sự kiện với SkyJump.",
+          "current_note": "15/11 — resolved_static_code_historical_build: Join state machine gọi SendSkyJumpWithStageJoinedEvent; ClaimLocally(didWin) gọi SendSkyJumpWithStageWon khi true và SendSkyJumpWithStageLost khi false. Vì vậy không còn gap chỉthấyscreen/info. Emission thực/params/sessiondedup chưa được test bởi đọcbody. Còn lại: Cần đối chiếu ARM64/current runtime và các nhánh caller còn chưa đủ bằng chứng.",
+          "status": "resolved_static_code_historical_build",
+          "review_status": "preserved_resolved_static_code_historical_build",
+          "dependency": "local_code_review",
+          "next_action": "Join state machine gọi SendSkyJumpWithStageJoinedEvent; ClaimLocally(didWin) gọi SendSkyJumpWithStageWon khi true và SendSkyJumpWithStageLost khi false. Vì vậy không còn gap chỉthấyscreen/info. Emission thực/params/sessiondedup chưa được test bởi đọcbody. Cần đối chiếu ARM64/current runtime và các nhánh caller còn chưa đủ bằng chứng.",
+          "conclusion": "Join state machine gọi SendSkyJumpWithStageJoinedEvent; ClaimLocally(didWin) gọi SendSkyJumpWithStageWon khi true và SendSkyJumpWithStageLost khi false. Vì vậy không còn gap chỉthấyscreen/info. Emission thực/params/sessiondedup chưa được test bởi đọcbody.",
+          "evidence": [
+            "../com.grandgames.magicsort_Unity_20260909_112501/RecoveredNative/PseudoC/Assembly-CSharp/Modules/Contexts/Home/SkyJumpWithStage/Scripts/SkyJumpWithStageService.c:5609"
+          ],
+          "reviewed": "2026-11-15",
+          "mode": "file_only_recovered_native_0.0.3063",
+          "remaining": "15/11 — resolved_static_code_historical_build: Join state machine gọi SendSkyJumpWithStageJoinedEvent; ClaimLocally(didWin) gọi SendSkyJumpWithStageWon khi true và SendSkyJumpWithStageLost khi false. Vì vậy không còn gap chỉthấyscreen/info. Emission thực/params/sessiondedup chưa được test bởi đọcbody. Còn lại: Cần đối chiếu ARM64/current runtime và các nhánh caller còn chưa đủ bằng chứng."
+        },
+        {
+          "id": "MS-SkyJumpWithStage-G004",
+          "feature": "SkyJumpWithStage",
+          "source": "gdd/SkyJumpWithStage.json#/gaps/3",
+          "original": "Không có asset ScriptableObject riêng cho bản staged trong Assets/MonoBehaviour.",
+          "current_note": "15/11 — resolved_historical_snapshot: Có các ScriptableObject SkyJumpWithStageAnimationConfig và SkyJumpWithStageAreYouSureAnimationConfig trong export, với đầy đủ mảng và đường cong đã trích. Config cân bằng gameplay trong JSON là nguồn riêng; cần nói rõ loại asset khi mô tả phần thiếu. Còn lại: Giữ rõ build và phiên bản cache của nguồn; kiểm nhánh runtime riêng khi cần.",
+          "status": "resolved_historical_snapshot",
+          "review_status": "preserved_resolved_historical_snapshot",
+          "dependency": "local_asset_or_missing_bundle",
+          "next_action": "Có các ScriptableObject SkyJumpWithStageAnimationConfig và SkyJumpWithStageAreYouSureAnimationConfig trong export, với đầy đủ mảng và đường cong đã trích. Config cân bằng gameplay trong JSON là nguồn riêng; cần nói rõ loại asset khi mô tả phần thiếu. Giữ rõ build và phiên bản cache của nguồn; kiểm nhánh runtime riêng khi cần.",
+          "conclusion": "Có các ScriptableObject SkyJumpWithStageAnimationConfig và SkyJumpWithStageAreYouSureAnimationConfig trong export, với đầy đủ mảng và đường cong đã trích. Config cân bằng gameplay trong JSON là nguồn riêng; cần nói rõ loại asset khi mô tả phần thiếu.",
+          "evidence": [
+            "facts/remaining_asset_review_20261115/asset_catalog.json"
+          ],
+          "remaining": "15/11 — resolved_historical_snapshot: Có các ScriptableObject SkyJumpWithStageAnimationConfig và SkyJumpWithStageAreYouSureAnimationConfig trong export, với đầy đủ mảng và đường cong đã trích. Config cân bằng gameplay trong JSON là nguồn riêng; cần nói rõ loại asset khi mô tả phần thiếu. Còn lại: Giữ rõ build và phiên bản cache của nguồn; kiểm nhánh runtime riêng khi cần.",
+          "scope": "Asset/native export 0.0.3063 và cache UnityFS đọc ngày 15/11 từ app 0.0.3129 được giữ riêng; ảnh render asset không phải ảnh chụp playtest.",
+          "reviewed": "2026-11-15",
+          "full_uc_pass": false
+        },
+        {
+          "id": "MS-SkyJumpWithStage-G005",
+          "feature": "SkyJumpWithStage",
+          "source": "gdd/SkyJumpWithStage.json#/gaps/4",
+          "original": "[Runtime 2026-09-10] Config server LIVE đã đọc trực tiếp từ cache máy (không cần request); các hàng 'server live' là giá trị server ghi đè/thêm so với default.",
+          "current_note": "[Runtime 2026-09-10] Config server LIVE đã đọc trực tiếp từ cache máy (không cần request); các hàng 'server live' là giá trị server ghi đè/thêm so với default.",
+          "status": "historical_evidence_annotation_not_test_result",
+          "review_status": "historical_evidence_annotation_not_test_result",
+          "dependency": "historical_note_requires_qualified_use",
+          "next_action": "Ghi chú cache đã đọc tháng9, từ LIVE phải hiểu snapshot lịch sử. Đối chiếu config catalog/source, giữ default/cache/production hiện tại riêng; không coi là fresh fetch15/11.",
+          "remaining": "[Runtime 2026-09-10] Config server LIVE đã đọc trực tiếp từ cache máy (không cần request); các hàng 'server live' là giá trị server ghi đè/thêm so với default."
+        },
+        {
+          "id": "MS-SkyJumpWithStage-G006",
+          "feature": "SkyJumpWithStage",
+          "source": "gdd/SkyJumpWithStage.json#/gaps/5",
+          "original": "[Runtime 2026-09-10] Instance phiên event đang chạy đã đọc (SkyJumpWithStageModel); phần từng ghi 'do server gửi' nay có giá trị thật trong các hàng 'server instance'.",
+          "current_note": "[Runtime 2026-09-10] Instance phiên event đang chạy đã đọc (SkyJumpWithStageModel); phần từng ghi 'do server gửi' nay có giá trị thật trong các hàng 'server instance'.",
+          "status": "historical_evidence_annotation_not_test_result",
+          "review_status": "historical_evidence_annotation_not_test_result",
+          "dependency": "historical_note_requires_qualified_use",
+          "next_action": "Ghi chú instance đã đọc tháng9: kiểm model/snapshot trong GDD configs và báo cáo lịch sử; không đóng gap thuật toán/claim/rotation từ sự hiện diện model. Vòng mới cần event hợp lệ.",
+          "remaining": "[Runtime 2026-09-10] Instance phiên event đang chạy đã đọc (SkyJumpWithStageModel); phần từng ghi 'do server gửi' nay có giá trị thật trong các hàng 'server instance'."
+        }
+      ],
+      "feature_specific_acceptance_questions": [
+        "Three-stage ladder targets/reward/transition",
+        " coexistence with legacySkyJump, retry/claim/expiry"
+      ],
+      "next_steps": [
+        "Đối chiếu service registration/enable/endpoint và observed rotation hai bản; EventType1 không đủ nói loại trừ.",
+        "Ghi chú cache đã đọc tháng9, từ LIVE phải hiểu snapshot lịch sử. Đối chiếu config catalog/source, giữ default/cache/production hiện tại riêng; không coi là fresh fetch15/11.",
+        "Ghi chú instance đã đọc tháng9: kiểm model/snapshot trong GDD configs và báo cáo lịch sử; không đóng gap thuật toán/claim/rotation từ sự hiện diện model. Vòng mới cần event hợp lệ."
+      ]
+    }
+  },
+  "use_cases": 14,
+  "configs": 119,
+  "new_review_case_count": 0,
+  "reviewed_uc_branch_count": 0,
+  "curated_new_image_count": 0,
+  "segment_ids": [],
+  "matching_basis": "explicit_gd_config_map_or_exact_model_token_in_gdd_configs_where_key_sources; rootfieldscoped",
+  "unmatched_segment_status": "not_identified_in_sources",
+  "local_document_repairs": [],
+  "sources": [
+    "GameDesign/features/SkyJumpWithStageService.md",
+    "GameDesign/features/SkyJumpWithStageStateService.md",
+    "GameDesign/features/SkyJumpWithStageDataService.md",
+    "GameDesign/features/SkyJumpWithStageConfigModel.md",
+    "RecoveredNative/PseudoC/Assembly-CSharp/Modules/Contexts/Home/SkyJumpWithStage/Scripts/*.c",
+    "RecoveredNative/Il2CppDumper/dump.cs (TypeDefIndex 2404-2432)",
+    "UnityExport/ExportedProject/Assets/Resources/defaultconfigs/SkyJumpWithStageConfigModel.json",
+    "UnityExport/ExportedProject/Assets/MonoBehaviour/BackendEnvironmentConfig.asset",
+    "RecoveredNative/strings-by-type.tsv (EventSender.SendSkyJumpWithStage*)"
+  ],
+  "source_hashes": {
+    "gdd_sha256": "4ed7c7d9347b7719ed20ca75b9a1c58dac546f336881d250df8b17b899ccc2ef",
+    "site_meta_sha256": "7bf02cb411b5e40e09532a059d9c6292130dcbcee2f18d7aab7455a26dd44e7a"
+  }
+}

@@ -1,0 +1,955 @@
+{
+  "id": "JetpackRace",
+  "name": "Đua Jetpack (streak race)",
+  "category": "Event",
+  "managers": [
+    "Modules.Contexts.Home.JetpackRace.Scripts.JetpackRaceService",
+    "Modules.Contexts.Home.JetpackRace.Scripts.JetpackRaceDataService",
+    "Modules.Contexts.Home.JetpackRace.Scripts.JetpackRaceStateService",
+    "Modules.Contexts.Home.JetpackRace.Scripts.JetpackRaceRemoteService",
+    "Modules.Contexts.Home.JetpackRace.Scripts.JetpackRaceConfigModel"
+  ],
+  "summary": "Jetpack Race (backend gọi là 'streak race', endpoint /v1/*-streakrace-*) là cuộc đua chuỗi thắng giữa một nhóm nhỏ người chơi (có cả bot). Mỗi lần thắng level, nhân vật đeo jetpack của người chơi bay lên 1 nấc (Score+1); mỗi lần THUA hoặc bỏ level, điểm bị reset về 0 (TryResetScore — nhân vật rơi xuống). Ai chạm mốc MaxReachableScore (do server gửi) VÀ đứng hạng 1 thì thắng cuộc đua, nhận bộ phần thưởng RewardModels (mặc định 500 Coin + 15 phút Unlimited Life; bản Collection thêm 1 CollectionPack loại 3). Sự kiện là bản 'race' của cơ chế chuỗi thắng: khác TowerWinStreak ở chỗ có đối thủ trực tiếp trên cùng một bảng và có thời hạn. Kết thúc một cuộc đua thì client hỏi thời điểm kết thúc cuộc đua kế (GetNextRaceEndTime) để nối tiếp liên tục.",
+  "unlock": "JetpackRaceStateService.GetEventState(): Disable(0) nếu JetpackRaceConfigModel.IsEnabled == false; ProgressNotEnough(1) nếu level < FirstLevelToShow; NoCache(2) nếu chưa fetch; Join(3) chờ tham gia; InProgress(4) đang đua; LocalTimeIsUp(5)/RemoteTimeIsUp(6) hết giờ; ClaimedLocally(7) đã nhận thưởng. Client default: IsEnabled=false, EventType=4, FirstLevelToShow=80 (Resources/defaultconfigs/JetpackRaceConfigModel.json).",
+  "entry_points": [
+    "Nút/biểu tượng Jetpack Race ở lobby (IsLobbyIconVisible / IsLobbyIconVisibleAndNotIntroduced)",
+    "Banner Jetpack Race trên lobby (ShouldShowJetpackRaceBanner)",
+    "Popup mời tham gia (ShouldShowJoinPopup / CanShowJoinPopupForce)",
+    "Popup đua tự mở khi về lobby (ShouldOpenAutomaticallyOnLobbyReturn) hoặc khi mở app (ShouldOpenAutomaticallyOnSessionStart)",
+    "Nguồn TryAgain (JetpackRaceImpressionSource.TryAgain) sau khi thua",
+    "Popup xác nhận thoát level (ShouldShowAreYouSure)"
+  ],
+  "flow": "InitializeData() nạp cache và CacheProfileImages(). IntervalUpdate → JetpackRaceStateService.ShouldSendGetRequest() → SendGetRequest()/GetRequest() gọi JetpackRaceRemoteService.Get(eventType, tournamentId, score) tới jetpackRaceGetUrl (/v1/get-streakrace-leaderboard) với JetpackRaceGetRequestModel{tournament_id, tournament_type, score}. Response JetPackRaceResponseModel{tournamentID, tournamentType, startTime, finishTime, isFinished, isClaimed, userScore, maxReachableScore, players[], hasUsedLimitlessLife}. ChangeTournamentCache(response) ghi JetPackRaceCacheModel (Players, MaxReachableScore, LastSeenPlayers, LastSeenBannerPlayers…). Join: JetpackRaceService.Join() gọi jetpackRaceJoinUrl (/v1/join-streakrace-tournament) với JetpackRaceJoinRequestModel{tournament_type}; analytics jetpack_race_joined. Trong cuộc đua: WinState → TryIncreaseScore() (nếu CanIncreaseScore()) → JetpackRaceDataService.IncreaseScore(), đặt IsSynced = false để lần Get kế đẩy điểm lên server (cũng có JetpackRaceSetRequestModel gửi tới jetpackRaceSetUrl /v1/set-streakrace-tournament-points). LoseState/QuitState → TryResetScore() (nếu CanResetScore()) → JetpackRaceDataService.ResetScore(); LastScoreBeforeFallDown()/IsPlayerFallDown() dùng cho hoạt ảnh rơi; analytics jetpack_race_lost với race_rank, current_race_streak, step_rewards. UI: GetViewModels() / GetLastSeenViewModels() / GetLastSeenBannerViewModels() dựng JetpackRaceLeaderboardPlayerViewModel từ JetpackRaceUserModel{PublicID, Nickname, Score, Rank, IsMe, IsBot, ImageUrl, ImageID}; ArePlayersScoreChanged() phát hiện đối thủ tiến lên để chạy animation. GetRank() tìm view model có IsUser. Kết thúc: hết giờ (GetRemainingSeconds/GetEndDate) → LocalTimeIsUp(5)/RemoteTimeIsUp(6); DidPlayerWin() = state hợp lệ && Score >= MaxReachableScore && hạng 1; ShouldSendClaimRequest() → SendClaimRequest() gọi jetpackRaceClaimUrl (/v1/claim-streakrace-tournament); GetPlayerRewards()/GetRaceRewards() lấy RewardModels hoặc RewardModelsWithCollection từ remote config (FirebaseRemoteConfigs); ClaimLocally() đặt IsClaimedLocally, IncreaseWinRecord(); analytics jetpack_race_won; state → ClaimedLocally(7). SendGetNextRaceFinishTimeRequest() gọi jetpackRaceGetNextRaceEndTimeUrl (/v1/get-streakrace-endtime) trả {finishTime, maxReachableScore}; ScheduleLeaderboardFetchOnTimerEnd() tự fetch khi hết giờ.",
+  "use_cases": [
+    {
+      "id": "UC-01",
+      "title": "Kiểm tra điều kiện và hiện icon/banner",
+      "actor": "System",
+      "trigger": "Vào lobby / IntervalUpdate",
+      "precondition": "RemoteConfigs sẵn sàng",
+      "steps": [
+        "JetpackRaceStateService.GetConfig() lấy JetpackRaceConfigModel",
+        "GetEventState() trả Disable(0)/ProgressNotEnough(1)/NoCache(2)/Join(3)/InProgress(4)/LocalTimeIsUp(5)/RemoteTimeIsUp(6)/ClaimedLocally(7)",
+        "IsLobbyIconVisible() / IsLobbyIconVisibleAndNotIntroduced() / ShouldShowJetpackRaceBanner()",
+        "CanOpenPopUp() chặn mở popup ở state không hợp lệ"
+      ],
+      "result": "Icon + banner hiện/ẩn ở lobby",
+      "rules": "Client default: IsEnabled=false, FirstLevelToShow=80, EventType=4",
+      "evidence": "JetpackRaceStateService.GetEventState; JetpackRaceStateService.IsLobbyIconVisible; JetpackRaceStateService.ShouldShowJetpackRaceBanner; JetpackRaceStateService.CanOpenPopUp"
+    },
+    {
+      "id": "UC-02",
+      "title": "Fetch bảng đua từ server",
+      "actor": "Server",
+      "trigger": "InitializeData / IntervalUpdate khi ShouldSendGetRequest()",
+      "precondition": "Sự kiện bật",
+      "steps": [
+        "JetpackRaceService.TryFetchCurrentEvent() → SendGetRequest() → GetRequest()",
+        "JetpackRaceRemoteService.Get(eventType, tournamentId, score) → jetpackRaceGetUrl (/v1/get-streakrace-leaderboard)",
+        "Response JetPackRaceResponseModel; ChangeTournamentCache(response) ghi JetPackRaceCacheModel",
+        "CacheProfileImages() nạp avatar qua ProfileSpriteCacheService",
+        "IsSynced = true sau khi điểm client được server ghi nhận",
+        "NotActiveStatusCode phân biệt sự kiện không hoạt động"
+      ],
+      "result": "Cache có danh sách người đua (kèm bot), điểm, hạng, MaxReachableScore",
+      "rules": "MaxReachableScore do server gửi (không có mặc định client)",
+      "evidence": "JetpackRaceService.TryFetchCurrentEvent; JetpackRaceService.GetRequest; JetpackRaceRemoteService.Get; JetpackRaceService.ChangeTournamentCache; JetpackRaceService.CacheProfileImages; JetpackRaceService.IsSynced"
+    },
+    {
+      "id": "UC-03",
+      "title": "Tham gia cuộc đua",
+      "actor": "Player",
+      "trigger": "Bấm Join ở popup",
+      "precondition": "State Join(3)",
+      "steps": [
+        "JetpackRaceService.Join() (Task<bool>)",
+        "JetpackRaceRemoteService.Join(eventType) → jetpackRaceJoinUrl (/v1/join-streakrace-tournament), payload JetpackRaceJoinRequestModel{tournament_type}",
+        "OnJoinPopupOpened() / JetpackRaceDataService.SetIsJoinPopupIntroduced(true)",
+        "TryMarkForceShowedJoinPopUpForSession() chặn ép mở lại trong phiên",
+        "EventSender.SendJetpackRaceJoinedEvent (jetpack_race_joined) với tournament_id, progress, start_time, remaining_duration"
+      ],
+      "result": "Người chơi vào bảng đua với điểm 0, state InProgress(4)",
+      "rules": "JoinResult / mã trả về quyết định thông báo lỗi",
+      "evidence": "JetpackRaceService.Join; JetpackRaceRemoteService.Join; JetpackRaceService.OnJoinPopupOpened; JetpackRaceDataService.SetIsJoinPopupIntroduced; JetpackRaceService.TryMarkForceShowedJoinPopUpForSession; EventSender.SendJetpackRaceJoinedEvent"
+    },
+    {
+      "id": "UC-04",
+      "title": "Thắng level → bay lên 1 nấc",
+      "actor": "Player",
+      "trigger": "Hoàn thành level (WinState)",
+      "precondition": "JetpackRaceStateService.CanIncreaseScore() == true",
+      "steps": [
+        "WinState gọi JetpackRaceService.TryIncreaseScore()",
+        "JetpackRaceDataService.IncreaseScore() tăng Score và MaxScoreReached",
+        "Đặt IsSynced = false (pseudo-C `this._IsSynced = false;`) để đẩy điểm lên server ở request kế",
+        "IsScoreIncreasedSinceLastSeen() bật animation; UpdateLastSeen() / UpdateLastSeenBanner()",
+        "IsPlayerReachedMaxScore() so Score với GetMaxReachableScore()"
+      ],
+      "result": "Nhân vật jetpack bay lên, có thể vượt đối thủ",
+      "rules": "MaxReachableScore = mốc đích của cuộc đua (server)",
+      "evidence": "JetpackRaceService.TryIncreaseScore; JetpackRaceDataService.IncreaseScore; JetpackRaceService.IsScoreIncreasedSinceLastSeen; JetpackRaceService.IsPlayerReachedMaxScore; JetpackRaceService.GetMaxReachableScore"
+    },
+    {
+      "id": "UC-05",
+      "title": "Thua/bỏ level → mất toàn bộ chuỗi",
+      "actor": "Player",
+      "trigger": "LoseState hoặc QuitState",
+      "precondition": "JetpackRaceStateService.CanResetScore() == true",
+      "steps": [
+        "LoseState/QuitState gọi JetpackRaceService.TryResetScore()",
+        "JetpackRaceDataService.ResetScore() đưa Score về 0, lưu LastScoreBeforeReset",
+        "IsSynced = false để đồng bộ lại",
+        "IsPlayerFallDown() / LastScoreBeforeFallDown() cho hoạt ảnh rơi",
+        "EventSender.SendJetpackRaceLost (jetpack_race_lost) với race_rank, current_race_streak, step_rewards, tournament_id, progress, remaining_duration"
+      ],
+      "result": "Điểm về 0 nhưng vẫn còn trong cuộc đua (khác Sky Jump — không bị loại)",
+      "rules": "LastScoreBeforeReset lưu trong cache để hiển thị 'bạn đã có N thắng'",
+      "evidence": "JetpackRaceService.TryResetScore; JetpackRaceDataService.ResetScore; JetpackRaceStateService.CanResetScore; JetpackRaceService.IsPlayerFallDown; JetpackRaceService.LastScoreBeforeFallDown; EventSender.SendJetpackRaceLost"
+    },
+    {
+      "id": "UC-06",
+      "title": "Cảnh báo trước khi thoát level",
+      "actor": "Player",
+      "trigger": "Bấm thoát trong level",
+      "precondition": "Đang đua và có chuỗi",
+      "steps": [
+        "JetpackRaceStateService.ShouldShowAreYouSure()",
+        "Hiển thị chuỗi sắp mất"
+      ],
+      "result": "Giảm tỉ lệ bỏ level",
+      "rules": "-",
+      "evidence": "JetpackRaceStateService.ShouldShowAreYouSure"
+    },
+    {
+      "id": "UC-07",
+      "title": "Theo dõi đối thủ trên bảng đua",
+      "actor": "Player",
+      "trigger": "Mở popup / xem banner",
+      "precondition": "Có cache",
+      "steps": [
+        "JetpackRaceService.GetViewModels() dựng JetpackRaceLeaderboardPlayerViewModel từ Players",
+        "GetLastSeenViewModels() / GetLastSeenBannerViewModels() so với LastSeenPlayers / LastSeenBannerPlayers để chạy animation 'đối thủ vừa vượt lên'",
+        "ArePlayersScoreChanged() phát hiện thay đổi",
+        "GetRank() tìm view model có IsUser để lấy hạng của mình (mặc định -1 nếu không tìm thấy)",
+        "GetMaxScore() lấy điểm cao nhất trong bảng"
+      ],
+      "result": "Người chơi thấy vị trí tương đối so với đối thủ (thật và bot)",
+      "rules": "JetpackRaceUserModel.IsBot đánh dấu bot",
+      "evidence": "JetpackRaceService.GetViewModels; JetpackRaceService.GetLastSeenViewModels; JetpackRaceService.GetLastSeenBannerViewModels; JetpackRaceService.ArePlayersScoreChanged; JetpackRaceService.GetRank; JetpackRaceService.GetMaxScore"
+    },
+    {
+      "id": "UC-08",
+      "title": "Đặc quyền Unlimited Life một lần cho người tham gia",
+      "actor": "Player",
+      "trigger": "Vào sự kiện lần đầu",
+      "precondition": "Chưa dùng",
+      "steps": [
+        "JetpackRaceService.IsEligibleForLimitlessLife() = (HasUsedLimitlessLife == false) — pseudo-C `return obj._HasUsedLimitlessLife == false;`",
+        "Sau khi dùng: JetpackRaceDataService.SetHasUsedLimitlessLife(true)",
+        "Server cũng trả trường hasUsedLimitlessLife trong JetPackRaceResponseModel để đồng bộ"
+      ],
+      "result": "Người chơi được một đợt life vô hạn để cày chuỗi",
+      "rules": "Trạng thái được server xác thực, không chỉ lưu local",
+      "evidence": "JetpackRaceService.IsEligibleForLimitlessLife; JetpackRaceDataService.SetHasUsedLimitlessLife; JetpackRaceDataService.HasUsedLimitlessLife; JetPackRaceResponseModel.HasUsedLimitlessLife"
+    },
+    {
+      "id": "UC-09",
+      "title": "Kết thúc cuộc đua và xác định thắng",
+      "actor": "System",
+      "trigger": "Hết giờ hoặc isFinished = true",
+      "precondition": "Đã tham gia",
+      "steps": [
+        "GetRemainingSeconds() / GetEndDate() / GetStartTimeAsUnix() từ JetPackRaceCacheModel.StartTime/FinishTime",
+        "State → LocalTimeIsUp(5) hoặc RemoteTimeIsUp(6)",
+        "DidPlayerWin(): state hợp lệ (pseudo-C `iVar1 == 1`) VÀ Score >= MaxReachableScore (`obj._MaxReachableScore <= iVar2`) — tức phải chạm đích",
+        "JetpackRaceStateService.IsInProgressState() phân biệt đang đua và đã kết thúc"
+      ],
+      "result": "Popup chuyển JetpackRacePopUpState.Result(5)",
+      "rules": "Điều kiện thắng gắn với việc chạm mốc MaxReachableScore, không chỉ đứng hạng 1",
+      "evidence": "JetpackRaceService.DidPlayerWin; JetpackRaceService.GetRemainingSeconds; JetpackRaceService.GetEndDate; JetpackRaceStateService.IsInProgressState; JetpackRaceStateService.GetPopUpState"
+    },
+    {
+      "id": "UC-10",
+      "title": "Nhận thưởng chiến thắng",
+      "actor": "Player",
+      "trigger": "Bấm Claim ở popup kết quả",
+      "precondition": "DidPlayerWin() và ShouldSendClaimRequest()",
+      "steps": [
+        "JetpackRaceService.GetPlayerRewards() đọc RewardModels từ FirebaseRemoteConfigs (hoặc RewardModelsWithCollection khi Collection bật)",
+        "GetRaceRewards() gói thành một RewardModel tổng",
+        "SendClaimRequest() → JetpackRaceRemoteService.Claim(eventType, tournamentId, score) → jetpackRaceClaimUrl (/v1/claim-streakrace-tournament), payload JetpackRaceClaimRequestModel{tournament_id, tournament_type, score}",
+        "ClaimLocally() → JetpackRaceDataService.SetClaimedLocally(); IncreaseWinRecord()",
+        "EventSender: jetpack_race_won",
+        "_claimRequestedManuallyByUser phân biệt claim thủ công/tự động"
+      ],
+      "result": "500 Coin + 15 phút Unlimited Life (mặc định) vào túi; WinRecord tăng; state ClaimedLocally(7)",
+      "rules": "Bản Collection thêm 1 CollectionPack (CurrencyType 14) loại 3",
+      "evidence": "JetpackRaceService.GetPlayerRewards; JetpackRaceService.GetRaceRewards; JetpackRaceService.SendClaimRequest; JetpackRaceService.ClaimLocally; JetpackRaceDataService.SetClaimedLocally; JetpackRaceService.IncreaseWinRecord"
+    },
+    {
+      "id": "UC-11",
+      "title": "Hoạt ảnh nhận thẻ Collection khi về lobby",
+      "actor": "System",
+      "trigger": "Thưởng chứa CollectionPack",
+      "precondition": "Collection bật",
+      "steps": [
+        "JetpackRaceStateService.ShouldShowCollectibleEarnAnimationOnLobbyReturn()",
+        "Hoãn animation thẻ tới khi về lobby để không chồng popup"
+      ],
+      "result": "Người chơi thấy thẻ mới sau khi về lobby",
+      "rules": "RewardModelsWithCollection[2] = CollectionPack loại 3",
+      "evidence": "JetpackRaceStateService.ShouldShowCollectibleEarnAnimationOnLobbyReturn; JetpackRaceConfigModel.RewardModelsWithCollection"
+    },
+    {
+      "id": "UC-12",
+      "title": "Nối tiếp cuộc đua kế",
+      "actor": "System",
+      "trigger": "Cuộc đua hiện tại kết thúc",
+      "precondition": "-",
+      "steps": [
+        "SendGetNextRaceFinishTimeRequest() → JetpackRaceRemoteService.GetNextRaceEndTime(eventType) → jetpackRaceGetNextRaceEndTimeUrl (/v1/get-streakrace-endtime)",
+        "Response JetpackRaceGetNextRaceEndTimeResponseModel{finishTime, maxReachableScore}; IsNextRaceIsAvailable = true",
+        "GetNextRaceEndDate() cho đồng hồ",
+        "ScheduleLeaderboardFetchOnTimerEnd() dùng SecondTimer để tự fetch bảng mới khi đồng hồ về 0"
+      ],
+      "result": "Cuộc đua mới bắt đầu liền mạch",
+      "rules": "maxReachableScore của cuộc đua kế được biết trước để hiển thị mục tiêu",
+      "evidence": "JetpackRaceService.SendGetNextRaceFinishTimeRequest; JetpackRaceRemoteService.GetNextRaceEndTime; JetpackRaceService.GetNextRaceEndDate; JetpackRaceService.ScheduleLeaderboardFetchOnTimerEnd; JetpackRaceService.IsNextRaceIsAvailable"
+    },
+    {
+      "id": "UC-13",
+      "title": "Popup tự mở theo ngữ cảnh",
+      "actor": "System",
+      "trigger": "Về lobby / mở app / bấm Try Again",
+      "precondition": "State phù hợp",
+      "steps": [
+        "JetpackRaceStateService.ShouldOpenAutomaticallyOnLobbyReturn(out source) / ShouldOpenAutomaticallyOnSessionStart(out source)",
+        "GetPopUpState() trả Disabled(0)/Join(1)/FirstShowEver(2)/FirstShow(3)/InProgress(4)/Result(5)/JoinIntroduced(6)",
+        "EventSender.SendJetpackRaceImpression(JetpackRaceImpressionSource) (jetpack_race_screen_impression)",
+        "MarkEventIntroduced() / JetpackRaceDataService.MarkEventIntroduced()"
+      ],
+      "result": "Sự kiện được đẩy tới người chơi đúng lúc",
+      "rules": "JetpackRaceImpressionSource: None(0), LobbyIcon(1), EventJoin(2), Result(3), StepIncrease(4), TryAgain(5)",
+      "evidence": "JetpackRaceStateService.ShouldOpenAutomaticallyOnLobbyReturn; JetpackRaceStateService.ShouldOpenAutomaticallyOnSessionStart; JetpackRaceStateService.GetPopUpState; EventSender.SendJetpackRaceImpression; JetpackRaceService.MarkEventIntroduced"
+    },
+    {
+      "id": "UC-14",
+      "title": "Đóng góp nhiệm vụ cho MagicLab / Wheel of Fortune",
+      "actor": "System",
+      "trigger": "Thắng cuộc đua",
+      "precondition": "MagicLab / WOF đang bật",
+      "steps": [
+        "JetpackRaceService giữ tham chiếu MagicLabService (inject qua .ctor)",
+        "Chiến thắng Jetpack Race tính vào WheelOfFortuneTaskType.JetpackRaceWin(2) và nhiệm vụ MagicLab tương ứng"
+      ],
+      "result": "Sự kiện này là nguồn tiến độ cho các meta khác",
+      "rules": "Key localization: MagicLabJetpackRaceWinTaskDescription",
+      "evidence": "JetpackRaceService..ctor (MagicLabService); WheelOfFortunePopUpConfig.asset (WheelOfFortuneTaskType 2)"
+    },
+    {
+      "id": "UC-15",
+      "title": "Offline / lỗi request",
+      "actor": "System",
+      "trigger": "Get/Join/Claim thất bại",
+      "precondition": "-",
+      "steps": [
+        "IsSynced = false giữ dấu điểm chưa đồng bộ; lần Get kế đẩy lại",
+        "State giữ NoCache(2) nếu chưa từng fetch được",
+        "NotActiveStatusCode phân biệt sự kiện không hoạt động với lỗi mạng",
+        "IntervalUpdate thử lại"
+      ],
+      "result": "Chuỗi thắng/thua vẫn được ghi local, đồng bộ sau",
+      "rules": "-",
+      "evidence": "JetpackRaceService.IsSynced; JetpackRaceService.NotActiveStatusCode; JetpackRaceService.TryFetchCurrentEvent; JetpackRaceStateService.ShouldSendGetRequest"
+    },
+    {
+      "id": "UC-16",
+      "title": "Đồng bộ dữ liệu Jetpack Race",
+      "actor": "Server",
+      "trigger": "Sync / đổi thiết bị",
+      "precondition": "ISyncable",
+      "steps": [
+        "JetpackRaceDataService.GetSyncName() = 'JetpackRaceModel'",
+        "SerializeModelForSync() gửi JetpackRaceModel{WinRecord, JetPackRaceCache, HasUsedLimitlessLife, IsEventIntroducedEverInLifeTime, IsJoinPopupIntroduced}",
+        "OverwriteModelFromSync(data); DataSynced(); LateUpdate() lưu khi dirty; DeleteData() khi reset"
+      ],
+      "result": "Chuỗi hiện tại, kỷ lục thắng và quyền Unlimited Life giữ nguyên khi đổi máy",
+      "rules": "Khác Sky Jump: cache cuộc đua NẰM trong khối sync",
+      "evidence": "JetpackRaceDataService.GetSyncName; JetpackRaceDataService.SerializeModelForSync; JetpackRaceDataService.OverwriteModelFromSync; JetpackRaceDataService.DeleteData; JetpackRaceModel"
+    }
+  ],
+  "configs": [
+    {
+      "source": "json default",
+      "key": "IsEnabled",
+      "type": "bool",
+      "value": "false",
+      "meaning": "Bật/tắt Jetpack Race",
+      "where": "Resources/defaultconfigs/JetpackRaceConfigModel.json"
+    },
+    {
+      "source": "json default",
+      "key": "EventType",
+      "type": "int",
+      "value": "4",
+      "meaning": "tournament_type gửi backend",
+      "where": "JetpackRaceConfigModel.json"
+    },
+    {
+      "source": "json default",
+      "key": "FirstLevelToShow",
+      "type": "int",
+      "value": "80",
+      "meaning": "Level tối thiểu",
+      "where": "JetpackRaceConfigModel.json"
+    },
+    {
+      "source": "json default",
+      "key": "RewardModels[0]",
+      "type": "reward",
+      "value": "500 Coin (CurrencyType 1)",
+      "meaning": "Thưởng thắng cuộc đua — phần 1",
+      "where": "JetpackRaceConfigModel.json"
+    },
+    {
+      "source": "json default",
+      "key": "RewardModels[1]",
+      "type": "reward",
+      "value": "Life (CurrencyType 2) vô hạn 00:15:00",
+      "meaning": "Thưởng thắng cuộc đua — phần 2",
+      "where": "JetpackRaceConfigModel.json"
+    },
+    {
+      "source": "json default",
+      "key": "RewardModelsWithCollection",
+      "type": "reward[]",
+      "value": "500 Coin + Life 00:15:00 + 1 CollectionPack (CurrencyType 14, CollectionPackType 3)",
+      "meaning": "Bộ thưởng khi Collection bật",
+      "where": "JetpackRaceConfigModel.json"
+    },
+    {
+      "source": "code const",
+      "key": "Điều kiện thắng",
+      "type": "expr",
+      "value": "Score >= MaxReachableScore (và state kết thúc hợp lệ)",
+      "meaning": "Phải chạm đích mới thắng",
+      "where": "JetpackRaceService.DidPlayerWin (pseudo-C `obj._MaxReachableScore <= iVar2`)"
+    },
+    {
+      "source": "code const",
+      "key": "IsEligibleForLimitlessLife",
+      "type": "expr",
+      "value": "HasUsedLimitlessLife == false",
+      "meaning": "Chỉ được nhận quyền life vô hạn một lần",
+      "where": "JetpackRaceService.IsEligibleForLimitlessLife"
+    },
+    {
+      "source": "code field",
+      "key": "NotActiveStatusCode",
+      "type": "int",
+      "value": "(gán trong .ctor)",
+      "meaning": "Mã HTTP báo sự kiện không chạy",
+      "where": "JetpackRaceService"
+    },
+    {
+      "source": "code field",
+      "key": "IsSynced",
+      "type": "bool",
+      "value": "false sau mỗi lần đổi điểm",
+      "meaning": "Cờ đánh dấu điểm local chưa đẩy lên server",
+      "where": "JetpackRaceService.TryIncreaseScore / TryResetScore"
+    },
+    {
+      "source": "code enum",
+      "key": "JetpackRaceStateType",
+      "type": "enum",
+      "value": "Disable=0, ProgressNotEnough=1, NoCache=2, Join=3, InProgress=4, LocalTimeIsUp=5, RemoteTimeIsUp=6, ClaimedLocally=7",
+      "meaning": "Trạng thái sự kiện",
+      "where": "dump.cs TypeDefIndex 3923"
+    },
+    {
+      "source": "code enum",
+      "key": "JetpackRacePopUpState",
+      "type": "enum",
+      "value": "Disabled=0, Join=1, FirstShowEver=2, FirstShow=3, InProgress=4, Result=5, JoinIntroduced=6",
+      "meaning": "Layout popup",
+      "where": "dump.cs TypeDefIndex 3922"
+    },
+    {
+      "source": "code enum",
+      "key": "JetpackRaceImpressionSource",
+      "type": "enum",
+      "value": "None=0, LobbyIcon=1, EventJoin=2, Result=3, StepIncrease=4, TryAgain=5",
+      "meaning": "Nguồn mở popup",
+      "where": "dump.cs TypeDefIndex 3896"
+    },
+    {
+      "source": "server info",
+      "key": "JetPackRaceResponseModel",
+      "type": "object",
+      "value": "tournamentID, tournamentType, startTime, finishTime, isFinished, isClaimed, userScore, maxReachableScore, players[], hasUsedLimitlessLife",
+      "meaning": "Trạng thái cuộc đua",
+      "where": "dump.cs TypeDefIndex 3897"
+    },
+    {
+      "source": "server info",
+      "key": "JetPackRaceResponseUserModel",
+      "type": "object",
+      "value": "publicId, nickName, score, rank, isMe, isBot, imageUrl, imageId",
+      "meaning": "Một người đua (có thể là bot)",
+      "where": "dump.cs TypeDefIndex 3898"
+    },
+    {
+      "source": "server info",
+      "key": "JetpackRaceGetRequestModel / SetRequestModel / ClaimRequestModel",
+      "type": "object",
+      "value": "tournament_id, tournament_type, score",
+      "meaning": "Payload get/set/claim",
+      "where": "dump.cs TypeDefIndex 3899-3901"
+    },
+    {
+      "source": "server info",
+      "key": "JetpackRaceJoinRequestModel",
+      "type": "object",
+      "value": "tournament_type",
+      "meaning": "Payload join",
+      "where": "dump.cs TypeDefIndex 3902"
+    },
+    {
+      "source": "server info",
+      "key": "JetpackRaceGetNextRaceEndTimeResponseModel",
+      "type": "object",
+      "value": "finishTime, maxReachableScore",
+      "meaning": "Thông tin cuộc đua kế",
+      "where": "dump.cs TypeDefIndex 3904"
+    },
+    {
+      "source": "server info",
+      "key": "FlatBuffer schema",
+      "type": "string",
+      "value": "magicsort.schemas.v1.liveops.jet_pack_v2",
+      "meaning": "Biến thể nhị phân của dữ liệu jetpack",
+      "where": "PseudoC/Assembly-CSharp/MagicSort/schemas/v1/liveops/jet_pack_v2/"
+    },
+    {
+      "source": "storage key",
+      "key": "JetpackRaceModel",
+      "type": "string",
+      "value": "-",
+      "meaning": "Tên khối sync",
+      "where": "JetpackRaceDataService.GetSyncName"
+    },
+    {
+      "source": "storage key",
+      "key": "JetpackRaceModel.{WinRecord, JetPackRaceCache, HasUsedLimitlessLife, IsEventIntroducedEverInLifeTime, IsJoinPopupIntroduced}",
+      "type": "object",
+      "value": "-",
+      "meaning": "Dữ liệu lưu và đồng bộ",
+      "where": "dump.cs TypeDefIndex 3892"
+    },
+    {
+      "source": "storage key",
+      "key": "JetPackRaceCacheModel.{TournamentId, TournamentType, StartTime, FinishTime, IsFinished, IsClaimed, IsClaimedLocally, Score, MaxScoreReached, LastSeenScore, LastSeenBannerScore, IsIntroduced, MaxReachableScore, Players, LastSeenPlayers, LastSeenBannerPlayers, LastScoreBeforeReset}",
+      "type": "object",
+      "value": "-",
+      "meaning": "Cache cuộc đua",
+      "where": "dump.cs TypeDefIndex 3890"
+    },
+    {
+      "source": "asset",
+      "key": "JetPackRaceEndNotificationSo",
+      "type": "asset",
+      "value": "-",
+      "meaning": "Local notification báo cuộc đua sắp kết thúc",
+      "where": "Assets/MonoBehaviour/JetPackRaceEndNotificationSo.asset"
+    },
+    {
+      "source": "json default",
+      "key": "JetpackRaceConfigModel.json: RewardModels[0].CurrencyType",
+      "type": "",
+      "value": "1",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/JetpackRaceConfigModel.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "JetpackRaceConfigModel.json: RewardModels[0].Amount",
+      "type": "",
+      "value": "500",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/JetpackRaceConfigModel.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "JetpackRaceConfigModel.json: RewardModels[1].CurrencyType",
+      "type": "",
+      "value": "2",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/JetpackRaceConfigModel.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "JetpackRaceConfigModel.json: RewardModels[1].Amount",
+      "type": "",
+      "value": "0",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/JetpackRaceConfigModel.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "JetpackRaceConfigModel.json: RewardModels[1].timeSpan",
+      "type": "",
+      "value": "00:15:00",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/JetpackRaceConfigModel.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "JetpackRaceConfigModel.json: RewardModelsWithCollection[0].CurrencyType",
+      "type": "",
+      "value": "1",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/JetpackRaceConfigModel.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "JetpackRaceConfigModel.json: RewardModelsWithCollection[0].Amount",
+      "type": "",
+      "value": "500",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/JetpackRaceConfigModel.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "JetpackRaceConfigModel.json: RewardModelsWithCollection[1].CurrencyType",
+      "type": "",
+      "value": "2",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/JetpackRaceConfigModel.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "JetpackRaceConfigModel.json: RewardModelsWithCollection[1].Amount",
+      "type": "",
+      "value": "0",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/JetpackRaceConfigModel.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "JetpackRaceConfigModel.json: RewardModelsWithCollection[1].timeSpan",
+      "type": "",
+      "value": "00:15:00",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/JetpackRaceConfigModel.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "JetpackRaceConfigModel.json: RewardModelsWithCollection[2].currencyType",
+      "type": "",
+      "value": "14",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/JetpackRaceConfigModel.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "JetpackRaceConfigModel.json: RewardModelsWithCollection[2].amount",
+      "type": "",
+      "value": "1",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/JetpackRaceConfigModel.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "JetpackRaceConfigModel.json: RewardModelsWithCollection[2].CollectionPackType",
+      "type": "",
+      "value": "3",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/JetpackRaceConfigModel.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "server cache (historical)",
+      "key": "JetpackRaceConfigModel (live) = default?",
+      "type": "",
+      "value": "8/13 key trùng default, 5 key khác/thêm",
+      "meaning": "Đối chiếu config server thật (CachedRemoteConfigs) với JetpackRaceConfigModel.json",
+      "where": "Configs/CachedRemoteConfigs + Firebase RC template 3197 — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server cache (historical)",
+      "key": "JetpackRaceConfigModel: rewardModels[0].timeSpan",
+      "type": "",
+      "value": "00:00:00",
+      "meaning": "server-only (không có trong default)",
+      "where": "Configs/CachedRemoteConfigs + Firebase RC template 3197 — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server cache (historical)",
+      "key": "JetpackRaceConfigModel: rewardModels[0].chestType",
+      "type": "",
+      "value": "0",
+      "meaning": "server-only (không có trong default)",
+      "where": "Configs/CachedRemoteConfigs + Firebase RC template 3197 — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server cache (historical)",
+      "key": "JetpackRaceConfigModel: rewardModels[0].collectionPackType",
+      "type": "",
+      "value": "0",
+      "meaning": "server-only (không có trong default)",
+      "where": "Configs/CachedRemoteConfigs + Firebase RC template 3197 — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server cache (historical)",
+      "key": "JetpackRaceConfigModel: rewardModels[1].chestType",
+      "type": "",
+      "value": "0",
+      "meaning": "server-only (không có trong default)",
+      "where": "Configs/CachedRemoteConfigs + Firebase RC template 3197 — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server cache (historical)",
+      "key": "JetpackRaceConfigModel: rewardModels[1].collectionPackType",
+      "type": "",
+      "value": "0",
+      "meaning": "server-only (không có trong default)",
+      "where": "Configs/CachedRemoteConfigs + Firebase RC template 3197 — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    }
+  ],
+  "rewards": [
+    {
+      "context": "Thắng cuộc đua (chạm MaxReachableScore)",
+      "reward": "500 Coin + Unlimited Life 15 phút",
+      "evidence": "JetpackRaceConfigModel.json RewardModels; JetpackRaceService.GetPlayerRewards"
+    },
+    {
+      "context": "Thắng cuộc đua khi Collection bật",
+      "reward": "500 Coin + Unlimited Life 15 phút + 1 CollectionPack loại 3",
+      "evidence": "JetpackRaceConfigModel.json RewardModelsWithCollection"
+    },
+    {
+      "context": "Tham gia lần đầu",
+      "reward": "Một đợt Unlimited Life (IsEligibleForLimitlessLife)",
+      "evidence": "JetpackRaceService.IsEligibleForLimitlessLife; JetpackRaceDataService.SetHasUsedLimitlessLife"
+    }
+  ],
+  "backend": [
+    {
+      "command": "jetpackRaceGetUrl = {base}/v1/get-streakrace-leaderboard",
+      "direction": "client→server",
+      "purpose": "Lấy bảng đua và đẩy kèm điểm"
+    },
+    {
+      "command": "jetpackRaceSetUrl = {base}/v1/set-streakrace-tournament-points",
+      "direction": "client→server",
+      "purpose": "Đẩy điểm (JetpackRaceSetRequestModel)"
+    },
+    {
+      "command": "jetpackRaceJoinUrl = {base}/v1/join-streakrace-tournament",
+      "direction": "client→server",
+      "purpose": "Tham gia cuộc đua"
+    },
+    {
+      "command": "jetpackRaceClaimUrl = {base}/v1/claim-streakrace-tournament",
+      "direction": "client→server",
+      "purpose": "Nhận thưởng"
+    },
+    {
+      "command": "jetpackRaceGetNextRaceFinishTimeUrl = {base}/v1/get-streakrace-endtime",
+      "direction": "client→server",
+      "purpose": "Lấy thời điểm kết thúc cuộc đua kế"
+    },
+    {
+      "command": "Sync block 'JetpackRaceModel'",
+      "direction": "client↔server",
+      "purpose": "Đồng bộ chuỗi, kỷ lục, quyền life vô hạn"
+    }
+  ],
+  "ui": [
+    {
+      "element": "Popup đua",
+      "class": "Modules.Contexts.Home.JetpackRace.Scripts.UI (popup, banner, leaderboard)",
+      "purpose": "Hiển thị đường đua và đối thủ"
+    },
+    {
+      "element": "ViewModel",
+      "class": "JetpackRaceLeaderboardPlayerViewModel",
+      "purpose": "Một người đua (IsUser đánh dấu bản thân)"
+    },
+    {
+      "element": "Banner lobby",
+      "class": "JetpackRace banner (ShouldShowJetpackRaceBanner)",
+      "purpose": "Nhắc tiến độ đua ở lobby"
+    },
+    {
+      "element": "Popup tham gia / kết quả / thông tin",
+      "class": "JetpackRace Join / Result / Info popup",
+      "purpose": "Các trạng thái sự kiện"
+    },
+    {
+      "element": "Are You Sure",
+      "class": "JetpackRace AreYouSure view",
+      "purpose": "Cảnh báo mất chuỗi"
+    }
+  ],
+  "analytics": [
+    {
+      "event": "jetpack_race_joined",
+      "params": "tournament_id, progress, start_time, remaining_duration",
+      "when": "EventSender.SendJetpackRaceJoinedEvent"
+    },
+    {
+      "event": "jetpack_race_screen_impression",
+      "params": "tournament_id, impression_source, progress, remaining_duration...",
+      "when": "EventSender.SendJetpackRaceImpression(JetpackRaceImpressionSource)"
+    },
+    {
+      "event": "jetpack_race_info_impression",
+      "params": "tournament_id, progress, remaining_duration",
+      "when": "Mở popup thông tin"
+    },
+    {
+      "event": "jetpack_race_lost",
+      "params": "tournament_id, race_rank, current_race_streak, step_rewards, progress, remaining_duration",
+      "when": "EventSender.SendJetpackRaceLost khi mất chuỗi"
+    },
+    {
+      "event": "jetpack_race_won",
+      "params": "tournament_id, race_rank, current_race_streak, progress, remaining_duration",
+      "when": "Thắng và nhận thưởng"
+    }
+  ],
+  "storage_keys": [
+    "JetpackRaceModel",
+    "JetpackRaceModel.WinRecord",
+    "JetpackRaceModel.HasUsedLimitlessLife",
+    "JetpackRaceModel.IsEventIntroducedEverInLifeTime",
+    "JetpackRaceModel.IsJoinPopupIntroduced",
+    "JetPackRaceCacheModel.TournamentId",
+    "JetPackRaceCacheModel.Score",
+    "JetPackRaceCacheModel.MaxScoreReached",
+    "JetPackRaceCacheModel.MaxReachableScore",
+    "JetPackRaceCacheModel.LastScoreBeforeReset",
+    "JetPackRaceCacheModel.LastSeenScore",
+    "JetPackRaceCacheModel.LastSeenBannerScore",
+    "JetPackRaceCacheModel.IsClaimedLocally"
+  ],
+  "related_features": [
+    "JetpackRaceWithStage",
+    "SkyJump",
+    "TowerWinStreak",
+    "MagicLab",
+    "WheelOfFortune",
+    "Collection"
+  ],
+  "gaps": [
+    "MaxReachableScore (mốc đích) hoàn toàn do server, không có giá trị mặc định trong client.",
+    "Số người trong một bảng đua và tỉ lệ bot do server quyết định.",
+    "15/11 — resolved_static_code_historical_build: DidPlayerWin gọi GetRank; chỉ khi rank==1, cache tồn tại và cache.Score>=MaxReachableScore mới true. Không có state predicate thứ ba trong body này. Rank1 nhưng chưatarget, đạt target nhưng rank2, hoặc cache null đều false. Còn lại: Cần đối chiếu ARM64/current runtime và các nhánh caller còn chưa đủ bằng chứng.",
+    "15/11 — partial_static_code_unresolved: IsEligibleForLimitlessLife trả !model.HasUsedLimitlessLife. JetpackRaceJoinPopUp.Initialize dùng nó bật joinButtonWithLimitlessLifeView hoặc without; ChangeCache lấy HasUsedLimitlessLife từ response. Chưa thấy Inventory.Earn/RewardService trong các body service/joinpopup đã đọc, nên mới chứng minh eligibility/UI, không chốt thời điểm grant. Còn lại: Cần caller join/callback/command ngoàiservice và response inventory/sync để chứng minh grant/consume/duplicate behavior.",
+    "[Runtime 2026-09-10] Config server LIVE đã đọc trực tiếp từ cache máy (không cần request); các hàng 'server live' là giá trị server ghi đè/thêm so với default."
+  ],
+  "sources": [
+    "GameDesign/features/JetpackRaceService.md",
+    "GameDesign/features/JetpackRaceStateService.md",
+    "GameDesign/features/JetpackRaceDataService.md",
+    "GameDesign/features/JetpackRaceConfigModel.md",
+    "RecoveredNative/PseudoC/Assembly-CSharp/Modules/Contexts/Home/JetpackRace/Scripts/*.c",
+    "RecoveredNative/Il2CppDumper/dump.cs (TypeDefIndex 3890-3923)",
+    "UnityExport/ExportedProject/Assets/Resources/defaultconfigs/JetpackRaceConfigModel.json",
+    "UnityExport/ExportedProject/Assets/MonoBehaviour/BackendEnvironmentConfig.asset",
+    "RecoveredNative/strings-by-type.tsv (EventSender.SendJetpackRace*)"
+  ],
+  "audit_provenance": {
+    "review_date": "2026-11-15",
+    "mode": "offline_existing_files",
+    "code_build": "0.0.3063 ARMv7",
+    "runtime_build_observed_historically": "0.0.3129 ARM64 (audit 2026-10-18); not rechecked 2026-11-15",
+    "new_playtests": 0,
+    "uc_status": "See facts/audit_20261115/uc_registry.json; image reference is not pass",
+    "workbook_status": "Existing XLSX is historical; JSON and local web include 2026-11-15 corrections",
+    "static_review": "facts/local_code_gap_results_20261115.json; facts/local_asset_gap_results_20261115.json; facts/final_data_gap_decisions_20261115.json; facts/core_body_gap_decisions_20261115.json; facts/remaining_asset_gap_decisions_20261115.json"
+  },
+  "static_review_20261115": {
+    "date": "2026-11-15",
+    "scope": "Historical code/assets 0.0.3063, dated caches, device 0.0.3129 cached bundles and explicitly scoped runtime evidence. Not full runtime pass.",
+    "findings": [
+      {
+        "kind": "code",
+        "source_report": "facts/local_code_gap_results_20261115.json",
+        "id": "MS-CODE-37",
+        "gap_ids": [
+          "MS-JetpackRace-G003"
+        ],
+        "title": "DidPlayerWin = rank1 và đạt target",
+        "status": "resolved_static_code",
+        "conclusion": "DidPlayerWin gọi GetRank; chỉ khi rank==1, cache tồn tại và cache.Score>=MaxReachableScore mới true. Không có state predicate thứ ba trong body này. Rank1 nhưng chưatarget, đạt target nhưng rank2, hoặc cache null đều false.",
+        "evidence": [
+          {
+            "file": "../com.grandgames.magicsort_Unity_20260909_112501/RecoveredNative/PseudoC/Assembly-CSharp/Modules/Contexts/Home/JetpackRace/Scripts/JetpackRaceService.c",
+            "line": 6525,
+            "end_line": 6577,
+            "method": "// ===== JetpackRaceService :: public bool DidPlayerWin()",
+            "sha256": "4e291e791f4d2698d83d6f4441537a3145131ee4e8a895155a54e44d6914c43b",
+            "body_checked": true,
+            "build": "0.0.3063 ARMv7",
+            "required_body_tokens": [
+              "iVar1 == 1",
+              "_MaxReachableScore_k__BackingField <= iVar2"
+            ]
+          }
+        ],
+        "remaining": "Cần đối chiếu ARM64/current runtime và các nhánh caller còn chưa đủ bằng chứng.",
+        "scope": "recovered_native_0.0.3063_only",
+        "runtime_verified": false
+      },
+      {
+        "kind": "code",
+        "source_report": "facts/local_code_gap_results_20261115.json",
+        "id": "MS-CODE-38",
+        "gap_ids": [
+          "MS-JetpackRace-G004"
+        ],
+        "title": "Eligibility unlimited life đã tách khỏi grant",
+        "status": "partial_static_code",
+        "conclusion": "IsEligibleForLimitlessLife trả !model.HasUsedLimitlessLife. JetpackRaceJoinPopUp.Initialize dùng nó bật joinButtonWithLimitlessLifeView hoặc without; ChangeCache lấy HasUsedLimitlessLife từ response. Chưa thấy Inventory.Earn/RewardService trong các body service/joinpopup đã đọc, nên mới chứng minh eligibility/UI, không chốt thời điểm grant.",
+        "evidence": [
+          {
+            "file": "../com.grandgames.magicsort_Unity_20260909_112501/RecoveredNative/PseudoC/Assembly-CSharp/Modules/Contexts/Home/JetpackRace/Scripts/JetpackRaceService.c",
+            "line": 3652,
+            "end_line": 3677,
+            "method": "// ===== JetpackRaceService :: public bool IsEligibleForLimitlessLife()",
+            "sha256": "4e291e791f4d2698d83d6f4441537a3145131ee4e8a895155a54e44d6914c43b",
+            "body_checked": true,
+            "build": "0.0.3063 ARMv7",
+            "required_body_tokens": [
+              "_HasUsedLimitlessLife_k__BackingField == false"
+            ]
+          }
+        ],
+        "remaining": "Cần caller join/callback/command ngoàiservice và response inventory/sync để chứng minh grant/consume/duplicate behavior.",
+        "scope": "recovered_native_0.0.3063_only",
+        "runtime_verified": false
+      }
+    ]
+  },
+  "acceptance_review_20261115": {
+    "source": "facts/feature_acceptance_20261115.json",
+    "feature_id": "JetpackRace",
+    "scope": "All eleven dossier dimensions reviewed; full_feature_verified is not implied; read per-dimension gaps and actual runtime evidence."
+  },
+  "segment_ab_review_20261115": {
+    "status": "not_identified_in_sources",
+    "segment_ids": [],
+    "matching_basis": "explicit_gd_config_map_or_exact_model_token_in_gdd_configs_where_key_sources; rootfieldscoped",
+    "rows": [],
+    "classifications": {},
+    "assignment_verified": false,
+    "uplift_verified": false,
+    "note": "No matchingrow does not prove no segmentation/AB. Rewardbucketfalsepositives remain explicitly classified."
+  },
+  "continuation_review_20261116": {
+    "date": "2026-11-16",
+    "build": "0.0.3129 ARM64 host APK",
+    "build_scope": "Host APK version3129 matches LAST observed installed version15/11 only; installed bytes/live device16/11 not verified.",
+    "runtime_status": "device_unavailable",
+    "runtime_case_ids": [],
+    "current_apk_model_links": {
+      "feature": "JetpackRace",
+      "models": [
+        {
+          "model": "JetpackRaceConfigModel",
+          "current_default_file": "facts/review_20261116/public_current_config_3129/defaults/JetpackRaceConfigModel.json",
+          "resource_path": "defaultconfigs/jetpackraceconfigmodel",
+          "sha256": "9de4b90b549802fdd2bb0a5730547b8503076e7fd2fe85824cb6995a9d502d5c",
+          "matching_basis": [
+            "gdd/JetpackRace.json#/configs",
+            "gdd/JetpackRace.json#/sources",
+            "gdd/JetpackRace.json#/managers"
+          ],
+          "scope": "Packaged default3129, not effective server config.",
+          "site_data_path": "data/current_config_3129/defaults/JetpackRaceConfigModel.json",
+          "original_source_sha256": "9de4b90b549802fdd2bb0a5730547b8503076e7fd2fe85824cb6995a9d502d5c",
+          "public_artifact_sha256": "f1d41c134036a8de90e4afcd348b29e17e5353a8f9c70ae040aab511068ab3f3",
+          "sha256_scope": "sha256 is original raw model; public_artifact_sha256 is the sanitized download"
+        }
+      ],
+      "status": "exact_model_source_association",
+      "distribution": "sanitized_public",
+      "public_mapping_pending": false
+    },
+    "current_packaged_defaults": [
+      {
+        "model": "JetpackRaceConfigModel",
+        "source": "facts/review_20261116/public_current_config_3129/defaults/JetpackRaceConfigModel.json",
+        "site_data_path": "data/current_config_3129/defaults/JetpackRaceConfigModel.json",
+        "public_artifact_sha256": "f1d41c134036a8de90e4afcd348b29e17e5353a8f9c70ae040aab511068ab3f3",
+        "original_source_sha256": "9de4b90b549802fdd2bb0a5730547b8503076e7fd2fe85824cb6995a9d502d5c",
+        "source_class": "static_asset",
+        "build": "0.0.3129 host APK",
+        "scope": "Sanitized packaged default fullvalues only; not effective remote/selected config or runtime.",
+        "values": {
+          "IsEnabled": false,
+          "EventType": 4,
+          "FirstLevelToShow": 80,
+          "RewardModels": [
+            {
+              "CurrencyType": 1,
+              "Amount": 500
+            },
+            {
+              "CurrencyType": 2,
+              "Amount": 0,
+              "timeSpan": "00:15:00"
+            }
+          ],
+          "RewardModelsWithCollection": [
+            {
+              "CurrencyType": 1,
+              "Amount": 500
+            },
+            {
+              "CurrencyType": 2,
+              "Amount": 0,
+              "timeSpan": "00:15:00"
+            },
+            {
+              "currencyType": 14,
+              "amount": 1,
+              "CollectionPackType": 3
+            }
+          ]
+        }
+      }
+    ],
+    "native_finding_ids": [],
+    "documentation_source_coverage": {
+      "dossier_present": true,
+      "use_case_catalog_count": 16,
+      "config_catalog_rows": 42,
+      "current_apk_default_model_links": 1,
+      "current_native_findings": 0,
+      "scope": "Documentation/source coverage only; not complete runtime verification."
+    },
+    "runtime_completion": {
+      "date": "2026-11-16",
+      "status": "device_unavailable",
+      "executed_case_count": 0,
+      "full_feature_runtime_verified": false
+    },
+    "planned_branch": "Tìm icon race, mở đối thủ/progress và info entry; đóng không join mới, chụp error hoặc cached race.",
+    "target_uc_ids": [
+      "UC-01",
+      "UC-07",
+      "UC-15"
+    ],
+    "execution_phase": "noncore_first",
+    "core_or_levels_last": false,
+    "actionability_full_json": "facts/continuation_20261116/current/feature_actionability.json",
+    "actionability_site_data_path": "data/continuation_20261116/feature_actionability.json",
+    "source_classes": [
+      "static_asset"
+    ],
+    "full_feature_verified": false
+  }
+}

@@ -1,0 +1,784 @@
+{
+  "id": "SkyJump",
+  "name": "Sky Jump (đua leo thang)",
+  "category": "Event",
+  "managers": [
+    "Modules.Contexts.Home.SkyJump.Scripts.SkyJumpService",
+    "Modules.Contexts.Home.SkyJump.Scripts.SkyJumpDataService",
+    "Modules.Contexts.Home.SkyJump.Scripts.SkyJumpStateService",
+    "Modules.Contexts.Home.SkyJump.Scripts.SkyJumpRemoteService",
+    "Modules.Contexts.Home.SkyJump.Scripts.SkyJumpConfigModel"
+  ],
+  "summary": "Sky Jump (backend gọi là 'lava tournament', endpoint /v1/*-lava-*) là giải đấu loại trực tiếp theo bậc thang. Người chơi Join vào một nhóm cùng lúc; mỗi lần thắng level thì leo lên 1 bậc (Score+1), mỗi lần THUA thì rơi khỏi giải (TryFall đặt Score = -1) và bị loại vĩnh viễn trong giải đó. Bậc tối đa là 10 (GetMaxReachableScore trả 10). Ai leo tới bậc 10 trước khi hết giờ là người thắng; toàn bộ giải thưởng RewardsAsCoin (mặc định 10.000 coin) được CHIA ĐỀU cho số người thắng (GetPlayerReward: Amount = RewardsAsCoin / winnerCount, tối thiểu chia cho 1). UI hiển thị từng bậc thang với avatar của những người đang đứng ở bậc đó và những người đã rơi, tạo cảm giác đua trực tiếp. Sau khi giải kết thúc, client hỏi thời gian giải kế tiếp (GetNextTournamentStartTime) để hiển thị đồng hồ chờ.",
+  "unlock": "SkyJumpStateService.GetEventState(): Disable(0) nếu SkyJumpConfigModel.IsEnabled == false; ProgressNotEnough(1) nếu level < FirstLevelToShow; NoCache(2) nếu chưa fetch được; Join(3) khi có giải nhưng chưa tham gia; InProgress(4) khi đang đua; FinishedByLocal(5)/FinishedByRemote(6) khi kết thúc; ClaimedLocally(8) sau khi nhận thưởng. Client default: IsEnabled=false, EventType=1, FirstLevelToShow=120, RewardsAsCoin=10000 (Resources/defaultconfigs/SkyJumpConfigModel.json).",
+  "entry_points": [
+    "SkyJumpLobbyButton ở lobby (IsLobbyIconVisible), kèm SkyJumpLobbyButtonTimer đếm ngược",
+    "SkyJumpJoinPopUp — mời tham gia (ShouldShowJoinPopup / CanShowJoinPopupForce / ShouldOpenJoinPopUpAutomaticallyOnLobbyReturn)",
+    "SkyJumpPopUp — màn hình thang đua (SkyJumpPopUpArguments, impression source)",
+    "SkyJumpSearchPopUp — hoạt ảnh 'đang tìm đối thủ' sau khi Join",
+    "Tự mở khi về lobby nếu vừa lên bậc (ShouldOpenStepIncreasedOnLobbyReturn) hoặc khi có kết quả (ShouldOpenResultOnLobbyReturn), hoặc khi mở app (ShouldOpenAutomaticallyOnSessionStart)",
+    "SkyJumpInfoPopUp qua SkyJumpInfoButton",
+    "SkyJumpAreYouSureView — cảnh báo mất suất khi định thoát level (ShouldShowAreYouSure)",
+    "SkyJumpTryAgainCommand — nút chơi lại"
+  ],
+  "flow": "InitializeData() nạp cache và CacheProfileImages(). IntervalUpdate/SendGetRequest → SkyJumpStateService.ShouldSendGetRequest() → GetRequest() gọi SkyJumpRemoteService.Get(eventType, tournamentId, score) (hoặc GetWithFlatBuffer, schema magicsort.schemas.v1.liveops.lava_leaderboard) tới skyJumpGetUrl (/v1/get-lava-leaderboard) với SkyJumpGetRequestModel{tournament_id, tournament_type, score}. Response SkyJumpResponseModel{tournament_id, tournament_type, start_time, finish_time, is_finished, is_claimed, user_score, user_max_score, user_details_by_steps: Dictionary<step, {all_user_ids, loser_user_ids, total_user_count}>, players_images}. ChangeTournamentCache(response) ghi SkyJumpCacheModel và gọi CacheProfileImages(). Join: SkyJumpStateService.CanJoinTournament() → SkyJumpService.Join() gọi SkyJumpRemoteService.Join(eventType) tới skyJumpJoinUrl (/v1/join-lava-tournament) với SkyJumpJoinRequestModel{tournament_type}; analytics sky_jump_joined; SkyJumpSearchPopUp chạy hoạt ảnh tìm người chơi bằng GetViewModelsForSearchAnimation(). Trong giải: thắng level → TryIncreaseScore() (nếu CanIncreaseScore()) → SkyJumpDataService.IncreaseScore() (Score+1, cập nhật MaxScoreReached); thua level → TryFall() (nếu CanFall()) → SkyJumpDataService.Fall() đặt Score = -1 (pseudo-C `obj._Score = -1;`), analytics sky_jump_lost với lost_step. UI: GetViewModelsInCurrentScore()/GetViewModelsInMaxScore()/GetViewModelsInPreviousScore() trả 2 danh sách (người còn đứng, người đã rơi) cho từng bậc dựa vào all_user_ids/loser_user_ids; GetUserCountInStep(step) đếm người ở bậc. Kết thúc: hết giờ (GetRemainingSeconds/GetEndDate) hoặc server báo is_finished → state FinishedByLocal(5)/FinishedByRemote(6). DidPlayerWin() = Score >= 10 và state ∈ {5,6}; DidPlayerLost() = ngược lại. Nhận thưởng: ShouldSendClaimRequest() → SendClaimRequest() gọi Claim(eventType, tournamentId, score) tới skyJumpClaimUrl (/v1/claim-lava-tournament); GetPlayerReward() tạo RewardModel{CurrencyType = 1 (Coin), Amount = RewardsAsCoin / GetWinnerCount()} (winnerCount tối thiểu 1); ClaimLocally(didWin) đặt IsClaimedLocally và IncreaseWinRecord() nếu thắng; state → ClaimedLocally(8). Sau đó SendGetNextTournamentStartTimeRequest() gọi skyJumpGetNextTournamentStartTimeUrl (/v1/get-lava-starttime) trả {tournament_type, tournament_start_time, tournament_end_time} để SkyJumpNextTournamentStartTimer/EndTimer đếm ngược; ScheduleLeaderboardFetchOnTimerEnd() tự fetch lại khi đồng hồ về 0.",
+  "use_cases": [
+    {
+      "id": "UC-01",
+      "title": "Kiểm tra điều kiện và hiện icon Sky Jump",
+      "actor": "System",
+      "trigger": "Vào lobby / IntervalUpdate",
+      "precondition": "RemoteConfigs sẵn sàng",
+      "steps": [
+        "SkyJumpStateService.GetConfig() lấy SkyJumpConfigModel",
+        "GetEventState() trả Disable(0)/ProgressNotEnough(1)/NoCache(2)/Join(3)/InProgress(4)/FinishedByLocal(5)/FinishedByRemote(6)/ClaimedLocally(8)",
+        "IsLobbyIconVisible() quyết định hiện SkyJumpLobbyButton",
+        "GetLiveOpsStateForLevelEvent() cung cấp trạng thái cho analytics của level"
+      ],
+      "result": "Icon lobby hiện/ẩn; các luồng tăng/giảm điểm chỉ chạy ở state phù hợp",
+      "rules": "Client default: IsEnabled=false, FirstLevelToShow=120, EventType=1",
+      "evidence": "SkyJumpStateService.GetEventState; SkyJumpStateService.IsLobbyIconVisible; SkyJumpStateService.GetLiveOpsStateForLevelEvent; SkyJumpService.GetLiveOpsStateForLevelEvent"
+    },
+    {
+      "id": "UC-02",
+      "title": "Lấy dữ liệu giải hiện tại",
+      "actor": "Server",
+      "trigger": "InitializeData / IntervalUpdate khi ShouldSendGetRequest()",
+      "precondition": "Sự kiện bật",
+      "steps": [
+        "SkyJumpService.TryFetchCurrentEvent() → SendGetRequest() → GetRequest()",
+        "SkyJumpRemoteService.Get(eventType, tournamentId, score) hoặc GetWithFlatBuffer (schema lava_leaderboard) tới skyJumpGetUrl (/v1/get-lava-leaderboard)",
+        "Payload SkyJumpGetRequestModel{tournament_id, tournament_type, score} — điểm client cũng được đẩy kèm mỗi lần Get",
+        "ChangeTournamentCache(response) ghi SkyJumpCacheModel; CacheProfileImages() nạp players_images",
+        "Nếu HTTP status = NotActiveStatusCode → sự kiện không hoạt động"
+      ],
+      "result": "Cache có bậc của mình, danh sách người theo bậc, thời gian giải",
+      "rules": "user_details_by_steps là Dictionary<step, {all_user_ids, loser_user_ids, total_user_count}>",
+      "evidence": "SkyJumpService.TryFetchCurrentEvent; SkyJumpService.SendGetRequest; SkyJumpService.GetRequest; SkyJumpRemoteService.Get; SkyJumpService.ChangeTournamentCache; SkyJumpService.CacheProfileImages; SkyJumpService.NotActiveStatusCode"
+    },
+    {
+      "id": "UC-03",
+      "title": "Tham gia giải (Join)",
+      "actor": "Player",
+      "trigger": "Bấm Join ở SkyJumpJoinPopUp",
+      "precondition": "SkyJumpStateService.CanJoinTournament() == true (state Join(3))",
+      "steps": [
+        "SkyJumpService.Join() (Task<bool>)",
+        "SkyJumpRemoteService.Join(eventType) → skyJumpJoinUrl (/v1/join-lava-tournament), payload SkyJumpJoinRequestModel{tournament_type}",
+        "OnJoinPopupOpened() / SkyJumpDataService.SetIsJoinPopupIntroduced(true)",
+        "SkyJumpSearchPopUp mở, chạy GetViewModelsForSearchAnimation() + SkyJumpSearchAnimationView + SkyJumpSearchUserViewRevealAnimation",
+        "EventSender.SendSkyJumpJoinedEvent (sky_jump_joined)"
+      ],
+      "result": "Người chơi vào bậc 0 của thang, state chuyển InProgress(4)",
+      "rules": "TryMarkForceShowedJoinPopUpForSession()/ForceShowedJoinPopUpForThisSession chỉ ép mở popup Join 1 lần mỗi phiên",
+      "evidence": "SkyJumpService.Join; SkyJumpRemoteService.Join; SkyJumpService.OnJoinPopupOpened; SkyJumpDataService.SetIsJoinPopupIntroduced; SkyJumpService.GetViewModelsForSearchAnimation; SkyJumpService.TryMarkForceShowedJoinPopUpForSession"
+    },
+    {
+      "id": "UC-04",
+      "title": "Thắng level → leo lên 1 bậc",
+      "actor": "Player",
+      "trigger": "Hoàn thành level",
+      "precondition": "SkyJumpStateService.CanIncreaseScore() == true (state InProgress)",
+      "steps": [
+        "SkyJumpService.TryIncreaseScore() (trả bool)",
+        "SkyJumpDataService.IncreaseScore() tăng SkyJumpCacheModel.Score và MaxScoreReached",
+        "Điểm mới được đẩy lên server ở request Get/Claim kế tiếp (trường score)",
+        "IsScoreIncreasedSinceLastSeen() bật animation khi về lobby; UpdateLastSeen() / SkyJumpDataService.UpdateLastSeen()"
+      ],
+      "result": "Avatar người chơi nhảy lên bậc kế tiếp trên SkyJumpStepView",
+      "rules": "Bậc tối đa = 10 (SkyJumpService.GetMaxReachableScore trả 10); IsPlayerReachedMaxScore() khi Score >= 10",
+      "evidence": "SkyJumpService.TryIncreaseScore; SkyJumpDataService.IncreaseScore; SkyJumpService.GetMaxReachableScore; SkyJumpService.IsPlayerReachedMaxScore; SkyJumpService.IsScoreIncreasedSinceLastSeen; SkyJumpService.UpdateLastSeen"
+    },
+    {
+      "id": "UC-05",
+      "title": "Thua level → rơi khỏi giải (bị loại)",
+      "actor": "Player",
+      "trigger": "Thua hoặc bỏ level",
+      "precondition": "SkyJumpStateService.CanFall() == true",
+      "steps": [
+        "SkyJumpService.TryFall()",
+        "SkyJumpDataService.Fall() đặt SkyJumpCacheModel.Score = -1 (pseudo-C `obj._Score = -1;`)",
+        "DidPlayerFallDown() = true để chạy hoạt ảnh rơi (SkyJumpCloudAnimationView)",
+        "EventSender.SendSkyJumpLost (sky_jump_lost) với lost_step",
+        "Người chơi xuất hiện trong loser_user_ids ở bậc tương ứng"
+      ],
+      "result": "Bị loại khỏi giải hiện tại, không thể leo tiếp; phải chờ giải kế",
+      "rules": "Đây là cơ chế loại trực tiếp — khác với TowerWinStreak (chỉ reset về 0 và chơi tiếp)",
+      "evidence": "SkyJumpService.TryFall; SkyJumpDataService.Fall; SkyJumpStateService.CanFall; SkyJumpService.DidPlayerFallDown; EventSender.SendSkyJumpLost"
+    },
+    {
+      "id": "UC-06",
+      "title": "Cảnh báo trước khi thoát level",
+      "actor": "Player",
+      "trigger": "Bấm thoát / sắp thua trong level",
+      "precondition": "Đang tham gia Sky Jump",
+      "steps": [
+        "SkyJumpStateService.ShouldShowAreYouSure()",
+        "SkyJumpAreYouSureView (AreYouSureContainer) + SkyJumpAreYouSureAnimationView theo SkyJumpAreYouSureAnimationConfig",
+        "Nhấn mạnh rằng thua = bị loại khỏi giải"
+      ],
+      "result": "Tăng tỉ lệ dùng booster/mua tiếp lượt",
+      "rules": "-",
+      "evidence": "SkyJumpStateService.ShouldShowAreYouSure; SkyJumpAreYouSureView; SkyJumpAreYouSureAnimationView"
+    },
+    {
+      "id": "UC-07",
+      "title": "Xem thang đua và đối thủ theo từng bậc",
+      "actor": "Player",
+      "trigger": "Mở SkyJumpPopUp",
+      "precondition": "Có cache giải",
+      "steps": [
+        "SkyJumpService.GetUsersInThisStep(step) trả (danh sách người còn trụ, danh sách người đã rơi) — dùng DidPlayerLost để phân loại",
+        "GetViewModelsInCurrentScore() / GetViewModelsInMaxScore() / GetViewModelsInPreviousScore() cho 3 bậc quan trọng",
+        "GetViewModel(playerImages, userId) dựng SkyJumpLeaderboardPlayerViewModel (ảnh 'fb' hoặc id ảnh)",
+        "GetUserCountInStep(step) hiển thị số người ở mỗi bậc",
+        "SkyJumpStepView + SkyJumpUserView render; SkyJumpTimer/SkyJumpLobbyButtonTimer đếm ngược"
+      ],
+      "result": "Người chơi thấy mình đang ở bậc nào so với đám đông",
+      "rules": "Avatar tải qua ProfileSpriteCacheService từ players_images",
+      "evidence": "SkyJumpService.GetUsersInThisStep; SkyJumpService.GetViewModelsInCurrentScore; SkyJumpService.GetViewModelsInMaxScore; SkyJumpService.GetViewModelsInPreviousScore; SkyJumpService.GetViewModel; SkyJumpService.GetUserCountInStep"
+    },
+    {
+      "id": "UC-08",
+      "title": "Kết thúc giải và xác định thắng/thua",
+      "actor": "System",
+      "trigger": "Hết giờ hoặc server trả is_finished",
+      "precondition": "Đã tham gia",
+      "steps": [
+        "GetRemainingSeconds() / GetEndDate() / GetStartTimeAsUnix() / GetEndTimeAsUnix() từ SkyJumpCacheModel.StartTime/FinishTime",
+        "State → FinishedByLocal(5) hoặc FinishedByRemote(6); SkyJumpStateService.IsEventFinished()",
+        "DidPlayerWin(): Score >= 10 (pseudo-C `9 < iVar2`) VÀ state ∈ {5,6} (`iVar3 - 5U < 2`)",
+        "DidPlayerLost(): ngược lại"
+      ],
+      "result": "Popup chuyển sang SkyJumpPopUpState.Result(5)",
+      "rules": "Hai state Local/Remote để xử lý lệch giờ client-server",
+      "evidence": "SkyJumpService.DidPlayerWin; SkyJumpService.DidPlayerLost; SkyJumpService.GetRemainingSeconds; SkyJumpService.GetEndDate; SkyJumpStateService.IsEventFinished; SkyJumpStateService.GetPopUpState"
+    },
+    {
+      "id": "UC-09",
+      "title": "Nhận thưởng chia đều cho người thắng",
+      "actor": "Player",
+      "trigger": "Mở popup kết quả và bấm Claim",
+      "precondition": "DidPlayerWin() và ShouldSendClaimRequest()",
+      "steps": [
+        "SkyJumpService.GetWinnerCount() đếm số người đạt bậc tối đa (mặc định trả 1 nếu không xác định được)",
+        "GetSharingRewardsWith() / GetSharingRewardsWithUserCount() liệt kê người cùng chia thưởng",
+        "GetPlayerReward(): RewardModel{CurrencyType = 1 (Coin), Amount = RewardsAsCoin / winnerCount} — pseudo-C đặt `obj._CurrencyType = 1;` và chia với mẫu số tối thiểu 1",
+        "SendClaimRequest() → SkyJumpRemoteService.Claim(eventType, tournamentId, score) tới skyJumpClaimUrl (/v1/claim-lava-tournament), payload SkyJumpClaimRequestModel{tournament_id, tournament_type, score}",
+        "ClaimLocally(didWin): đặt IsClaimedLocally = true; nếu thắng thì IncreaseWinRecord()",
+        "_claimRequestedManuallyByUser phân biệt claim do người chơi bấm hay tự động"
+      ],
+      "result": "Coin vào túi; WinRecord (số lần vô địch) tăng; state → ClaimedLocally(8)",
+      "rules": "Client default RewardsAsCoin = 10000 — chia đều cho tất cả người đạt bậc 10",
+      "evidence": "SkyJumpService.GetPlayerReward; SkyJumpService.GetWinnerCount; SkyJumpService.GetSharingRewardsWith; SkyJumpService.GetSharingRewardsWithUserCount; SkyJumpService.SendClaimRequest; SkyJumpService.ClaimLocally; SkyJumpDataService.SetClaimedLocally; SkyJumpService.IncreaseWinRecord"
+    },
+    {
+      "id": "UC-10",
+      "title": "Chờ giải kế tiếp",
+      "actor": "System",
+      "trigger": "Giải hiện tại đã kết thúc/nhận thưởng xong",
+      "precondition": "-",
+      "steps": [
+        "SkyJumpService.SendGetNextTournamentStartTimeRequest() → SkyJumpRemoteService.GetNextTournamentStartTime(eventType) tới skyJumpGetNextTournamentStartTimeUrl (/v1/get-lava-starttime)",
+        "Response SkyJumpGetNextTournamentStartTimeResponseModel{tournament_type, tournament_start_time, tournament_end_time}; IsNextRaceIsAvailable = true",
+        "GetNextTournamentStartTime() / GetNextTournamentEndTime() cho SkyJumpNextTournamentStartTimer / SkyJumpNextTournamentEndTimer",
+        "ScheduleLeaderboardFetchOnTimerEnd() đặt callback fetch lại khi đồng hồ về 0 (SecondTimer)",
+        "EventSender.SendSkyJumpWaitImpression (sky_jump_wait_impression) với remaining_penalty_duration"
+      ],
+      "result": "Người chơi thấy đồng hồ 'giải kế bắt đầu sau ...' và tự động vào giải mới",
+      "rules": "-",
+      "evidence": "SkyJumpService.SendGetNextTournamentStartTimeRequest; SkyJumpRemoteService.GetNextTournamentStartTime; SkyJumpService.GetNextTournamentStartTime; SkyJumpService.ScheduleLeaderboardFetchOnTimerEnd; SkyJumpService.IsNextRaceIsAvailable"
+    },
+    {
+      "id": "UC-11",
+      "title": "Popup tự mở theo ngữ cảnh",
+      "actor": "System",
+      "trigger": "Về lobby hoặc mở app",
+      "precondition": "State phù hợp",
+      "steps": [
+        "SkyJumpStateService.ShouldOpenStepIncreasedOnLobbyReturn(out source) — vừa lên bậc → source ScoreIncreased(4)",
+        "ShouldOpenResultOnLobbyReturn(out source) — có kết quả → source EventEnd(3)",
+        "ShouldOpenJoinPopUpAutomaticallyOnLobbyReturn(out source) — mời Join → source EventJoin(2)",
+        "ShouldOpenAutomaticallyOnSessionStart(out source) khi mở app",
+        "GetPopUpState() trả SkyJumpPopUpState: Disabled(0), Join(1), FirstShowEver(2), FirstShow(3), InProgress(4), Result(5), JoinIntroduced(6)",
+        "EventSender.SendSkyJumpImpression(source) / SendSkyJumpJoinImpression(source)",
+        "MarkEventIntroduced() / SkyJumpDataService.MarkEventIntroduced()"
+      ],
+      "result": "Người chơi luôn thấy diễn biến giải sau mỗi level",
+      "rules": "SkyJumpImpressionSource: None(0), LobbyIcon(1), EventJoin(2), EventEnd(3), ScoreIncreased(4)",
+      "evidence": "SkyJumpStateService.ShouldOpenStepIncreasedOnLobbyReturn; SkyJumpStateService.ShouldOpenResultOnLobbyReturn; SkyJumpStateService.ShouldOpenJoinPopUpAutomaticallyOnLobbyReturn; SkyJumpStateService.ShouldOpenAutomaticallyOnSessionStart; SkyJumpStateService.GetPopUpState; SkyJumpService.MarkEventIntroduced"
+    },
+    {
+      "id": "UC-12",
+      "title": "Chơi lại ngay sau khi thua",
+      "actor": "Player",
+      "trigger": "Bấm Try Again ở màn thua",
+      "precondition": "-",
+      "steps": [
+        "SkyJumpTryAgainCommand (ITryAgainCommand) chạy",
+        "Đưa người chơi vào lại level để giữ nhịp đua"
+      ],
+      "result": "Giảm tỉ lệ bỏ giải sau khi thua",
+      "rules": "-",
+      "evidence": "SkyJumpTryAgainCommand"
+    },
+    {
+      "id": "UC-13",
+      "title": "Kỷ lục vô địch và lịch sử",
+      "actor": "Player",
+      "trigger": "Xem popup thông tin",
+      "precondition": "-",
+      "steps": [
+        "SkyJumpService.GetWinRecord() / SkyJumpDataService.GetWinRecord() đọc SkyJumpSyncModel.WinRecord",
+        "GetMaxScoreReached() đọc SkyJumpCacheModel.MaxScoreReached",
+        "EventSender.SendSkyJumpInfoImpression (sky_jump_info_impression)"
+      ],
+      "result": "Hiển thị số lần vô địch và bậc cao nhất từng đạt",
+      "rules": "WinRecord nằm trong khối sync nên xuyên thiết bị",
+      "evidence": "SkyJumpService.GetWinRecord; SkyJumpService.GetMaxScoreReached; SkyJumpDataService.IncreaseWinRecord; EventSender.SendSkyJumpInfoImpression"
+    },
+    {
+      "id": "UC-14",
+      "title": "Offline / lỗi request",
+      "actor": "System",
+      "trigger": "Get/Join/Claim thất bại",
+      "precondition": "-",
+      "steps": [
+        "State giữ NoCache(2) nếu chưa từng fetch được",
+        "Join/Claim không thực hiện được; điểm vẫn tăng/giảm local và đẩy lên ở request kế",
+        "IntervalUpdate thử lại; NotActiveStatusCode phân biệt 'sự kiện không chạy' với lỗi mạng",
+        "SkyJumpRemoteService.Dispose() huỷ CancellationTokenSource"
+      ],
+      "result": "Không mất tiến độ; các thao tác server bị hoãn",
+      "rules": "Vì Score được gửi kèm mọi request Get, server luôn nhận được điểm mới nhất khi có mạng",
+      "evidence": "SkyJumpService.TryFetchCurrentEvent; SkyJumpService.NotActiveStatusCode; SkyJumpStateService.ShouldSendGetRequest; SkyJumpRemoteService.Dispose"
+    },
+    {
+      "id": "UC-15",
+      "title": "Đồng bộ dữ liệu Sky Jump",
+      "actor": "Server",
+      "trigger": "Sync / đổi thiết bị",
+      "precondition": "ISyncable",
+      "steps": [
+        "SkyJumpDataService.GetSyncName() = 'SkyJumpSyncModel'",
+        "SerializeModelForSync() gửi SkyJumpSyncModel{IsEventIntroducedEverInLifeTime, WinRecord}",
+        "OverwriteModelFromSync(data); DataSynced(); LateUpdate() lưu khi dirty",
+        "SkyJumpCacheModel (bậc, danh sách người) KHÔNG nằm trong sync — fetch lại từ server"
+      ],
+      "result": "Kỷ lục vô địch giữ nguyên khi đổi máy; trạng thái giải lấy lại từ server",
+      "rules": "DeleteData() xoá khi reset tài khoản",
+      "evidence": "SkyJumpDataService.GetSyncName; SkyJumpDataService.SerializeModelForSync; SkyJumpDataService.OverwriteModelFromSync; SkyJumpDataService.DataSynced; SkyJumpDataService.DeleteData; SkyJumpModel.SkyJumpSyncModel"
+    }
+  ],
+  "configs": [
+    {
+      "source": "json default",
+      "key": "IsEnabled",
+      "type": "bool",
+      "value": "false",
+      "meaning": "Bật/tắt Sky Jump",
+      "where": "Resources/defaultconfigs/SkyJumpConfigModel.json"
+    },
+    {
+      "source": "json default",
+      "key": "EventType",
+      "type": "int",
+      "value": "1",
+      "meaning": "tournament_type gửi lên backend",
+      "where": "SkyJumpConfigModel.json"
+    },
+    {
+      "source": "json default",
+      "key": "FirstLevelToShow",
+      "type": "int",
+      "value": "120",
+      "meaning": "Level tối thiểu",
+      "where": "SkyJumpConfigModel.json"
+    },
+    {
+      "source": "json default",
+      "key": "RewardsAsCoin",
+      "type": "int",
+      "value": "10000",
+      "meaning": "Tổng giải thưởng coin, chia đều cho người thắng",
+      "where": "SkyJumpConfigModel.json"
+    },
+    {
+      "source": "code const",
+      "key": "GetMaxReachableScore()",
+      "type": "int",
+      "value": "10",
+      "meaning": "Số bậc tối đa của thang (hard-code)",
+      "where": "SkyJumpService.GetMaxReachableScore (pseudo-C `return 10;`)"
+    },
+    {
+      "source": "code const",
+      "key": "Điểm khi rơi",
+      "type": "int",
+      "value": "-1",
+      "meaning": "Score = -1 nghĩa là đã bị loại",
+      "where": "SkyJumpService.TryFall (pseudo-C `obj._Score = -1;`)"
+    },
+    {
+      "source": "code const",
+      "key": "Điều kiện thắng",
+      "type": "expr",
+      "value": "Score >= 10 && state ∈ {FinishedByLocal(5), FinishedByRemote(6)}",
+      "meaning": "Xác định người thắng",
+      "where": "SkyJumpService.DidPlayerWin (pseudo-C `9 < iVar2` và `iVar3 - 5U < 2`)"
+    },
+    {
+      "source": "code const",
+      "key": "Reward CurrencyType",
+      "type": "enum",
+      "value": "1 (Coin)",
+      "meaning": "Sky Jump chỉ trả coin",
+      "where": "SkyJumpService.GetPlayerReward"
+    },
+    {
+      "source": "code field",
+      "key": "NotActiveStatusCode",
+      "type": "int",
+      "value": "(gán trong .ctor)",
+      "meaning": "Mã HTTP báo sự kiện không hoạt động",
+      "where": "SkyJumpService"
+    },
+    {
+      "source": "code enum",
+      "key": "SkyJumpStateType",
+      "type": "enum",
+      "value": "Disable=0, ProgressNotEnough=1, NoCache=2, Join=3, InProgress=4, FinishedByLocal=5, FinishedByRemote=6, ClaimedLocally=8",
+      "meaning": "Trạng thái sự kiện (chú ý không có giá trị 7)",
+      "where": "dump.cs TypeDefIndex 2526"
+    },
+    {
+      "source": "code enum",
+      "key": "SkyJumpPopUpState",
+      "type": "enum",
+      "value": "Disabled=0, Join=1, FirstShowEver=2, FirstShow=3, InProgress=4, Result=5, JoinIntroduced=6",
+      "meaning": "Layout popup",
+      "where": "dump.cs TypeDefIndex 2525"
+    },
+    {
+      "source": "code enum",
+      "key": "SkyJumpImpressionSource",
+      "type": "enum",
+      "value": "None=0, LobbyIcon=1, EventJoin=2, EventEnd=3, ScoreIncreased=4",
+      "meaning": "Nguồn mở popup",
+      "where": "dump.cs TypeDefIndex 2503"
+    },
+    {
+      "source": "server info",
+      "key": "SkyJumpResponseModel",
+      "type": "object",
+      "value": "tournament_id, tournament_type, start_time, finish_time, is_finished, is_claimed, user_score, user_max_score, user_details_by_steps, players_images",
+      "meaning": "Toàn bộ trạng thái giải",
+      "where": "dump.cs TypeDefIndex 2504"
+    },
+    {
+      "source": "server info",
+      "key": "SkyJumpUserDetailsByStepsResponseModel",
+      "type": "object",
+      "value": "all_user_ids, loser_user_ids, total_user_count",
+      "meaning": "Người chơi ở một bậc (còn trụ / đã rơi)",
+      "where": "dump.cs TypeDefIndex 2505"
+    },
+    {
+      "source": "server info",
+      "key": "SkyJumpGetRequestModel",
+      "type": "object",
+      "value": "tournament_id, tournament_type, score",
+      "meaning": "Payload Get (đẩy kèm điểm)",
+      "where": "dump.cs TypeDefIndex 2506"
+    },
+    {
+      "source": "server info",
+      "key": "SkyJumpClaimRequestModel",
+      "type": "object",
+      "value": "tournament_id, tournament_type, score",
+      "meaning": "Payload Claim",
+      "where": "dump.cs TypeDefIndex 2507"
+    },
+    {
+      "source": "server info",
+      "key": "SkyJumpJoinRequestModel",
+      "type": "object",
+      "value": "tournament_type",
+      "meaning": "Payload Join",
+      "where": "dump.cs TypeDefIndex 2508"
+    },
+    {
+      "source": "server info",
+      "key": "SkyJumpGetNextTournamentStartTimeResponseModel",
+      "type": "object",
+      "value": "tournament_type, tournament_start_time, tournament_end_time",
+      "meaning": "Lịch giải kế tiếp",
+      "where": "dump.cs TypeDefIndex 2510"
+    },
+    {
+      "source": "server info",
+      "key": "FlatBuffer schema",
+      "type": "string",
+      "value": "magicsort.schemas.v1.liveops.lava_leaderboard",
+      "meaning": "Biến thể nhị phân (GetWithFlatBuffer / JoinWithFlatBuffer / ClaimWithFlatBuffer / GetNextTournamentStartTimeWithFlatBuffer)",
+      "where": "PseudoC/Assembly-CSharp/MagicSort/schemas/v1/liveops/lava_leaderboard/"
+    },
+    {
+      "source": "storage key",
+      "key": "SkyJumpSyncModel",
+      "type": "string",
+      "value": "-",
+      "meaning": "Tên khối sync",
+      "where": "SkyJumpDataService.GetSyncName"
+    },
+    {
+      "source": "storage key",
+      "key": "SkyJumpSyncModel.{IsEventIntroducedEverInLifeTime, WinRecord}",
+      "type": "object",
+      "value": "-",
+      "meaning": "Dữ liệu xuyên thiết bị",
+      "where": "SkyJumpSyncModel"
+    },
+    {
+      "source": "storage key",
+      "key": "SkyJumpCacheModel.{TournamentId, TournamentType, StartTime, FinishTime, IsFinished, IsClaimed, IsClaimedLocally, Score, MaxScoreReached, LastSeenScore, IsIntroduced, SkyJumpUserDetailsBySteps, PlayerImages}",
+      "type": "object",
+      "value": "-",
+      "meaning": "Cache giải hiện tại (local)",
+      "where": "SkyJumpCacheModel"
+    },
+    {
+      "source": "storage key",
+      "key": "SkyJumpModel.IsJoinPopupIntroduced",
+      "type": "bool",
+      "value": "-",
+      "meaning": "Đã giới thiệu popup Join",
+      "where": "SkyJumpModel"
+    },
+    {
+      "source": "asset",
+      "key": "SkyJumpAnimationConfig / SkyJumpAreYouSureAnimationConfig",
+      "type": "ScriptableObject",
+      "value": "-",
+      "meaning": "Tham số hoạt ảnh nhảy bậc và popup xác nhận",
+      "where": "dump.cs TypeDefIndex 2542 / 2544"
+    },
+    {
+      "source": "server cache (historical)",
+      "key": "SkyJumpConfigModel (live) = default?",
+      "type": "",
+      "value": "4/4 key trùng default, 0 key khác/thêm",
+      "meaning": "Đối chiếu config server thật (CachedRemoteConfigs) với SkyJumpConfigModel.json",
+      "where": "Configs/CachedRemoteConfigs + Firebase RC template 3197 — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    }
+  ],
+  "rewards": [
+    {
+      "context": "Đạt bậc 10 trước khi hết giờ",
+      "reward": "Coin = RewardsAsCoin (10.000 mặc định) / số người thắng",
+      "evidence": "SkyJumpService.GetPlayerReward; SkyJumpService.GetWinnerCount"
+    },
+    {
+      "context": "Không đạt bậc 10 hoặc bị loại",
+      "reward": "Không có thưởng",
+      "evidence": "SkyJumpService.DidPlayerLost; SkyJumpService.ClaimLocally"
+    }
+  ],
+  "backend": [
+    {
+      "command": "skyJumpGetUrl = {base}/v1/get-lava-leaderboard",
+      "direction": "client→server",
+      "purpose": "Lấy trạng thái giải + danh sách người theo bậc, đồng thời đẩy điểm"
+    },
+    {
+      "command": "skyJumpJoinUrl = {base}/v1/join-lava-tournament",
+      "direction": "client→server",
+      "purpose": "Tham gia giải"
+    },
+    {
+      "command": "skyJumpClaimUrl = {base}/v1/claim-lava-tournament",
+      "direction": "client→server",
+      "purpose": "Nhận thưởng"
+    },
+    {
+      "command": "skyJumpGetNextTournamentStartTimeUrl = {base}/v1/get-lava-starttime",
+      "direction": "client→server",
+      "purpose": "Lấy thời gian giải kế tiếp"
+    },
+    {
+      "command": "skyJumpSetUrl",
+      "direction": "client→server",
+      "purpose": "Khai báo trong BackendEnvironmentConfig nhưng để trống ('/v1/') — điểm được đẩy kèm request Get/Claim"
+    },
+    {
+      "command": "Sync block 'SkyJumpSyncModel'",
+      "direction": "client↔server",
+      "purpose": "Đồng bộ WinRecord và cờ introduced"
+    }
+  ],
+  "ui": [
+    {
+      "element": "Popup thang đua",
+      "class": "Modules.Contexts.Home.SkyJump.Scripts.UI.SkyJumpPopUp / SkyJumpPopUpArguments",
+      "purpose": "Hiển thị 10 bậc, avatar người chơi, đồng hồ"
+    },
+    {
+      "element": "Popup tham gia",
+      "class": "SkyJumpJoinPopUp / SkyJumpJoinPopUpArguments",
+      "purpose": "Mời Join"
+    },
+    {
+      "element": "Popup tìm đối thủ",
+      "class": "SkyJumpSearchPopUp / SkyJumpSearchAnimationView / SkyJumpSearchUserViewRevealAnimation",
+      "purpose": "Hoạt ảnh ghép người chơi sau khi Join"
+    },
+    {
+      "element": "Popup thông tin",
+      "class": "SkyJumpInfoPopUp / SkyJumpInfoButton",
+      "purpose": "Luật chơi"
+    },
+    {
+      "element": "Bậc thang",
+      "class": "SkyJumpStepView / SkyJumpUserView / SkyJumpLeaderboardPlayerViewModel",
+      "purpose": "Một bậc và người chơi trên đó"
+    },
+    {
+      "element": "Nút lobby",
+      "class": "SkyJumpLobbyButton / SkyJumpLobbyButtonAnimation / SkyJumpLobbyButtonTimer",
+      "purpose": "Icon + đếm ngược"
+    },
+    {
+      "element": "Đồng hồ",
+      "class": "SkyJumpTimer / SkyJumpNextTournamentStartTimer / SkyJumpNextTournamentEndTimer",
+      "purpose": "Đếm ngược giải hiện tại và giải kế"
+    },
+    {
+      "element": "Are You Sure",
+      "class": "SkyJumpAreYouSureView / SkyJumpAreYouSureAnimationView / SkyJumpAreYouSureAnimationConfig",
+      "purpose": "Cảnh báo bị loại nếu thua"
+    },
+    {
+      "element": "Hiệu ứng",
+      "class": "SkyJumpCloudAnimationView / SkyJumpAnimationConfig",
+      "purpose": "Hoạt ảnh mây và nhảy bậc"
+    },
+    {
+      "element": "Command",
+      "class": "SkyJumpTryAgainCommand",
+      "purpose": "Chơi lại sau khi thua"
+    }
+  ],
+  "analytics": [
+    {
+      "event": "sky_jump_joined",
+      "params": "tournament_id, current_step, progress, start_time, remaining_duration",
+      "when": "EventSender.SendSkyJumpJoinedEvent sau khi Join"
+    },
+    {
+      "event": "sky_jump_screen_impression",
+      "params": "tournament_id, impression_source, current_step, progress, start_time, remaining_duration",
+      "when": "EventSender.SendSkyJumpImpression(SkyJumpImpressionSource)"
+    },
+    {
+      "event": "sky_jump_join_impression",
+      "params": "tournament_id, impression_source, current_step, progress, start_time, remaining_duration",
+      "when": "EventSender.SendSkyJumpJoinImpression(source)"
+    },
+    {
+      "event": "sky_jump_info_impression",
+      "params": "tournament_id, current_step, progress, start_time, remaining_duration",
+      "when": "EventSender.SendSkyJumpInfoImpression"
+    },
+    {
+      "event": "sky_jump_lost",
+      "params": "tournament_id, lost_step, progress, start_time, remaining_duration",
+      "when": "EventSender.SendSkyJumpLost khi rơi khỏi giải"
+    },
+    {
+      "event": "sky_jump_wait_impression",
+      "params": "progress, remaining_penalty_duration",
+      "when": "EventSender.SendSkyJumpWaitImpression khi đang chờ giải kế"
+    }
+  ],
+  "storage_keys": [
+    "SkyJumpSyncModel",
+    "SkyJumpSyncModel.IsEventIntroducedEverInLifeTime",
+    "SkyJumpSyncModel.WinRecord",
+    "SkyJumpModel.IsJoinPopupIntroduced",
+    "SkyJumpCacheModel.TournamentId",
+    "SkyJumpCacheModel.Score",
+    "SkyJumpCacheModel.MaxScoreReached",
+    "SkyJumpCacheModel.LastSeenScore",
+    "SkyJumpCacheModel.IsClaimedLocally",
+    "SkyJumpCacheModel.SkyJumpUserDetailsBySteps",
+    "SkyJumpCacheModel.PlayerImages"
+  ],
+  "related_features": [
+    "SkyJumpWithStage",
+    "JetpackRace",
+    "TowerWinStreak",
+    "EventsFramework"
+  ],
+  "gaps": [
+    "Số người trong một nhóm đua và cách ghép nhóm do server quyết định (total_user_count).",
+    "Độ dài giải và khoảng nghỉ giữa hai giải hoàn toàn từ server (start_time/finish_time và /v1/get-lava-starttime).",
+    "GetWinnerCount() đọc từ cache user_details_by_steps ở bậc tối đa; nếu cache chưa cập nhật thì trả 1 (người chơi nhận trọn 10.000 coin) — có thể lệch với server.",
+    "15/11 — resolved_static_code_historical_build: SkyJumpService constructor gán _NotActiveStatusCode=0x1a9, tức425. Giá trị lấy từ chính SkyJump body, không mượn TeamQuest. Ý nghĩa response425 tại backend hiện tại chưa được test. Còn lại: Cần đối chiếu method/consumer trên app0.0.3129 ARM64; chưa là runtime pass.",
+    "[Runtime 2026-09-10] Config server LIVE đã đọc trực tiếp từ cache máy (không cần request); các hàng 'server live' là giá trị server ghi đè/thêm so với default."
+  ],
+  "sources": [
+    "GameDesign/features/SkyJumpService.md",
+    "GameDesign/features/SkyJumpStateService.md",
+    "GameDesign/features/SkyJumpDataService.md",
+    "GameDesign/features/SkyJumpConfigModel.md",
+    "RecoveredNative/PseudoC/Assembly-CSharp/Modules/Contexts/Home/SkyJump/Scripts/*.c",
+    "RecoveredNative/Il2CppDumper/dump.cs (TypeDefIndex 2497-2576)",
+    "UnityExport/ExportedProject/Assets/Resources/defaultconfigs/SkyJumpConfigModel.json",
+    "UnityExport/ExportedProject/Assets/MonoBehaviour/BackendEnvironmentConfig.asset",
+    "RecoveredNative/strings-by-type.tsv (EventSender.SendSkyJump*)"
+  ],
+  "related_feature_aliases": [
+    {
+      "original": "LobbyEventsService",
+      "feature": "EventsFramework"
+    }
+  ],
+  "audit_provenance": {
+    "review_date": "2026-11-15",
+    "mode": "offline_existing_files",
+    "code_build": "0.0.3063 ARMv7",
+    "runtime_build_observed_historically": "0.0.3129 ARM64 (audit 2026-10-18); not rechecked 2026-11-15",
+    "new_playtests": 0,
+    "uc_status": "See facts/audit_20261115/uc_registry.json; image reference is not pass",
+    "workbook_status": "Existing XLSX is historical; JSON and local web include 2026-11-15 corrections",
+    "static_review": "facts/local_code_gap_results_20261115.json; facts/local_asset_gap_results_20261115.json; facts/final_data_gap_decisions_20261115.json; facts/core_body_gap_decisions_20261115.json; facts/remaining_asset_gap_decisions_20261115.json"
+  },
+  "static_review_20261115": {
+    "date": "2026-11-15",
+    "scope": "Historical code/assets 0.0.3063, dated caches, device 0.0.3129 cached bundles and explicitly scoped runtime evidence. Not full runtime pass.",
+    "findings": [
+      {
+        "kind": "code",
+        "source_report": "facts/local_code_gap_results_20261115.json",
+        "id": "MS-CODE-09",
+        "gap_ids": [
+          "MS-SkyJump-G004"
+        ],
+        "title": "SkyJump NotActiveStatusCode=425",
+        "status": "resolved_static_code",
+        "conclusion": "SkyJumpService constructor gán _NotActiveStatusCode=0x1a9, tức425. Giá trị lấy từ chính SkyJump body, không mượn TeamQuest. Ý nghĩa response425 tại backend hiện tại chưa được test.",
+        "evidence": [
+          {
+            "file": "../com.grandgames.magicsort_Unity_20260909_112501/RecoveredNative/PseudoC/Assembly-CSharp/Modules/Contexts/Home/SkyJump/Scripts/SkyJumpService.c",
+            "line": 2123,
+            "end_line": 2175,
+            "method": "// ===== SkyJumpService :: public void .ctor(",
+            "sha256": "2949dcb7dfe1105cc0ce2c758420241023ff93e4aba2fb1adf3a9baca60237d7",
+            "body_checked": true,
+            "build": "0.0.3063 ARMv7",
+            "required_body_tokens": [
+              "_NotActiveStatusCode_k__BackingField = 0x1a9"
+            ]
+          }
+        ],
+        "remaining": "Cần đối chiếu method/consumer trên app0.0.3129 ARM64; chưa là runtime pass.",
+        "scope": "recovered_native_0.0.3063_only",
+        "runtime_verified": false
+      }
+    ]
+  },
+  "acceptance_review_20261115": {
+    "source": "facts/feature_acceptance_20261115.json",
+    "feature_id": "SkyJump",
+    "scope": "All eleven dossier dimensions reviewed; full_feature_verified is not implied; read per-dimension gaps and actual runtime evidence."
+  },
+  "segment_ab_review_20261115": {
+    "status": "not_identified_in_sources",
+    "segment_ids": [],
+    "matching_basis": "explicit_gd_config_map_or_exact_model_token_in_gdd_configs_where_key_sources; rootfieldscoped",
+    "rows": [],
+    "classifications": {},
+    "assignment_verified": false,
+    "uplift_verified": false,
+    "note": "No matchingrow does not prove no segmentation/AB. Rewardbucketfalsepositives remain explicitly classified."
+  },
+  "continuation_review_20261116": {
+    "date": "2026-11-16",
+    "build": "0.0.3129 ARM64 host APK",
+    "build_scope": "Host APK version3129 matches LAST observed installed version15/11 only; installed bytes/live device16/11 not verified.",
+    "runtime_status": "device_unavailable",
+    "runtime_case_ids": [],
+    "current_apk_model_links": {
+      "feature": "SkyJump",
+      "models": [
+        {
+          "model": "SkyJumpConfigModel",
+          "current_default_file": "facts/review_20261116/public_current_config_3129/defaults/SkyJumpConfigModel.json",
+          "resource_path": "defaultconfigs/skyjumpconfigmodel",
+          "sha256": "e3a2c98ed33bce5b6a14a1f0375f1849340b5ac23e5d4e7965d95bbc4b369db6",
+          "matching_basis": [
+            "gdd/SkyJump.json#/configs",
+            "gdd/SkyJump.json#/sources",
+            "gdd/SkyJump.json#/managers"
+          ],
+          "scope": "Packaged default3129, not effective server config.",
+          "site_data_path": "data/current_config_3129/defaults/SkyJumpConfigModel.json",
+          "original_source_sha256": "e3a2c98ed33bce5b6a14a1f0375f1849340b5ac23e5d4e7965d95bbc4b369db6",
+          "public_artifact_sha256": "06d717ddb9ff564a9951e5fe918a9608f3d79f9ab71e56cc127e135edfdc90d5",
+          "sha256_scope": "sha256 is original raw model; public_artifact_sha256 is the sanitized download"
+        }
+      ],
+      "status": "exact_model_source_association",
+      "distribution": "sanitized_public",
+      "public_mapping_pending": false
+    },
+    "current_packaged_defaults": [
+      {
+        "model": "SkyJumpConfigModel",
+        "source": "facts/review_20261116/public_current_config_3129/defaults/SkyJumpConfigModel.json",
+        "site_data_path": "data/current_config_3129/defaults/SkyJumpConfigModel.json",
+        "public_artifact_sha256": "06d717ddb9ff564a9951e5fe918a9608f3d79f9ab71e56cc127e135edfdc90d5",
+        "original_source_sha256": "e3a2c98ed33bce5b6a14a1f0375f1849340b5ac23e5d4e7965d95bbc4b369db6",
+        "source_class": "static_asset",
+        "build": "0.0.3129 host APK",
+        "scope": "Sanitized packaged default fullvalues only; not effective remote/selected config or runtime.",
+        "values": {
+          "IsEnabled": false,
+          "EventType": 1,
+          "FirstLevelToShow": 120,
+          "RewardsAsCoin": 10000
+        }
+      }
+    ],
+    "native_finding_ids": [],
+    "documentation_source_coverage": {
+      "dossier_present": true,
+      "use_case_catalog_count": 15,
+      "config_catalog_rows": 25,
+      "current_apk_default_model_links": 1,
+      "current_native_findings": 0,
+      "scope": "Documentation/source coverage only; not complete runtime verification."
+    },
+    "runtime_completion": {
+      "date": "2026-11-16",
+      "status": "device_unavailable",
+      "executed_case_count": 0,
+      "full_feature_runtime_verified": false
+    },
+    "planned_branch": "Tìm icon Sky Jump, mở ladder và waiting/info state nếu có; chụp join button rồi đóng trước join.",
+    "target_uc_ids": [
+      "UC-01",
+      "UC-07",
+      "UC-10",
+      "UC-14"
+    ],
+    "execution_phase": "noncore_first",
+    "core_or_levels_last": false,
+    "actionability_full_json": "facts/continuation_20261116/current/feature_actionability.json",
+    "actionability_site_data_path": "data/continuation_20261116/feature_actionability.json",
+    "source_classes": [
+      "static_asset"
+    ],
+    "full_feature_verified": false
+  }
+}

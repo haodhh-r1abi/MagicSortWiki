@@ -1,0 +1,4110 @@
+{
+  "id": "Store",
+  "name": "Store & IAP & WebShop",
+  "category": "Economy",
+  "managers": [
+    "Modules.Contexts.Home.Store.Scripts.StoreModelService",
+    "Modules.Contexts.Home.Store.Scripts.StoreViewService",
+    "Modules.Contexts.Home.Store.Scripts.HomeStoreController",
+    "Modules.Contexts.Application.IAP.Scripts.IAPManager",
+    "Modules.Contexts.Application.IAP.Scripts.IAPService",
+    "Modules.Contexts.Application.IAP.Scripts.IAPPurchaseVerificationService",
+    "Modules.Contexts.Home.Monetization.WebShop.Scripts.WebShopService",
+    "Modules.Contexts.Home.Monetization.WebShop.Scripts.WebShopHandler"
+  ],
+  "summary": "Store là cửa hàng trung tâm của Magic Sort, gồm ba nhóm hàng: gói coin (StoreBundleModel), gói đặc biệt theo hạng (StoreSpecialBundleModel với Rank tăng dần theo lịch sử mua) và gói vĩnh viễn (StorePermanentBundleModel có nhãn Popular/Best). Ngoài ra Store còn nhúng các dòng riêng cho Daily Bonus, Magic Pass, bundle kèm No Ads và một dải offer ngang. Toàn bộ giao dịch đi qua IAPManager (Unity IAP, IDetailedStoreListener) với xác thực bắt buộc ở backend qua IAPPurchaseVerificationService; IAPService là điểm vào duy nhất, phân phối kết quả mua tới đúng feature theo IAPOrigin. Song song với IAP trong app, game có WebShop (Appcharge) — thanh toán qua web với giá rẻ hơn (DiscountPercent), có luồng checkout, theo dõi trạng thái giao dịch và nhận bù khi người chơi quay lại app.",
+  "unlock": "Store luôn có sẵn. Nội dung do StoreConfigModelV2 (remote config) quyết định: StoreBundles, StoreSpecialBundles, StorePermanentBundles. Bundle kèm No Ads phụ thuộc BundleNoAdsAvailabilityService và StoreModelService.IsSelectiveNoAdsBundleEnabled. WebShop bật khi WebShopConfigModel.IsEnabled và level >= WebShopConfigModel.FirstLevelToShow (WebShopService.IsEnabled).",
+  "entry_points": [
+    "HomeStoreController — trang Store nhúng ở Home (SwipeMenuManager, PageType)",
+    "StorePopUp / StorePopUpV2 (+StorePopUpArguments{StorePopUpSource})",
+    "OpenStorePopupCommand — mở Store, có thể chèn offer trước (enum lồng OfferBeforeStore)",
+    "PreviewStoreController / PreviewStoreControllerV2 — dải xem trước, nút 'More' (StoreMoreButton / StoreMoreButtonV2)",
+    "StoreHorizontalOfferSliderView — dải offer cuộn ngang",
+    "RestorePurchaseButton (SettingsPopUp) — khôi phục giao dịch",
+    "WebShopPopup — mở trang thanh toán web"
+  ],
+  "flow": "Khởi tạo: IAPService.CollectIAPConfigModels() gom IAPConfigModel{ProductId, ProductType, DollarEquivalent} từ tất cả các nguồn — StoreModelService, EndlessPortalService, SpecialOfferService, PawTouchOfferService, NoAdsOfferService, ChooseOneSpecialOfferService, TreasureDrillService, MagicPassService, MiniGameService, WebShopService — rồi IAPManager.InitializeUnityServices(iapConfigModels) → InitializePurchasing() gọi AddProduct cho từng id và InitializeDefaultStore(); OnInitialized(controller, extensions) log 'Store initialized' cùng danh sách sản phẩm (Product / Price / Description); lỗi thì OnInitializeFailed(InitializationFailureReason). Cửa hàng chọn store nền theo Resources/BillingMode.json ('androidStore': 'GooglePlay'). Danh mục: StoreModelService.GetCoinBundles() / GetSpecialBundles() / GetPermanentBundles() đọc từ StoreConfigModelV2; StoreViewService dựng StoreViewModel{StoreViewType, IAPConfigModel, HeaderKey, IsPopular, IsBest, DiscountText, LifeDurationInHours, ShuffleAmount, ExtraBottleAmount, UndoAmount, CoinAmount, PictureId, IsExistNoAds, ShouldCloseAds, ContainedBundleViewModels}; StoreScrollController / StoreScrollControllerV2 + StoreItemFactory / StoreBaseViewFactory dựng từng dòng theo StoreViewType (BasicHeader=0, BasicBundle=1, SpecialHeader=2, SpecialBundle=3, CoinHeader=4, CoinBundle=5, BasicBundleWithNoAds=6, HorizontalOffer=7, DailyReward=8, MagicPass=9). Hạng gói đặc biệt: StoreModelService.SetCurrentOfferRank(index) / GetCurrentOfferRank() và SetMaxPurchasedBundleIndex(index) / GetMaxPurchasedBundleIndex() lưu trong StoreModel{CurrentSpecialOfferRank, MaxPurchasedBundleIndex} — mua càng nhiều thì gói đặc biệt được nâng hạng, TryGetCurrentSpecialOffer(out StoreSpecialBundleModel) trả gói đang chào. Mua trong app: StorePurchaseClickCommand → IAPService.ProcessPurchase(productId, IAPOrigin, IAPReason, IAPContext, giveRewardsWithoutAnimation) → IAPHandler.OnClickButton() → PurchaseAsync() → IAPManager.TryPurchase(productId, iapReason) (chặn khi 'Not Initialized' hoặc 'requestedIAP is not null') → StartPurchaseProcess(productId) → Unity IAP → ProcessPurchase(PurchaseEventArgs): ProcessPurchaseWithVerificationAsync() gọi IAPPurchaseVerificationService.GetVerificationResult(productId, args) tới backend; nếu bỏ qua xác thực thì ProcessPurchaseWithoutVerification(). IsRequested(productId) phân biệt giao dịch do người chơi vừa bấm (CompleteRequestedInApp) với giao dịch tới ngoài luồng (CompleteNotRequestedInApp → EventSender.SendNotRequestedIAPStat). Sau khi mua thành công, AdService.HideBanner() được gọi và HomeStoreController.UpdateStoreAfterPurchase(isSuccess) dựng lại danh mục. RestorePurchases() → TryRestoreTransaction(result, errorMessage) log 'Restore purchases succeeded./failed.'. WebShop: WebShopService.CanShowWebShopOffer(productId) kiểm tra sản phẩm có bản web rẻ hơn không (WebShopProduct{ProductId, WebProductId, Price, DiscountPercent, Reward}); TryShowWebShopPromptCommand hỏi người chơi chọn kênh (WebShopPromptResultType: None=0, InApp=1, WebShop=2); chọn web → StartCheckout(productId, origin, reason, context, giveRewardsWithoutAnimation) → WebShopHandler.StartCheckoutAsync(...) tạo phiên Appcharge (SendCreateSessionRequest với platform 'ios'/'and' và countryCode), mở WebShopPopup; TryFetchTransactionStatus() theo dõi WebShopPurchaseStatus ('pending', 'fulfilled', 'needs_review', 'cancelled'); khi fulfilled thì TryClaimTransactionAsync() → SendClaimPurchaseRequest(purchaseId) và trao thưởng. Khi người chơi quay lại app (IFocusChanged.FocusChanged), FetchFulfilledPurchases() / HandleClaimablePurchases() / ApplyNotRequestedTransactions() xử lý các giao dịch web hoàn tất ngoài app.",
+  "use_cases": [
+    {
+      "id": "UC-01",
+      "title": "Khởi tạo Unity IAP với toàn bộ sản phẩm của game",
+      "actor": "System",
+      "trigger": "Khởi động game",
+      "precondition": "Đã nhận remote config",
+      "steps": [
+        "IAPService.Initialize() → CollectIAPConfigModels() gom IAPConfigModel từ StoreModelService và 9 service monetization khác (EndlessPortal, SpecialOffer, PawTouchOffer, NoAdsOffer, ChooseOneSpecialOffer, TreasureDrill, MagicPass, MiniGame, WebShop)",
+        "IAPManager.InitializeUnityServices(iapConfigModels) → InitializePurchasing() gọi AddProduct cho từng ProductId",
+        "InitializeDefaultStore(iapConfigModels) chọn store theo Resources/BillingMode.json ('androidStore': 'GooglePlay')",
+        "OnInitialized(IStoreController, IExtensionProvider) log 'Store initialized' và từng 'Product: … (…), Price: …, Description: …'",
+        "ConvertIAPConfigModelToIAPModel() dựng IAPModel{ProductId, ProductType, PriceString, Title, Description, IsoCurrencyCode, LocalizedPrice, DollarEquivalent} vào _IAPModels",
+        "Lỗi → OnInitializeFailed(InitializationFailureReason) log 'OnInitializeFailed InitializationFailureReason:'"
+      ],
+      "result": "Mọi sản phẩm của mọi tính năng nằm trong một danh mục Unity IAP duy nhất, có giá bản địa hoá",
+      "rules": "Resources/IAPProductCatalog.json trong build chỉ chứa product 'test' — danh mục thật hoàn toàn đến từ remote config qua CollectIAPConfigModels",
+      "evidence": "IAPService.CollectIAPConfigModels; IAPManager.InitializeUnityServices; IAPManager.InitializePurchasing; IAPManager.InitializeDefaultStore; IAPManager.OnInitialized; IAPManager.ConvertIAPConfigModelToIAPModel"
+    },
+    {
+      "id": "UC-02",
+      "title": "Dựng danh mục cửa hàng",
+      "actor": "System",
+      "trigger": "Mở trang Store hoặc StorePopUp",
+      "precondition": "-",
+      "steps": [
+        "StoreModelService.GetCoinBundles() / GetSpecialBundles() / GetPermanentBundles() đọc StoreConfigModelV2.StoreBundles / StoreSpecialBundles / StorePermanentBundles",
+        "StoreViewService dựng StoreViewModel cho từng dòng với StoreViewType tương ứng",
+        "HomeStoreController chọn giữa StoreScrollController (V1) và StoreScrollControllerV2 cùng factory tương ứng (_currentStoreScrollController / _currentFactory)",
+        "StoreItemFactory / StoreBaseViewFactory tạo StoreBaseView; StoreDiscountTagView, StorePopularBestView, StorePictureView (StorePictureModel) trang trí",
+        "StoreScrollItemLayoutController (V2) sắp xếp bố cục",
+        "TryGetDailyReward(out StoreDailyRewardModel) và TryGetMagicPassOffer(out StoreMagicPassOfferModel) chèn hai dòng đặc biệt",
+        "EventSender.SendShopOpenedEvent(StorePopUpSource) → shop_opened với source"
+      ],
+      "result": "Cửa hàng hiển thị đủ ba nhóm hàng cộng các dòng tích hợp",
+      "rules": "StoreViewType: BasicHeader=0, BasicBundle=1, SpecialHeader=2, SpecialBundle=3, CoinHeader=4, CoinBundle=5, BasicBundleWithNoAds=6, HorizontalOffer=7, DailyReward=8, MagicPass=9. StorePopUpSource: None=0, Booster=1, Navigation=2, PlayOn=3, Refill=4, Teams=5. StoreScrollPlace: Home=0, Popup=1",
+      "evidence": "StoreModelService.GetCoinBundles; StoreModelService.GetSpecialBundles; StoreModelService.GetPermanentBundles; StoreModelService.TryGetDailyReward; StoreModelService.TryGetMagicPassOffer; HomeStoreController.UpdateStore; EventSender.SendShopOpenedEvent"
+    },
+    {
+      "id": "UC-03",
+      "title": "Nâng hạng gói đặc biệt theo lịch sử mua",
+      "actor": "System",
+      "trigger": "Mua thành công một gói",
+      "precondition": "-",
+      "steps": [
+        "IAPManager.ProcessPurchaseWithoutVerification / CompleteNotRequestedInApp gọi StoreModelService.GetCoinBundles() để tra gói vừa mua",
+        "StoreModelService.TryGetCoinStoreBundle(productId, out StoreBundleModel, out int index) / TryGetPermanentStoreBundle(...) trả index",
+        "SetMaxPurchasedBundleIndex(index) cập nhật StoreModel.MaxPurchasedBundleIndex nếu index lớn hơn",
+        "SetCurrentOfferRank(index) cập nhật StoreModel.CurrentSpecialOfferRank",
+        "TryGetCurrentSpecialOffer(out StoreSpecialBundleModel) chọn gói đặc biệt có Rank khớp để chào lần sau"
+      ],
+      "result": "Người chơi mua gói lớn hơn sẽ được chào gói đặc biệt giá trị cao hơn ở lần sau",
+      "rules": "StoreSpecialBundleModel.Rank là trường quyết định; StoreModel chỉ lưu hai số nguyên và được đồng bộ qua SyncName 'StoreModel'",
+      "evidence": "StoreModelService.SetCurrentOfferRank; StoreModelService.GetCurrentOfferRank; StoreModelService.SetMaxPurchasedBundleIndex; StoreModelService.TryGetCurrentSpecialOffer; StoreModelService.TryGetCoinStoreBundle"
+    },
+    {
+      "id": "UC-04",
+      "title": "Mua một gói trong app",
+      "actor": "Player",
+      "trigger": "Bấm nút mua trên một dòng cửa hàng",
+      "precondition": "IAPManager.IsInitialized() == true",
+      "steps": [
+        "StorePurchaseClickCommand / StoreBaseView.OnClick chạy",
+        "IAPService.ProcessPurchase(productId, IAPOrigin, IAPReason, IAPContext, giveRewardsWithoutAnimation); _isPurchaseInProgress chặn bấm trùng",
+        "SendPurchaseButtonSelectedEvent(productId, origin, reason, context) ghi analytics",
+        "IAPHandler.OnClickButton() → PurchaseAsync() → IAPManager.TryPurchase(productId, iapReason)",
+        "StartPurchaseProcess(productId): kiểm tra khởi tạo ('BuyProductID FAIL. Not initialized.'), productId null ('ProductIdIsNull'), sản phẩm không mua được ('ProductIdIsNotAvailableToPurchaseSomehow'), rồi log 'Purchasing product asychronously: '",
+        "Unity IAP mở hộp thoại mua của store nền"
+      ],
+      "result": "Giao dịch được gửi tới Google Play / App Store",
+      "rules": "IAPReason lấy từ StorePopupHelper.GetIAPReason() dựa trên popup đang mở ('StorePopUp' hoặc 'StorePopUpV2'); IAPContext: None=0, Home=1, Store=2, Teams=3, Refill=4, RefillInGame=5, Booster=6, PlayOn=7, MiniGame=8",
+      "evidence": "IAPService.ProcessPurchase; IAPHandler.OnClickButton; IAPHandler.PurchaseAsync; IAPManager.TryPurchase; IAPManager.StartPurchaseProcess; StorePopupHelper.GetIAPReason"
+    },
+    {
+      "id": "UC-05",
+      "title": "Xác thực giao dịch với backend rồi mới trao hàng",
+      "actor": "System",
+      "trigger": "Store báo mua thành công (ProcessPurchase)",
+      "precondition": "-",
+      "steps": [
+        "IAPManager.ProcessPurchase(PurchaseEventArgs args) → ProcessPurchaseWithVerificationAsync(args)",
+        "IAPPurchaseVerificationService.GetVerificationResult(productId, argsPurchasedProduct) gửi IAPPurchaseVerificationRequestModel tới backend qua HttpProxy",
+        "Nhận IAPPurchaseVerificationResponse; xác thực đạt → trao hàng",
+        "IsRequested(productId) true → CompleteRequestedInApp(productId, purchaseResult) trả kết quả cho luồng đang chờ",
+        "IsRequested false → CompleteNotRequestedInApp(productId, verified) và EventSender.SendNotRequestedIAPStat(productId) → not_requested_iap",
+        "AdService.HideBanner() tắt banner sau khi mua",
+        "EventSender.SendInAppPurchaseEvent(...) → iap_purchase và SendInAppPurchaseEventD14(...) → in_app_purchase_d14_v2"
+      ],
+      "result": "Chỉ giao dịch hợp lệ mới được trao hàng; giao dịch ngoài luồng vẫn được xử lý đúng",
+      "rules": "ProcessPurchaseWithoutVerification() là nhánh không xác thực; cả hai nhánh đều log 'Error!!! Purchase completed, but id isn't found in config' khi productId lạ. StorePurchaseFailureReason.CouldNotVerifyFromBackend = 5",
+      "evidence": "IAPManager.ProcessPurchase; IAPManager.ProcessPurchaseWithVerificationAsync; IAPPurchaseVerificationService.GetVerificationResult; IAPManager.IsRequested; IAPManager.CompleteNotRequestedInApp; EventSender.SendInAppPurchaseEvent"
+    },
+    {
+      "id": "UC-06",
+      "title": "Phân phối kết quả mua tới đúng tính năng",
+      "actor": "System",
+      "trigger": "Giao dịch hoàn tất",
+      "precondition": "-",
+      "steps": [
+        "IAPService giữ tham chiếu tới 10 service (Store, EndlessPortal, SpecialOffer, PawTouchOffer, NoAdsOffer, ChooseOneSpecialOffer, TreasureDrill, MagicPass, MiniGame, WebShop)",
+        "Dựa vào IAPOrigin của giao dịch, gọi hàm claim của service tương ứng (ví dụ SpecialOfferService.ClaimPurchasedSpecialOfferRewards, MagicPassService.MarkPassAsActivated, MiniGameService.TridentOfferPurchased)",
+        "TryGetIAPModel(productId, out IAPModel) và TryGetDollarEquivalentByProductId(productId, out float) cấp dữ liệu giá cho analytics",
+        "HomeStoreController.UpdateStoreAfterPurchase(isSuccess) dựng lại danh mục"
+      ],
+      "result": "Một luồng mua duy nhất phục vụ mọi tính năng monetization",
+      "rules": "IAPOrigin: None=0, StorePreview=1, StoreExpanded=2, EndlessPortal=3, SpecialOffer=4, PawTouchOffer=5, NoAdsOffer=6, ChooseOneSpecialOffer=7, MagicPass=8, TreasureDrill=9, MiniGameOffer=10. IAPReason: None=0, Booster=1, Navigation=2, PlayOn=3, Refill=4, Endless=5, SpecialOffer=6, PawTouchOffer=7, NoAdsOffer=8, ChooseOneSpecialOffer=9, MagicPass=10, TreasureDrill=11, MiniGameOffer=12",
+      "evidence": "IAPService..ctor (10 service); IAPService.TryGetIAPModel; IAPService.TryGetDollarEquivalentByProductId; HomeStoreController.UpdateStoreAfterPurchase"
+    },
+    {
+      "id": "UC-07",
+      "title": "Mua thất bại",
+      "actor": "System",
+      "trigger": "Store hoặc người chơi huỷ giao dịch",
+      "precondition": "-",
+      "steps": [
+        "IAPManager.OnPurchaseFailed(Product, PurchaseFailureReason) hoặc bản PurchaseFailureDescription log 'OnPurchaseFailed: FAIL. Product: {0}, Reason: {1}'",
+        "PurchaseResult.Fail() trả về cho luồng đang chờ",
+        "IAPHandler.SendPurchaseFailed(productId, iapReason, purchaseResult) → EventSender.SendPurchaseFailedEvent → purchase_failed với reason (mặc định 'Unknown reason'), product_id, product_type, product_rank, price, currency, source",
+        "_isPurchaseInProgress được giải phóng, người chơi bấm lại được"
+      ],
+      "result": "Không trao hàng, có log và analytics đầy đủ",
+      "rules": "StorePurchaseFailureReason: NotInitialized=1, NotRequestedInApp=2, ProductIdIsNull=3, ProductIdIsNotAvailableToPurchaseSomehow=4, CouldNotVerifyFromBackend=5",
+      "evidence": "IAPManager.OnPurchaseFailed; IAPHandler.SendPurchaseFailed; EventSender.SendPurchaseFailedEvent; Modules.Contexts.Application.IAP.Scripts.StorePurchaseFailureReason"
+    },
+    {
+      "id": "UC-08",
+      "title": "Khôi phục giao dịch đã mua",
+      "actor": "Player",
+      "trigger": "Bấm Restore Purchase trong Settings",
+      "precondition": "-",
+      "steps": [
+        "RestorePurchaseButton (Modules.Contexts.Home.SettingsPopUp.Scripts) gọi IAPManager.RestorePurchases()",
+        "TryRestoreTransaction(bool result, string errorMessage) log 'Restore purchases succeeded.' hoặc 'Restore purchases failed. ' + lỗi",
+        "InAppPurchaseHistoryService cập nhật lịch sử; quyền No Ads và các sản phẩm non-consumable được trả lại"
+      ],
+      "result": "Người chơi cài lại game không mất quyền đã mua",
+      "rules": "Bắt buộc theo chính sách App Store / Google Play",
+      "evidence": "IAPManager.RestorePurchases; IAPManager.TryRestoreTransaction; RestorePurchaseButton; InAppPurchaseHistoryService"
+    },
+    {
+      "id": "UC-09",
+      "title": "Chèn offer trước khi mở Store",
+      "actor": "System",
+      "trigger": "Người chơi bấm mở cửa hàng",
+      "precondition": "Có offer đủ điều kiện",
+      "steps": [
+        "OpenStorePopupCommand.ShouldShowStorePopUp() kiểm tra trạng thái",
+        "Enum lồng OpenStorePopupCommand.OfferBeforeStore xác định offer nào chen trước (SpecialOffer.ShouldDisplayBeforeStore, ChooseOneSpecialOffer.CanShowBeforeStore, NoAdsOffer…)",
+        "OpenStorePopUpAsync() mở offer trước rồi mới mở StorePopUp / StorePopUpV2"
+      ],
+      "result": "Offer giới hạn thời gian được ưu tiên hơn danh mục thường",
+      "rules": "Đóng Store bắn EventSender.SendShopClosedEvent(StorePopUpSource) → shop_closed",
+      "evidence": "OpenStorePopupCommand.ShouldShowStorePopUp; OpenStorePopupCommand.OfferBeforeStore; EventSender.SendShopClosedEvent"
+    },
+    {
+      "id": "UC-10",
+      "title": "Dải offer ngang trong cửa hàng",
+      "actor": "Player",
+      "trigger": "Cuộn tới dòng HorizontalOffer",
+      "precondition": "StoreViewType.HorizontalOffer (7) có trong danh mục",
+      "steps": [
+        "StoreHorizontalOfferViewController + StoreHorizontalOfferViewAdapter dựng danh sách",
+        "StoreHorizontalOfferModel{SpecialItemIndex, SelectedIndex, TotalCount, IsSlideable, ShouldResetScroll} điều khiển vị trí và khả năng vuốt",
+        "StoreHorizontalOfferSliderView / StoreHorizontalOfferSliderViewController xử lý vuốt ngang"
+      ],
+      "result": "Nhiều offer nằm gọn trong một dòng, có mục được đánh dấu đặc biệt (SpecialItemIndex)",
+      "rules": "ShouldResetScroll quyết định có cuộn về mục đặc biệt khi mở lại không",
+      "evidence": "StoreHorizontalOfferModel; StoreHorizontalOfferViewController; StoreHorizontalOfferSliderViewController"
+    },
+    {
+      "id": "UC-11",
+      "title": "Bundle kèm quyền No Ads",
+      "actor": "System",
+      "trigger": "Dựng danh mục",
+      "precondition": "-",
+      "steps": [
+        "StoreBundleModel.ShouldCloseAds và StoreViewModel.IsExistNoAds đánh dấu gói có kèm No Ads",
+        "BundleNoAdsAvailabilityService (dùng _inAppPurchaseHistoryService, _storeModelService, _adService) quyết định gói còn bán được không",
+        "StoreModelService.IsSelectiveNoAdsBundleEnabled bật/tắt cơ chế chọn lọc",
+        "HomeStoreController._noAdsState theo dõi trạng thái để dựng lại danh mục khi đổi",
+        "Dòng dùng StoreViewType.BasicBundleWithNoAds (6) thay cho BasicBundle (1)"
+      ],
+      "result": "Không bán trùng quyền No Ads cho người đã sở hữu",
+      "rules": "Liên kết chặt với tính năng NoAdsOffer",
+      "evidence": "StoreModelService.IsSelectiveNoAdsBundleEnabled; BundleNoAdsAvailabilityService; HomeStoreController._noAdsState; StoreBundleModel.ShouldCloseAds"
+    },
+    {
+      "id": "UC-12",
+      "title": "Chào bán qua WebShop thay vì IAP trong app",
+      "actor": "System",
+      "trigger": "Người chơi bấm mua một sản phẩm có bản web",
+      "precondition": "WebShopService.IsEnabled() và CanShowWebShopOffer(productId) == true",
+      "steps": [
+        "WebShopService.GetWebShopProduct(productId) trả WebShopProduct{ProductId, WebProductId, Price, DiscountPercent, Reward}",
+        "TryShowWebShopPromptCommand hiển thị lựa chọn kênh thanh toán",
+        "WebShopPromptResultType: None=0, InApp=1, WebShop=2",
+        "WebShopPriceView / WebShopDiscountView / WebShopRewardView hiển thị giá web rẻ hơn và phần thưởng thêm"
+      ],
+      "result": "Người chơi được mời sang web với giá tốt hơn (nhà phát hành tiết kiệm phí nền tảng)",
+      "rules": "GetWebProductId(productId) ánh xạ id trong app sang id web; TryGetProductByWebProductId làm chiều ngược lại",
+      "evidence": "WebShopService.CanShowWebShopOffer; WebShopService.GetWebShopProduct; WebShopService.GetWebProductId; TryShowWebShopPromptCommand; Modules.Contexts.Home.Monetization.WebShop.Scripts.WebShopPromptResultType"
+    },
+    {
+      "id": "UC-13",
+      "title": "Luồng checkout trên WebShop (Appcharge)",
+      "actor": "Player",
+      "trigger": "Chọn thanh toán qua web",
+      "precondition": "-",
+      "steps": [
+        "WebShopService.StartCheckout(productId, iapOrigin, iapReason, context, giveRewardsWithoutAnimation)",
+        "WebShopHandler.StartCheckoutAsync(productId, webProductId, origin, reason, context, giveRewardsWithoutAnimation, countryCode)",
+        "WebShopRemoteService.SendCreateSessionRequest(CreateAppchargeSessionRequest) với header X-Client-Key (WebShopConfigModel.ClientKey) và X-Game-Key (giá trị 'magic'); nền tảng gửi 'ios' (PlatformIos) hoặc 'and' (PlatformAndroid)",
+        "Nhận CreateAppchargeSessionResponse, mở WebShopPopup trỏ tới phiên thanh toán",
+        "Lưu WebShopTransactionDataModel{TransactionId, ProductId, WebProductId, Origin, Context, Reason, GiveRewardsWithoutAnimation} làm _ongoingTransaction"
+      ],
+      "result": "Người chơi rời app sang trang thanh toán web, context giao dịch được giữ lại",
+      "rules": "ClientKey nằm trong WebShopConfigModel (remote config) — không chép giá trị vào tài liệu này",
+      "evidence": "WebShopService.StartCheckout; WebShopHandler.StartCheckoutAsync; WebShopRemoteService.SendCreateSessionRequest; WebShopRemoteService.Initialize (X-Client-Key, X-Game-Key); WebShopHandler.PlatformIos / PlatformAndroid"
+    },
+    {
+      "id": "UC-14",
+      "title": "Theo dõi và nhận hàng từ giao dịch web",
+      "actor": "System",
+      "trigger": "Người chơi quay lại app sau khi thanh toán",
+      "precondition": "Có _ongoingTransaction",
+      "steps": [
+        "WebShopService.FocusChanged(hasFocus) phát hiện app được focus lại",
+        "WebShopHandler.TryFetchTransactionStatus(transactionModel) → WebShopRemoteService.SendGetPurchaseStatusRequest(purchaseId)",
+        "Trạng thái theo WebShopPurchaseStatus: 'pending' → chờ tiếp; 'fulfilled' → TryClaimFulfilledTransaction(); 'needs_review' → giữ nguyên; 'cancelled' → huỷ",
+        "TryClaimTransactionAsync(transaction, shouldShowPurchaseFailPopup) → SendClaimPurchaseRequest(purchaseId); thất bại thì WebShopPurchaseFailedPopup và RetryClaimOngoingTransaction()",
+        "ApplyTransaction(transaction) trao thưởng (WebShopProduct.Reward) với CurrencyEarnReason.WebShopBonus (60); WebShopDataService.AddAppliedTransaction(transaction)",
+        "WebShopService.ShouldShowPurchasedCompleted() bật popup xác nhận; ResetOngoingTransaction() dọn"
+      ],
+      "result": "Hàng được trao đúng dù thanh toán diễn ra ngoài app",
+      "rules": "WebShopPurchaseStatus là 4 hằng chuỗi trong class WebShopPurchaseStatus",
+      "evidence": "WebShopService.FocusChanged; WebShopHandler.TryFetchTransactionStatus; WebShopHandler.TryClaimTransactionAsync; WebShopHandler.ApplyTransaction; WebShopService.RetryClaimOngoingTransaction; WebShopPurchaseStatus"
+    },
+    {
+      "id": "UC-15",
+      "title": "Nhận bù các giao dịch web ngoài luồng",
+      "actor": "System",
+      "trigger": "Vào game / IntervalUpdate",
+      "precondition": "-",
+      "steps": [
+        "WebShopService.FetchFulfilledPurchases() → WebShopRemoteService.SendGetClaimablePurchasesRequest() trả AppchargeClaimablePurchasesResponse",
+        "WebShopHandler.HandleClaimablePurchases() lọc danh sách _fulfilledPurchases",
+        "ApplyNotRequestedTransactions(fulfilledPurchases) → ApplyNotRequestedTransaction(purchaseId, webProductId) cho từng giao dịch",
+        "WebShopDataService.IsApplied(purchaseId) chặn trao trùng",
+        "ClaimAppliedTransactions() → SendClaimPurchasesRequest(purchaseIds) báo server hàng loạt",
+        "SendWebPurchaseEvent(productId, webProductId, transactionId, webShopProduct) ghi analytics iap_purchase với from_web = true và web_product_id"
+      ],
+      "result": "Người chơi mua trên web ở thiết bị khác hoặc bị mất kết nối vẫn nhận được hàng",
+      "rules": "WebShopDataModel.AppliedTransactions là danh sách các giao dịch đã trao, đồng bộ qua SyncName 'WebShopSyncDataModel'",
+      "evidence": "WebShopService.FetchFulfilledPurchases; WebShopHandler.HandleClaimablePurchases; WebShopHandler.ApplyNotRequestedTransactions; WebShopDataService.IsApplied; WebShopHandler.ClaimAppliedTransactions; WebShopHandler.SendWebPurchaseEvent"
+    },
+    {
+      "id": "UC-16",
+      "title": "Thông báo Daily Bonus trên nút Store",
+      "actor": "System",
+      "trigger": "Còn quà Daily Bonus chưa nhận",
+      "precondition": "-",
+      "steps": [
+        "StoreNotificationController giữ tham chiếu DailyRewardService",
+        "UpdateVisual() bật/tắt _notificationContainer theo trạng thái Daily Bonus",
+        "Dòng StoreViewType.DailyReward (8) trong cửa hàng dẫn tới DailyRewardPopUp (DailyRewardStoreClickCommand)"
+      ],
+      "result": "Store làm cửa vào thứ hai cho Daily Bonus và có chấm đỏ nhắc nhở",
+      "rules": "-",
+      "evidence": "StoreNotificationController.UpdateVisual; StoreNotificationController._dailyRewardService; DailyRewardStoreClickCommand"
+    },
+    {
+      "id": "UC-17",
+      "title": "Đồng bộ dữ liệu cửa hàng",
+      "actor": "System",
+      "trigger": "SyncService",
+      "precondition": "-",
+      "steps": [
+        "StoreModelService.GetSyncName() = 'StoreModel'; SerializeModelForSync() xuất StoreModel{CurrentSpecialOfferRank, MaxPurchasedBundleIndex}",
+        "WebShopDataService.GetSyncName() = 'WebShopSyncDataModel'; đồng bộ AppliedTransactions",
+        "InAppPurchaseHistoryService lưu lịch sử mua (ISaveLoad + LateUpdate)",
+        "LateUpdate() lưu khi IsDataChangedSinceLastSave(); DeleteData() xoá khi reset"
+      ],
+      "result": "Hạng gói đặc biệt và lịch sử giao dịch web đồng nhất giữa thiết bị",
+      "rules": "StoreModelService và WebShopDataService đều implement ISyncable, IDeletable, ILateUpdate",
+      "evidence": "StoreModelService.GetSyncName; StoreModelService.SerializeModelForSync; WebShopDataService.GetSyncName; WebShopDataService.GetAppliedTransactions; InAppPurchaseHistoryService"
+    },
+    {
+      "id": "UC-18",
+      "title": "Chặn thao tác khi đang có giao dịch",
+      "actor": "System",
+      "trigger": "Người chơi bấm mua lần hai hoặc app định chuyển sang trạng thái idle",
+      "precondition": "-",
+      "steps": [
+        "IAPService._isPurchaseInProgress = true trong lúc mua",
+        "IAPService.IsInterrupting() (IHomeIdleInterrupter) chặn hoạt ảnh idle ở Home khi đang mua",
+        "IAPManager.TryPurchase trả lỗi 'TryPurchase: requestedIAP is not null' nếu đã có _requestedIAP",
+        "WebShopService._isClaimInProgress chặn claim trùng"
+      ],
+      "result": "Không có giao dịch chồng chéo, không trao thưởng hai lần",
+      "rules": "RequestedIAP là bản ghi giao dịch đang chờ trong IAPManager",
+      "evidence": "IAPService.IsInterrupting; IAPManager.TryPurchase; IAPManager._requestedIAP; WebShopService._isClaimInProgress"
+    }
+  ],
+  "configs": [
+    {
+      "source": "json default",
+      "key": "Resources/BillingMode.json",
+      "type": "json",
+      "value": "{\"androidStore\": \"GooglePlay\"}",
+      "meaning": "Store nền cho Unity IAP trên Android",
+      "where": "Assets/Resources/BillingMode.json"
+    },
+    {
+      "source": "json default",
+      "key": "Resources/IAPProductCatalog.json",
+      "type": "json",
+      "value": "appleSKU='', appleTeamID='', enableCodelessAutoInitialization=false, enableUnityGamingServicesAutoInitialization=false, products=[{id='test', type=0}]",
+      "meaning": "Catalog Unity IAP trong build chỉ có sản phẩm 'test' — danh mục thật đến từ remote config",
+      "where": "Assets/Resources/IAPProductCatalog.json"
+    },
+    {
+      "source": "server info",
+      "key": "StoreConfigModelV2.StoreBundles / StoreSpecialBundles / StorePermanentBundles",
+      "type": "List",
+      "value": "server",
+      "meaning": "Ba nhóm hàng của cửa hàng",
+      "where": "StoreModelService.GetCoinBundles / GetSpecialBundles / GetPermanentBundles"
+    },
+    {
+      "source": "server info",
+      "key": "StoreBundleModel",
+      "type": "object",
+      "value": "{IAPConfigModel, CoinAmount, PictureId, ShouldCloseAds}",
+      "meaning": "Gói coin cơ bản",
+      "where": "Modules.Contexts.Home.Store.Scripts.StoreBundleModel"
+    },
+    {
+      "source": "server info",
+      "key": "StoreSpecialBundleModel (kế thừa StoreBundleModel)",
+      "type": "object",
+      "value": "{Rank, DiscountText, LifeDurationInHours, ShuffleAmount, ExtraBottleAmount, UndoAmount, HeaderText, HeaderKey}",
+      "meaning": "Gói đặc biệt theo hạng, chứa booster và unlimited life theo giờ",
+      "where": "StoreSpecialBundleModel"
+    },
+    {
+      "source": "server info",
+      "key": "StorePermanentBundleModel (kế thừa StoreBundleModel)",
+      "type": "object",
+      "value": "{IsPopular, IsBest, DiscountText, LifeDurationInHours, ShuffleAmount, ExtraBottleAmount, UndoAmount, HeaderText, HeaderKey}",
+      "meaning": "Gói vĩnh viễn có nhãn Popular / Best",
+      "where": "StorePermanentBundleModel"
+    },
+    {
+      "source": "server info",
+      "key": "StoreBundleContainerModel",
+      "type": "object",
+      "value": "{Bundles: List<StoreViewModel>}",
+      "meaning": "Gói gộp chứa nhiều bundle con",
+      "where": "StoreBundleContainerModel"
+    },
+    {
+      "source": "code const",
+      "key": "StoreViewType",
+      "type": "enum",
+      "value": "BasicHeader=0, BasicBundle=1, SpecialHeader=2, SpecialBundle=3, CoinHeader=4, CoinBundle=5, BasicBundleWithNoAds=6, HorizontalOffer=7, DailyReward=8, MagicPass=9",
+      "meaning": "10 loại dòng trong cửa hàng",
+      "where": "Modules.Contexts.Home.Store.Scripts.StoreViewType"
+    },
+    {
+      "source": "code const",
+      "key": "StorePopUpSource",
+      "type": "enum",
+      "value": "None=0, Booster=1, Navigation=2, PlayOn=3, Refill=4, Teams=5",
+      "meaning": "Nguồn mở cửa hàng (analytics shop_opened / shop_closed)",
+      "where": "Modules.Contexts.Home.Store.Scripts.StorePopUpSource"
+    },
+    {
+      "source": "code const",
+      "key": "StoreScrollPlace",
+      "type": "enum",
+      "value": "Home=0, Popup=1",
+      "meaning": "Cửa hàng nhúng ở Home hay trong popup",
+      "where": "Modules.Contexts.Home.Store.Scripts.StoreScrollPlace"
+    },
+    {
+      "source": "code const",
+      "key": "IAPContext",
+      "type": "enum",
+      "value": "None=0, Home=1, Store=2, Teams=3, Refill=4, RefillInGame=5, Booster=6, PlayOn=7, MiniGame=8",
+      "meaning": "Bối cảnh người chơi khi mua",
+      "where": "Modules.Contexts.Application.IAP.Scripts.IAPContext"
+    },
+    {
+      "source": "code const",
+      "key": "IAPOrigin",
+      "type": "enum",
+      "value": "None=0, StorePreview=1, StoreExpanded=2, EndlessPortal=3, SpecialOffer=4, PawTouchOffer=5, NoAdsOffer=6, ChooseOneSpecialOffer=7, MagicPass=8, TreasureDrill=9, MiniGameOffer=10",
+      "meaning": "Nơi xuất phát giao dịch",
+      "where": "Modules.Contexts.Application.IAP.Scripts.IAPOrigin"
+    },
+    {
+      "source": "code const",
+      "key": "IAPReason",
+      "type": "enum",
+      "value": "None=0, Booster=1, Navigation=2, PlayOn=3, Refill=4, Endless=5, SpecialOffer=6, PawTouchOffer=7, NoAdsOffer=8, ChooseOneSpecialOffer=9, MagicPass=10, TreasureDrill=11, MiniGameOffer=12",
+      "meaning": "Lý do mua",
+      "where": "Modules.Contexts.Application.IAP.Scripts.IAPReason"
+    },
+    {
+      "source": "code const",
+      "key": "StorePurchaseFailureReason",
+      "type": "enum",
+      "value": "NotInitialized=1, NotRequestedInApp=2, ProductIdIsNull=3, ProductIdIsNotAvailableToPurchaseSomehow=4, CouldNotVerifyFromBackend=5",
+      "meaning": "Nguyên nhân mua thất bại",
+      "where": "Modules.Contexts.Application.IAP.Scripts.StorePurchaseFailureReason"
+    },
+    {
+      "source": "code const",
+      "key": "IAPConfigModel / IAPModel",
+      "type": "object",
+      "value": "IAPConfigModel{ProductId, ProductType, DollarEquivalent}; IAPModel{ProductId, ProductType, PriceString, Title, Description, IsoCurrencyCode, LocalizedPrice, DollarEquivalent}",
+      "meaning": "Cấu hình sản phẩm (từ server) và dữ liệu thật lấy từ store nền",
+      "where": "Modules.Contexts.Application.IAP.Scripts"
+    },
+    {
+      "source": "code const",
+      "key": "StorePopupHelper",
+      "type": "string",
+      "value": "\"StorePopUp\", \"StorePopUpV2\"",
+      "meaning": "Hai popup cửa hàng (V1/V2) dùng để suy ra IAPReason",
+      "where": "Modules.Contexts.Home.Store.Scripts.V2.StorePopupHelper"
+    },
+    {
+      "source": "code const",
+      "key": "WebShopHandler.PlatformIos / PlatformAndroid",
+      "type": "string",
+      "value": "\"ios\" / \"and\"",
+      "meaning": "Mã nền tảng gửi lên Appcharge",
+      "where": "WebShopHandler"
+    },
+    {
+      "source": "code const",
+      "key": "WebShopPurchaseStatus",
+      "type": "string const",
+      "value": "Pending=\"pending\", Fulfilled=\"fulfilled\", NeedsReview=\"needs_review\", Cancelled=\"cancelled\"",
+      "meaning": "4 trạng thái giao dịch web",
+      "where": "Modules.Contexts.Home.Monetization.WebShop.Scripts.WebShopPurchaseStatus"
+    },
+    {
+      "source": "code const",
+      "key": "WebShopPromptResultType",
+      "type": "enum",
+      "value": "None=0, InApp=1, WebShop=2",
+      "meaning": "Kênh thanh toán người chơi chọn",
+      "where": "Modules.Contexts.Home.Monetization.WebShop.Scripts.WebShopPromptResultType"
+    },
+    {
+      "source": "code const",
+      "key": "HTTP header WebShop",
+      "type": "string",
+      "value": "\"X-Client-Key\" (giá trị = WebShopConfigModel.ClientKey), \"X-Game-Key\" (giá trị \"magic\")",
+      "meaning": "Header xác thực khi gọi Appcharge",
+      "where": "WebShopRemoteService.Initialize"
+    },
+    {
+      "source": "server info",
+      "key": "WebShopConfigModel.IsEnabled / FirstLevelToShow / Products / ClientKey",
+      "type": "object",
+      "value": "server",
+      "meaning": "Bật tắt WebShop, level mở khoá, danh sách sản phẩm web và khoá client (không chép giá trị)",
+      "where": "WebShopService.GetConfig"
+    },
+    {
+      "source": "server info",
+      "key": "WebShopProduct",
+      "type": "object",
+      "value": "{ProductId, WebProductId, Price, DiscountPercent, Reward}",
+      "meaning": "Ánh xạ sản phẩm in-app sang sản phẩm web, giá và mức giảm",
+      "where": "WebShopService.GetWebShopProduct"
+    },
+    {
+      "source": "code const",
+      "key": "CurrencyEarnReason.WebShopBonus",
+      "type": "enum",
+      "value": "60",
+      "meaning": "Thưởng thêm khi mua qua WebShop",
+      "where": "Modules.Contexts.Application.Inventory.Scripts.CurrencyEarnReason"
+    },
+    {
+      "source": "storage key",
+      "key": "StoreModel",
+      "type": "sync name",
+      "value": "\"StoreModel\"",
+      "meaning": "Tên bản ghi đồng bộ của cửa hàng",
+      "where": "StoreModelService.GetSyncName"
+    },
+    {
+      "source": "storage key",
+      "key": "StoreModel.CurrentSpecialOfferRank / MaxPurchasedBundleIndex",
+      "type": "int",
+      "value": "client + server",
+      "meaning": "Hạng gói đặc biệt đang chào và chỉ số gói lớn nhất từng mua",
+      "where": "StoreModelService"
+    },
+    {
+      "source": "storage key",
+      "key": "WebShopSyncDataModel",
+      "type": "sync name",
+      "value": "\"WebShopSyncDataModel\"",
+      "meaning": "Tên bản ghi đồng bộ của WebShop",
+      "where": "WebShopDataService.GetSyncName"
+    },
+    {
+      "source": "storage key",
+      "key": "WebShopDataModel.AppliedTransactions",
+      "type": "List<WebShopTransactionDataModel>",
+      "value": "client + server",
+      "meaning": "Các giao dịch web đã trao thưởng, chống trao trùng",
+      "where": "WebShopDataService.GetAppliedTransactions"
+    },
+    {
+      "source": "storage key",
+      "key": "WebShopTransactionDataModel",
+      "type": "object",
+      "value": "{TransactionId, ProductId, WebProductId, Origin, Context, Reason, GiveRewardsWithoutAnimation}",
+      "meaning": "Bối cảnh của một giao dịch web đang chạy",
+      "where": "WebShopService.GetOnGoingTransaction"
+    },
+    {
+      "source": "storage key",
+      "key": "InAppPurchaseHistoryService",
+      "type": "ISaveLoad",
+      "value": "client",
+      "meaning": "Lịch sử mua, nguồn sự thật cho quyền No Ads và hạng gói",
+      "where": "Modules.Contexts.Home.Store.Scripts.InAppPurchaseHistoryService"
+    },
+    {
+      "source": "code field",
+      "key": "StoreModelService.IsSelectiveNoAdsBundleEnabled",
+      "type": "bool",
+      "value": "server (remote config)",
+      "meaning": "Bật cơ chế chỉ hiện bundle kèm No Ads cho một số người chơi",
+      "where": "StoreModelService"
+    },
+    {
+      "source": "code const",
+      "key": "StoreHorizontalOfferModel",
+      "type": "object",
+      "value": "{SpecialItemIndex, SelectedIndex, TotalCount, IsSlideable, ShouldResetScroll}",
+      "meaning": "Điều khiển dải offer cuộn ngang",
+      "where": "Modules.Contexts.Home.Store.Scripts.StoreScroll.HorizontalOffer"
+    },
+    {
+      "source": "json default",
+      "key": "StoreConfigModelV2.json: IsEnabled",
+      "type": "",
+      "value": "true",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/StoreConfigModelV2.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "StoreConfigModelV2.json: StoreSpecialBundles[0].IAPModel.ProductId",
+      "type": "",
+      "value": "sort.starterbundle1",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/StoreConfigModelV2.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "StoreConfigModelV2.json: StoreSpecialBundles[0].IAPModel.ProductType",
+      "type": "",
+      "value": "Consumable",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/StoreConfigModelV2.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "StoreConfigModelV2.json: StoreSpecialBundles[0].IAPModel.DollarEquivalent",
+      "type": "",
+      "value": "0.99",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/StoreConfigModelV2.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "StoreConfigModelV2.json: StoreSpecialBundles[0].CoinAmount",
+      "type": "",
+      "value": "1000",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/StoreConfigModelV2.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "StoreConfigModelV2.json: StoreSpecialBundles[0].Rank",
+      "type": "",
+      "value": "1",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/StoreConfigModelV2.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "StoreConfigModelV2.json: StoreSpecialBundles[0].DiscountText",
+      "type": "",
+      "value": "90% OFF!",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/StoreConfigModelV2.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "StoreConfigModelV2.json: StoreSpecialBundles[0].LifeDurationInHours",
+      "type": "",
+      "value": "1",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/StoreConfigModelV2.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "StoreConfigModelV2.json: StoreSpecialBundles[0].ShuffleAmount",
+      "type": "",
+      "value": "1",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/StoreConfigModelV2.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "StoreConfigModelV2.json: StoreSpecialBundles[0].ExtraBottleAmount",
+      "type": "",
+      "value": "1",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/StoreConfigModelV2.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "StoreConfigModelV2.json: StoreSpecialBundles[0].UndoAmount",
+      "type": "",
+      "value": "1",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/StoreConfigModelV2.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "StoreConfigModelV2.json: StoreSpecialBundles[0].HeaderText",
+      "type": "",
+      "value": "Starter Bundle",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/StoreConfigModelV2.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "StoreConfigModelV2.json: StoreSpecialBundles[0].HeaderKey",
+      "type": "",
+      "value": "ShopBundleStarter",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/StoreConfigModelV2.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "StoreConfigModelV2.json: StoreSpecialBundles[0].PictureId",
+      "type": "",
+      "value": "1",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/StoreConfigModelV2.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "StoreConfigModelV2.json: StorePermanentBundles[0].IAPModel.ProductId",
+      "type": "",
+      "value": "sort.apprenticebundle5",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/StoreConfigModelV2.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "StoreConfigModelV2.json: StorePermanentBundles[0].IAPModel.ProductType",
+      "type": "",
+      "value": "Consumable",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/StoreConfigModelV2.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "StoreConfigModelV2.json: StorePermanentBundles[0].IAPModel.DollarEquivalent",
+      "type": "",
+      "value": "4.99",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/StoreConfigModelV2.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "StoreConfigModelV2.json: StorePermanentBundles[0].CoinAmount",
+      "type": "",
+      "value": "2000",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/StoreConfigModelV2.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "StoreConfigModelV2.json: StorePermanentBundles[0].Rank",
+      "type": "",
+      "value": "1",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/StoreConfigModelV2.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "StoreConfigModelV2.json: StorePermanentBundles[0].DiscountText",
+      "type": "",
+      "value": "",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/StoreConfigModelV2.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "StoreConfigModelV2.json: StorePermanentBundles[0].LifeDurationInHours",
+      "type": "",
+      "value": "3",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/StoreConfigModelV2.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "StoreConfigModelV2.json: StorePermanentBundles[0].ShuffleAmount",
+      "type": "",
+      "value": "1",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/StoreConfigModelV2.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "StoreConfigModelV2.json: StorePermanentBundles[0].ExtraBottleAmount",
+      "type": "",
+      "value": "1",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/StoreConfigModelV2.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "StoreConfigModelV2.json: StorePermanentBundles[0].UndoAmount",
+      "type": "",
+      "value": "1",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/StoreConfigModelV2.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "StoreConfigModelV2.json: StorePermanentBundles[0].HeaderText",
+      "type": "",
+      "value": "Apprentice Bundle",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/StoreConfigModelV2.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "StoreConfigModelV2.json: StorePermanentBundles[0].HeaderKey",
+      "type": "",
+      "value": "ShopBundleApprentice",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/StoreConfigModelV2.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "StoreConfigModelV2.json: StorePermanentBundles[0].PictureId",
+      "type": "",
+      "value": "2",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/StoreConfigModelV2.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "StoreConfigModelV2.json: StorePermanentBundles[0].IsPopular",
+      "type": "",
+      "value": "false",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/StoreConfigModelV2.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "StoreConfigModelV2.json: StorePermanentBundles[0].IsBest",
+      "type": "",
+      "value": "false",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/StoreConfigModelV2.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "StoreConfigModelV2.json: StorePermanentBundles[0].ShouldCloseAds",
+      "type": "",
+      "value": "false",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/StoreConfigModelV2.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "StoreConfigModelV2.json: StorePermanentBundles[1].IAPModel.ProductId",
+      "type": "",
+      "value": "sort.magicianbundle10",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/StoreConfigModelV2.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "StoreConfigModelV2.json: StorePermanentBundles[1].IAPModel.ProductType",
+      "type": "",
+      "value": "Consumable",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/StoreConfigModelV2.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "StoreConfigModelV2.json: StorePermanentBundles[1].IAPModel.DollarEquivalent",
+      "type": "",
+      "value": "9.99",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/StoreConfigModelV2.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "StoreConfigModelV2.json: StorePermanentBundles[1].CoinAmount",
+      "type": "",
+      "value": "4000",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/StoreConfigModelV2.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "StoreConfigModelV2.json: StorePermanentBundles[1].Rank",
+      "type": "",
+      "value": "2",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/StoreConfigModelV2.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "StoreConfigModelV2.json: StorePermanentBundles[1].DiscountText",
+      "type": "",
+      "value": "",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/StoreConfigModelV2.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "StoreConfigModelV2.json: StorePermanentBundles[1].LifeDurationInHours",
+      "type": "",
+      "value": "6",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/StoreConfigModelV2.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "StoreConfigModelV2.json: StorePermanentBundles[1].ShuffleAmount",
+      "type": "",
+      "value": "3",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/StoreConfigModelV2.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "StoreConfigModelV2.json: StorePermanentBundles[1].ExtraBottleAmount",
+      "type": "",
+      "value": "3",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/StoreConfigModelV2.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "StoreConfigModelV2.json: StorePermanentBundles[1].UndoAmount",
+      "type": "",
+      "value": "3",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/StoreConfigModelV2.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "StoreConfigModelV2.json: StorePermanentBundles[1].HeaderText",
+      "type": "",
+      "value": "Magician Bundle",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/StoreConfigModelV2.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "StoreConfigModelV2.json: StorePermanentBundles[1].HeaderKey",
+      "type": "",
+      "value": "ShopBundleMagician",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/StoreConfigModelV2.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "StoreConfigModelV2.json: StorePermanentBundles[1].PictureId",
+      "type": "",
+      "value": "3",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/StoreConfigModelV2.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "StoreConfigModelV2.json: StorePermanentBundles[1].IsPopular",
+      "type": "",
+      "value": "false",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/StoreConfigModelV2.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "StoreConfigModelV2.json: StorePermanentBundles[1].IsBest",
+      "type": "",
+      "value": "false",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/StoreConfigModelV2.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "StoreConfigModelV2.json: StorePermanentBundles[1].ShouldCloseAds",
+      "type": "",
+      "value": "false",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/StoreConfigModelV2.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "StoreConfigModelV2.json: StorePermanentBundles[2].IAPModel.ProductId",
+      "type": "",
+      "value": "sort.sorcererbundle20",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/StoreConfigModelV2.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "StoreConfigModelV2.json: StorePermanentBundles[2].IAPModel.ProductType",
+      "type": "",
+      "value": "Consumable",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/StoreConfigModelV2.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "StoreConfigModelV2.json: StorePermanentBundles[2].IAPModel.DollarEquivalent",
+      "type": "",
+      "value": "19.99",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/StoreConfigModelV2.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "StoreConfigModelV2.json: StorePermanentBundles[2].CoinAmount",
+      "type": "",
+      "value": "8000",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/StoreConfigModelV2.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "StoreConfigModelV2.json: StorePermanentBundles[2].Rank",
+      "type": "",
+      "value": "3",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/StoreConfigModelV2.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "StoreConfigModelV2.json: StorePermanentBundles[2].DiscountText",
+      "type": "",
+      "value": "",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/StoreConfigModelV2.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "StoreConfigModelV2.json: StorePermanentBundles[2].LifeDurationInHours",
+      "type": "",
+      "value": "12",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/StoreConfigModelV2.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "StoreConfigModelV2.json: StorePermanentBundles[2].ShuffleAmount",
+      "type": "",
+      "value": "8",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/StoreConfigModelV2.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "StoreConfigModelV2.json: StorePermanentBundles[2].ExtraBottleAmount",
+      "type": "",
+      "value": "8",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/StoreConfigModelV2.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "StoreConfigModelV2.json: StorePermanentBundles[2].UndoAmount",
+      "type": "",
+      "value": "8",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/StoreConfigModelV2.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "StoreConfigModelV2.json: StorePermanentBundles[2].HeaderText",
+      "type": "",
+      "value": "Sorcerer Bundle",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/StoreConfigModelV2.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "StoreConfigModelV2.json: StorePermanentBundles[2].HeaderKey",
+      "type": "",
+      "value": "ShopBundleSorcerer",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/StoreConfigModelV2.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "StoreConfigModelV2.json: StorePermanentBundles[2].PictureId",
+      "type": "",
+      "value": "4",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/StoreConfigModelV2.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "StoreConfigModelV2.json: StorePermanentBundles[2].IsPopular",
+      "type": "",
+      "value": "true",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/StoreConfigModelV2.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "StoreConfigModelV2.json: StorePermanentBundles[2].IsBest",
+      "type": "",
+      "value": "false",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/StoreConfigModelV2.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "StoreConfigModelV2.json: StorePermanentBundles[2].ShouldCloseAds",
+      "type": "",
+      "value": "true",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/StoreConfigModelV2.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "StoreConfigModelV2.json: StorePermanentBundles[3].IAPModel.ProductId",
+      "type": "",
+      "value": "sort.magebundle50",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/StoreConfigModelV2.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "StoreConfigModelV2.json: StorePermanentBundles[3].IAPModel.ProductType",
+      "type": "",
+      "value": "Consumable",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/StoreConfigModelV2.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "StoreConfigModelV2.json: StorePermanentBundles[3].IAPModel.DollarEquivalent",
+      "type": "",
+      "value": "49.99",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/StoreConfigModelV2.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "StoreConfigModelV2.json: StorePermanentBundles[3].CoinAmount",
+      "type": "",
+      "value": "20000",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/StoreConfigModelV2.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "StoreConfigModelV2.json: StorePermanentBundles[3].Rank",
+      "type": "",
+      "value": "4",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/StoreConfigModelV2.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "StoreConfigModelV2.json: StorePermanentBundles[3].DiscountText",
+      "type": "",
+      "value": "",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/StoreConfigModelV2.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "StoreConfigModelV2.json: StorePermanentBundles[3].LifeDurationInHours",
+      "type": "",
+      "value": "36",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/StoreConfigModelV2.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "StoreConfigModelV2.json: StorePermanentBundles[3].ShuffleAmount",
+      "type": "",
+      "value": "18",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/StoreConfigModelV2.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "StoreConfigModelV2.json: StorePermanentBundles[3].ExtraBottleAmount",
+      "type": "",
+      "value": "18",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/StoreConfigModelV2.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "StoreConfigModelV2.json: StorePermanentBundles[3].UndoAmount",
+      "type": "",
+      "value": "18",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/StoreConfigModelV2.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "StoreConfigModelV2.json: StorePermanentBundles[3].HeaderText",
+      "type": "",
+      "value": "Mage Bundle",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/StoreConfigModelV2.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "StoreConfigModelV2.json: StorePermanentBundles[3].HeaderKey",
+      "type": "",
+      "value": "ShopBundleMage",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/StoreConfigModelV2.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "StoreConfigModelV2.json: StorePermanentBundles[3].PictureId",
+      "type": "",
+      "value": "5",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/StoreConfigModelV2.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "StoreConfigModelV2.json: StorePermanentBundles[3].IsPopular",
+      "type": "",
+      "value": "false",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/StoreConfigModelV2.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "StoreConfigModelV2.json: StorePermanentBundles[3].IsBest",
+      "type": "",
+      "value": "false",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/StoreConfigModelV2.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "StoreConfigModelV2.json: StorePermanentBundles[3].ShouldCloseAds",
+      "type": "",
+      "value": "true",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/StoreConfigModelV2.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "StoreConfigModelV2.json: StorePermanentBundles[4].IAPModel.ProductId",
+      "type": "",
+      "value": "sort.wizardbundle100",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/StoreConfigModelV2.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "StoreConfigModelV2.json: StorePermanentBundles[4].IAPModel.ProductType",
+      "type": "",
+      "value": "Consumable",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/StoreConfigModelV2.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "StoreConfigModelV2.json: StorePermanentBundles[4].IAPModel.DollarEquivalent",
+      "type": "",
+      "value": "99.99",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/StoreConfigModelV2.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "StoreConfigModelV2.json: StorePermanentBundles[4].CoinAmount",
+      "type": "",
+      "value": "60000",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/StoreConfigModelV2.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "StoreConfigModelV2.json: StorePermanentBundles[4].Rank",
+      "type": "",
+      "value": "5",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/StoreConfigModelV2.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "StoreConfigModelV2.json: StorePermanentBundles[4].DiscountText",
+      "type": "",
+      "value": "",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/StoreConfigModelV2.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "StoreConfigModelV2.json: StorePermanentBundles[4].LifeDurationInHours",
+      "type": "",
+      "value": "72",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/StoreConfigModelV2.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "StoreConfigModelV2.json: StorePermanentBundles[4].ShuffleAmount",
+      "type": "",
+      "value": "36",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/StoreConfigModelV2.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "StoreConfigModelV2.json: StorePermanentBundles[4].ExtraBottleAmount",
+      "type": "",
+      "value": "36",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/StoreConfigModelV2.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "StoreConfigModelV2.json: StorePermanentBundles[4].UndoAmount",
+      "type": "",
+      "value": "36",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/StoreConfigModelV2.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "StoreConfigModelV2.json: StorePermanentBundles[4].HeaderText",
+      "type": "",
+      "value": "Wizard Bundle",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/StoreConfigModelV2.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "StoreConfigModelV2.json: StorePermanentBundles[4].HeaderKey",
+      "type": "",
+      "value": "ShopBundleWizard",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/StoreConfigModelV2.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "StoreConfigModelV2.json: StorePermanentBundles[4].PictureId",
+      "type": "",
+      "value": "6",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/StoreConfigModelV2.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "StoreConfigModelV2.json: StorePermanentBundles[4].IsPopular",
+      "type": "",
+      "value": "false",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/StoreConfigModelV2.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "StoreConfigModelV2.json: StorePermanentBundles[4].IsBest",
+      "type": "",
+      "value": "true",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/StoreConfigModelV2.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "StoreConfigModelV2.json: StorePermanentBundles[4].ShouldCloseAds",
+      "type": "",
+      "value": "true",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/StoreConfigModelV2.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "StoreConfigModelV2.json: StoreBundles[0].IAPModel.ProductId",
+      "type": "",
+      "value": "sort.coins2",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/StoreConfigModelV2.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "StoreConfigModelV2.json: StoreBundles[0].IAPModel.ProductType",
+      "type": "",
+      "value": "Consumable",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/StoreConfigModelV2.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "StoreConfigModelV2.json: StoreBundles[0].IAPModel.DollarEquivalent",
+      "type": "",
+      "value": "1.99",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/StoreConfigModelV2.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "StoreConfigModelV2.json: StoreBundles[0].CoinAmount",
+      "type": "",
+      "value": "1000",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/StoreConfigModelV2.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "StoreConfigModelV2.json: StoreBundles[0].Rank",
+      "type": "",
+      "value": "1",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/StoreConfigModelV2.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "StoreConfigModelV2.json: StoreBundles[0].PictureId",
+      "type": "",
+      "value": "0",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/StoreConfigModelV2.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "StoreConfigModelV2.json: StoreBundles[1].IAPModel.ProductId",
+      "type": "",
+      "value": "sort.coins8",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/StoreConfigModelV2.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "StoreConfigModelV2.json: StoreBundles[1].IAPModel.ProductType",
+      "type": "",
+      "value": "Consumable",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/StoreConfigModelV2.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "StoreConfigModelV2.json: StoreBundles[1].IAPModel.DollarEquivalent",
+      "type": "",
+      "value": "7.99",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/StoreConfigModelV2.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "StoreConfigModelV2.json: StoreBundles[1].CoinAmount",
+      "type": "",
+      "value": "5000",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/StoreConfigModelV2.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "StoreConfigModelV2.json: StoreBundles[1].Rank",
+      "type": "",
+      "value": "2",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/StoreConfigModelV2.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "StoreConfigModelV2.json: StoreBundles[1].PictureId",
+      "type": "",
+      "value": "1",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/StoreConfigModelV2.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "StoreConfigModelV2.json: StoreBundles[2].IAPModel.ProductId",
+      "type": "",
+      "value": "sort.coins15",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/StoreConfigModelV2.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "StoreConfigModelV2.json: StoreBundles[2].IAPModel.ProductType",
+      "type": "",
+      "value": "Consumable",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/StoreConfigModelV2.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "StoreConfigModelV2.json: StoreBundles[2].IAPModel.DollarEquivalent",
+      "type": "",
+      "value": "14.99",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/StoreConfigModelV2.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "StoreConfigModelV2.json: StoreBundles[2].CoinAmount",
+      "type": "",
+      "value": "10000",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/StoreConfigModelV2.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "StoreConfigModelV2.json: StoreBundles[2].Rank",
+      "type": "",
+      "value": "3",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/StoreConfigModelV2.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "StoreConfigModelV2.json: StoreBundles[2].PictureId",
+      "type": "",
+      "value": "2",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/StoreConfigModelV2.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "StoreConfigModelV2.json: StoreBundles[3].IAPModel.ProductId",
+      "type": "",
+      "value": "sort.coins30",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/StoreConfigModelV2.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "StoreConfigModelV2.json: StoreBundles[3].IAPModel.ProductType",
+      "type": "",
+      "value": "Consumable",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/StoreConfigModelV2.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "StoreConfigModelV2.json: StoreBundles[3].IAPModel.DollarEquivalent",
+      "type": "",
+      "value": "29.99",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/StoreConfigModelV2.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "StoreConfigModelV2.json: StoreBundles[3].CoinAmount",
+      "type": "",
+      "value": "25000",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/StoreConfigModelV2.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "StoreConfigModelV2.json: StoreBundles[3].Rank",
+      "type": "",
+      "value": "4",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/StoreConfigModelV2.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "StoreConfigModelV2.json: StoreBundles[3].PictureId",
+      "type": "",
+      "value": "3",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/StoreConfigModelV2.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "StoreConfigModelV2.json: StoreBundles[4].IAPModel.ProductId",
+      "type": "",
+      "value": "sort.coins55",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/StoreConfigModelV2.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "StoreConfigModelV2.json: StoreBundles[4].IAPModel.ProductType",
+      "type": "",
+      "value": "Consumable",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/StoreConfigModelV2.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "StoreConfigModelV2.json: StoreBundles[4].IAPModel.DollarEquivalent",
+      "type": "",
+      "value": "54.99",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/StoreConfigModelV2.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "StoreConfigModelV2.json: StoreBundles[4].CoinAmount",
+      "type": "",
+      "value": "50000",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/StoreConfigModelV2.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "StoreConfigModelV2.json: StoreBundles[4].Rank",
+      "type": "",
+      "value": "5",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/StoreConfigModelV2.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "StoreConfigModelV2.json: StoreBundles[4].PictureId",
+      "type": "",
+      "value": "4",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/StoreConfigModelV2.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "StoreConfigModelV2.json: StoreBundles[5].IAPModel.ProductId",
+      "type": "",
+      "value": "sort.coins100",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/StoreConfigModelV2.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "StoreConfigModelV2.json: StoreBundles[5].IAPModel.ProductType",
+      "type": "",
+      "value": "Consumable",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/StoreConfigModelV2.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "StoreConfigModelV2.json: StoreBundles[5].IAPModel.DollarEquivalent",
+      "type": "",
+      "value": "99.99",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/StoreConfigModelV2.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "StoreConfigModelV2.json: StoreBundles[5].CoinAmount",
+      "type": "",
+      "value": "100000",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/StoreConfigModelV2.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "StoreConfigModelV2.json: StoreBundles[5].Rank",
+      "type": "",
+      "value": "6",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/StoreConfigModelV2.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "StoreConfigModelV2.json: StoreBundles[5].PictureId",
+      "type": "",
+      "value": "5",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/StoreConfigModelV2.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "StoreConfigModelV3.json: IsEnabled",
+      "type": "",
+      "value": "false",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/StoreConfigModelV3.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "WebShopConfigModel.json: IsEnabled",
+      "type": "",
+      "value": "false",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/WebShopConfigModel.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "WebShopConfigModel.json: FirstLevelToShow",
+      "type": "",
+      "value": "5000",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/WebShopConfigModel.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "WebShopConfigModel.json: ClientKey",
+      "type": "",
+      "value": "[REDACTED]",
+      "meaning": " Giá trị credential được loại khỏi GDD/web/workbook review; tên field và nguồn được giữ.",
+      "where": "Resources/defaultconfigs/WebShopConfigModel.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "WebShopConfigModel.json: Products[0].ProductId",
+      "type": "",
+      "value": "sort.special1",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/WebShopConfigModel.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "WebShopConfigModel.json: Products[0].WebProductId",
+      "type": "",
+      "value": "sort.special1",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/WebShopConfigModel.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "WebShopConfigModel.json: Products[0].Price",
+      "type": "",
+      "value": "0.99",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/WebShopConfigModel.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "WebShopConfigModel.json: Products[0].Reward.CurrencyType",
+      "type": "",
+      "value": "1",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/WebShopConfigModel.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "WebShopConfigModel.json: Products[0].Reward.Amount",
+      "type": "",
+      "value": "250",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/WebShopConfigModel.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "WebShopConfigModel.json: Products[1].ProductId",
+      "type": "",
+      "value": "sort.special3",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/WebShopConfigModel.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "WebShopConfigModel.json: Products[1].WebProductId",
+      "type": "",
+      "value": "sort.special3",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/WebShopConfigModel.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "WebShopConfigModel.json: Products[1].Price",
+      "type": "",
+      "value": "2.69",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/WebShopConfigModel.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "WebShopConfigModel.json: Products[1].DiscountPercent",
+      "type": "",
+      "value": "10",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/WebShopConfigModel.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "WebShopConfigModel.json: Products[2].ProductId",
+      "type": "",
+      "value": "sort.special4.99",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/WebShopConfigModel.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "WebShopConfigModel.json: Products[2].WebProductId",
+      "type": "",
+      "value": "sort.special4.99",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/WebShopConfigModel.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "WebShopConfigModel.json: Products[2].Price",
+      "type": "",
+      "value": "4.99",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/WebShopConfigModel.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "WebShopConfigModel.json: Products[2].Reward.CurrencyType",
+      "type": "",
+      "value": "1",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/WebShopConfigModel.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "WebShopConfigModel.json: Products[2].Reward.Amount",
+      "type": "",
+      "value": "500",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/WebShopConfigModel.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "WebShopConfigModel.json: Products[3].ProductId",
+      "type": "",
+      "value": "sort.special5",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/WebShopConfigModel.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "WebShopConfigModel.json: Products[3].WebProductId",
+      "type": "",
+      "value": "sort.special5",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/WebShopConfigModel.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "WebShopConfigModel.json: Products[3].Price",
+      "type": "",
+      "value": "4.49",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/WebShopConfigModel.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "WebShopConfigModel.json: Products[3].DiscountPercent",
+      "type": "",
+      "value": "10",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/WebShopConfigModel.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "WebShopConfigModel.json: Products[4].ProductId",
+      "type": "",
+      "value": "sort.special10",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/WebShopConfigModel.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "WebShopConfigModel.json: Products[4].WebProductId",
+      "type": "",
+      "value": "sort.special10",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/WebShopConfigModel.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "WebShopConfigModel.json: Products[4].Price",
+      "type": "",
+      "value": "9.99",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/WebShopConfigModel.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "WebShopConfigModel.json: Products[4].Reward.CurrencyType",
+      "type": "",
+      "value": "1",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/WebShopConfigModel.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "WebShopConfigModel.json: Products[4].Reward.Amount",
+      "type": "",
+      "value": "1000",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/WebShopConfigModel.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "WebShopConfigModel.json: Products[5].ProductId",
+      "type": "",
+      "value": "sort.special20",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/WebShopConfigModel.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "WebShopConfigModel.json: Products[5].WebProductId",
+      "type": "",
+      "value": "sort.special20",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/WebShopConfigModel.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "WebShopConfigModel.json: Products[5].Price",
+      "type": "",
+      "value": "17.99",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/WebShopConfigModel.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "WebShopConfigModel.json: Products[5].DiscountPercent",
+      "type": "",
+      "value": "10",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/WebShopConfigModel.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "WebShopConfigModel.json: Products[6].ProductId",
+      "type": "",
+      "value": "sort.special40",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/WebShopConfigModel.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "WebShopConfigModel.json: Products[6].WebProductId",
+      "type": "",
+      "value": "sort.special40",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/WebShopConfigModel.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "WebShopConfigModel.json: Products[6].Price",
+      "type": "",
+      "value": "35.99",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/WebShopConfigModel.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "WebShopConfigModel.json: Products[6].DiscountPercent",
+      "type": "",
+      "value": "10",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/WebShopConfigModel.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "WebShopConfigModel.json: Products[7].ProductId",
+      "type": "",
+      "value": "sort.special50",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/WebShopConfigModel.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "WebShopConfigModel.json: Products[7].WebProductId",
+      "type": "",
+      "value": "sort.special50",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/WebShopConfigModel.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "WebShopConfigModel.json: Products[7].Price",
+      "type": "",
+      "value": "44.99",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/WebShopConfigModel.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "WebShopConfigModel.json: Products[7].DiscountPercent",
+      "type": "",
+      "value": "10",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/WebShopConfigModel.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "WebShopConfigModel.json: Products[8].ProductId",
+      "type": "",
+      "value": "sort.special80",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/WebShopConfigModel.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "WebShopConfigModel.json: Products[8].WebProductId",
+      "type": "",
+      "value": "sort.special80",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/WebShopConfigModel.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "WebShopConfigModel.json: Products[8].Price",
+      "type": "",
+      "value": "71.99",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/WebShopConfigModel.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "WebShopConfigModel.json: Products[8].DiscountPercent",
+      "type": "",
+      "value": "10",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/WebShopConfigModel.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "WebShopConfigModel.json: Products[9].ProductId",
+      "type": "",
+      "value": "sort.special100",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/WebShopConfigModel.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "WebShopConfigModel.json: Products[9].WebProductId",
+      "type": "",
+      "value": "sort.special100",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/WebShopConfigModel.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "WebShopConfigModel.json: Products[9].Price",
+      "type": "",
+      "value": "89.99",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/WebShopConfigModel.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "WebShopConfigModel.json: Products[9].DiscountPercent",
+      "type": "",
+      "value": "10",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/WebShopConfigModel.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "server cache (historical)",
+      "key": "StoreConfigModelV2 (live) = default?",
+      "type": "",
+      "value": "106/125 key trùng default, 19 key khác/thêm",
+      "meaning": "Đối chiếu config server thật (CachedRemoteConfigs) với StoreConfigModelV2.json",
+      "where": "Configs/CachedRemoteConfigs + Firebase RC template 3197 — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server cache (historical)",
+      "key": "StoreConfigModelV2: storeSpecialBundles[0].IAPModel.productType",
+      "type": "",
+      "value": "0",
+      "meaning": "server ghi đè (default = Consumable)",
+      "where": "Configs/CachedRemoteConfigs + Firebase RC template 3197 — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server cache (historical)",
+      "key": "StoreConfigModelV2: storeSpecialBundles[0].shouldCloseAds",
+      "type": "",
+      "value": "false",
+      "meaning": "server-only (không có trong default)",
+      "where": "Configs/CachedRemoteConfigs + Firebase RC template 3197 — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server cache (historical)",
+      "key": "StoreConfigModelV2: storePermanentBundles[0].IAPModel.productType",
+      "type": "",
+      "value": "0",
+      "meaning": "server ghi đè (default = Consumable)",
+      "where": "Configs/CachedRemoteConfigs + Firebase RC template 3197 — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server cache (historical)",
+      "key": "StoreConfigModelV2: storePermanentBundles[1].IAPModel.productType",
+      "type": "",
+      "value": "0",
+      "meaning": "server ghi đè (default = Consumable)",
+      "where": "Configs/CachedRemoteConfigs + Firebase RC template 3197 — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server cache (historical)",
+      "key": "StoreConfigModelV2: storePermanentBundles[2].IAPModel.productType",
+      "type": "",
+      "value": "0",
+      "meaning": "server ghi đè (default = Consumable)",
+      "where": "Configs/CachedRemoteConfigs + Firebase RC template 3197 — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server cache (historical)",
+      "key": "StoreConfigModelV2: storePermanentBundles[3].IAPModel.productType",
+      "type": "",
+      "value": "0",
+      "meaning": "server ghi đè (default = Consumable)",
+      "where": "Configs/CachedRemoteConfigs + Firebase RC template 3197 — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server cache (historical)",
+      "key": "StoreConfigModelV2: storePermanentBundles[4].IAPModel.productType",
+      "type": "",
+      "value": "0",
+      "meaning": "server ghi đè (default = Consumable)",
+      "where": "Configs/CachedRemoteConfigs + Firebase RC template 3197 — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server cache (historical)",
+      "key": "StoreConfigModelV2: storeBundles[0].IAPModel.productType",
+      "type": "",
+      "value": "0",
+      "meaning": "server ghi đè (default = Consumable)",
+      "where": "Configs/CachedRemoteConfigs + Firebase RC template 3197 — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server cache (historical)",
+      "key": "StoreConfigModelV2: storeBundles[0].shouldCloseAds",
+      "type": "",
+      "value": "false",
+      "meaning": "server-only (không có trong default)",
+      "where": "Configs/CachedRemoteConfigs + Firebase RC template 3197 — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server cache (historical)",
+      "key": "StoreConfigModelV2: storeBundles[1].IAPModel.productType",
+      "type": "",
+      "value": "0",
+      "meaning": "server ghi đè (default = Consumable)",
+      "where": "Configs/CachedRemoteConfigs + Firebase RC template 3197 — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server cache (historical)",
+      "key": "StoreConfigModelV2: storeBundles[1].shouldCloseAds",
+      "type": "",
+      "value": "false",
+      "meaning": "server-only (không có trong default)",
+      "where": "Configs/CachedRemoteConfigs + Firebase RC template 3197 — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server cache (historical)",
+      "key": "StoreConfigModelV2: storeBundles[2].IAPModel.productType",
+      "type": "",
+      "value": "0",
+      "meaning": "server ghi đè (default = Consumable)",
+      "where": "Configs/CachedRemoteConfigs + Firebase RC template 3197 — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server cache (historical)",
+      "key": "StoreConfigModelV2: storeBundles[2].shouldCloseAds",
+      "type": "",
+      "value": "false",
+      "meaning": "server-only (không có trong default)",
+      "where": "Configs/CachedRemoteConfigs + Firebase RC template 3197 — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server cache (historical)",
+      "key": "StoreConfigModelV2: storeBundles[3].IAPModel.productType",
+      "type": "",
+      "value": "0",
+      "meaning": "server ghi đè (default = Consumable)",
+      "where": "Configs/CachedRemoteConfigs + Firebase RC template 3197 — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server cache (historical)",
+      "key": "StoreConfigModelV2: storeBundles[3].shouldCloseAds",
+      "type": "",
+      "value": "false",
+      "meaning": "server-only (không có trong default)",
+      "where": "Configs/CachedRemoteConfigs + Firebase RC template 3197 — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server cache (historical)",
+      "key": "StoreConfigModelV2: storeBundles[4].IAPModel.productType",
+      "type": "",
+      "value": "0",
+      "meaning": "server ghi đè (default = Consumable)",
+      "where": "Configs/CachedRemoteConfigs + Firebase RC template 3197 — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server cache (historical)",
+      "key": "StoreConfigModelV2: storeBundles[4].shouldCloseAds",
+      "type": "",
+      "value": "false",
+      "meaning": "server-only (không có trong default)",
+      "where": "Configs/CachedRemoteConfigs + Firebase RC template 3197 — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server cache (historical)",
+      "key": "StoreConfigModelV2: storeBundles[5].IAPModel.productType",
+      "type": "",
+      "value": "0",
+      "meaning": "server ghi đè (default = Consumable)",
+      "where": "Configs/CachedRemoteConfigs + Firebase RC template 3197 — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server cache (historical)",
+      "key": "StoreConfigModelV2: storeBundles[5].shouldCloseAds",
+      "type": "",
+      "value": "false",
+      "meaning": "server-only (không có trong default)",
+      "where": "Configs/CachedRemoteConfigs + Firebase RC template 3197 — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server cache (historical)",
+      "key": "StoreConfigModelV3 (live) = default?",
+      "type": "",
+      "value": "0/1 key trùng default, 1 key khác/thêm",
+      "meaning": "Đối chiếu config server thật (Firebase RC) với StoreConfigModelV3.json",
+      "where": "Configs/CachedRemoteConfigs + Firebase RC template 3197 — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server cache (historical)",
+      "key": "StoreConfigModelV3: IsEnabled",
+      "type": "",
+      "value": "true",
+      "meaning": "server ghi đè (default = false)",
+      "where": "Configs/CachedRemoteConfigs + Firebase RC template 3197 — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server cache (historical)",
+      "key": "WebShopConfigModel (live) = default?",
+      "type": "",
+      "value": "46/58 key trùng default, 12 key khác/thêm",
+      "meaning": "Đối chiếu config server thật (CachedRemoteConfigs) với WebShopConfigModel.json",
+      "where": "Configs/CachedRemoteConfigs + Firebase RC template 3197 — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server cache (historical)",
+      "key": "WebShopConfigModel: products[0].discountPercent",
+      "type": "",
+      "value": "0",
+      "meaning": "server-only (không có trong default)",
+      "where": "Configs/CachedRemoteConfigs + Firebase RC template 3197 — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server cache (historical)",
+      "key": "WebShopConfigModel: products[0].reward.timeSpan",
+      "type": "",
+      "value": "00:00:00",
+      "meaning": "server-only (không có trong default)",
+      "where": "Configs/CachedRemoteConfigs + Firebase RC template 3197 — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server cache (historical)",
+      "key": "WebShopConfigModel: products[0].reward.chestType",
+      "type": "",
+      "value": "0",
+      "meaning": "server-only (không có trong default)",
+      "where": "Configs/CachedRemoteConfigs + Firebase RC template 3197 — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server cache (historical)",
+      "key": "WebShopConfigModel: products[0].reward.collectionPackType",
+      "type": "",
+      "value": "0",
+      "meaning": "server-only (không có trong default)",
+      "where": "Configs/CachedRemoteConfigs + Firebase RC template 3197 — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server cache (historical)",
+      "key": "WebShopConfigModel: products[2].discountPercent",
+      "type": "",
+      "value": "0",
+      "meaning": "server-only (không có trong default)",
+      "where": "Configs/CachedRemoteConfigs + Firebase RC template 3197 — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server cache (historical)",
+      "key": "WebShopConfigModel: products[2].reward.timeSpan",
+      "type": "",
+      "value": "00:00:00",
+      "meaning": "server-only (không có trong default)",
+      "where": "Configs/CachedRemoteConfigs + Firebase RC template 3197 — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server cache (historical)",
+      "key": "WebShopConfigModel: products[2].reward.chestType",
+      "type": "",
+      "value": "0",
+      "meaning": "server-only (không có trong default)",
+      "where": "Configs/CachedRemoteConfigs + Firebase RC template 3197 — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server cache (historical)",
+      "key": "WebShopConfigModel: products[2].reward.collectionPackType",
+      "type": "",
+      "value": "0",
+      "meaning": "server-only (không có trong default)",
+      "where": "Configs/CachedRemoteConfigs + Firebase RC template 3197 — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server cache (historical)",
+      "key": "WebShopConfigModel: products[4].discountPercent",
+      "type": "",
+      "value": "0",
+      "meaning": "server-only (không có trong default)",
+      "where": "Configs/CachedRemoteConfigs + Firebase RC template 3197 — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server cache (historical)",
+      "key": "WebShopConfigModel: products[4].reward.timeSpan",
+      "type": "",
+      "value": "00:00:00",
+      "meaning": "server-only (không có trong default)",
+      "where": "Configs/CachedRemoteConfigs + Firebase RC template 3197 — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server cache (historical)",
+      "key": "WebShopConfigModel: products[4].reward.chestType",
+      "type": "",
+      "value": "0",
+      "meaning": "server-only (không có trong default)",
+      "where": "Configs/CachedRemoteConfigs + Firebase RC template 3197 — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server cache (historical)",
+      "key": "WebShopConfigModel: products[4].reward.collectionPackType",
+      "type": "",
+      "value": "0",
+      "meaning": "server-only (không có trong default)",
+      "where": "Configs/CachedRemoteConfigs + Firebase RC template 3197 — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server cache (historical)",
+      "key": "StoreConfigModel: Preview4Bundles",
+      "type": "",
+      "value": "[\"sort.magebundle50\", \"sort.apprenticebundle5\", \"sort.coins2\", \"sort.coins8\"]",
+      "meaning": "server-only (không có file default)",
+      "where": "Configs/CachedRemoteConfigs + Firebase RC template 3197 — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server cache (historical)",
+      "key": "StoreConfigModel: Preview3Bundles",
+      "type": "",
+      "value": "[\"sort.apprenticebundle5\", \"sort.coins2\", \"sort.coins8\"]",
+      "meaning": "server-only (không có file default)",
+      "where": "Configs/CachedRemoteConfigs + Firebase RC template 3197 — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server cache (historical)",
+      "key": "StoreConfigModel: StoreSpecialBundles[0].IAPModel.ProductId",
+      "type": "",
+      "value": "sort.starterbundle1",
+      "meaning": "server-only (không có file default)",
+      "where": "Configs/CachedRemoteConfigs + Firebase RC template 3197 — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server cache (historical)",
+      "key": "StoreConfigModel: StoreSpecialBundles[0].IAPModel.ProductType",
+      "type": "",
+      "value": "Consumable",
+      "meaning": "server-only (không có file default)",
+      "where": "Configs/CachedRemoteConfigs + Firebase RC template 3197 — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server cache (historical)",
+      "key": "StoreConfigModel: StoreSpecialBundles[0].IAPModel.DollarEquivalent",
+      "type": "",
+      "value": "0.99",
+      "meaning": "server-only (không có file default)",
+      "where": "Configs/CachedRemoteConfigs + Firebase RC template 3197 — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server cache (historical)",
+      "key": "StoreConfigModel: StoreSpecialBundles[0].CoinAmount",
+      "type": "",
+      "value": "1000",
+      "meaning": "server-only (không có file default)",
+      "where": "Configs/CachedRemoteConfigs + Firebase RC template 3197 — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server cache (historical)",
+      "key": "StoreConfigModel: StoreSpecialBundles[0].Rank",
+      "type": "",
+      "value": "1",
+      "meaning": "server-only (không có file default)",
+      "where": "Configs/CachedRemoteConfigs + Firebase RC template 3197 — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server cache (historical)",
+      "key": "StoreConfigModel: StoreSpecialBundles[0].DiscountText",
+      "type": "",
+      "value": "90% OFF!",
+      "meaning": "server-only (không có file default)",
+      "where": "Configs/CachedRemoteConfigs + Firebase RC template 3197 — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server cache (historical)",
+      "key": "StoreConfigModel: StoreSpecialBundles[0].LifeDurationInHours",
+      "type": "",
+      "value": "1",
+      "meaning": "server-only (không có file default)",
+      "where": "Configs/CachedRemoteConfigs + Firebase RC template 3197 — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server cache (historical)",
+      "key": "StoreConfigModel: StoreSpecialBundles[0].ShuffleAmount",
+      "type": "",
+      "value": "1",
+      "meaning": "server-only (không có file default)",
+      "where": "Configs/CachedRemoteConfigs + Firebase RC template 3197 — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server cache (historical)",
+      "key": "StoreConfigModel: StoreSpecialBundles[0].ExtraBottleAmount",
+      "type": "",
+      "value": "1",
+      "meaning": "server-only (không có file default)",
+      "where": "Configs/CachedRemoteConfigs + Firebase RC template 3197 — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server cache (historical)",
+      "key": "StoreConfigModel: StoreSpecialBundles[0].UndoAmount",
+      "type": "",
+      "value": "1",
+      "meaning": "server-only (không có file default)",
+      "where": "Configs/CachedRemoteConfigs + Firebase RC template 3197 — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server cache (historical)",
+      "key": "StoreConfigModel: StoreSpecialBundles[0].HeaderText",
+      "type": "",
+      "value": "Starter Bundle",
+      "meaning": "server-only (không có file default)",
+      "where": "Configs/CachedRemoteConfigs + Firebase RC template 3197 — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server cache (historical)",
+      "key": "StoreConfigModel: StoreSpecialBundles[0].HeaderKey",
+      "type": "",
+      "value": "ShopBundleStarter",
+      "meaning": "server-only (không có file default)",
+      "where": "Configs/CachedRemoteConfigs + Firebase RC template 3197 — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server cache (historical)",
+      "key": "StoreConfigModel: StoreSpecialBundles[0].PictureId",
+      "type": "",
+      "value": "1",
+      "meaning": "server-only (không có file default)",
+      "where": "Configs/CachedRemoteConfigs + Firebase RC template 3197 — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server cache (historical)",
+      "key": "StoreConfigModel: StorePermanentBundles[0].IAPModel.ProductId",
+      "type": "",
+      "value": "sort.apprenticebundle5",
+      "meaning": "server-only (không có file default)",
+      "where": "Configs/CachedRemoteConfigs + Firebase RC template 3197 — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server cache (historical)",
+      "key": "StoreConfigModel: StorePermanentBundles[0].IAPModel.ProductType",
+      "type": "",
+      "value": "Consumable",
+      "meaning": "server-only (không có file default)",
+      "where": "Configs/CachedRemoteConfigs + Firebase RC template 3197 — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server cache (historical)",
+      "key": "StoreConfigModel: StorePermanentBundles[0].IAPModel.DollarEquivalent",
+      "type": "",
+      "value": "4.99",
+      "meaning": "server-only (không có file default)",
+      "where": "Configs/CachedRemoteConfigs + Firebase RC template 3197 — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server cache (historical)",
+      "key": "StoreConfigModel: StorePermanentBundles[0].CoinAmount",
+      "type": "",
+      "value": "2000",
+      "meaning": "server-only (không có file default)",
+      "where": "Configs/CachedRemoteConfigs + Firebase RC template 3197 — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server cache (historical)",
+      "key": "StoreConfigModel: StorePermanentBundles[0].Rank",
+      "type": "",
+      "value": "2",
+      "meaning": "server-only (không có file default)",
+      "where": "Configs/CachedRemoteConfigs + Firebase RC template 3197 — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server cache (historical)",
+      "key": "StoreConfigModel: StorePermanentBundles[0].DiscountText",
+      "type": "",
+      "value": "",
+      "meaning": "server-only (không có file default)",
+      "where": "Configs/CachedRemoteConfigs + Firebase RC template 3197 — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server cache (historical)",
+      "key": "StoreConfigModel: StorePermanentBundles[0].LifeDurationInHours",
+      "type": "",
+      "value": "3",
+      "meaning": "server-only (không có file default)",
+      "where": "Configs/CachedRemoteConfigs + Firebase RC template 3197 — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server cache (historical)",
+      "key": "StoreConfigModel: StorePermanentBundles[0].ShuffleAmount",
+      "type": "",
+      "value": "1",
+      "meaning": "server-only (không có file default)",
+      "where": "Configs/CachedRemoteConfigs + Firebase RC template 3197 — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server cache (historical)",
+      "key": "StoreConfigModel: StorePermanentBundles[0].ExtraBottleAmount",
+      "type": "",
+      "value": "1",
+      "meaning": "server-only (không có file default)",
+      "where": "Configs/CachedRemoteConfigs + Firebase RC template 3197 — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server cache (historical)",
+      "key": "StoreConfigModel: StorePermanentBundles[0].UndoAmount",
+      "type": "",
+      "value": "1",
+      "meaning": "server-only (không có file default)",
+      "where": "Configs/CachedRemoteConfigs + Firebase RC template 3197 — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server cache (historical)",
+      "key": "StoreConfigModel: StorePermanentBundles[0].HeaderText",
+      "type": "",
+      "value": "Apprentice Bundle",
+      "meaning": "server-only (không có file default)",
+      "where": "Configs/CachedRemoteConfigs + Firebase RC template 3197 — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server cache (historical)",
+      "key": "StoreConfigModel: StorePermanentBundles[0].HeaderKey",
+      "type": "",
+      "value": "ShopBundleApprentice",
+      "meaning": "server-only (không có file default)",
+      "where": "Configs/CachedRemoteConfigs + Firebase RC template 3197 — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server cache (historical)",
+      "key": "StoreConfigModel: StorePermanentBundles[0].PictureId",
+      "type": "",
+      "value": "2",
+      "meaning": "server-only (không có file default)",
+      "where": "Configs/CachedRemoteConfigs + Firebase RC template 3197 — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server cache (historical)",
+      "key": "StoreConfigModel: StorePermanentBundles[0].IsPopular",
+      "type": "",
+      "value": "false",
+      "meaning": "server-only (không có file default)",
+      "where": "Configs/CachedRemoteConfigs + Firebase RC template 3197 — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server cache (historical)",
+      "key": "StoreConfigModel: StorePermanentBundles[0].IsBest",
+      "type": "",
+      "value": "false",
+      "meaning": "server-only (không có file default)",
+      "where": "Configs/CachedRemoteConfigs + Firebase RC template 3197 — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server cache (historical)",
+      "key": "StoreConfigModel: StorePermanentBundles[1].IAPModel.ProductId",
+      "type": "",
+      "value": "sort.magicianbundle10",
+      "meaning": "server-only (không có file default)",
+      "where": "Configs/CachedRemoteConfigs + Firebase RC template 3197 — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server cache (historical)",
+      "key": "StoreConfigModel: StorePermanentBundles[1].IAPModel.ProductType",
+      "type": "",
+      "value": "Consumable",
+      "meaning": "server-only (không có file default)",
+      "where": "Configs/CachedRemoteConfigs + Firebase RC template 3197 — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server cache (historical)",
+      "key": "StoreConfigModel: StorePermanentBundles[1].IAPModel.DollarEquivalent",
+      "type": "",
+      "value": "9.99",
+      "meaning": "server-only (không có file default)",
+      "where": "Configs/CachedRemoteConfigs + Firebase RC template 3197 — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server cache (historical)",
+      "key": "StoreConfigModel: StorePermanentBundles[1].CoinAmount",
+      "type": "",
+      "value": "4000",
+      "meaning": "server-only (không có file default)",
+      "where": "Configs/CachedRemoteConfigs + Firebase RC template 3197 — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server cache (historical)",
+      "key": "StoreConfigModel: StorePermanentBundles[1].Rank",
+      "type": "",
+      "value": "3",
+      "meaning": "server-only (không có file default)",
+      "where": "Configs/CachedRemoteConfigs + Firebase RC template 3197 — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server cache (historical)",
+      "key": "StoreConfigModel: StorePermanentBundles[1].DiscountText",
+      "type": "",
+      "value": "",
+      "meaning": "server-only (không có file default)",
+      "where": "Configs/CachedRemoteConfigs + Firebase RC template 3197 — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server cache (historical)",
+      "key": "StoreConfigModel: StorePermanentBundles[1].LifeDurationInHours",
+      "type": "",
+      "value": "6",
+      "meaning": "server-only (không có file default)",
+      "where": "Configs/CachedRemoteConfigs + Firebase RC template 3197 — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server cache (historical)",
+      "key": "StoreConfigModel: StorePermanentBundles[1].ShuffleAmount",
+      "type": "",
+      "value": "3",
+      "meaning": "server-only (không có file default)",
+      "where": "Configs/CachedRemoteConfigs + Firebase RC template 3197 — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server cache (historical)",
+      "key": "StoreConfigModel: StorePermanentBundles[1].ExtraBottleAmount",
+      "type": "",
+      "value": "3",
+      "meaning": "server-only (không có file default)",
+      "where": "Configs/CachedRemoteConfigs + Firebase RC template 3197 — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server cache (historical)",
+      "key": "StoreConfigModel: StorePermanentBundles[1].UndoAmount",
+      "type": "",
+      "value": "3",
+      "meaning": "server-only (không có file default)",
+      "where": "Configs/CachedRemoteConfigs + Firebase RC template 3197 — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server cache (historical)",
+      "key": "StoreConfigModel: StorePermanentBundles[1].HeaderText",
+      "type": "",
+      "value": "Magician Bundle",
+      "meaning": "server-only (không có file default)",
+      "where": "Configs/CachedRemoteConfigs + Firebase RC template 3197 — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server cache (historical)",
+      "key": "StoreConfigModel: StorePermanentBundles[1].HeaderKey",
+      "type": "",
+      "value": "ShopBundleMagician",
+      "meaning": "server-only (không có file default)",
+      "where": "Configs/CachedRemoteConfigs + Firebase RC template 3197 — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server cache (historical)",
+      "key": "StoreConfigModel: StorePermanentBundles[1].PictureId",
+      "type": "",
+      "value": "3",
+      "meaning": "server-only (không có file default)",
+      "where": "Configs/CachedRemoteConfigs + Firebase RC template 3197 — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server cache (historical)",
+      "key": "StoreConfigModel: StorePermanentBundles[1].IsPopular",
+      "type": "",
+      "value": "false",
+      "meaning": "server-only (không có file default)",
+      "where": "Configs/CachedRemoteConfigs + Firebase RC template 3197 — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server cache (historical)",
+      "key": "StoreConfigModel: StorePermanentBundles[1].IsBest",
+      "type": "",
+      "value": "false",
+      "meaning": "server-only (không có file default)",
+      "where": "Configs/CachedRemoteConfigs + Firebase RC template 3197 — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server cache (historical)",
+      "key": "StoreConfigModel: StorePermanentBundles[2].IAPModel.ProductId",
+      "type": "",
+      "value": "sort.sorcererbundle20",
+      "meaning": "server-only (không có file default)",
+      "where": "Configs/CachedRemoteConfigs + Firebase RC template 3197 — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server cache (historical)",
+      "key": "StoreConfigModel: StorePermanentBundles[2].IAPModel.ProductType",
+      "type": "",
+      "value": "Consumable",
+      "meaning": "server-only (không có file default)",
+      "where": "Configs/CachedRemoteConfigs + Firebase RC template 3197 — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server cache (historical)",
+      "key": "StoreConfigModel: StorePermanentBundles[2].IAPModel.DollarEquivalent",
+      "type": "",
+      "value": "19.99",
+      "meaning": "server-only (không có file default)",
+      "where": "Configs/CachedRemoteConfigs + Firebase RC template 3197 — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server cache (historical)",
+      "key": "StoreConfigModel: StorePermanentBundles[2].CoinAmount",
+      "type": "",
+      "value": "8000",
+      "meaning": "server-only (không có file default)",
+      "where": "Configs/CachedRemoteConfigs + Firebase RC template 3197 — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server cache (historical)",
+      "key": "StoreConfigModel: StorePermanentBundles[2].Rank",
+      "type": "",
+      "value": "4",
+      "meaning": "server-only (không có file default)",
+      "where": "Configs/CachedRemoteConfigs + Firebase RC template 3197 — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server cache (historical)",
+      "key": "StoreConfigModel: StorePermanentBundles[2].DiscountText",
+      "type": "",
+      "value": "",
+      "meaning": "server-only (không có file default)",
+      "where": "Configs/CachedRemoteConfigs + Firebase RC template 3197 — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server cache (historical)",
+      "key": "StoreConfigModel: StorePermanentBundles[2].LifeDurationInHours",
+      "type": "",
+      "value": "12",
+      "meaning": "server-only (không có file default)",
+      "where": "Configs/CachedRemoteConfigs + Firebase RC template 3197 — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server cache (historical)",
+      "key": "StoreConfigModel: StorePermanentBundles[2].ShuffleAmount",
+      "type": "",
+      "value": "8",
+      "meaning": "server-only (không có file default)",
+      "where": "Configs/CachedRemoteConfigs + Firebase RC template 3197 — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server cache (historical)",
+      "key": "StoreConfigModel: StorePermanentBundles[2].ExtraBottleAmount",
+      "type": "",
+      "value": "8",
+      "meaning": "server-only (không có file default)",
+      "where": "Configs/CachedRemoteConfigs + Firebase RC template 3197 — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server cache (historical)",
+      "key": "StoreConfigModel: StorePermanentBundles[2].UndoAmount",
+      "type": "",
+      "value": "8",
+      "meaning": "server-only (không có file default)",
+      "where": "Configs/CachedRemoteConfigs + Firebase RC template 3197 — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server cache (historical)",
+      "key": "StoreConfigModel: StorePermanentBundles[2].HeaderText",
+      "type": "",
+      "value": "Sorcerer Bundle",
+      "meaning": "server-only (không có file default)",
+      "where": "Configs/CachedRemoteConfigs + Firebase RC template 3197 — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server cache (historical)",
+      "key": "StoreConfigModel: StorePermanentBundles[2].HeaderKey",
+      "type": "",
+      "value": "ShopBundleSorcerer",
+      "meaning": "server-only (không có file default)",
+      "where": "Configs/CachedRemoteConfigs + Firebase RC template 3197 — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server cache (historical)",
+      "key": "StoreConfigModel: StorePermanentBundles[2].PictureId",
+      "type": "",
+      "value": "4",
+      "meaning": "server-only (không có file default)",
+      "where": "Configs/CachedRemoteConfigs + Firebase RC template 3197 — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server cache (historical)",
+      "key": "StoreConfigModel: StorePermanentBundles[2].IsPopular",
+      "type": "",
+      "value": "true",
+      "meaning": "server-only (không có file default)",
+      "where": "Configs/CachedRemoteConfigs + Firebase RC template 3197 — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server cache (historical)",
+      "key": "StoreConfigModel: StorePermanentBundles[2].IsBest",
+      "type": "",
+      "value": "false",
+      "meaning": "server-only (không có file default)",
+      "where": "Configs/CachedRemoteConfigs + Firebase RC template 3197 — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server cache (historical)",
+      "key": "StoreConfigModel: StorePermanentBundles[3].IAPModel.ProductId",
+      "type": "",
+      "value": "sort.magebundle50",
+      "meaning": "server-only (không có file default)",
+      "where": "Configs/CachedRemoteConfigs + Firebase RC template 3197 — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server cache (historical)",
+      "key": "StoreConfigModel: StorePermanentBundles[3].IAPModel.ProductType",
+      "type": "",
+      "value": "Consumable",
+      "meaning": "server-only (không có file default)",
+      "where": "Configs/CachedRemoteConfigs + Firebase RC template 3197 — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server cache (historical)",
+      "key": "StoreConfigModel: StorePermanentBundles[3].IAPModel.DollarEquivalent",
+      "type": "",
+      "value": "49.99",
+      "meaning": "server-only (không có file default)",
+      "where": "Configs/CachedRemoteConfigs + Firebase RC template 3197 — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server cache (historical)",
+      "key": "StoreConfigModel: StorePermanentBundles[3].CoinAmount",
+      "type": "",
+      "value": "20000",
+      "meaning": "server-only (không có file default)",
+      "where": "Configs/CachedRemoteConfigs + Firebase RC template 3197 — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server cache (historical)",
+      "key": "StoreConfigModel: StorePermanentBundles[3].Rank",
+      "type": "",
+      "value": "5",
+      "meaning": "server-only (không có file default)",
+      "where": "Configs/CachedRemoteConfigs + Firebase RC template 3197 — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server cache (historical)",
+      "key": "StoreConfigModel: StorePermanentBundles[3].DiscountText",
+      "type": "",
+      "value": "",
+      "meaning": "server-only (không có file default)",
+      "where": "Configs/CachedRemoteConfigs + Firebase RC template 3197 — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server cache (historical)",
+      "key": "StoreConfigModel: StorePermanentBundles[3].LifeDurationInHours",
+      "type": "",
+      "value": "36",
+      "meaning": "server-only (không có file default)",
+      "where": "Configs/CachedRemoteConfigs + Firebase RC template 3197 — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server cache (historical)",
+      "key": "StoreConfigModel: StorePermanentBundles[3].ShuffleAmount",
+      "type": "",
+      "value": "18",
+      "meaning": "server-only (không có file default)",
+      "where": "Configs/CachedRemoteConfigs + Firebase RC template 3197 — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server cache (historical)",
+      "key": "StoreConfigModel: StorePermanentBundles[3].ExtraBottleAmount",
+      "type": "",
+      "value": "18",
+      "meaning": "server-only (không có file default)",
+      "where": "Configs/CachedRemoteConfigs + Firebase RC template 3197 — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server cache (historical)",
+      "key": "StoreConfigModel: StorePermanentBundles[3].UndoAmount",
+      "type": "",
+      "value": "18",
+      "meaning": "server-only (không có file default)",
+      "where": "Configs/CachedRemoteConfigs + Firebase RC template 3197 — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server cache (historical)",
+      "key": "StoreConfigModel: StorePermanentBundles[3].HeaderText",
+      "type": "",
+      "value": "Mage Bundle",
+      "meaning": "server-only (không có file default)",
+      "where": "Configs/CachedRemoteConfigs + Firebase RC template 3197 — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server cache (historical)",
+      "key": "StoreConfigModel: StorePermanentBundles[3].HeaderKey",
+      "type": "",
+      "value": "ShopBundleMage",
+      "meaning": "server-only (không có file default)",
+      "where": "Configs/CachedRemoteConfigs + Firebase RC template 3197 — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server cache (historical)",
+      "key": "StoreConfigModel: StorePermanentBundles[3].PictureId",
+      "type": "",
+      "value": "5",
+      "meaning": "server-only (không có file default)",
+      "where": "Configs/CachedRemoteConfigs + Firebase RC template 3197 — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server cache (historical)",
+      "key": "StoreConfigModel: StorePermanentBundles[3].IsPopular",
+      "type": "",
+      "value": "false",
+      "meaning": "server-only (không có file default)",
+      "where": "Configs/CachedRemoteConfigs + Firebase RC template 3197 — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server cache (historical)",
+      "key": "StoreConfigModel: StorePermanentBundles[3].IsBest",
+      "type": "",
+      "value": "false",
+      "meaning": "server-only (không có file default)",
+      "where": "Configs/CachedRemoteConfigs + Firebase RC template 3197 — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server cache (historical)",
+      "key": "StoreConfigModel: StorePermanentBundles[4].IAPModel.ProductId",
+      "type": "",
+      "value": "sort.wizardbundle100",
+      "meaning": "server-only (không có file default)",
+      "where": "Configs/CachedRemoteConfigs + Firebase RC template 3197 — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server cache (historical)",
+      "key": "StoreConfigModel: StorePermanentBundles[4].IAPModel.ProductType",
+      "type": "",
+      "value": "Consumable",
+      "meaning": "server-only (không có file default)",
+      "where": "Configs/CachedRemoteConfigs + Firebase RC template 3197 — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server cache (historical)",
+      "key": "StoreConfigModel: StorePermanentBundles[4].IAPModel.DollarEquivalent",
+      "type": "",
+      "value": "99.99",
+      "meaning": "server-only (không có file default)",
+      "where": "Configs/CachedRemoteConfigs + Firebase RC template 3197 — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server cache (historical)",
+      "key": "StoreConfigModel: StorePermanentBundles[4].CoinAmount",
+      "type": "",
+      "value": "60000",
+      "meaning": "server-only (không có file default)",
+      "where": "Configs/CachedRemoteConfigs + Firebase RC template 3197 — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server cache (historical)",
+      "key": "StoreConfigModel: StorePermanentBundles[4].Rank",
+      "type": "",
+      "value": "6",
+      "meaning": "server-only (không có file default)",
+      "where": "Configs/CachedRemoteConfigs + Firebase RC template 3197 — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server cache (historical)",
+      "key": "StoreConfigModel: StorePermanentBundles[4].DiscountText",
+      "type": "",
+      "value": "",
+      "meaning": "server-only (không có file default)",
+      "where": "Configs/CachedRemoteConfigs + Firebase RC template 3197 — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server cache (historical)",
+      "key": "StoreConfigModel: StorePermanentBundles[4].LifeDurationInHours",
+      "type": "",
+      "value": "72",
+      "meaning": "server-only (không có file default)",
+      "where": "Configs/CachedRemoteConfigs + Firebase RC template 3197 — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server cache (historical)",
+      "key": "StoreConfigModel: StorePermanentBundles[4].ShuffleAmount",
+      "type": "",
+      "value": "36",
+      "meaning": "server-only (không có file default)",
+      "where": "Configs/CachedRemoteConfigs + Firebase RC template 3197 — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server cache (historical)",
+      "key": "StoreConfigModel: StorePermanentBundles[4].ExtraBottleAmount",
+      "type": "",
+      "value": "36",
+      "meaning": "server-only (không có file default)",
+      "where": "Configs/CachedRemoteConfigs + Firebase RC template 3197 — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server cache (historical)",
+      "key": "StoreConfigModel: StorePermanentBundles[4].UndoAmount",
+      "type": "",
+      "value": "36",
+      "meaning": "server-only (không có file default)",
+      "where": "Configs/CachedRemoteConfigs + Firebase RC template 3197 — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server cache (historical)",
+      "key": "StoreConfigModel: StorePermanentBundles[4].HeaderText",
+      "type": "",
+      "value": "Wizard Bundle",
+      "meaning": "server-only (không có file default)",
+      "where": "Configs/CachedRemoteConfigs + Firebase RC template 3197 — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server cache (historical)",
+      "key": "StoreConfigModel: StorePermanentBundles[4].HeaderKey",
+      "type": "",
+      "value": "ShopBundleWizard",
+      "meaning": "server-only (không có file default)",
+      "where": "Configs/CachedRemoteConfigs + Firebase RC template 3197 — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server cache (historical)",
+      "key": "StoreConfigModel: StorePermanentBundles[4].PictureId",
+      "type": "",
+      "value": "6",
+      "meaning": "server-only (không có file default)",
+      "where": "Configs/CachedRemoteConfigs + Firebase RC template 3197 — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server cache (historical)",
+      "key": "StoreConfigModel: StorePermanentBundles[4].IsPopular",
+      "type": "",
+      "value": "false",
+      "meaning": "server-only (không có file default)",
+      "where": "Configs/CachedRemoteConfigs + Firebase RC template 3197 — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server cache (historical)",
+      "key": "StoreConfigModel: StorePermanentBundles[4].IsBest",
+      "type": "",
+      "value": "true",
+      "meaning": "server-only (không có file default)",
+      "where": "Configs/CachedRemoteConfigs + Firebase RC template 3197 — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server cache (historical)",
+      "key": "StoreConfigModel: StoreBundles[0].IAPModel.ProductId",
+      "type": "",
+      "value": "sort.coins2",
+      "meaning": "server-only (không có file default)",
+      "where": "Configs/CachedRemoteConfigs + Firebase RC template 3197 — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server cache (historical)",
+      "key": "StoreConfigModel: StoreBundles[0].IAPModel.ProductType",
+      "type": "",
+      "value": "Consumable",
+      "meaning": "server-only (không có file default)",
+      "where": "Configs/CachedRemoteConfigs + Firebase RC template 3197 — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server cache (historical)",
+      "key": "StoreConfigModel: StoreBundles[0].IAPModel.DollarEquivalent",
+      "type": "",
+      "value": "1.99",
+      "meaning": "server-only (không có file default)",
+      "where": "Configs/CachedRemoteConfigs + Firebase RC template 3197 — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server cache (historical)",
+      "key": "StoreConfigModel: StoreBundles[0].CoinAmount",
+      "type": "",
+      "value": "1000",
+      "meaning": "server-only (không có file default)",
+      "where": "Configs/CachedRemoteConfigs + Firebase RC template 3197 — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server cache (historical)",
+      "key": "StoreConfigModel: StoreBundles[1].IAPModel.ProductId",
+      "type": "",
+      "value": "sort.coins8",
+      "meaning": "server-only (không có file default)",
+      "where": "Configs/CachedRemoteConfigs + Firebase RC template 3197 — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server cache (historical)",
+      "key": "StoreConfigModel: StoreBundles[1].IAPModel.ProductType",
+      "type": "",
+      "value": "Consumable",
+      "meaning": "server-only (không có file default)",
+      "where": "Configs/CachedRemoteConfigs + Firebase RC template 3197 — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server cache (historical)",
+      "key": "StoreConfigModel: StoreBundles[1].IAPModel.DollarEquivalent",
+      "type": "",
+      "value": "7.99",
+      "meaning": "server-only (không có file default)",
+      "where": "Configs/CachedRemoteConfigs + Firebase RC template 3197 — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server cache (historical)",
+      "key": "StoreConfigModel: StoreBundles[1].CoinAmount",
+      "type": "",
+      "value": "5000",
+      "meaning": "server-only (không có file default)",
+      "where": "Configs/CachedRemoteConfigs + Firebase RC template 3197 — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server cache (historical)",
+      "key": "StoreConfigModel: StoreBundles[2].IAPModel.ProductId",
+      "type": "",
+      "value": "sort.coins15",
+      "meaning": "server-only (không có file default)",
+      "where": "Configs/CachedRemoteConfigs + Firebase RC template 3197 — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server cache (historical)",
+      "key": "StoreConfigModel: StoreBundles[2].IAPModel.ProductType",
+      "type": "",
+      "value": "Consumable",
+      "meaning": "server-only (không có file default)",
+      "where": "Configs/CachedRemoteConfigs + Firebase RC template 3197 — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server cache (historical)",
+      "key": "StoreConfigModel: StoreBundles[2].IAPModel.DollarEquivalent",
+      "type": "",
+      "value": "14.99",
+      "meaning": "server-only (không có file default)",
+      "where": "Configs/CachedRemoteConfigs + Firebase RC template 3197 — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server cache (historical)",
+      "key": "StoreConfigModel: StoreBundles[2].CoinAmount",
+      "type": "",
+      "value": "10000",
+      "meaning": "server-only (không có file default)",
+      "where": "Configs/CachedRemoteConfigs + Firebase RC template 3197 — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server cache (historical)",
+      "key": "StoreConfigModel: StoreBundles[3].IAPModel.ProductId",
+      "type": "",
+      "value": "sort.coins30",
+      "meaning": "server-only (không có file default)",
+      "where": "Configs/CachedRemoteConfigs + Firebase RC template 3197 — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server cache (historical)",
+      "key": "StoreConfigModel: StoreBundles[3].IAPModel.ProductType",
+      "type": "",
+      "value": "Consumable",
+      "meaning": "server-only (không có file default)",
+      "where": "Configs/CachedRemoteConfigs + Firebase RC template 3197 — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server cache (historical)",
+      "key": "StoreConfigModel: StoreBundles[3].IAPModel.DollarEquivalent",
+      "type": "",
+      "value": "29.99",
+      "meaning": "server-only (không có file default)",
+      "where": "Configs/CachedRemoteConfigs + Firebase RC template 3197 — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server cache (historical)",
+      "key": "StoreConfigModel: StoreBundles[3].CoinAmount",
+      "type": "",
+      "value": "25000",
+      "meaning": "server-only (không có file default)",
+      "where": "Configs/CachedRemoteConfigs + Firebase RC template 3197 — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server cache (historical)",
+      "key": "StoreConfigModel: StoreBundles[4].IAPModel.ProductId",
+      "type": "",
+      "value": "sort.coins55",
+      "meaning": "server-only (không có file default)",
+      "where": "Configs/CachedRemoteConfigs + Firebase RC template 3197 — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server cache (historical)",
+      "key": "StoreConfigModel: StoreBundles[4].IAPModel.ProductType",
+      "type": "",
+      "value": "Consumable",
+      "meaning": "server-only (không có file default)",
+      "where": "Configs/CachedRemoteConfigs + Firebase RC template 3197 — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server cache (historical)",
+      "key": "StoreConfigModel: StoreBundles[4].IAPModel.DollarEquivalent",
+      "type": "",
+      "value": "54.99",
+      "meaning": "server-only (không có file default)",
+      "where": "Configs/CachedRemoteConfigs + Firebase RC template 3197 — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server cache (historical)",
+      "key": "StoreConfigModel: StoreBundles[4].CoinAmount",
+      "type": "",
+      "value": "50000",
+      "meaning": "server-only (không có file default)",
+      "where": "Configs/CachedRemoteConfigs + Firebase RC template 3197 — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server cache (historical)",
+      "key": "StoreConfigModel: StoreBundles[5].IAPModel.ProductId",
+      "type": "",
+      "value": "sort.coins100",
+      "meaning": "server-only (không có file default)",
+      "where": "Configs/CachedRemoteConfigs + Firebase RC template 3197 — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server cache (historical)",
+      "key": "StoreConfigModel: StoreBundles[5].IAPModel.ProductType",
+      "type": "",
+      "value": "Consumable",
+      "meaning": "server-only (không có file default)",
+      "where": "Configs/CachedRemoteConfigs + Firebase RC template 3197 — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server cache (historical)",
+      "key": "StoreConfigModel: StoreBundles[5].IAPModel.DollarEquivalent",
+      "type": "",
+      "value": "99.99",
+      "meaning": "server-only (không có file default)",
+      "where": "Configs/CachedRemoteConfigs + Firebase RC template 3197 — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server cache (historical)",
+      "key": "StoreConfigModel: StoreBundles[5].CoinAmount",
+      "type": "",
+      "value": "100000",
+      "meaning": "server-only (không có file default)",
+      "where": "Configs/CachedRemoteConfigs + Firebase RC template 3197 — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "AB test",
+      "key": "Firebase RC: RestorePurchaseEnabled",
+      "type": "",
+      "value": "false",
+      "meaning": "cờ AB/tinh chỉnh server-only (giá trị nhánh máy này)",
+      "where": "Configs/CachedRemoteConfigs + Firebase RC template 3197 — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    }
+  ],
+  "rewards": [
+    {
+      "context": "Gói coin",
+      "reward": "StoreBundleModel.CoinAmount",
+      "evidence": "StoreModelService.GetCoinBundles"
+    },
+    {
+      "context": "Gói đặc biệt / vĩnh viễn",
+      "reward": "CoinAmount + LifeDurationInHours (unlimited life theo giờ) + ShuffleAmount + ExtraBottleAmount + UndoAmount",
+      "evidence": "StoreSpecialBundleModel; StorePermanentBundleModel"
+    },
+    {
+      "context": "Mua qua WebShop",
+      "reward": "WebShopProduct.Reward + phần thưởng bonus — CurrencyEarnReason.WebShopBonus (60)",
+      "evidence": "WebShopHandler.ApplyTransaction"
+    },
+    {
+      "context": "Bundle kèm No Ads",
+      "reward": "Thêm quyền CurrencyType.NoAds (7) khi ShouldCloseAds = true",
+      "evidence": "StoreBundleModel.ShouldCloseAds; StoreViewModel.IsExistNoAds"
+    }
+  ],
+  "backend": [
+    {
+      "command": "IAPPurchaseVerificationService.GetVerificationResult(productId, args)",
+      "direction": "client→server",
+      "purpose": "xác thực receipt trước khi trao hàng (IAPPurchaseVerificationRequestModel → IAPPurchaseVerificationResponse)"
+    },
+    {
+      "command": "Unity IAP (IStoreController / IExtensionProvider)",
+      "direction": "client→store nền",
+      "purpose": "mua hàng qua Google Play / App Store (BillingMode.json chọn GooglePlay)"
+    },
+    {
+      "command": "WebShopRemoteService.SendCreateSessionRequest(CreateAppchargeSessionRequest)",
+      "direction": "client→Appcharge",
+      "purpose": "tạo phiên thanh toán web"
+    },
+    {
+      "command": "WebShopRemoteService.SendGetPurchaseStatusRequest(purchaseId)",
+      "direction": "client→Appcharge",
+      "purpose": "kiểm tra trạng thái giao dịch (pending/fulfilled/needs_review/cancelled)"
+    },
+    {
+      "command": "WebShopRemoteService.SendClaimPurchaseRequest(purchaseId) / SendClaimPurchasesRequest(purchaseIds)",
+      "direction": "client→server",
+      "purpose": "nhận hàng cho một hoặc nhiều giao dịch web"
+    },
+    {
+      "command": "WebShopRemoteService.SendGetClaimablePurchasesRequest()",
+      "direction": "client→server",
+      "purpose": "lấy danh sách giao dịch web đã hoàn tất chưa nhận"
+    },
+    {
+      "command": "SyncService – SyncName 'StoreModel' và 'WebShopSyncDataModel'",
+      "direction": "hai chiều",
+      "purpose": "đồng bộ hạng gói và giao dịch web đã trao"
+    }
+  ],
+  "ui": [
+    {
+      "element": "Cửa hàng ở Home",
+      "class": "Modules.Contexts.Home.Store.Scripts.HomeStoreController (SwipeMenuManager, PageType)",
+      "purpose": "trang Store nhúng, chuyển trang bằng vuốt"
+    },
+    {
+      "element": "Popup cửa hàng",
+      "class": "StorePopUp / StorePopUpV2 (+StorePopUpArguments{StorePopUpSource}) / OpenStorePopupCommand",
+      "purpose": "mở cửa hàng từ nơi khác"
+    },
+    {
+      "element": "Danh sách",
+      "class": "StoreScrollController / StoreScrollControllerV2 / IStoreScrollController / StoreScrollItemLayoutController / StoreScrollSingleItemView",
+      "purpose": "cuộn danh mục"
+    },
+    {
+      "element": "Dòng hàng",
+      "class": "Modules.Contexts.Home.Store.Scripts.StoreScroll.StoreBaseView / StoreItemFactory / StoreBaseViewFactory / StoreDiscountTagView / StorePopularBestView / StorePictureView (StorePictureModel)",
+      "purpose": "một gói hàng với nhãn giảm giá và nhãn Popular/Best"
+    },
+    {
+      "element": "Xem trước",
+      "class": "PreviewStoreController / PreviewStoreControllerV2 / StoreMoreButton / StoreMoreButtonV2",
+      "purpose": "dải rút gọn ở Home và nút mở rộng"
+    },
+    {
+      "element": "Offer ngang",
+      "class": "StoreScroll.HorizontalOffer.StoreHorizontalOfferSliderView / StoreHorizontalOfferSliderViewController / StoreHorizontalOfferViewAdapter / StoreHorizontalOfferViewController / StoreHorizontalOfferModel",
+      "purpose": "dải offer cuộn ngang trong cửa hàng"
+    },
+    {
+      "element": "Thông báo",
+      "class": "StoreNotificationController",
+      "purpose": "chấm đỏ khi có Daily Bonus chưa nhận"
+    },
+    {
+      "element": "Mua",
+      "class": "StorePurchaseClickCommand / StorePopupHelper",
+      "purpose": "xử lý bấm mua và suy ra IAPReason"
+    },
+    {
+      "element": "WebShop",
+      "class": "Modules.Contexts.Home.Monetization.WebShop.Scripts.WebShopPopup (+WebShopPopupArguments) / WebShopPriceView / WebShopDiscountView / WebShopRewardView / WebShopPurchaseFailedPopup / TryShowWebShopPromptCommand",
+      "purpose": "chào bán và thanh toán qua web"
+    },
+    {
+      "element": "Restore",
+      "class": "Modules.Contexts.Home.SettingsPopUp.Scripts.RestorePurchaseButton",
+      "purpose": "khôi phục giao dịch đã mua"
+    }
+  ],
+  "analytics": [
+    {
+      "event": "shop_opened / shop_closed",
+      "params": "source (StorePopUpSource)",
+      "when": "mở / đóng cửa hàng"
+    },
+    {
+      "event": "iap_purchase",
+      "params": "product_id, product_type, product_rank, price, currency, origin, source, context, from_web, web_product_id, ml_rank, ml_joined, ml_remaining_duration, progress",
+      "when": "mua thành công (kể cả qua web)"
+    },
+    {
+      "event": "in_app_purchase_d14_v2",
+      "params": "product_id, product_type, product_rank, value, currency, USD, origin, source, from_web, progress",
+      "when": "mua thành công (sự kiện doanh thu D14)"
+    },
+    {
+      "event": "purchase_failed",
+      "params": "product_id, product_type, product_rank, price, currency, reason ('Unknown reason' nếu trống), source",
+      "when": "mua thất bại"
+    },
+    {
+      "event": "purchase_not_verified / purchase_unable_to_verify",
+      "params": "product_id",
+      "when": "backend không xác thực được receipt"
+    },
+    {
+      "event": "not_requested_iap",
+      "params": "product_id",
+      "when": "giao dịch tới ngoài luồng người chơi vừa bấm"
+    },
+    {
+      "event": "refill_purchased",
+      "params": "refill_price, game_state",
+      "when": "mua refill mạng"
+    },
+    {
+      "event": "booster_purchased",
+      "params": "booster_type, booster_price",
+      "when": "mua booster bằng coin"
+    }
+  ],
+  "storage_keys": [
+    "StoreModel (sync name)",
+    "StoreModel.CurrentSpecialOfferRank",
+    "StoreModel.MaxPurchasedBundleIndex",
+    "WebShopSyncDataModel (sync name)",
+    "WebShopDataModel.AppliedTransactions",
+    "InAppPurchaseHistoryService (lịch sử mua)"
+  ],
+  "related_features": [
+    "SpecialOffer",
+    "ChooseOneSpecialOffer",
+    "NoAdsOffer",
+    "PawTouchOffer",
+    "EndlessPortal",
+    "MagicPass",
+    "MiniGame",
+    "DailyReward",
+    "Ads",
+    "Inventory"
+  ],
+  "gaps": [
+    "15/11 — partial_actual_evidence: Đã có full SKU/reward/config default/cache; giá VND và purchase lifecycle phải đọc report19, không đổi dollarEquivalent thành store price. Còn lại: Nối SKU với report19; chỉ đóng phần store-current-price/receipt/grant khi có store sandbox hợp lệ và ledger riêng.",
+    "Không chép giá trị WebShopConfigModel.ClientKey (khoá xác thực) — chỉ ghi tên trường và tên header.",
+    "15/11 — resolved_static_code_historical_build: StoreDailyRewardModel constructor và StoreMagicPassOfferModel constructor đều gán fields.super.PictureId=1. Chúng kếthừaStoreBundleModel, không phải object không có state chỉ vì không khai báo ownfields trongmetadata. Content/reward vẫn ở inheritedmodel/config; không tự tạo trường riêng. Còn lại: Cần đối chiếu ARM64/current runtime và các nhánh caller còn chưa đủ bằng chứng.",
+    "15/11 — resolved_static_code_historical_build: GetHomeStoreViews lấy GetHorizontalBundle(true) → GetPermanentBundles(true,false,-1,0,null) → GetCoinBundles(true,-1,0), rồi lấy/reuse StoreViewModel và Initialize theo object bundle. GetPopupStoreViews dùng Special→Permanent→Coin với header=false, không gọi horizontal ở body đó. FillStoreViewItems và pool hỗ trợ dựng view; không cần suy từ tên field. V1/V2 controller selection vẫn là gap riêng StoreG005. Còn lại: Cần đối chiếu method/consumer trên app0.0.3129 ARM64; chưa là runtime pass.",
+    "15/11 — partial_static_code_unresolved: StorePopupHelper V2.GetIAPReason/GetPopUp dùng GetPopUp<StorePopUpV2>; StorePopUpV2 body khởi tạo StoreScrollControllerV2. Đây là pathV2 cụthể. V1 controller tồn tại không chứng minh còn được chọn hoặc cầnflag; entrypoint mapping đầy đủ của mọi store opener chưa resolve. Còn lại: Trace mọi StorePopUp/V2 open caller và prefab registration, không suy universalV1/V2switch từ một helper.",
+    "Endpoint HTTP của verification và Appcharge nằm trong BackendEnvironmentConfig.",
+    "[Runtime 2026-09-10] Config server LIVE đã đọc trực tiếp từ cache máy (không cần request); các hàng 'server live' là giá trị server ghi đè/thêm so với default.",
+    "[Runtime 2026-09-10] Model server-only StoreConfigModel (không có trong Resources/defaultconfigs) đã đọc từ cache live.",
+    "[Runtime 2026-09-10] Cờ AB/tinh chỉnh server-only đọc từ Firebase Remote Config (template 3197)."
+  ],
+  "sources": [
+    "features/StoreModelService.md",
+    "features/HomeStoreController.md",
+    "features/StoreBundleModel.md",
+    "features/StoreSpecialBundleModel.md",
+    "features/StorePermanentBundleModel.md",
+    "features/StoreBundleContainerModel.md",
+    "features/StoreModel.md",
+    "features/StoreNotificationController.md",
+    "features/StorePopupHelper.md",
+    "features/IAPManager.md",
+    "features/IAPService.md",
+    "features/IAPPurchaseVerificationService.md",
+    "features/IAPHandler.md",
+    "features/IAPModel.md",
+    "features/IAPConfigModel.md",
+    "features/WebShopService.md",
+    "features/WebShopHandler.md",
+    "features/WebShopConfigModel.md",
+    "features/WebShopDataService.md",
+    "features/WebShopRemoteService.md",
+    "features/WebShopTransactionDataModel.md",
+    "Assets/Resources/BillingMode.json; Assets/Resources/IAPProductCatalog.json (qua facts/facts.json defaults)",
+    "RecoveredNative/strings-by-type.tsv (EventSender.SendShop*/SendInAppPurchase*/SendPurchase*)",
+    "GameDesign/facts/facts.json (StoreViewType, StorePopUpSource, StoreScrollPlace, IAPContext, IAPOrigin, IAPReason, StorePurchaseFailureReason, WebShopPromptResultType, WebShopProduct, StoreConfigModelV2)"
+  ],
+  "related_feature_aliases": [
+    {
+      "original": "Lives",
+      "feature": "Inventory"
+    }
+  ],
+  "audit_provenance": {
+    "review_date": "2026-11-15",
+    "mode": "offline_existing_files",
+    "code_build": "0.0.3063 ARMv7",
+    "runtime_build_observed_historically": "0.0.3129 ARM64 (audit 2026-10-18); not rechecked 2026-11-15",
+    "new_playtests": 2,
+    "uc_status": "See facts/audit_20261115/uc_registry.json; image reference is not pass",
+    "workbook_status": "Existing XLSX is historical; JSON and local web include 2026-11-15 corrections",
+    "static_review": "facts/local_code_gap_results_20261115.json; facts/local_asset_gap_results_20261115.json; facts/final_data_gap_decisions_20261115.json; facts/core_body_gap_decisions_20261115.json; facts/remaining_asset_gap_decisions_20261115.json"
+  },
+  "runtime_review_20261115": [
+    {
+      "id": "MS-R15-ECO01",
+      "feature": "Store",
+      "uc": [
+        "UC-02",
+        "UC-11"
+      ],
+      "title": "Catalog Shop và giá hiển thị từ cache",
+      "precondition": "Build 0.0.3129 ARM64; level351; non-purchaser trong save; tài nguyên đã chỉnh từ trước; UID MagicSort bị chặn mạng IPv4/IPv6.",
+      "steps": [
+        "Mở tab Shop",
+        "Cuộn từ Starter Bundle tới Magic Bundles và Coins"
+      ],
+      "expected": "Catalog dựng được từ dữ liệu có sẵn, duyệt catalog không tự tiêu/cấp tài nguyên.",
+      "actual": "Starter 1.000 coin + 1h lives + ba booster x1: 29.000 VND; Apprentice 2.000 coin + 3h lives + ba booster x1 + No Ads:149.000 VND. Mage20.000/36h/x18:1.499.000 VND; Wizard60.000/72h/x36:2.999.000 VND. Coins1.000/5.000/10.000/25.000/50.000/100.000 hiện59.000/249.000/499.000/999.000/1.799.000/2.999.000 VND. Kho không đổi.",
+      "status": "observed_partial",
+      "limitations": "Giá cache/UI offline, không xác minh metadata store mới, productId bằng trace, purchase hay entitlement NoAds. Chưa chụp đủ nội dung Magician/Sorcerer.",
+      "images": [
+        "ECO04_store_ready",
+        "ECO05_bundles",
+        "ECO06_bundles",
+        "ECO07_coins"
+      ],
+      "before": "ECO02_wait",
+      "after": "ECO07_coins",
+      "currency_unchanged": true,
+      "build": "0.0.3129 ARM64",
+      "mode": "offline_existing_fixture",
+      "date": "2026-11-15",
+      "ledger": {
+        "before": "ECO02_wait.json",
+        "after": "ECO07_coins.json"
+      }
+    },
+    {
+      "id": "MS-R15-ECO02",
+      "feature": "Store",
+      "uc": [
+        "UC-04",
+        "UC-07"
+      ],
+      "title": "IAP lỗi không tìm thấy mặt hàng và trở lại Shop",
+      "precondition": "Cùng phiên offline fixture, nút gói1.000 coin hiện59.000 VND.",
+      "steps": [
+        "Bấm giá gói1.000 coin",
+        "Quan sát loading rồi store error",
+        "Bấm Tôi hiểu rồi",
+        "Quan sát Failed của game",
+        "Bấm Continue"
+      ],
+      "expected": "Giao dịch lỗi không cấp coin; UI trả lại Shop.",
+      "actual": "Store báo Không thể tìm thấy mặt hàng bạn đang cố gắng mua; game hiện Failed / Your account wasn't charged; Continue trả lại Shop. CurrencyAmountByType trước/sau bằng nhau, coin999995869. Không xác nhận hoặc hoàn tất thanh toán.",
+      "status": "verified_observed_branch",
+      "limitations": "Chỉ nhánh lỗi đã thấy; chưa kiểm chứng mọi mã lỗi, mua thành công, receipt/grant/refund. Không quy lỗi chắc chắn cho firewall vì chưa trace nguyên nhân store.",
+      "images": [
+        "ECO08_coin_request",
+        "ECO09_coin_response",
+        "ECO10_purchase_error_closed",
+        "ECO12_error_continue"
+      ],
+      "before": "ECO07_coins",
+      "after": "ECO12_error_continue",
+      "currency_unchanged": true,
+      "build": "0.0.3129 ARM64",
+      "mode": "offline_existing_fixture",
+      "date": "2026-11-15",
+      "ledger": {
+        "before": "ECO07_coins.json",
+        "after": "ECO12_error_continue.json"
+      }
+    }
+  ],
+  "static_review_20261115": {
+    "date": "2026-11-15",
+    "scope": "Historical code/assets 0.0.3063, dated caches, device 0.0.3129 cached bundles and explicitly scoped runtime evidence. Not full runtime pass.",
+    "findings": [
+      {
+        "kind": "final_data",
+        "source_report": "facts/final_data_gap_decisions_20261115.json",
+        "id": "MS-FDG-021",
+        "gap_ids": [
+          "MS-Store-G001"
+        ],
+        "title": "Toàn bộ danh mục thật (product id, giá, nội dung gói) nằm trong StoreConfigModelV2 và các *ConfigModel trên remote config; Resources/IAPProductCatalog.json chỉ ",
+        "status": "partial_actual_evidence",
+        "conclusion": "Đã có full SKU/reward/config default/cache; giá VND và purchase lifecycle phải đọc report19, không đổi dollarEquivalent thành store price.",
+        "evidence": [
+          "facts/local_asset_review_20261115/config_catalog.json"
+        ],
+        "remaining": "Full SKU/reward/config đã có; các giá VND ở report19 là metadata cache offline. Chưa có giá store mới, successful receipt, verify hoặc grant.",
+        "next_action": "Nối SKU với report19; chỉ đóng phần store-current-price/receipt/grant khi có store sandbox hợp lệ và ledger riêng.",
+        "scope": "question-specific source/observed branch only; no full-UC or production claim",
+        "source_records": [
+          {
+            "snapshot": "default0.0.3063",
+            "model": "StoreConfigModelV2",
+            "source": "Resources\\defaultconfigs\\StoreConfigModelV2.json",
+            "root": "UnityExport Assets 0.0.3063",
+            "sha256": "693f1cd117fbcaae8d70356a801044303fb5d3bd8a54b45d01d3b69c2615d335",
+            "line": 1,
+            "build": "0.0.3063 ARMv7"
+          },
+          {
+            "snapshot": "cache20260910",
+            "model": "StoreConfigModelV2",
+            "source": "facts\\runtime\\server_configs\\storeConfigModelV2.json",
+            "root": "GameDesign",
+            "sha256": "11ba409551c5ffb49a8bc30e9cdf93e0bc6c5e15c6830361dc0477f2beb424fb",
+            "line": 1,
+            "build": "snapshot provenance at path"
+          },
+          {
+            "snapshot": "cache20261010",
+            "model": "StoreConfigModelV2",
+            "source": "facts\\runtime\\test_20261010\\before\\CachedRemoteConfigs",
+            "root": "GameDesign",
+            "sha256": "433164d4877b2dee55d2bbd79ef2fe83d3fe9519492fe15e3cb0926daf216050",
+            "line": 1,
+            "build": "snapshot provenance at path"
+          },
+          {
+            "snapshot": "default0.0.3063",
+            "model": "StoreConfigModelV3",
+            "source": "Resources\\defaultconfigs\\StoreConfigModelV3.json",
+            "root": "UnityExport Assets 0.0.3063",
+            "sha256": "586a8a98ab98faf1316da41f295cc5df3aeedef7b1cb0744145f8e959d772f38",
+            "line": 1,
+            "build": "0.0.3063 ARMv7"
+          }
+        ]
+      },
+      {
+        "kind": "code",
+        "source_report": "facts/local_code_gap_results_20261115.json",
+        "id": "MS-CODE-12",
+        "gap_ids": [
+          "MS-Store-G004"
+        ],
+        "title": "StoreViewService dựng danh sách bằng method bodies",
+        "status": "resolved_static_code",
+        "conclusion": "GetHomeStoreViews lấy GetHorizontalBundle(true) → GetPermanentBundles(true,false,-1,0,null) → GetCoinBundles(true,-1,0), rồi lấy/reuse StoreViewModel và Initialize theo object bundle. GetPopupStoreViews dùng Special→Permanent→Coin với header=false, không gọi horizontal ở body đó. FillStoreViewItems và pool hỗ trợ dựng view; không cần suy từ tên field. V1/V2 controller selection vẫn là gap riêng StoreG005.",
+        "evidence": [
+          {
+            "file": "../com.grandgames.magicsort_Unity_20260909_112501/RecoveredNative/PseudoC/Assembly-CSharp/Modules/Contexts/Home/Store/Scripts/StoreViewService.c",
+            "line": 75,
+            "end_line": 238,
+            "method": "// ===== StoreViewService :: public List<StoreViewModel> GetHomeStoreViews()",
+            "sha256": "51b36afa5d7e0091cd5dfee17d134d220593620cc81f0e48c0bdd67cb19fc738",
+            "body_checked": true,
+            "build": "0.0.3063 ARMv7",
+            "required_body_tokens": [
+              "__GetHorizontalBundle",
+              "__GetPermanentBundles",
+              "__GetCoinBundles",
+              "StoreViewModel__Initialize"
+            ]
+          },
+          {
+            "file": "../com.grandgames.magicsort_Unity_20260909_112501/RecoveredNative/PseudoC/Assembly-CSharp/Modules/Contexts/Home/Store/Scripts/StoreViewService.c",
+            "line": 239,
+            "end_line": 402,
+            "method": "// ===== StoreViewService :: public List<StoreViewModel> GetPopupStoreViews()",
+            "sha256": "51b36afa5d7e0091cd5dfee17d134d220593620cc81f0e48c0bdd67cb19fc738",
+            "body_checked": true,
+            "build": "0.0.3063 ARMv7",
+            "required_body_tokens": [
+              "__GetSpecialBundles",
+              "__GetPermanentBundles",
+              "__GetCoinBundles",
+              "StoreViewModel__Initialize"
+            ]
+          }
+        ],
+        "remaining": "Cần đối chiếu method/consumer trên app0.0.3129 ARM64; chưa là runtime pass.",
+        "scope": "recovered_native_0.0.3063_only",
+        "runtime_verified": false
+      },
+      {
+        "kind": "code",
+        "source_report": "facts/local_code_gap_results_20261115.json",
+        "id": "MS-CODE-63",
+        "gap_ids": [
+          "MS-Store-G003"
+        ],
+        "title": "Hai Store subtype có inherited state",
+        "status": "resolved_static_code",
+        "conclusion": "StoreDailyRewardModel constructor và StoreMagicPassOfferModel constructor đều gán fields.super.PictureId=1. Chúng kếthừaStoreBundleModel, không phải object không có state chỉ vì không khai báo ownfields trongmetadata. Content/reward vẫn ở inheritedmodel/config; không tự tạo trường riêng.",
+        "evidence": [
+          {
+            "file": "../com.grandgames.magicsort_Unity_20260909_112501/RecoveredNative/PseudoC/Assembly-CSharp/Modules/Contexts/Home/Store/Scripts/StoreDailyRewardModel.c",
+            "line": 6,
+            "end_line": 19,
+            "method": "// ===== StoreDailyRewardModel :: public void .ctor()",
+            "sha256": "72d238a7747492f1e1663a2d53ac25c9a631b0833de978e70f055278f572534e",
+            "body_checked": true,
+            "build": "0.0.3063 ARMv7",
+            "required_body_tokens": [
+              "super._PictureId_k__BackingField = 1"
+            ]
+          }
+        ],
+        "remaining": "Cần đối chiếu ARM64/current runtime và các nhánh caller còn chưa đủ bằng chứng.",
+        "scope": "recovered_native_0.0.3063_only",
+        "runtime_verified": false
+      },
+      {
+        "kind": "code",
+        "source_report": "facts/local_code_gap_results_20261115.json",
+        "id": "MS-CODE-64",
+        "gap_ids": [
+          "MS-Store-G005"
+        ],
+        "title": "V2 popup helper có path thực, selector tổng chưa đóng",
+        "status": "partial_static_code",
+        "conclusion": "StorePopupHelper V2.GetIAPReason/GetPopUp dùng GetPopUp<StorePopUpV2>; StorePopUpV2 body khởi tạo StoreScrollControllerV2. Đây là pathV2 cụthể. V1 controller tồn tại không chứng minh còn được chọn hoặc cầnflag; entrypoint mapping đầy đủ của mọi store opener chưa resolve.",
+        "evidence": [
+          {
+            "file": "../com.grandgames.magicsort_Unity_20260909_112501/RecoveredNative/PseudoC/Assembly-CSharp/Modules/Contexts/Home/Store/Scripts/V2/StorePopupHelper.c",
+            "line": 6,
+            "end_line": 146,
+            "method": "// ===== StorePopupHelper :: public static IAPReason GetIAPReason()",
+            "sha256": "f5b4ca2389aca527a4afe16c9128dcec7dab7f274c27e61f46ac6d81626e5d1f",
+            "body_checked": true,
+            "build": "0.0.3063 ARMv7",
+            "required_body_tokens": [
+              "GetPopUp<StorePopUpV2>"
+            ]
+          }
+        ],
+        "remaining": "Trace mọi StorePopUp/V2 open caller và prefab registration, không suy universalV1/V2switch từ một helper.",
+        "scope": "recovered_native_0.0.3063_only",
+        "runtime_verified": false
+      },
+      {
+        "kind": "asset",
+        "source_report": "facts/local_asset_gap_results_20261115.json",
+        "id": "MS-Store-G001",
+        "status": "partial_static_reconciliation",
+        "conclusion": "Đã có full SKU/reward/config default/cache; giá VND và purchase lifecycle phải đọc report19, không đổi dollarEquivalent thành store price.",
+        "evidence": [
+          {
+            "snapshot": "default0.0.3063",
+            "model": "StoreConfigModelV2",
+            "source": "Resources\\defaultconfigs\\StoreConfigModelV2.json",
+            "root": "UnityExport Assets 0.0.3063",
+            "sha256": "693f1cd117fbcaae8d70356a801044303fb5d3bd8a54b45d01d3b69c2615d335",
+            "line": 1,
+            "build": "0.0.3063 ARMv7"
+          },
+          {
+            "snapshot": "cache20260910",
+            "model": "StoreConfigModelV2",
+            "source": "facts\\runtime\\server_configs\\storeConfigModelV2.json",
+            "root": "GameDesign",
+            "sha256": "11ba409551c5ffb49a8bc30e9cdf93e0bc6c5e15c6830361dc0477f2beb424fb",
+            "line": 1,
+            "build": "snapshot provenance at path"
+          },
+          {
+            "snapshot": "cache20261010",
+            "model": "StoreConfigModelV2",
+            "source": "facts\\runtime\\test_20261010\\before\\CachedRemoteConfigs",
+            "root": "GameDesign",
+            "sha256": "433164d4877b2dee55d2bbd79ef2fe83d3fe9519492fe15e3cb0926daf216050",
+            "line": 1,
+            "build": "snapshot provenance at path"
+          },
+          {
+            "snapshot": "default0.0.3063",
+            "model": "StoreConfigModelV3",
+            "source": "Resources\\defaultconfigs\\StoreConfigModelV3.json",
+            "root": "UnityExport Assets 0.0.3063",
+            "sha256": "586a8a98ab98faf1316da41f295cc5df3aeedef7b1cb0744145f8e959d772f38",
+            "line": 1,
+            "build": "0.0.3063 ARMv7"
+          }
+        ],
+        "data": "config_catalog.json",
+        "scope": "static_export0.0.3063_or_historical_cache_not_runtime_pass",
+        "reviewed": "2026-11-15",
+        "next_action": "Nối SKU với report19; chỉ đóng phần store-current-price/receipt/grant khi có store sandbox hợp lệ và ledger riêng.",
+        "remaining": "Full SKU/reward/config đã có; các giá VND ở report19 là metadata cache offline. Chưa có giá store mới, successful receipt, verify hoặc grant.",
+        "superseded_or_refined_by": "MS-FDG-021"
+      }
+    ]
+  },
+  "acceptance_review_20261115": {
+    "source": "facts/feature_acceptance_20261115.json",
+    "feature_id": "Store",
+    "scope": "All eleven dossier dimensions reviewed; full_feature_verified is not implied; read per-dimension gaps and actual runtime evidence."
+  },
+  "segment_ab_review_20261115": {
+    "status": "not_identified_in_sources",
+    "segment_ids": [],
+    "matching_basis": "explicit_gd_config_map_or_exact_model_token_in_gdd_configs_where_key_sources; rootfieldscoped",
+    "rows": [],
+    "classifications": {},
+    "assignment_verified": false,
+    "uplift_verified": false,
+    "note": "No matchingrow does not prove no segmentation/AB. Rewardbucketfalsepositives remain explicitly classified."
+  },
+  "continuation_review_20261116": {
+    "date": "2026-11-16",
+    "build": "0.0.3129 ARM64 host APK",
+    "build_scope": "Host APK version3129 matches LAST observed installed version15/11 only; installed bytes/live device16/11 not verified.",
+    "runtime_status": "device_unavailable",
+    "runtime_case_ids": [],
+    "current_apk_model_links": {
+      "feature": "Store",
+      "models": [
+        {
+          "model": "StoreConfigModelV2",
+          "current_default_file": "facts/review_20261116/public_current_config_3129/defaults/StoreConfigModelV2.json",
+          "resource_path": "defaultconfigs/storeconfigmodelv2",
+          "sha256": "693f1cd117fbcaae8d70356a801044303fb5d3bd8a54b45d01d3b69c2615d335",
+          "matching_basis": [
+            "gdd/Store.json#/configs",
+            "gdd/Store.json#/sources",
+            "gdd/Store.json#/flow"
+          ],
+          "scope": "Packaged default3129, not effective server config.",
+          "site_data_path": "data/current_config_3129/defaults/StoreConfigModelV2.json",
+          "original_source_sha256": "693f1cd117fbcaae8d70356a801044303fb5d3bd8a54b45d01d3b69c2615d335",
+          "public_artifact_sha256": "470709f6b14c05ceda24c2a0c1f409692ce3d033bdeea44eb18cac6a37750ac3",
+          "sha256_scope": "sha256 is original raw model; public_artifact_sha256 is the sanitized download"
+        },
+        {
+          "model": "StoreConfigModelV3",
+          "current_default_file": "facts/review_20261116/public_current_config_3129/defaults/StoreConfigModelV3.json",
+          "resource_path": "defaultconfigs/storeconfigmodelv3",
+          "sha256": "586a8a98ab98faf1316da41f295cc5df3aeedef7b1cb0744145f8e959d772f38",
+          "matching_basis": [
+            "gdd/Store.json#/configs"
+          ],
+          "scope": "Packaged default3129, not effective server config.",
+          "site_data_path": "data/current_config_3129/defaults/StoreConfigModelV3.json",
+          "original_source_sha256": "586a8a98ab98faf1316da41f295cc5df3aeedef7b1cb0744145f8e959d772f38",
+          "public_artifact_sha256": "f6e0a83f3d301393da213836701ceef0feeb8676d5f6b849bf2ae515ac42e617",
+          "sha256_scope": "sha256 is original raw model; public_artifact_sha256 is the sanitized download"
+        },
+        {
+          "model": "WebShopConfigModel",
+          "current_default_file": "facts/review_20261116/public_current_config_3129/defaults/WebShopConfigModel.json",
+          "resource_path": "defaultconfigs/webshopconfigmodel",
+          "sha256": "97a57ce9281375f36d0300367a88ce6c79a3d170e47763cde394cbccda8d94d5",
+          "matching_basis": [
+            "gdd/Store.json#/configs",
+            "gdd/Store.json#/sources"
+          ],
+          "scope": "Packaged default3129, not effective server config.",
+          "site_data_path": "data/current_config_3129/defaults/WebShopConfigModel.json",
+          "original_source_sha256": "97a57ce9281375f36d0300367a88ce6c79a3d170e47763cde394cbccda8d94d5",
+          "public_artifact_sha256": "271703f7d5d6bfc1cb4b6ff7fdfabfa471fd95efdc3937c51de57f2caf8e5a1f",
+          "sha256_scope": "sha256 is original raw model; public_artifact_sha256 is the sanitized download"
+        }
+      ],
+      "status": "exact_model_source_association",
+      "distribution": "sanitized_public",
+      "public_mapping_pending": false
+    },
+    "current_packaged_defaults": [
+      {
+        "model": "StoreConfigModelV2",
+        "source": "facts/review_20261116/public_current_config_3129/defaults/StoreConfigModelV2.json",
+        "site_data_path": "data/current_config_3129/defaults/StoreConfigModelV2.json",
+        "public_artifact_sha256": "470709f6b14c05ceda24c2a0c1f409692ce3d033bdeea44eb18cac6a37750ac3",
+        "original_source_sha256": "693f1cd117fbcaae8d70356a801044303fb5d3bd8a54b45d01d3b69c2615d335",
+        "source_class": "static_asset",
+        "build": "0.0.3129 host APK",
+        "scope": "Sanitized packaged default fullvalues only; not effective remote/selected config or runtime.",
+        "values": {
+          "IsEnabled": true,
+          "StoreSpecialBundles": [
+            {
+              "IAPModel": {
+                "ProductId": "sort.starterbundle1",
+                "ProductType": "Consumable",
+                "DollarEquivalent": 0.99
+              },
+              "CoinAmount": 1000,
+              "Rank": 1,
+              "DiscountText": "90% OFF!",
+              "LifeDurationInHours": 1,
+              "ShuffleAmount": 1,
+              "ExtraBottleAmount": 1,
+              "UndoAmount": 1,
+              "HeaderText": "Starter Bundle",
+              "HeaderKey": "ShopBundleStarter",
+              "PictureId": 1
+            }
+          ],
+          "StorePermanentBundles": [
+            {
+              "IAPModel": {
+                "ProductId": "sort.apprenticebundle5",
+                "ProductType": "Consumable",
+                "DollarEquivalent": 4.99
+              },
+              "CoinAmount": 2000,
+              "Rank": 1,
+              "DiscountText": "",
+              "LifeDurationInHours": 3,
+              "ShuffleAmount": 1,
+              "ExtraBottleAmount": 1,
+              "UndoAmount": 1,
+              "HeaderText": "Apprentice Bundle",
+              "HeaderKey": "ShopBundleApprentice",
+              "PictureId": 2,
+              "IsPopular": false,
+              "IsBest": false,
+              "ShouldCloseAds": false
+            },
+            {
+              "IAPModel": {
+                "ProductId": "sort.magicianbundle10",
+                "ProductType": "Consumable",
+                "DollarEquivalent": 9.99
+              },
+              "CoinAmount": 4000,
+              "Rank": 2,
+              "DiscountText": "",
+              "LifeDurationInHours": 6,
+              "ShuffleAmount": 3,
+              "ExtraBottleAmount": 3,
+              "UndoAmount": 3,
+              "HeaderText": "Magician Bundle",
+              "HeaderKey": "ShopBundleMagician",
+              "PictureId": 3,
+              "IsPopular": false,
+              "IsBest": false,
+              "ShouldCloseAds": false
+            },
+            {
+              "IAPModel": {
+                "ProductId": "sort.sorcererbundle20",
+                "ProductType": "Consumable",
+                "DollarEquivalent": 19.99
+              },
+              "CoinAmount": 8000,
+              "Rank": 3,
+              "DiscountText": "",
+              "LifeDurationInHours": 12,
+              "ShuffleAmount": 8,
+              "ExtraBottleAmount": 8,
+              "UndoAmount": 8,
+              "HeaderText": "Sorcerer Bundle",
+              "HeaderKey": "ShopBundleSorcerer",
+              "PictureId": 4,
+              "IsPopular": true,
+              "IsBest": false,
+              "ShouldCloseAds": true
+            },
+            {
+              "IAPModel": {
+                "ProductId": "sort.magebundle50",
+                "ProductType": "Consumable",
+                "DollarEquivalent": 49.99
+              },
+              "CoinAmount": 20000,
+              "Rank": 4,
+              "DiscountText": "",
+              "LifeDurationInHours": 36,
+              "ShuffleAmount": 18,
+              "ExtraBottleAmount": 18,
+              "UndoAmount": 18,
+              "HeaderText": "Mage Bundle",
+              "HeaderKey": "ShopBundleMage",
+              "PictureId": 5,
+              "IsPopular": false,
+              "IsBest": false,
+              "ShouldCloseAds": true
+            },
+            {
+              "IAPModel": {
+                "ProductId": "sort.wizardbundle100",
+                "ProductType": "Consumable",
+                "DollarEquivalent": 99.99
+              },
+              "CoinAmount": 60000,
+              "Rank": 5,
+              "DiscountText": "",
+              "LifeDurationInHours": 72,
+              "ShuffleAmount": 36,
+              "ExtraBottleAmount": 36,
+              "UndoAmount": 36,
+              "HeaderText": "Wizard Bundle",
+              "HeaderKey": "ShopBundleWizard",
+              "PictureId": 6,
+              "IsPopular": false,
+              "IsBest": true,
+              "ShouldCloseAds": true
+            }
+          ],
+          "StoreBundles": [
+            {
+              "IAPModel": {
+                "ProductId": "sort.coins2",
+                "ProductType": "Consumable",
+                "DollarEquivalent": 1.99
+              },
+              "CoinAmount": 1000,
+              "Rank": 1,
+              "PictureId": 0
+            },
+            {
+              "IAPModel": {
+                "ProductId": "sort.coins8",
+                "ProductType": "Consumable",
+                "DollarEquivalent": 7.99
+              },
+              "CoinAmount": 5000,
+              "Rank": 2,
+              "PictureId": 1
+            },
+            {
+              "IAPModel": {
+                "ProductId": "sort.coins15",
+                "ProductType": "Consumable",
+                "DollarEquivalent": 14.99
+              },
+              "CoinAmount": 10000,
+              "Rank": 3,
+              "PictureId": 2
+            },
+            {
+              "IAPModel": {
+                "ProductId": "sort.coins30",
+                "ProductType": "Consumable",
+                "DollarEquivalent": 29.99
+              },
+              "CoinAmount": 25000,
+              "Rank": 4,
+              "PictureId": 3
+            },
+            {
+              "IAPModel": {
+                "ProductId": "sort.coins55",
+                "ProductType": "Consumable",
+                "DollarEquivalent": 54.99
+              },
+              "CoinAmount": 50000,
+              "Rank": 5,
+              "PictureId": 4
+            },
+            {
+              "IAPModel": {
+                "ProductId": "sort.coins100",
+                "ProductType": "Consumable",
+                "DollarEquivalent": 99.99
+              },
+              "CoinAmount": 100000,
+              "Rank": 6,
+              "PictureId": 5
+            }
+          ]
+        }
+      },
+      {
+        "model": "StoreConfigModelV3",
+        "source": "facts/review_20261116/public_current_config_3129/defaults/StoreConfigModelV3.json",
+        "site_data_path": "data/current_config_3129/defaults/StoreConfigModelV3.json",
+        "public_artifact_sha256": "f6e0a83f3d301393da213836701ceef0feeb8676d5f6b849bf2ae515ac42e617",
+        "original_source_sha256": "586a8a98ab98faf1316da41f295cc5df3aeedef7b1cb0744145f8e959d772f38",
+        "source_class": "static_asset",
+        "build": "0.0.3129 host APK",
+        "scope": "Sanitized packaged default fullvalues only; not effective remote/selected config or runtime.",
+        "values": {
+          "IsEnabled": false
+        }
+      },
+      {
+        "model": "WebShopConfigModel",
+        "source": "facts/review_20261116/public_current_config_3129/defaults/WebShopConfigModel.json",
+        "site_data_path": "data/current_config_3129/defaults/WebShopConfigModel.json",
+        "public_artifact_sha256": "271703f7d5d6bfc1cb4b6ff7fdfabfa471fd95efdc3937c51de57f2caf8e5a1f",
+        "original_source_sha256": "97a57ce9281375f36d0300367a88ce6c79a3d170e47763cde394cbccda8d94d5",
+        "source_class": "static_asset",
+        "build": "0.0.3129 host APK",
+        "scope": "Sanitized packaged default fullvalues only; not effective remote/selected config or runtime.",
+        "values": {
+          "IsEnabled": false,
+          "FirstLevelToShow": 5000,
+          "ClientKey": "[REDACTED_CLIENT_KEY]",
+          "Products": [
+            {
+              "ProductId": "sort.special1",
+              "WebProductId": "sort.special1",
+              "Price": 0.99,
+              "Reward": {
+                "CurrencyType": 1,
+                "Amount": 250
+              }
+            },
+            {
+              "ProductId": "sort.special3",
+              "WebProductId": "sort.special3",
+              "Price": 2.69,
+              "DiscountPercent": 10
+            },
+            {
+              "ProductId": "sort.special4.99",
+              "WebProductId": "sort.special4.99",
+              "Price": 4.99,
+              "Reward": {
+                "CurrencyType": 1,
+                "Amount": 500
+              }
+            },
+            {
+              "ProductId": "sort.special5",
+              "WebProductId": "sort.special5",
+              "Price": 4.49,
+              "DiscountPercent": 10
+            },
+            {
+              "ProductId": "sort.special10",
+              "WebProductId": "sort.special10",
+              "Price": 9.99,
+              "Reward": {
+                "CurrencyType": 1,
+                "Amount": 1000
+              }
+            },
+            {
+              "ProductId": "sort.special20",
+              "WebProductId": "sort.special20",
+              "Price": 17.99,
+              "DiscountPercent": 10
+            },
+            {
+              "ProductId": "sort.special40",
+              "WebProductId": "sort.special40",
+              "Price": 35.99,
+              "DiscountPercent": 10
+            },
+            {
+              "ProductId": "sort.special50",
+              "WebProductId": "sort.special50",
+              "Price": 44.99,
+              "DiscountPercent": 10
+            },
+            {
+              "ProductId": "sort.special80",
+              "WebProductId": "sort.special80",
+              "Price": 71.99,
+              "DiscountPercent": 10
+            },
+            {
+              "ProductId": "sort.special100",
+              "WebProductId": "sort.special100",
+              "Price": 89.99,
+              "DiscountPercent": 10
+            }
+          ]
+        }
+      }
+    ],
+    "native_finding_ids": [],
+    "documentation_source_coverage": {
+      "dossier_present": true,
+      "use_case_catalog_count": 18,
+      "config_catalog_rows": 358,
+      "current_apk_default_model_links": 3,
+      "current_native_findings": 0,
+      "scope": "Documentation/source coverage only; not complete runtime verification."
+    },
+    "runtime_completion": {
+      "date": "2026-11-16",
+      "status": "device_unavailable",
+      "executed_case_count": 0,
+      "full_feature_runtime_verified": false
+    },
+    "planned_branch": "Cuộn chụp đủ Magician và Sorcerer, các hàng ngang, Daily Bonus/MagicPass nếu có; ghi toàn bộ item, số lượng, giá và nút.",
+    "target_uc_ids": [
+      "UC-02",
+      "UC-10",
+      "UC-16"
+    ],
+    "execution_phase": "noncore_first",
+    "core_or_levels_last": false,
+    "actionability_full_json": "facts/continuation_20261116/current/feature_actionability.json",
+    "actionability_site_data_path": "data/continuation_20261116/feature_actionability.json",
+    "source_classes": [
+      "static_asset"
+    ],
+    "full_feature_verified": false
+  }
+}

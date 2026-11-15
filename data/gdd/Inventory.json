@@ -1,0 +1,1631 @@
+{
+  "id": "Inventory",
+  "name": "Kho đồ & tiền tệ",
+  "category": "Economy",
+  "managers": [
+    "Modules.Contexts.Application.Inventory.Scripts.InventoryService",
+    "Modules.Contexts.Application.Reward.Scripts.RewardService",
+    "Modules.Contexts.Application.Reward.Scripts.OrderedRewardAnimationService",
+    "Modules.Contexts.Application.Reward.Scripts.BulkRewardAnimationService"
+  ],
+  "summary": "InventoryService là sổ cái duy nhất cho mọi thứ người chơi sở hữu: coin, mạng (Life), ba booster cơ bản (Undo, Shuffle, ExtraBottle) cùng các booster mở rộng (MegaShuffle, Reveal), vé/đồng xu sự kiện (DuckMultiplier, MiniGameTrident, WheelOfFortuneCurrency, MergeMiniGameEnergy), rương, gói thẻ sưu tập, token hồ sơ và quyền NoAds. Một CurrencyType có thể tồn tại ở ba dạng: theo số lượng (amount), theo thời hạn có giới hạn (timed) và theo thời hạn không giới hạn dùng (limitless — ví dụ mạng vô hạn). Điểm thiết kế quan trọng là hệ 'pending': phần thưởng được ghi nhận trước ở dạng chờ rồi mới 'apply' khi animation chạy xong, nhờ đó UI luôn khớp với số dư thật và người chơi không bị mất thưởng nếu thoát giữa chừng. Mạng hồi theo thời gian bằng một mốc LifeFillDate thay vì bộ đếm, tính theo mốc UTC; chỉ dùng UTC không đủ chứng minh chống chỉnh đồng hồ thiết bị. RewardService điều phối việc trao thưởng với ba kiểu trình diễn: trao thẳng, hàng đợi tuần tự (bay từng món về ô tiền tệ) và hàng đợi gộp (popup phần thưởng lớn).",
+  "unlock": "Có từ đầu game. Số dư khởi tạo và mốc mở khoá booster lấy từ Firebase Remote Config key 'GameEconomyModel': InitialCoin, InitialUndoAmount, InitialShuffleAmount, InitialExtraBottleAmount, InitialFourthBoosterAmount và UndoUnlockAtLevel / ShuffleUnlockAtLevel / ExtraBottleUnlockAtLevel; InventoryService.InitializeForNewDownload() áp các giá trị này cho tài khoản mới và GiveFourthBoosterIfEnabled(amount) cấp booster thứ tư khi bật.",
+  "entry_points": [
+    "Thanh tiền tệ ở Home (CurrencyDisplayerController)",
+    "Popup More Lives / Refill (localize 'RefillPopupTitle', 'Refill')",
+    "Nút booster trong màn chơi (BoosterManager.TryUseBooster)",
+    "Popup Play On khi thua (localize 'PlayOn', 'StuckAreYouSurePlayOn1')",
+    "Mọi nguồn thưởng: rương, sự kiện, cửa hàng, Teams, Referral (CurrencyEarnReason có 61 giá trị)"
+  ],
+  "flow": "InventoryService nạp InventoryModel qua ISaveLoad và đăng ký ISyncable (sync name 'InventoryModel'). Mọi số dư nằm trong các Dictionary khoá bằng (int)CurrencyType: CurrencyAmountByType, TimedCurrencyEndDateByType, LimitlessCurrencyEndDateByType, cùng ba dictionary 'pending' tương ứng và PendingCollectionPackAmountByType. Khi có thưởng, RewardService.QueueReward/QueueRewards đẩy vào OrderedRewardQueue hoặc QueueBulkReward(s) vào BulkRewardQueue; PendRewards(rewards) gọi InventoryService.Pending(currencyType, amount|timeSpan) để cộng vào phần chờ. Animation chạy: OrderedRewardAnimationService.PlayRewardAnimationAndEarnOnAnimationComplete(rewardModel, initialPosition) tách một phần thưởng lớn thành nhiều icon nhỏ (GetRewardsAmountsForCoins / GetRewardsAmountsForBoosters), bay từ vị trí xuất phát tới CurrencyRewardTarget của loại tiền tương ứng rồi mới ApplyPending → Earn. Với thưởng lớn, BulkRewardAnimationService.ShowRewards(rewards, currencyEarnReason) mở popup nền mờ, RevealRewards() lộ từng món, người chơi bấm Continue → OnClaimMoveCurrencies() → GatherRewards() gom về ô tiền; MapRewardToViewCount() giới hạn số icon hiển thị khi số lượng lớn, GetDynamicRewardPositions(count, maxWidth = 6, maxHeight = 6) tự xếp lưới. Gói thẻ sưu tập có nhánh riêng (StartCollectionPackOpeningSequence, PlayActiveCardPackOpenSequence, nút Claim Cards và Skip). Tiêu dùng: InventoryService.Spend(currencySpendReason, currencyType, amount) sau khi DoesEnoughVisibleCurrency() xác nhận đủ; BoosterManager.TryUseBooster(currencyType) kiểm tra CanUseBooster rồi UseBooster. Mạng: GetSecondsToFillOneLife() lấy hiệu giữa LifeFillDate và DateTime.UtcNow chia dư cho GameEconomyModel.RefillDurationAsMinutes × 60; GetMaxLifeAmount() trả GameEconomyModel.MaxLifeAmount, hoặc GetMagicPassMaxLifeAmount() khi IsMagicPassActive(); UpdateLifeFilledNotification() hẹn/huỷ thông báo mạng đầy qua NotificationService. Mọi thay đổi gọi MarkDataForLateUpdate(), LateUpdate() lưu và SyncService đẩy lên server.",
+  "use_cases": [
+    {
+      "id": "UC-01",
+      "title": "Khởi tạo kho đồ cho tài khoản mới",
+      "actor": "System",
+      "trigger": "Cài mới hoặc InitializeForNewDownload",
+      "precondition": "-",
+      "steps": [
+        "InventoryService.InitializeForNewDownload() đọc GameEconomyModel",
+        "Cấp InitialCoin, InitialUndoAmount, InitialShuffleAmount, InitialExtraBottleAmount",
+        "GiveFourthBoosterIfEnabled(InitialFourthBoosterAmount) nếu booster thứ tư bật",
+        "Mạng đặt đầy theo MaxLifeAmount"
+      ],
+      "result": "Người chơi mới có sẵn coin và booster để học cách dùng",
+      "rules": "Giá trị đều từ remote config nên chỉnh được không cần cập nhật app",
+      "evidence": "InventoryService.InitializeForNewDownload; InventoryService.GiveFourthBoosterIfEnabled; GameEconomyModel.InitialCoin"
+    },
+    {
+      "id": "UC-02",
+      "title": "Nhận thưởng bay về ô tiền tệ (tuần tự)",
+      "actor": "System",
+      "trigger": "Thắng level, mở rương nhỏ, nhận quà lẻ",
+      "precondition": "-",
+      "steps": [
+        "RewardService.QueueReward(currencyEarnReason, reward) đưa vào OrderedRewardQueue",
+        "PendReward(reward) → InventoryService.Pending(currencyType, amount)",
+        "GiveNextReward() / GiveNextRewardFromPosition(position) chạy OrderedRewardAnimationService.PlayRewardAnimationAndEarnOnAnimationComplete",
+        "GetRewardsAmountsForCoins(amount) chia thành nhiều icon coin bay riêng",
+        "Animation xong → ApplyPending(currencyType, amount) → Earn(currencyType, amount)",
+        "GiveRegularLevelCoinRewards() / GiveDailyLevelCoinRewards() là hai lối tắt cho thưởng coin cuối màn"
+      ],
+      "result": "Số dư trên thanh tăng đúng lúc icon chạm ô, cảm giác thoả mãn",
+      "rules": "CurrencyRewardTarget cho từng CurrencyType đăng ký qua OnCurrencyDisplayerActiveSignal/OnCurrencyDisplayerDeactiveSignal nên nếu ô không hiển thị thì thưởng vẫn được cộng",
+      "evidence": "RewardService.QueueReward; RewardService.GiveNextReward; OrderedRewardAnimationService.PlayRewardAnimationAndEarnOnAnimationComplete; OrderedRewardAnimationService.GetRewardsAmountsForCoins; InventoryService.ApplyPending"
+    },
+    {
+      "id": "UC-03",
+      "title": "Popup phần thưởng lớn (bulk)",
+      "actor": "Player",
+      "trigger": "Hoàn thành sự kiện, mở rương lớn, nhận thưởng giải",
+      "precondition": "HasBulkRewardByCurrencyEarnReason(currencyEarnReason) = true",
+      "steps": [
+        "RewardService.QueueBulkRewards(currencyEarnReason, rewardModels) rồi GiveBulkRewards(currencyEarnReason)",
+        "BulkRewardAnimationService.ShowRewards(rewards, currencyEarnReason): FadeInBackground(), SetTextAccordingToCurrencyEarnReason() đặt tiêu đề theo nguồn thưởng",
+        "RevealRewards() lộ từng món; SetRewardPositions()/SetDynamicRewardPositions() xếp lưới (GetDynamicRewardPositions với maxWidth = 6, maxHeight = 6)",
+        "MapRewardToViewCount(rewardCount, minReward, maxReward, minViewCount, maxViewCount) giới hạn số icon khi số lượng lớn",
+        "Bấm Continue → OnContinueButtonDown() → OnClaimMoveCurrencies() → GatherRewards() bay về ô tiền",
+        "GiveBulkRewardsCombined(currencyEarnReason) gộp nhiều nguồn vào một popup"
+      ],
+      "result": "Một popup duy nhất trình bày trọn gói phần thưởng rồi mới cộng vào kho",
+      "rules": "_claimCompletionSource cho luồng gọi await tới khi người chơi bấm nhận; BulkRewardAnimationConfig.asset và BulkRewardCurrencyViewFactory.asset điều khiển hình thức",
+      "evidence": "RewardService.GiveBulkRewards; BulkRewardAnimationService.ShowRewards; BulkRewardAnimationService.RevealRewards; BulkRewardAnimationService.GatherRewards; BulkRewardAnimationService.MapRewardToViewCount"
+    },
+    {
+      "id": "UC-04",
+      "title": "Mở gói thẻ sưu tập trong popup thưởng",
+      "actor": "Player",
+      "trigger": "Phần thưởng chứa CollectionPack",
+      "precondition": "-",
+      "steps": [
+        "InventoryService.PendingCollectionPack(packType, amount) ghi vào PendingCollectionPackAmountByType",
+        "BulkRewardAnimationService.UpdateOpenedCardPacks(currencyEarnReason) chuẩn bị _openedCardPacks",
+        "StartCollectionPackOpeningSequence() và PlayActiveCardPackOpenSequence() mở từng gói theo _activeCardPackIndex",
+        "Nút Claim Cards (OnClaimCardsButtonDown) hoặc Skip (OnSkipButtonDown) để bỏ qua animation",
+        "ApplyPendingCollectionPack(packType, amount) chốt vào CollectionService"
+      ],
+      "result": "Thẻ mới vào bộ sưu tập với hiệu ứng mở gói",
+      "rules": "GetPendingCollectionPack(packType) cho biết còn gói nào chưa mở",
+      "evidence": "InventoryService.PendingCollectionPack; InventoryService.ApplyPendingCollectionPack; BulkRewardAnimationService.StartCollectionPackOpeningSequence; BulkRewardAnimationService.OnClaimCardsButtonDown"
+    },
+    {
+      "id": "UC-05",
+      "title": "Trao thưởng thẳng không animation",
+      "actor": "System",
+      "trigger": "Thưởng nền hoặc bù trừ (compensation)",
+      "precondition": "-",
+      "steps": [
+        "RewardService.GiveDirectlyReward(currencyEarnReason, reward) hoặc GiveDirectlyRewards(...) ",
+        "Gọi thẳng InventoryService.Earn(currencyType, amount|timeSpan)"
+      ],
+      "result": "Số dư tăng ngay, không chặn luồng người chơi",
+      "rules": "Dùng cho CurrencyEarnReason.Compensation, WebShopBonus và các trường hợp nền",
+      "evidence": "RewardService.GiveDirectlyReward; RewardService.GiveDirectlyRewards; InventoryService.Earn"
+    },
+    {
+      "id": "UC-06",
+      "title": "Mạng hồi theo thời gian",
+      "actor": "System",
+      "trigger": "Thời gian trôi (kể cả offline)",
+      "precondition": "Mạng < GetMaxLifeAmount()",
+      "steps": [
+        "InventoryService.GetSecondsToFillOneLife() lấy hiệu (LifeFillDate − DateTime.UtcNow) rồi chia dư cho RefillDurationAsMinutes × 60",
+        "GetVisibleCurrencyAmountByType(CurrencyType.Life) suy ra số mạng hiện có từ mốc LifeFillDate",
+        "UpdateLifeFilledNotification() hẹn thông báo mạng đầy hoặc huỷ nếu không cần"
+      ],
+      "result": "Đồng hồ đếm ngược trên thanh mạng và thông báo khi đầy",
+      "rules": "Code dùng UtcNow; khả năng chống chỉnh giờ chưa được chứng minh bằng riêng API thời gian này; RefillDurationAsMinutes và MaxLifeAmount từ remote config",
+      "evidence": "InventoryService.GetSecondsToFillOneLife; InventoryService.UpdateLifeFilledNotification; InventoryService.GetMaxLifeAmount; InventoryModel.LifeFillDate"
+    },
+    {
+      "id": "UC-07",
+      "title": "Mạng tối đa tăng khi có Magic Pass",
+      "actor": "System",
+      "trigger": "Kích hoạt Magic Pass",
+      "precondition": "IsMagicPassActive() = true",
+      "steps": [
+        "InventoryService.GetMaxLifeAmount() kiểm tra IsMagicPassActive()",
+        "Có pass → trả GetMagicPassMaxLifeAmount() (giá trị từ MagicPassService)",
+        "Không có → trả GameEconomyModel.MaxLifeAmount"
+      ],
+      "result": "Người mua pass giữ được nhiều mạng hơn",
+      "rules": "Cùng cơ chế với giới hạn mạng chuẩn, chỉ đổi trần",
+      "evidence": "InventoryService.GetMaxLifeAmount; InventoryService.IsMagicPassActive; InventoryService.GetMagicPassMaxLifeAmount"
+    },
+    {
+      "id": "UC-08",
+      "title": "Mua đầy mạng bằng coin (Refill)",
+      "actor": "Player",
+      "trigger": "Bấm Refill trong popup More Lives ('RefillPopupTitle', 'Refill')",
+      "precondition": "DoesEnoughVisibleCurrency(CurrencyType.Coin, RefillPrice)",
+      "steps": [
+        "InventoryService.Spend(CurrencySpendReason.Refill, CurrencyType.Coin, GameEconomyModel.RefillPrice)",
+        "Earn(CurrencyType.Life, MaxLifeAmount) hoặc đặt lại LifeFillDate",
+        "Analytics 'virtual_resource_transaction'"
+      ],
+      "result": "Mạng đầy ngay, coin trừ tương ứng",
+      "rules": "RefillPrice từ remote config; localize 'RefillPopupWarning' = \"Time to next life\"",
+      "evidence": "InventoryService.Spend; InventoryService.DoesEnoughVisibleCurrency; GameEconomyModel.RefillPrice; CurrencySpendReason.Refill"
+    },
+    {
+      "id": "UC-09",
+      "title": "Mạng vô hạn theo thời gian (limitless)",
+      "actor": "Player",
+      "trigger": "Nhận thưởng dạng thời lượng (pass, offer, sự kiện)",
+      "precondition": "CanHasLimitlessCurrencyByType(CurrencyType.Life)",
+      "steps": [
+        "Earn(CurrencyType.Life, TimeSpan) → EarnLimitless(currencyType, timeSpan) cộng dồn vào LimitlessCurrencyEndDateByType",
+        "HasVisibleLimitlessCurrencyByType(Life) = true khi hạn còn",
+        "GetVisibleLimitlessCurrencyEndDateByType(Life) cho UI đếm ngược",
+        "ResetLimitlessCurrencyEndDateByType(Life) khi hết hạn hoặc bị thu hồi"
+      ],
+      "result": "Không tốn mạng khi vào level trong suốt thời gian còn hạn",
+      "rules": "RewardModel.IsDurationBased() phân biệt thưởng theo thời lượng với thưởng theo số lượng. Có nhánh song song EarnTimed/PendingTimed cho tiền tệ 'có hạn dùng' khác",
+      "evidence": "InventoryService.EarnLimitless; InventoryService.HasVisibleLimitlessCurrencyByType; InventoryService.GetVisibleLimitlessCurrencyEndDateByType; InventoryService.ResetLimitlessCurrencyEndDateByType; RewardModel.IsDurationBased"
+    },
+    {
+      "id": "UC-10",
+      "title": "Dùng booster trong màn chơi",
+      "actor": "Player",
+      "trigger": "Bấm nút Undo / Shuffle / ExtraBottle / MegaShuffle / Reveal",
+      "precondition": "CanUseBooster(currencyType) và điều kiện bàn chơi cho phép",
+      "steps": [
+        "BoosterManager.TryUseBooster(currencyType) kiểm tra CanUseBooster và IsBoardStopped()",
+        "Điều kiện riêng: CanUseUndo(), CanUseShuffleOrReveal() + HasBottleCanShuffle()/HasBottleCanReveal(), CanUseExtraBottleBooster(), CanUseMegaShuffle()",
+        "UseBooster(currencyType) → InventoryService.Spend(CurrencySpendReason.Boosters, currencyType, 1)",
+        "Thực thi: Undo(), UseShuffleBooster(selectedBottle), UseRevealBooster(selectedBottle), AddExtraBottle(), UseMegaShuffle()",
+        "Analytics 'booster_used' kèm 'booster_type'"
+      ],
+      "result": "Hiệu ứng booster áp lên bàn chơi và trừ 1 lượt",
+      "rules": "Hết booster thì mua bằng coin theo GameEconomyModel: UndoPrice, ShufflePrice, ExtraBottlePrice, MegaShufflePrice, RevealPrice (GetPriceByCurrency(currencyType)); analytics 'booster_purchased' + 'booster_price'",
+      "evidence": "BoosterManager.TryUseBooster; BoosterManager.UseBooster; BoosterManager.CanUseMegaShuffle; InventoryService.Spend; GameEconomyModel.GetPriceByCurrency"
+    },
+    {
+      "id": "UC-11",
+      "title": "Giới thiệu booster mới theo level",
+      "actor": "System",
+      "trigger": "Đạt level mở khoá booster",
+      "precondition": "-",
+      "steps": [
+        "BoosterManager.TryIntroduceNewBooster() so level với GameEconomyModel.UndoUnlockAtLevel / ShuffleUnlockAtLevel / ExtraBottleUnlockAtLevel",
+        "ShouldShowRevealTutorial() → StartRevealTutorial(); ShouldShowMegaShuffleTutorial() → StartMegaShuffleTutorial()",
+        "PlayerService.IsMegaShuffleIntroduced() / IsRevealIntroduced() ghi nhớ đã dạy",
+        "Localize hướng dẫn: 'GameBoosterShuffleInfo', 'GameBoosterRevealInfo', 'MegaShuffleTitle', 'RevealTitle'"
+      ],
+      "result": "Người chơi được dạy từng booster đúng thời điểm",
+      "rules": "PlayerService.SetMegaShuffleIntroduced()/SetRevealIntroduced() và các hàm Reset… cho phép dạy lại khi cần",
+      "evidence": "BoosterManager.TryIntroduceNewBooster; BoosterManager.ShouldShowRevealTutorial; PlayerService.IsMegaShuffleIntroduced; PlayerService.SetRevealIntroduced; GameEconomyModel.UndoUnlockAtLevel"
+    },
+    {
+      "id": "UC-12",
+      "title": "Chơi tiếp (Play On) khi thua",
+      "actor": "Player",
+      "trigger": "Hết nước / kẹt bàn",
+      "precondition": "Đủ coin theo bậc giá",
+      "steps": [
+        "Giá tăng dần theo lần dùng trong màn: GameEconomyModel.PlayOnPrice → SecondPlayOnPrice → ThirdSecondPlayOnPrice (hoặc bảng PlayOnConfigModels)",
+        "IsFirstPlayOnFree = true thì lần đầu miễn phí",
+        "InventoryService.GrantSingleUseFreePlayOn() cấp một lượt Play On miễn phí (_hasSingleUseFreePlayOn); HasFreePlayOn() kiểm tra, UseFreePlayOn() tiêu, ResetFreePlayOn() dọn",
+        "Nếu phải trả: Spend(CurrencySpendReason.PlayOn, CurrencyType.Coin, price)",
+        "InventoryModel.UsedPlayOnForFree ghi nhận đã dùng lượt miễn phí"
+      ],
+      "result": "Người chơi tiếp tục màn thay vì mất mạng",
+      "rules": "Localize 'PlayOn', 'StuckAreYouSurePlayOn1' = \"+1 Play On\", 'MagicPassOfferPlayOn'. PlayOnWithRewardedService cho phép xem quảng cáo thay vì trả coin",
+      "evidence": "InventoryService.GrantSingleUseFreePlayOn; InventoryService.HasFreePlayOn; InventoryService.UseFreePlayOn; GameEconomyModel.PlayOnPrice; GameEconomyModel.IsFirstPlayOnFree; InventoryModel.UsedPlayOnForFree"
+    },
+    {
+      "id": "UC-13",
+      "title": "Tạo đội tốn coin",
+      "actor": "Player",
+      "trigger": "Tạo đội mới",
+      "precondition": "Đủ coin",
+      "steps": [
+        "TeamsService.GetTeamCreateCost() cho giá",
+        "InventoryService.Spend(CurrencySpendReason.TeamCreate, CurrencyType.Coin, cost)"
+      ],
+      "result": "Coin trừ, đội được tạo",
+      "rules": "CurrencySpendReason chỉ có 6 giá trị: None=0, Boosters=1, Refill=2, PlayOn=3, TeamCreate=4, MergeMiniGame=5 — tức toàn bộ đầu ra của coin chỉ gồm booster, refill, play on, tạo đội và mini game merge",
+      "evidence": "InventoryService.Spend; CurrencySpendReason.TeamCreate; TeamsService.GetTeamCreateCost"
+    },
+    {
+      "id": "UC-14",
+      "title": "Áp toàn bộ phần thưởng đang chờ",
+      "actor": "System",
+      "trigger": "Rời màn hình giữa lúc animation chưa xong, hoặc mở lại game",
+      "precondition": "Có mục pending",
+      "steps": [
+        "InventoryService.ApplyAllPending() duyệt PendingCurrencyAmountByType, PendingTimedCurrencyByType, PendingLimitlessCurrencyByType",
+        "Cộng hết vào số dư thật rồi dọn danh sách chờ",
+        "RewardService.ResetAllRewards() dọn hàng đợi hiển thị"
+      ],
+      "result": "Không mất thưởng dù thoát giữa chừng",
+      "rules": "GetCurrencyAmountByTypeIncludingPending / GetLimitlessCurrencyEndDateByTypeIncludingPending cho phép logic khác tính cả phần chờ",
+      "evidence": "InventoryService.ApplyAllPending; InventoryService.GetCurrencyAmountByTypeIncludingPending; RewardService.ResetAllRewards"
+    },
+    {
+      "id": "UC-15",
+      "title": "Kiểm tra đủ tiền trước khi tiêu",
+      "actor": "System",
+      "trigger": "Bấm mua bất kỳ",
+      "precondition": "-",
+      "steps": [
+        "InventoryService.DoesEnoughVisibleCurrency(currencyType, amount)",
+        "Không đủ → mở cửa hàng hoặc offer tương ứng"
+      ],
+      "result": "Không bao giờ để số dư âm",
+      "rules": "'Visible' là số dư đã chốt, không tính phần pending — tránh cho phép tiêu tiền chưa nhận xong",
+      "evidence": "InventoryService.DoesEnoughVisibleCurrency; InventoryService.GetVisibleCurrencyAmountByType"
+    },
+    {
+      "id": "UC-16",
+      "title": "Gửi sự kiện khi tiêu đủ nhiều coin",
+      "actor": "System",
+      "trigger": "Counter attribution tiêu coin vượt ngưỡng khi SpendEventSent còn false",
+      "precondition": "InventoryModel.SpendEventSent = false",
+      "steps": [
+        "Chỉ khi SpendEventSent=false, CheckCanSendEventForSpendCoin(amount) mới cộng amount vào SpendCoin; true thì trả về không cộng tiếp",
+        "Khi SpendCoin > 1899 (0x76b) thì đặt SpendEventSent = true và gửi sự kiện qua AdjustStatSender",
+        "MarkDataForLateUpdate() để lưu cờ"
+      ],
+      "result": "Một sự kiện attribution/predictive bắn đúng một lần cho mỗi người chơi",
+      "rules": "Ngưỡng >1899 coin (0x76b), sau đó SpendEventSent=true chặn cộng tiếp. SpendCoin không phải tổng chi lifetime. Snapshot10/10 giữ2700,true trong khi coin Daily giảm900; nhất quán với gate trong pseudo-C0.0.3063.",
+      "evidence": "InventoryService.CheckCanSendEventForSpendCoin; InventoryModel.SpendCoin; InventoryModel.SpendEventSent"
+    },
+    {
+      "id": "UC-17",
+      "title": "Đồng bộ kho đồ theo tài khoản",
+      "actor": "System",
+      "trigger": "SyncService chạy hoặc số dư đổi",
+      "precondition": "-",
+      "steps": [
+        "MarkDataForLateUpdate() → LateUpdate() lưu qua ISaveLoad<InventoryModel>",
+        "SerializeModelForSync() với GetSyncName() = \"InventoryModel\"",
+        "OverwriteModelFromSync(data) khi đăng nhập máy khác",
+        "DeleteData() (IDeletable) xoá khi xoá tài khoản"
+      ],
+      "result": "Coin, booster và mạng theo tài khoản chứ không theo thiết bị",
+      "rules": "IsDataChangedSinceLastSave()/DataSynced() quản lý cờ bẩn",
+      "evidence": "InventoryService.SerializeModelForSync; InventoryService.GetSyncName; InventoryService.OverwriteModelFromSync; InventoryService.DeleteData"
+    },
+    {
+      "id": "UC-18",
+      "title": "Gửi số dư kèm mọi sự kiện analytics",
+      "actor": "System",
+      "trigger": "Bắn bất kỳ sự kiện nào",
+      "precondition": "-",
+      "steps": [
+        "InventoryParametersProvider.SetInventoryService(inventoryService)",
+        "GetInventoryParameters() trả Dictionary với các khoá 'coin_inventory', 'life_inventory', 'limitless_life_duration_inventory', 'undo_inventory', 'shuffle_inventory', 'extra_bottle_inventory'",
+        "GetLifeAmount() và GetLimitlessLifeDuration() lấy giá trị hiện thời",
+        "GetParameterCount() cho biết số tham số"
+      ],
+      "result": "Mọi sự kiện đều mang ảnh cắt số dư, phục vụ phân tích kinh tế",
+      "rules": "EventSender còn có 'trident_inventory', 'vault_inventory', 'map_inventory', 'additional_life_inventory'",
+      "evidence": "InventoryParametersProvider.GetInventoryParameters; InventoryParametersProvider.GetLifeAmount; InventoryParametersProvider.GetLimitlessLifeDuration"
+    },
+    {
+      "id": "UC-19",
+      "title": "Nhận mạng miễn phí từ đồng đội",
+      "actor": "System",
+      "trigger": "Claim trong FreeLivesPopup",
+      "precondition": "-",
+      "steps": [
+        "TeamsService.ClaimFreeLive(messageId, userId)",
+        "InventoryService.Earn(CurrencyType.Life, 1) với CurrencyEarnReason.TeamsFreeLife"
+      ],
+      "result": "Mạng +1 mỗi lượt nhận",
+      "rules": "Các nguồn xã hội khác: TeamCardHelp=37, TeamsHelpSupport=39, Referral=51, FacebookLogin=52",
+      "evidence": "TeamsService.ClaimFreeLive; InventoryService.Earn; CurrencyEarnReason.TeamsFreeLife"
+    },
+    {
+      "id": "UC-20",
+      "title": "Hiển thị rương theo loại",
+      "actor": "System",
+      "trigger": "Phần thưởng chứa CurrencyType.Chest",
+      "precondition": "-",
+      "steps": [
+        "RewardModel.ChestType xác định loại rương",
+        "ChestSpriteConfig tra ChestId → Sprite (33 loại rương trong asset, ChestId 1..33)",
+        "ChestSpriteLibraryModels cung cấp bộ sprite động (Chest1SpriteLibrary … Chest9SpriteLibrary)"
+      ],
+      "result": "Mỗi bậc rương có hình riêng",
+      "rules": "Chest cũng là một CurrencyType (=13) nên đi qua cùng hệ pending/earn",
+      "evidence": "ChestSpriteConfig; RewardModel.ChestType; CurrencyType.Chest; Assets/MonoBehaviour/ChestSpriteConfig.asset"
+    },
+    {
+      "id": "UC-21",
+      "title": "Bỏ quảng cáo (NoAds) như một vật phẩm kho",
+      "actor": "Player",
+      "trigger": "Mua gói NoAds",
+      "precondition": "-",
+      "steps": [
+        "Earn(CurrencyType.NoAds, ...) ghi vào kho (có thể theo thời hạn hoặc vĩnh viễn)",
+        "Các nơi hiện quảng cáo kiểm tra HasVisibleLimitlessCurrencyByType/GetVisibleCurrencyAmountByType(NoAds)"
+      ],
+      "result": "Quảng cáo bắt buộc bị tắt (localize 'noads_title' = Remove ADS, 'noads_description_1/2')",
+      "rules": "NoAds là CurrencyType = 7, dùng chung hạ tầng với mọi vật phẩm khác",
+      "evidence": "CurrencyType.NoAds; InventoryService.HasVisibleLimitlessCurrencyByType; localize noads_title"
+    },
+    {
+      "id": "UC-22",
+      "title": "Tiền tệ riêng của sự kiện",
+      "actor": "System",
+      "trigger": "Tham gia sự kiện có tiền tệ riêng",
+      "precondition": "-",
+      "steps": [
+        "Sự kiện dùng CurrencyType chuyên biệt: DuckMultiplier=16, MiniGameTrident=17, WheelOfFortuneCurrency=20, MergeMiniGameEnergy=21",
+        "Earn/Spend đi qua đúng InventoryService như coin",
+        "MergeMiniGame tiêu năng lượng qua CurrencySpendReason.MergeMiniGame (analytics 'merge_event_spend_energy')"
+      ],
+      "result": "Sự kiện mới chỉ cần thêm một CurrencyType, không cần hệ kho riêng",
+      "rules": "InventoryService giữ tham chiếu MagicLabService và WheelOfFortuneService để đồng bộ tiến độ của hai sự kiện này",
+      "evidence": "CurrencyType.WheelOfFortuneCurrency; CurrencyType.MergeMiniGameEnergy; CurrencySpendReason.MergeMiniGame; InventoryService._wheelOfFortuneService"
+    }
+  ],
+  "configs": [
+    {
+      "source": "code enum",
+      "key": "CurrencyType",
+      "type": "enum int",
+      "value": "None=0, Coin=1, Life=2, Undo=4, Shuffle=5, ExtraBottle=6, NoAds=7, Chest=13, CollectionPack=14, ProfileToken=15, DuckMultiplier=16, MiniGameTrident=17, MegaShuffle=18, Reveal=19, WheelOfFortuneCurrency=20, MergeMiniGameEnergy=21",
+      "meaning": "Mọi loại tài nguyên/vật phẩm (giá trị 3 và 8–12 đã bị bỏ)",
+      "where": "Modules.Contexts.Application.Inventory.Scripts.CurrencyType"
+    },
+    {
+      "source": "code enum",
+      "key": "CurrencySpendReason",
+      "type": "enum int",
+      "value": "None=0, Boosters=1, Refill=2, PlayOn=3, TeamCreate=4, MergeMiniGame=5",
+      "meaning": "Toàn bộ đầu ra của tiền tệ trong game",
+      "where": "CurrencySpendReason"
+    },
+    {
+      "source": "code enum",
+      "key": "CurrencyEarnReason",
+      "type": "enum int",
+      "value": "61 giá trị: None=0, LevelWin=1, HardSuperHardLevel=2, Shop=3, StreakTournament=4, Refill=5, Debugger=6, WeeklyTournament=7, Rewarded2XCoin=8, RewardedOneLife=9, TowerWinStreak=10, MagicStreakTournament=11, JetpackRace=12, SkyJump=13, EndlessPortal=14, DailyLevelWin=15, DailyProgressBarStep=16, SpecialOffer=17, WelcomeBack=18, BroomStreak=19, PawTouchOffer=20, Compensation=21, Journey=22, MagicStreakGae=23, ChampionsLeague=24, JetpackJoinLimitless=25, MagicLab=26, NoAdsOffer=27, JetpackRaceWithStage=28, ChooseOneSpecialOffer=29, DailyReward=30, SkyJumpWithStage=31, WatchAndWin=32, CollectionChest=33, CollectionThemeCompleted=34, CollectionCompleted=35, CollectionActivated=36, TeamCardHelp=37, TeamsFreeLife=38, TeamsHelpSupport=39, TreasureDrill=40, MagicPass=41, MagicPassFinished=42, MagicPassTicketClaim=43, DuckFestival=44, WheelOfFortune=45, TeamArena=46, TeamArenaContribution=47, TeamArenaProgress=48, MiniGameUnderwaterTreasures=49, TeamQuest=50, Referral=51, FacebookLogin=52, MiniGameOffer=53, BoatRushRaceCompleted=54, BoatRushTierCompleted=55, BoatRushJoinLimitless=56, MergeMiniGameCollectibleItem=57, MergeMiniGameStageCompleted=58, MergeMiniGameGrandPrize=59, WebShopBonus=60",
+      "meaning": "Danh mục đầy đủ mọi nguồn thu của người chơi — cũng là bản đồ mọi tính năng phát thưởng trong game",
+      "where": "CurrencyEarnReason"
+    },
+    {
+      "source": "code enum",
+      "key": "EarnReason",
+      "type": "enum int",
+      "value": "None=0, LevelWinCauldron=1, StreakTournament=2, WeeklyTournament=3",
+      "meaning": "Phân loại rút gọn cho một số animation thưởng",
+      "where": "Modules.Contexts.Application.Inventory.Scripts.EarnReason"
+    },
+    {
+      "source": "Default/code0.0.3063 and historical caches20260910/20261010; per-snapshot source/hash in snapshot_values; not effective-runtime proof",
+      "key": "GameEconomyModel.RefillPrice",
+      "type": "int (coin)",
+      "value": "default_0.0.3063: 900; cache_20260910: 900; cache_20261010: 900; firebase_20260910: 900",
+      "meaning": "Giá mua đầy mạng [15/11: giá trị theo snapshot cụ thể; thiếu field khác với false/0. Không xác nhận assignment hoặc effective runtime.]",
+      "where": "Firebase Remote Config key 'GameEconomyModel'",
+      "previous_unresolved_value": "server",
+      "snapshot_values": [
+        {
+          "snapshot": "default_0.0.3063",
+          "model": "GameEconomyModel",
+          "key": "refillPrice",
+          "value": 900,
+          "type": "int",
+          "source": "../com.grandgames.magicsort_Unity_20260909_112501/UnityExport/ExportedProject/Assets/Resources/defaultconfigs/GameEconomyModel.json",
+          "value_type": "int",
+          "source_sha256": "faf7a71fc3818165f8a5eb34c29898d84bda8db5d68afe8b9ad390fbd083c66e",
+          "field_present": true
+        },
+        {
+          "snapshot": "cache_20260910",
+          "model": "gameEconomyModel",
+          "key": "refillPrice",
+          "value": 900,
+          "type": "int",
+          "source": "facts/runtime/server_configs/gameEconomyModel.json",
+          "value_type": "int",
+          "source_sha256": "1f9c3ed2cf7b354b2c4c791432cb9ce28cadc5f2ae8ece878cd98b4db56b1ec9",
+          "field_present": true
+        },
+        {
+          "snapshot": "cache_20261010",
+          "model": "gameEconomyModel",
+          "key": "refillPrice",
+          "value": 900,
+          "type": "int",
+          "source": "facts/runtime/test_20261010/before/CachedRemoteConfigs",
+          "value_type": "int",
+          "source_sha256": "433164d4877b2dee55d2bbd79ef2fe83d3fe9519492fe15e3cb0926daf216050",
+          "field_present": true
+        },
+        {
+          "snapshot": "firebase_20260910",
+          "model": "GameEconomyModel",
+          "key": "refillPrice",
+          "value": 900,
+          "type": "int",
+          "source": "facts/runtime/decoded/firebase_rc.json",
+          "value_type": "int",
+          "source_sha256": "e49f73c0e3854a98c0c27ffae86e6abc7897c767b5f3e82991004c48c4eb45d5",
+          "field_present": true
+        }
+      ],
+      "snapshot_review_id": "MS-CFG-Inventory-0004"
+    },
+    {
+      "source": "remote config",
+      "key": "GameEconomyModel.PlayOnPrice / SecondPlayOnPrice / ThirdSecondPlayOnPrice",
+      "type": "int (coin)",
+      "value": "server",
+      "meaning": "Giá Play On lần 1/2/3 trong cùng một màn",
+      "where": "GameEconomyModel"
+    },
+    {
+      "source": "remote config",
+      "key": "GameEconomyModel.PlayOnConfigModels",
+      "type": "List<PlayOnConfigModel>",
+      "value": "server",
+      "meaning": "Bảng giá Play On chi tiết (thay cho ba trường trên)",
+      "where": "GameEconomyModel"
+    },
+    {
+      "source": "Default/code0.0.3063 and historical caches20260910/20261010; per-snapshot source/hash in snapshot_values; not effective-runtime proof",
+      "key": "GameEconomyModel.IsFirstPlayOnFree",
+      "type": "bool",
+      "value": "default_0.0.3063: false; cache_20260910: false; cache_20261010: false; firebase_20260910: false",
+      "meaning": "Lần Play On đầu tiên miễn phí [15/11: giá trị theo snapshot cụ thể; thiếu field khác với false/0. Không xác nhận assignment hoặc effective runtime.]",
+      "where": "GameEconomyModel",
+      "previous_unresolved_value": "server",
+      "snapshot_values": [
+        {
+          "snapshot": "default_0.0.3063",
+          "model": "GameEconomyModel",
+          "key": "IsFirstPlayOnFree",
+          "value": false,
+          "type": "bool",
+          "source": "../com.grandgames.magicsort_Unity_20260909_112501/UnityExport/ExportedProject/Assets/Resources/defaultconfigs/GameEconomyModel.json",
+          "value_type": "bool",
+          "source_sha256": "faf7a71fc3818165f8a5eb34c29898d84bda8db5d68afe8b9ad390fbd083c66e",
+          "field_present": true
+        },
+        {
+          "snapshot": "cache_20260910",
+          "model": "gameEconomyModel",
+          "key": "isFirstPlayOnFree",
+          "value": false,
+          "type": "bool",
+          "source": "facts/runtime/server_configs/gameEconomyModel.json",
+          "value_type": "bool",
+          "source_sha256": "1f9c3ed2cf7b354b2c4c791432cb9ce28cadc5f2ae8ece878cd98b4db56b1ec9",
+          "field_present": true
+        },
+        {
+          "snapshot": "cache_20261010",
+          "model": "gameEconomyModel",
+          "key": "isFirstPlayOnFree",
+          "value": false,
+          "type": "bool",
+          "source": "facts/runtime/test_20261010/before/CachedRemoteConfigs",
+          "value_type": "bool",
+          "source_sha256": "433164d4877b2dee55d2bbd79ef2fe83d3fe9519492fe15e3cb0926daf216050",
+          "field_present": true
+        },
+        {
+          "snapshot": "firebase_20260910",
+          "model": "GameEconomyModel",
+          "key": "IsFirstPlayOnFree",
+          "value": false,
+          "type": "bool",
+          "source": "facts/runtime/decoded/firebase_rc.json",
+          "value_type": "bool",
+          "source_sha256": "e49f73c0e3854a98c0c27ffae86e6abc7897c767b5f3e82991004c48c4eb45d5",
+          "field_present": true
+        }
+      ],
+      "snapshot_review_id": "MS-CFG-Inventory-0007"
+    },
+    {
+      "source": "Default/code0.0.3063 and historical caches20260910/20261010; per-snapshot source/hash in snapshot_values; not effective-runtime proof",
+      "key": "GameEconomyModel.RefillDurationAsMinutes",
+      "type": "int (phút)",
+      "value": "default_0.0.3063: 30; cache_20260910: 30; cache_20261010: 30; firebase_20260910: 30",
+      "meaning": "Thời gian hồi 1 mạng [15/11: giá trị theo snapshot cụ thể; thiếu field khác với false/0. Không xác nhận assignment hoặc effective runtime.]",
+      "where": "InventoryService.GetSecondsToFillOneLife",
+      "previous_unresolved_value": "server",
+      "snapshot_values": [
+        {
+          "snapshot": "default_0.0.3063",
+          "model": "GameEconomyModel",
+          "key": "refillDurationAsMinutes",
+          "value": 30,
+          "type": "int",
+          "source": "../com.grandgames.magicsort_Unity_20260909_112501/UnityExport/ExportedProject/Assets/Resources/defaultconfigs/GameEconomyModel.json",
+          "value_type": "int",
+          "source_sha256": "faf7a71fc3818165f8a5eb34c29898d84bda8db5d68afe8b9ad390fbd083c66e",
+          "field_present": true
+        },
+        {
+          "snapshot": "cache_20260910",
+          "model": "gameEconomyModel",
+          "key": "refillDurationAsMinutes",
+          "value": 30,
+          "type": "int",
+          "source": "facts/runtime/server_configs/gameEconomyModel.json",
+          "value_type": "int",
+          "source_sha256": "1f9c3ed2cf7b354b2c4c791432cb9ce28cadc5f2ae8ece878cd98b4db56b1ec9",
+          "field_present": true
+        },
+        {
+          "snapshot": "cache_20261010",
+          "model": "gameEconomyModel",
+          "key": "refillDurationAsMinutes",
+          "value": 30,
+          "type": "int",
+          "source": "facts/runtime/test_20261010/before/CachedRemoteConfigs",
+          "value_type": "int",
+          "source_sha256": "433164d4877b2dee55d2bbd79ef2fe83d3fe9519492fe15e3cb0926daf216050",
+          "field_present": true
+        },
+        {
+          "snapshot": "firebase_20260910",
+          "model": "GameEconomyModel",
+          "key": "refillDurationAsMinutes",
+          "value": 30,
+          "type": "int",
+          "source": "facts/runtime/decoded/firebase_rc.json",
+          "value_type": "int",
+          "source_sha256": "e49f73c0e3854a98c0c27ffae86e6abc7897c767b5f3e82991004c48c4eb45d5",
+          "field_present": true
+        }
+      ],
+      "snapshot_review_id": "MS-CFG-Inventory-0008"
+    },
+    {
+      "source": "Default/code0.0.3063 and historical caches20260910/20261010; per-snapshot source/hash in snapshot_values; not effective-runtime proof",
+      "key": "GameEconomyModel.MaxLifeAmount",
+      "type": "int",
+      "value": "default_0.0.3063: 5; cache_20260910: 5; cache_20261010: 5; firebase_20260910: 5",
+      "meaning": "Số mạng tối đa mặc định [15/11: giá trị theo snapshot cụ thể; thiếu field khác với false/0. Không xác nhận assignment hoặc effective runtime.]",
+      "where": "InventoryService.GetMaxLifeAmount",
+      "previous_unresolved_value": "server",
+      "snapshot_values": [
+        {
+          "snapshot": "default_0.0.3063",
+          "model": "GameEconomyModel",
+          "key": "maxLifeAmount",
+          "value": 5,
+          "type": "int",
+          "source": "../com.grandgames.magicsort_Unity_20260909_112501/UnityExport/ExportedProject/Assets/Resources/defaultconfigs/GameEconomyModel.json",
+          "value_type": "int",
+          "source_sha256": "faf7a71fc3818165f8a5eb34c29898d84bda8db5d68afe8b9ad390fbd083c66e",
+          "field_present": true
+        },
+        {
+          "snapshot": "cache_20260910",
+          "model": "gameEconomyModel",
+          "key": "maxLifeAmount",
+          "value": 5,
+          "type": "int",
+          "source": "facts/runtime/server_configs/gameEconomyModel.json",
+          "value_type": "int",
+          "source_sha256": "1f9c3ed2cf7b354b2c4c791432cb9ce28cadc5f2ae8ece878cd98b4db56b1ec9",
+          "field_present": true
+        },
+        {
+          "snapshot": "cache_20261010",
+          "model": "gameEconomyModel",
+          "key": "maxLifeAmount",
+          "value": 5,
+          "type": "int",
+          "source": "facts/runtime/test_20261010/before/CachedRemoteConfigs",
+          "value_type": "int",
+          "source_sha256": "433164d4877b2dee55d2bbd79ef2fe83d3fe9519492fe15e3cb0926daf216050",
+          "field_present": true
+        },
+        {
+          "snapshot": "firebase_20260910",
+          "model": "GameEconomyModel",
+          "key": "maxLifeAmount",
+          "value": 5,
+          "type": "int",
+          "source": "facts/runtime/decoded/firebase_rc.json",
+          "value_type": "int",
+          "source_sha256": "e49f73c0e3854a98c0c27ffae86e6abc7897c767b5f3e82991004c48c4eb45d5",
+          "field_present": true
+        }
+      ],
+      "snapshot_review_id": "MS-CFG-Inventory-0009"
+    },
+    {
+      "source": "remote config",
+      "key": "GameEconomyModel.InitialCoin / InitialUndoAmount / InitialShuffleAmount / InitialExtraBottleAmount / InitialFourthBoosterAmount",
+      "type": "int",
+      "value": "server",
+      "meaning": "Số dư khởi tạo cho tài khoản mới",
+      "where": "InventoryService.InitializeForNewDownload"
+    },
+    {
+      "source": "remote config",
+      "key": "GameEconomyModel.UndoUnlockAtLevel / ShuffleUnlockAtLevel / ExtraBottleUnlockAtLevel",
+      "type": "int (level)",
+      "value": "server",
+      "meaning": "Mốc level mở khoá từng booster",
+      "where": "BoosterManager.TryIntroduceNewBooster"
+    },
+    {
+      "source": "remote config",
+      "key": "GameEconomyModel.UndoPrice / ShufflePrice / ExtraBottlePrice / MegaShufflePrice / RevealPrice",
+      "type": "int (coin)",
+      "value": "server",
+      "meaning": "Giá mua từng booster",
+      "where": "GameEconomyModel.GetPriceByCurrency"
+    },
+    {
+      "source": "code const",
+      "key": "Ngưỡng sự kiện tiêu coin",
+      "type": "int",
+      "value": "1899 (0x76b) — gửi khi SpendCoin vượt giá trị này",
+      "meaning": "Mốc bắn sự kiện attribution một lần",
+      "where": "InventoryService.CheckCanSendEventForSpendCoin (pseudo-C)"
+    },
+    {
+      "source": "code const",
+      "key": "BulkRewardAnimationService.GetDynamicRewardPositions mặc định",
+      "type": "float",
+      "value": "maxWidth = 6, maxHeight = 6",
+      "meaning": "Khung xếp lưới phần thưởng trong popup",
+      "where": "BulkRewardAnimationService"
+    },
+    {
+      "source": "code field",
+      "key": "InventoryModel",
+      "type": "class",
+      "value": "CurrencyAmountByType, TimedCurrencyEndDateByType, LimitlessCurrencyEndDateByType, PendingCurrencyAmountByType, PendingTimedCurrencyByType, PendingLimitlessCurrencyByType, LifeFillDate, PendingCollectionPackAmountByType, SpendCoin, SpendEventSent, UsedPlayOnForFree",
+      "meaning": "Toàn bộ kho đồ, khoá dictionary là (int)CurrencyType",
+      "where": "InventoryModel"
+    },
+    {
+      "source": "code field",
+      "key": "RewardModel",
+      "type": "class",
+      "value": "CurrencyType, Amount, TimeSpan, Rewards (lồng nhau), ChestType, CollectionPackType, TokenId, PrimaryRewards; IsDurationBased()",
+      "meaning": "Mô tả một phần thưởng bất kỳ, có thể lồng nhiều tầng",
+      "where": "Modules.Contexts.Application.Reward.Scripts.RewardModel"
+    },
+    {
+      "source": "storage key",
+      "key": "InventoryModel",
+      "type": "sync name",
+      "value": "\"InventoryModel\"",
+      "meaning": "Tên khối kho đồ trong SyncService",
+      "where": "InventoryService.GetSyncName"
+    },
+    {
+      "source": "asset",
+      "key": "ChestSpriteConfig.asset",
+      "type": "ScriptableObject",
+      "value": "ChestSpriteConfig trong export 0.0.3063 có 25 ánh xạ sprite (ChestId 1–25) và 8 ánh xạ SpriteLibrary (ChestId 1–8). File Chest9SpriteLibrary.asset tồn tại riêng nhưng không nằm trong 8 ánh xạ của config này. Không cộng 25+8 thành 33 ChestId.",
+      "meaning": "Hình rương theo bậc",
+      "where": "Assets/MonoBehaviour/ChestSpriteConfig.asset; fullGUID/path/hash tại facts/remaining_asset_review_20261115/chest_sources.json"
+    },
+    {
+      "source": "asset",
+      "key": "BulkRewardAnimationConfig.asset, BulkRewardCurrencyViewFactory.asset, CurrencyAnimationConfig.asset, CurrencyRevealAnimationConfig.asset, CurrencyViewFactory.asset, CurrencyRevealViewFactory.asset, RewardCurrencyViewFactory.asset, BoostersCurrencyAnimationConfig.asset, LifeCurrencyAnimationConfig.asset, BulkCurrencyAnimationConfig.asset, rewardsittoposition.asset",
+      "type": "ScriptableObject",
+      "value": "-",
+      "meaning": "Cấu hình animation và factory cho việc trình diễn phần thưởng",
+      "where": "Assets/MonoBehaviour/"
+    },
+    {
+      "source": "code field",
+      "key": "CurrencyRewardTarget",
+      "type": "class",
+      "value": "-",
+      "meaning": "Ô đích trên UI cho từng CurrencyType, đăng ký qua OnCurrencyDisplayerActiveSignal",
+      "where": "RewardService.GetCurrencyRewardTarget; OrderedRewardAnimationService"
+    },
+    {
+      "source": "json default",
+      "key": "GameEconomyModel.json: refillPrice",
+      "type": "",
+      "value": "900",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/GameEconomyModel.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "GameEconomyModel.json: PlayOnPrice",
+      "type": "",
+      "value": "900",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/GameEconomyModel.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "GameEconomyModel.json: SecondPlayOnPrice",
+      "type": "",
+      "value": "1900",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/GameEconomyModel.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "GameEconomyModel.json: ThirdSecondPlayOnPrice",
+      "type": "",
+      "value": "2300",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/GameEconomyModel.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "GameEconomyModel.json: refillDurationAsMinutes",
+      "type": "",
+      "value": "30",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/GameEconomyModel.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "GameEconomyModel.json: maxLifeAmount",
+      "type": "",
+      "value": "5",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/GameEconomyModel.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "GameEconomyModel.json: initialCoin",
+      "type": "",
+      "value": "1000",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/GameEconomyModel.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "GameEconomyModel.json: initialUndoAmount",
+      "type": "",
+      "value": "3",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/GameEconomyModel.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "GameEconomyModel.json: initialShuffleAmount",
+      "type": "",
+      "value": "3",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/GameEconomyModel.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "GameEconomyModel.json: initialExtraBottleAmount",
+      "type": "",
+      "value": "3",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/GameEconomyModel.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "GameEconomyModel.json: initialFourthBoosterAmount",
+      "type": "",
+      "value": "3",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/GameEconomyModel.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "GameEconomyModel.json: undoUnlockAtLevel",
+      "type": "",
+      "value": "15",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/GameEconomyModel.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "GameEconomyModel.json: shuffleUnlockAtLevel",
+      "type": "",
+      "value": "15",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/GameEconomyModel.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "GameEconomyModel.json: extraBottleUnlockAtLevel",
+      "type": "",
+      "value": "15",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/GameEconomyModel.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "GameEconomyModel.json: UndoPrice",
+      "type": "",
+      "value": "300",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/GameEconomyModel.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "GameEconomyModel.json: ShufflePrice",
+      "type": "",
+      "value": "300",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/GameEconomyModel.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "GameEconomyModel.json: ExtraBottlePrice",
+      "type": "",
+      "value": "900",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/GameEconomyModel.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "GameEconomyModel.json: MegaShufflePrice",
+      "type": "",
+      "value": "900",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/GameEconomyModel.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "GameEconomyModel.json: RevealPrice",
+      "type": "",
+      "value": "900",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/GameEconomyModel.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "GameEconomyModel.json: RegularLevelWinCoinReward",
+      "type": "",
+      "value": "20",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/GameEconomyModel.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "GameEconomyModel.json: HardLevelWinCoinReward",
+      "type": "",
+      "value": "60",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/GameEconomyModel.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "GameEconomyModel.json: SuperHardLevelWinCoinReward",
+      "type": "",
+      "value": "100",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/GameEconomyModel.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "GameEconomyModel.json: IsFirstPlayOnFree",
+      "type": "",
+      "value": "false",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/GameEconomyModel.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "GameEconomyModel.json: PlayOnConfigModels[0].PlayOnType",
+      "type": "",
+      "value": "0",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/GameEconomyModel.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "GameEconomyModel.json: PlayOnConfigModels[0].Price",
+      "type": "",
+      "value": "900",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/GameEconomyModel.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "GameEconomyModel.json: PlayOnConfigModels[1].PlayOnType",
+      "type": "",
+      "value": "0",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/GameEconomyModel.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "GameEconomyModel.json: PlayOnConfigModels[1].Price",
+      "type": "",
+      "value": "1900",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/GameEconomyModel.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "GameEconomyModel.json: PlayOnConfigModels[2].PlayOnType",
+      "type": "",
+      "value": "0",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/GameEconomyModel.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "GameEconomyModel.json: PlayOnConfigModels[2].Price",
+      "type": "",
+      "value": "2300",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/GameEconomyModel.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "server cache (historical)",
+      "key": "GameEconomyModel (live) = default?",
+      "type": "",
+      "value": "26/27 key trùng default, 1 key khác/thêm",
+      "meaning": "Đối chiếu config server thật (CachedRemoteConfigs) với GameEconomyModel.json",
+      "where": "Configs/CachedRemoteConfigs + Firebase RC template 3197 — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server cache (historical)",
+      "key": "GameEconomyModel: hierarchy",
+      "type": "",
+      "value": "0",
+      "meaning": "server-only (không có trong default)",
+      "where": "Configs/CachedRemoteConfigs + Firebase RC template 3197 — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server cache (historical)",
+      "key": "gameEconomyConfigModelFromBackend: isEnabled",
+      "type": "",
+      "value": "false",
+      "meaning": "server-only (không có file default)",
+      "where": "Configs/CachedRemoteConfigs + Firebase RC template 3197 — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server cache (historical)",
+      "key": "gameEconomyConfigModelFromBackend: configType",
+      "type": "",
+      "value": "0",
+      "meaning": "server-only (không có file default)",
+      "where": "Configs/CachedRemoteConfigs + Firebase RC template 3197 — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    }
+  ],
+  "rewards": [
+    {
+      "context": "Thắng level",
+      "reward": "Coin (CurrencyEarnReason.LevelWin, HardSuperHardLevel, DailyLevelWin)",
+      "evidence": "RewardService.GiveRegularLevelCoinRewards; RewardService.GiveDailyLevelCoinRewards"
+    },
+    {
+      "context": "Xem quảng cáo",
+      "reward": "Coin nhân đôi (Rewarded2XCoin) hoặc 1 mạng (RewardedOneLife)",
+      "evidence": "CurrencyEarnReason.Rewarded2XCoin; CurrencyEarnReason.RewardedOneLife"
+    },
+    {
+      "context": "Nguồn xã hội",
+      "reward": "TeamCardHelp, TeamsFreeLife, TeamsHelpSupport, Referral, FacebookLogin",
+      "evidence": "CurrencyEarnReason"
+    },
+    {
+      "context": "Bộ sưu tập",
+      "reward": "CollectionChest, CollectionThemeCompleted, CollectionCompleted, CollectionActivated (kèm token hồ sơ)",
+      "evidence": "CurrencyEarnReason; CurrencyType.ProfileToken"
+    },
+    {
+      "context": "Bù trừ từ vận hành",
+      "reward": "Compensation, WebShopBonus",
+      "evidence": "CurrencyEarnReason.Compensation; RewardService.GiveDirectlyRewards"
+    }
+  ],
+  "backend": [
+    {
+      "command": "Đồng bộ InventoryModel qua SyncService (/v1/sync-data)",
+      "direction": "client↔server",
+      "purpose": "lưu và khôi phục kho đồ theo tài khoản"
+    },
+    {
+      "command": "Schema magicsort.schemas.v1.common.ClientRewardModel",
+      "direction": "server→client",
+      "purpose": "định dạng phần thưởng do server cấp cho các sự kiện"
+    }
+  ],
+  "ui": [
+    {
+      "element": "Thanh tiền tệ",
+      "class": "Modules.Contexts.Application.Inventory.Scripts.UI.CurrencyDisplayerController",
+      "purpose": "hiển thị số dư và đếm ngược mạng/limitless"
+    },
+    {
+      "element": "Popup phần thưởng lớn",
+      "class": "Modules.Contexts.Application.Reward.Scripts.BulkRewardAnimationService",
+      "purpose": "reveal + gather, mở gói thẻ, nút Continue/Claim/Skip"
+    },
+    {
+      "element": "Thưởng bay tuần tự",
+      "class": "Modules.Contexts.Application.Reward.Scripts.OrderedRewardAnimationService",
+      "purpose": "icon bay từ vị trí nguồn về ô tiền tệ"
+    },
+    {
+      "element": "Nút booster trong màn chơi",
+      "class": "Modules.Contexts.GamePlay.Boosters.Scripts.BoosterManager",
+      "purpose": "Undo / Shuffle / ExtraBottle / MegaShuffle / Reveal"
+    },
+    {
+      "element": "Popup More Lives / Refill",
+      "class": "localize 'RefillPopupTitle', 'RefillPopupWarning'",
+      "purpose": "mua mạng hoặc chờ hồi"
+    },
+    {
+      "element": "Hình rương",
+      "class": "Modules.Contexts.Home.UI.Chest.Scripts.ChestSpriteConfig",
+      "purpose": "sprite theo ChestId"
+    }
+  ],
+  "analytics": [
+    {
+      "event": "virtual_resource_transaction",
+      "params": "currency_type, currency_amount, earned, total_currency",
+      "when": "mọi lần Earn/Spend"
+    },
+    {
+      "event": "booster_used",
+      "params": "booster_type",
+      "when": "dùng booster"
+    },
+    {
+      "event": "booster_purchased",
+      "params": "booster_type, booster_price, cost_currency",
+      "when": "mua booster bằng coin"
+    },
+    {
+      "event": "coin_spent",
+      "params": "amount",
+      "when": "tiêu coin"
+    },
+    {
+      "event": "earned_coins / total_collected_coin_amount",
+      "params": "amount",
+      "when": "nhận coin"
+    },
+    {
+      "event": "merge_event_spend_energy",
+      "params": "-",
+      "when": "tiêu năng lượng mini game merge"
+    },
+    {
+      "event": "Tham số kèm mọi sự kiện",
+      "params": "coin_inventory, life_inventory, limitless_life_duration_inventory, undo_inventory, shuffle_inventory, extra_bottle_inventory, additional_life_inventory, trident_inventory, vault_inventory, map_inventory",
+      "when": "InventoryParametersProvider gắn vào mọi sự kiện"
+    }
+  ],
+  "storage_keys": [
+    "InventoryModel (ISaveLoad + SyncService)"
+  ],
+  "related_features": [
+    "Teams",
+    "Referral",
+    "HomeUI",
+    "Account",
+    "Notifications",
+    "Profile"
+  ],
+  "gaps": [
+    "15/11 — resolved_historical_snapshot: Đã trích toàn bộ field/value của GameEconomyModel từ default0.0.3063 và cache lịch sử hiện có. Nhận định không có giá trị trong client đã được đối chiếu bằng file thật; không xác nhận effective runtime. Còn lại: Kiểm chứng effective config/asset và nhánh runtime trên đúng build nếu cần.",
+    "15/11 — resolved_historical_snapshot: GetMagicPassMaxLifeAmount trả literal8 trong native0.0.3063, không phải chỉ suy từ localization hoặc một field config chưa biết. GameEconomy base maxLife5 ở snapshots là scope khác. Còn lại: Đối chiếu native0.0.3129 và active-pass finite-life ledger khi có sandbox hợp lệ.",
+    "15/11 — partial_actual_evidence: Đã xuất đủ 25 ánh xạ sprite và 8 ánh xạ SpriteLibrary trong ChestSpriteConfig. Nội dung thưởng thực tế nằm trong RewardModel của từng event/config/instance, không phải một bảng thưởng duy nhất chỉ dựa trên ChestId. Còn lại: Nối RewardModel của từng instance thực với ChestId; giữ danh tính hình tách khỏi nội dung được cấp.",
+    "15/11 — partial_static_code_unresolved: CurrencyType enum đónggói có0/1/2/4/5/6/7/13..21, không khai báo3/8..12. Đó là reserved/undefined trongmetadata này; không có bằngchứng lịch sử rằng đãgỡ. Giữrawvalueunknown và không cấp têncurrency cũ. Còn lại: Muốn kết luận removal cần metadata/build cũ hoặc backendcontract; enumgap hiện tại không đủ.",
+    "[Runtime 2026-09-10] Config server LIVE đã đọc trực tiếp từ cache máy (không cần request); các hàng 'server live' là giá trị server ghi đè/thêm so với default.",
+    "[Runtime 2026-09-10] Model server-only gameEconomyConfigModelFromBackend (không có trong Resources/defaultconfigs) đã đọc từ cache live."
+  ],
+  "sources": [
+    "Il2CppDumper/dump.cs: InventoryService, InventoryModel, CurrencyType, CurrencyEarnReason, CurrencySpendReason, EarnReason, InventoryParametersProvider, RewardService, RewardModel, OrderedRewardAnimationService, BulkRewardAnimationService, ChestSpriteConfig, GameEconomyModel, BoosterManager",
+    "Assets/MonoBehaviour/ChestSpriteConfig.asset (33 ChestId), các *CurrencyViewFactory/*AnimationConfig.asset",
+    "RecoveredNative/PseudoC/Assembly-CSharp/Modules/Contexts/Application/{Inventory,Reward}/**",
+    "RecoveredNative/strings-by-type.tsv (InventoryService, InventoryParametersProvider, RewardService, EventSender)",
+    "GameDesign/appendix/localization.tsv (Refill*, PlayOn, MegaShuffle*, Reveal*, noads_*)"
+  ],
+  "audit_provenance": {
+    "review_date": "2026-11-15",
+    "mode": "offline_existing_files",
+    "code_build": "0.0.3063 ARMv7",
+    "runtime_build_observed_historically": "0.0.3129 ARM64 (audit 2026-10-18); not rechecked 2026-11-15",
+    "new_playtests": 4,
+    "uc_status": "See facts/audit_20261115/uc_registry.json; image reference is not pass",
+    "workbook_status": "Existing XLSX is historical; JSON and local web include 2026-11-15 corrections",
+    "static_review": "facts/local_code_gap_results_20261115.json; facts/local_asset_gap_results_20261115.json; facts/final_data_gap_decisions_20261115.json; facts/core_body_gap_decisions_20261115.json; facts/remaining_asset_gap_decisions_20261115.json"
+  },
+  "runtime_review_20261115": [
+    {
+      "id": "MS-R15-ECO03",
+      "feature": "Inventory",
+      "uc": [],
+      "title": "Chạm vùng Lives khi đầy5 mạng",
+      "precondition": "Home hiện5 Full; không vào level.",
+      "steps": [
+        "Chạm dấu cộng Lives",
+        "Chạm vùng số mạng/Full"
+      ],
+      "expected": "Quan sát cách UI xử lý khi không cần refill.",
+      "actual": "Home vẫn hiển thị5 Full, không mở refill popup trong hai thao tác; coin và kho không đổi.",
+      "status": "observed_gate_only",
+      "limitations": "Chưa chứng minh nhánh mua refill, thiếu tiền hoặc hồi mạng. Không đánh dấu toàn UC-08 pass.",
+      "images": [
+        "ECO13_lives_full",
+        "ECO14_lives_touch"
+      ],
+      "before": "ECO12_error_continue",
+      "after": "ECO14_lives_touch",
+      "currency_unchanged": true,
+      "build": "0.0.3129 ARM64",
+      "mode": "offline_existing_fixture",
+      "date": "2026-11-15",
+      "ledger": {
+        "before": "ECO12_error_continue.json",
+        "after": "ECO14_lives_touch.json"
+      },
+      "related_uc": [
+        "UC-08"
+      ],
+      "uc_scope_note": "related_uc chỉ context/dependency: gate, chưa vào UC, khác subsystem hoặc teardown nội bộ chưa đo; không tính vào executed branch coverage."
+    },
+    {
+      "id": "MS-R15-CORE11",
+      "feature": "Inventory",
+      "uc": [
+        "UC-06"
+      ],
+      "title": "LifeFillDate đã đổi ngay khi vào level352",
+      "precondition": "0.0.3129 ARM64; level352, UID MagicSort offline, save fixture có sẵn. Code/asset0.0.3063 là nguồn lịch sử riêng.",
+      "steps": [
+        "Từ Home5Full bấm Play352",
+        "Chụp board trước mọi nước đi"
+      ],
+      "expected": "Đối chiếu thời điểm timer/life state, không chỉ dựa chữ cảnh báo quit.",
+      "actual": "lifeFillDate từ15:47:37.481215UTC đổi thành16:21:23.276935UTC ngay snapshot ENTER15:51:23; isLevelInProgress false→true, coin/booster giữ nguyên. Sau quit Home hiện4mạng.",
+      "limitations": "Mạng được suy từ LifeFillDate và UI, không phải CurrencyAmountByType riêng. Đây là start/countdown observation; chưa đợi đủ30phút để chứng minh natural refill. Không gán life spend lần nữa ở Quit.",
+      "status": "observed_partial",
+      "before": "MORE22_home_before_core",
+      "after": "MORE23_level352",
+      "images": [
+        "MORE22_home_before_core",
+        "MORE23_level352"
+      ],
+      "build": "0.0.3129 ARM64",
+      "mode": "offline_existing_fixture",
+      "date": "2026-11-15",
+      "uc_scope": {
+        "UC-06": "life_timer_start_only_not_completed_regeneration"
+      },
+      "currency_unchanged": true,
+      "ledger": {
+        "before": "MORE22_home_before_core.json",
+        "after": "MORE23_level352.json"
+      }
+    },
+    {
+      "id": "MS-R15-CORE14",
+      "feature": "Inventory",
+      "uc": [
+        "UC-08"
+      ],
+      "title": "Refill900coin từ4 lên5Full",
+      "precondition": "0.0.3129 ARM64; level352, UID MagicSort offline, save fixture có sẵn. Code/asset0.0.3063 là nguồn lịch sử riêng.",
+      "steps": [
+        "Từ More Lives bấm Refill900"
+      ],
+      "expected": "Trừ đúng900coin, hồi đầy mạng và reset timer.",
+      "actual": "Coin999995889→999994989 (−900); Home5Full. lifeFillDate về15:52:24.825648UTC. Các booster không đổi.",
+      "limitations": "Một mức4→5, có đủ coin; chưa thử thiếu tiền/0mạng hoặc giá theo segment. Đây là coin refill, không phải IAP hoặc ad reward.",
+      "status": "verified_observed_branch",
+      "before": "MORE29_rewarded_life",
+      "after": "MORE30_refill_paid",
+      "images": [
+        "MORE28_refill",
+        "MORE30_refill_paid"
+      ],
+      "build": "0.0.3129 ARM64",
+      "mode": "offline_existing_fixture",
+      "date": "2026-11-15",
+      "currency_unchanged": false,
+      "ledger": {
+        "before": "MORE29_rewarded_life.json",
+        "after": "MORE30_refill_paid.json"
+      }
+    },
+    {
+      "id": "MS-R15-CORE15",
+      "feature": "Inventory",
+      "uc": [
+        "UC-17"
+      ],
+      "title": "Refill và số dư giữ qua restart local",
+      "precondition": "0.0.3129 ARM64; level352, UID MagicSort offline, save fixture có sẵn. Code/asset0.0.3063 là nguồn lịch sử riêng.",
+      "steps": [
+        "Force-stop sau refill",
+        "Khởi động lại và đợi Home"
+      ],
+      "expected": "Đối chiếu số dư đã lưu, không coi local restart là server sync.",
+      "actual": "Home giữ level352,5Full, coin999994989 và booster. lifeFillDate reset khi đã Full tại15:52:49, không giữ nguyên timestamp refill15:52:24. more_ledger.json xác nhận profileInfo gốc không đổi từ MORE03 đến MORE31; retry2, snitchRetry0, seed v2betterdesign352_difficulty4-1.",
+      "limitations": "Chỉ local save/load; chưa Serialize/Overwrite từ server, reinstall hay đa thiết bị. ProfileInfo unchanged là đối chiếu phụ của more_ledger.json; không phải sửa profile thành công.",
+      "status": "verified_observed_branch",
+      "before": "MORE30_refill_paid",
+      "after": "MORE31_restart_final",
+      "images": [
+        "MORE30_refill_paid",
+        "MORE31_restart_final"
+      ],
+      "build": "0.0.3129 ARM64",
+      "mode": "offline_existing_fixture",
+      "date": "2026-11-15",
+      "uc_scope": {
+        "UC-17": "local_save_reload_only_no_server_sync"
+      },
+      "currency_unchanged": true,
+      "ledger": {
+        "before": "MORE30_refill_paid.json",
+        "after": "MORE31_restart_final.json"
+      }
+    }
+  ],
+  "static_review_20261115": {
+    "date": "2026-11-15",
+    "scope": "Historical code/assets 0.0.3063, dated caches, device 0.0.3129 cached bundles and explicitly scoped runtime evidence. Not full runtime pass.",
+    "findings": [
+      {
+        "kind": "remaining_asset",
+        "source_report": "facts/remaining_asset_gap_decisions_20261115.json",
+        "id": "MS-RA-009",
+        "gap_ids": [
+          "MS-Inventory-G003"
+        ],
+        "title": "Nội dung ChestSpriteLibraryModels và phần thưởng thật của từng ChestId nằm ngoài phạm vi feature này.",
+        "status": "partial_actual_evidence",
+        "conclusion": "Đã xuất đủ 25 ánh xạ sprite và 8 ánh xạ SpriteLibrary trong ChestSpriteConfig. Nội dung thưởng thực tế nằm trong RewardModel của từng event/config/instance, không phải một bảng thưởng duy nhất chỉ dựa trên ChestId.",
+        "evidence": [
+          "facts/remaining_asset_review_20261115/chest_sources.json",
+          "facts/remaining_asset_review_20261115/asset_catalog.json"
+        ],
+        "remaining": "Không thể suy ra nội dung thưởng của mọi instance tương lai chỉ từ sprite hoặc SpriteLibrary của ChestId.",
+        "next_action": "Nối RewardModel của từng instance thực với ChestId; giữ danh tính hình tách khỏi nội dung được cấp.",
+        "scope": "Asset/native export 0.0.3063 và cache UnityFS đọc ngày 15/11 từ app 0.0.3129 được giữ riêng; ảnh render asset không phải ảnh chụp playtest.",
+        "reviewed": "2026-11-15",
+        "full_uc_pass": false
+      },
+      {
+        "kind": "final_data",
+        "source_report": "facts/final_data_gap_decisions_20261115.json",
+        "id": "MS-FDG-007",
+        "gap_ids": [
+          "MS-Inventory-G001"
+        ],
+        "title": "Toàn bộ giá trị số của GameEconomyModel (giá booster, giá refill, số mạng tối đa, thời gian hồi, số dư khởi tạo, mốc mở khoá) do Firebase Remote Config quyết đị",
+        "status": "resolved_historical_snapshot",
+        "conclusion": "Đã trích toàn bộ field/value của GameEconomyModel từ default0.0.3063 và cache lịch sử hiện có. Nhận định không có giá trị trong client đã được đối chiếu bằng file thật; không xác nhận effective runtime.",
+        "evidence": [
+          "facts/local_asset_review_20261115/config_catalog.json"
+        ],
+        "remaining": "Full historical data answered; current effective selection and full runtime remain unverified.",
+        "next_action": "Kiểm chứng effective config/asset và nhánh runtime trên đúng build nếu cần.",
+        "scope": "question-specific source/observed branch only; no full-UC or production claim",
+        "source_records": [
+          {
+            "snapshot": "default0.0.3063",
+            "model": "GameEconomyModel",
+            "source": "Resources\\defaultconfigs\\GameEconomyModel.json",
+            "root": "UnityExport Assets 0.0.3063",
+            "sha256": "faf7a71fc3818165f8a5eb34c29898d84bda8db5d68afe8b9ad390fbd083c66e",
+            "line": 1,
+            "build": "0.0.3063 ARMv7"
+          },
+          {
+            "snapshot": "cache20260910",
+            "model": "GameEconomyModel",
+            "source": "facts\\runtime\\server_configs\\gameEconomyModel.json",
+            "root": "GameDesign",
+            "sha256": "1f9c3ed2cf7b354b2c4c791432cb9ce28cadc5f2ae8ece878cd98b4db56b1ec9",
+            "line": 1,
+            "build": "snapshot provenance at path"
+          },
+          {
+            "snapshot": "cache20261010",
+            "model": "GameEconomyModel",
+            "source": "facts\\runtime\\test_20261010\\before\\CachedRemoteConfigs",
+            "root": "GameDesign",
+            "sha256": "433164d4877b2dee55d2bbd79ef2fe83d3fe9519492fe15e3cb0926daf216050",
+            "line": 1,
+            "build": "snapshot provenance at path"
+          }
+        ]
+      },
+      {
+        "kind": "final_data",
+        "source_report": "facts/final_data_gap_decisions_20261115.json",
+        "id": "MS-FDG-008",
+        "gap_ids": [
+          "MS-Inventory-G002"
+        ],
+        "title": "GetMagicPassMaxLifeAmount() lấy số từ MagicPassService (thuộc nhóm tính năng khác), chưa xác định giá trị.",
+        "status": "resolved_historical_snapshot",
+        "conclusion": "GetMagicPassMaxLifeAmount trả literal8 trong native0.0.3063, không phải chỉ suy từ localization hoặc một field config chưa biết. GameEconomy base maxLife5 ở snapshots là scope khác.",
+        "evidence": [
+          "facts/final_data_review_20261115/source_evidence.json"
+        ],
+        "remaining": "Chưa xác minh active-pass finite-life refill/native0.0.3129; không fullUCpass.",
+        "next_action": "Đối chiếu native0.0.3129 và active-pass finite-life ledger khi có sandbox hợp lệ.",
+        "scope": "question-specific source/observed branch only; no full-UC or production claim",
+        "source_records": [
+          {
+            "source": "com.grandgames.magicsort_Unity_20260909_112501/RecoveredNative/PseudoC/Assembly-CSharp/Modules/Contexts/Home/MagicPass/Scripts/MagicPassService.c",
+            "sha256": "e31a692d032e508dd433fedb95ae26bcf113f7d86b0ea0290c25d5fbdb753e37",
+            "line": 11135,
+            "build": "0.0.3063 ARMv7",
+            "meaning": "GetMagicPassMaxLifeAmount returns literal8"
+          }
+        ]
+      },
+      {
+        "kind": "code",
+        "source_report": "facts/local_code_gap_results_20261115.json",
+        "id": "MS-CODE-73",
+        "gap_ids": [
+          "MS-Inventory-G004"
+        ],
+        "title": "Currency enum holes không chứng minh removedcurrency",
+        "status": "partial_static_code",
+        "conclusion": "CurrencyType enum đónggói có0/1/2/4/5/6/7/13..21, không khai báo3/8..12. Đó là reserved/undefined trongmetadata này; không có bằngchứng lịch sử rằng đãgỡ. Giữrawvalueunknown và không cấp têncurrency cũ.",
+        "evidence": [
+          {
+            "file": "../com.grandgames.magicsort_Unity_20260909_112501/UnityExport/ExportedProject/Assets/Scripts/Assembly-CSharp/Modules/Contexts/Application/Inventory/Scripts/CurrencyType.cs",
+            "line": 3,
+            "end_line": 22,
+            "method": "public enum CurrencyType",
+            "sha256": "c8ddbda2d7d1ee0ca1cb3dc73349f3c19e60f4d47892bc08a7420006722ab588",
+            "body_checked": false,
+            "definition_checked": true,
+            "build": "0.0.3063 ARMv7",
+            "required_body_tokens": []
+          }
+        ],
+        "remaining": "Muốn kết luận removal cần metadata/build cũ hoặc backendcontract; enumgap hiện tại không đủ.",
+        "scope": "recovered_native_0.0.3063_only",
+        "runtime_verified": false
+      },
+      {
+        "kind": "asset",
+        "source_report": "facts/local_asset_gap_results_20261115.json",
+        "id": "MS-Inventory-G001",
+        "status": "resolved_static_snapshot",
+        "conclusion": "Đã trích toàn bộ field/value của GameEconomyModel từ default0.0.3063 và cache lịch sử hiện có. Nhận định không có giá trị trong client đã được đối chiếu bằng file thật; không xác nhận effective runtime.",
+        "evidence": [
+          {
+            "snapshot": "default0.0.3063",
+            "model": "GameEconomyModel",
+            "source": "Resources\\defaultconfigs\\GameEconomyModel.json",
+            "root": "UnityExport Assets 0.0.3063",
+            "sha256": "faf7a71fc3818165f8a5eb34c29898d84bda8db5d68afe8b9ad390fbd083c66e",
+            "line": 1,
+            "build": "0.0.3063 ARMv7"
+          },
+          {
+            "snapshot": "cache20260910",
+            "model": "GameEconomyModel",
+            "source": "facts\\runtime\\server_configs\\gameEconomyModel.json",
+            "root": "GameDesign",
+            "sha256": "1f9c3ed2cf7b354b2c4c791432cb9ce28cadc5f2ae8ece878cd98b4db56b1ec9",
+            "line": 1,
+            "build": "snapshot provenance at path"
+          },
+          {
+            "snapshot": "cache20261010",
+            "model": "GameEconomyModel",
+            "source": "facts\\runtime\\test_20261010\\before\\CachedRemoteConfigs",
+            "root": "GameDesign",
+            "sha256": "433164d4877b2dee55d2bbd79ef2fe83d3fe9519492fe15e3cb0926daf216050",
+            "line": 1,
+            "build": "snapshot provenance at path"
+          }
+        ],
+        "data": "config_catalog.json",
+        "scope": "static_export0.0.3063_or_historical_cache_not_runtime_pass",
+        "reviewed": "2026-11-15",
+        "next_action": "Kiểm chứng effective config/asset và nhánh runtime trên đúng build nếu cần.",
+        "superseded_or_refined_by": "MS-FDG-007"
+      },
+      {
+        "kind": "asset",
+        "source_report": "facts/local_asset_gap_results_20261115.json",
+        "id": "MS-Inventory-G002",
+        "status": "partial_static_reconciliation",
+        "conclusion": "GameEconomy/MagicPass catalog có giá trị max life nếu field tồn tại; active-pass runtime và consumer vẫn chưa xác minh ở đợt này.",
+        "evidence": [
+          {
+            "snapshot": "default0.0.3063",
+            "model": "GameEconomyModel",
+            "source": "Resources\\defaultconfigs\\GameEconomyModel.json",
+            "root": "UnityExport Assets 0.0.3063",
+            "sha256": "faf7a71fc3818165f8a5eb34c29898d84bda8db5d68afe8b9ad390fbd083c66e",
+            "line": 1,
+            "build": "0.0.3063 ARMv7"
+          },
+          {
+            "snapshot": "cache20260910",
+            "model": "GameEconomyModel",
+            "source": "facts\\runtime\\server_configs\\gameEconomyModel.json",
+            "root": "GameDesign",
+            "sha256": "1f9c3ed2cf7b354b2c4c791432cb9ce28cadc5f2ae8ece878cd98b4db56b1ec9",
+            "line": 1,
+            "build": "snapshot provenance at path"
+          },
+          {
+            "snapshot": "cache20261010",
+            "model": "GameEconomyModel",
+            "source": "facts\\runtime\\test_20261010\\before\\CachedRemoteConfigs",
+            "root": "GameDesign",
+            "sha256": "433164d4877b2dee55d2bbd79ef2fe83d3fe9519492fe15e3cb0926daf216050",
+            "line": 1,
+            "build": "snapshot provenance at path"
+          },
+          {
+            "snapshot": "default0.0.3063",
+            "model": "MagicPassConfigModel",
+            "source": "Resources\\defaultconfigs\\MagicPassConfigModel.json",
+            "root": "UnityExport Assets 0.0.3063",
+            "sha256": "dd57452f68e58c19e05dd3bdc6a8f6a5e9548f51d0d91f74f64a0c0facb4e8f9",
+            "line": 1,
+            "build": "0.0.3063 ARMv7"
+          },
+          {
+            "snapshot": "cache20260910",
+            "model": "MagicPassConfigModel",
+            "source": "facts\\runtime\\server_configs\\magicPassConfigModel.json",
+            "root": "GameDesign",
+            "sha256": "a93d4654a3df1e44804d0855d712f17181a36d5c8fc250d08db596d841a28e75",
+            "line": 1,
+            "build": "snapshot provenance at path"
+          },
+          {
+            "snapshot": "cache20261010",
+            "model": "MagicPassConfigModel",
+            "source": "facts\\runtime\\test_20261010\\before\\CachedRemoteConfigs",
+            "root": "GameDesign",
+            "sha256": "433164d4877b2dee55d2bbd79ef2fe83d3fe9519492fe15e3cb0926daf216050",
+            "line": 1,
+            "build": "snapshot provenance at path"
+          }
+        ],
+        "data": "config_catalog.json",
+        "scope": "static_export0.0.3063_or_historical_cache_not_runtime_pass",
+        "reviewed": "2026-11-15",
+        "next_action": "Đọc body GetMagicPassMaxLifeAmount và MagicPassService đúng build; kiểm ledger finite-life với pass active trong sandbox hợp lệ.",
+        "remaining": "GameEconomy maxLifeAmount=5 ở cả ba nguồn; MagicPassConfigModel không có field chứa Life/life. Chưa xác định số max life khi pass active hoặc giá trị GetMagicPassMaxLifeAmount.",
+        "superseded_or_refined_by": "MS-FDG-008"
+      }
+    ]
+  },
+  "acceptance_review_20261115": {
+    "source": "facts/feature_acceptance_20261115.json",
+    "feature_id": "Inventory",
+    "scope": "All eleven dossier dimensions reviewed; full_feature_verified is not implied; read per-dimension gaps and actual runtime evidence."
+  },
+  "segment_ab_review_20261115": {
+    "status": "not_identified_in_sources",
+    "segment_ids": [],
+    "matching_basis": "explicit_gd_config_map_or_exact_model_token_in_gdd_configs_where_key_sources; rootfieldscoped",
+    "rows": [],
+    "classifications": {},
+    "assignment_verified": false,
+    "uplift_verified": false,
+    "note": "No matchingrow does not prove no segmentation/AB. Rewardbucketfalsepositives remain explicitly classified."
+  },
+  "continuation_review_20261116": {
+    "date": "2026-11-16",
+    "build": "0.0.3129 ARM64 host APK",
+    "build_scope": "Host APK version3129 matches LAST observed installed version15/11 only; installed bytes/live device16/11 not verified.",
+    "runtime_status": "device_unavailable",
+    "runtime_case_ids": [],
+    "current_apk_model_links": {
+      "feature": "Inventory",
+      "models": [
+        {
+          "model": "GameEconomyModel",
+          "current_default_file": "facts/review_20261116/public_current_config_3129/defaults/GameEconomyModel.json",
+          "resource_path": "defaultconfigs/gameeconomymodel",
+          "sha256": "a32421a6f1e34e66cc5dcf1943c56a1c3efeacd8f3b762401b3c067e9960ca9b",
+          "matching_basis": [
+            "gdd/Inventory.json#/configs",
+            "gdd/Inventory.json#/sources",
+            "gdd/Inventory.json#/flow"
+          ],
+          "scope": "Packaged default3129, not effective server config.",
+          "site_data_path": "data/current_config_3129/defaults/GameEconomyModel.json",
+          "original_source_sha256": "a32421a6f1e34e66cc5dcf1943c56a1c3efeacd8f3b762401b3c067e9960ca9b",
+          "public_artifact_sha256": "2027b6e23169a78b572e5778d87be378571cf217c876e5cbe386963ad0f27598",
+          "sha256_scope": "sha256 is original raw model; public_artifact_sha256 is the sanitized download"
+        }
+      ],
+      "status": "exact_model_source_association",
+      "distribution": "sanitized_public",
+      "public_mapping_pending": false
+    },
+    "current_packaged_defaults": [
+      {
+        "model": "GameEconomyModel",
+        "source": "facts/review_20261116/public_current_config_3129/defaults/GameEconomyModel.json",
+        "site_data_path": "data/current_config_3129/defaults/GameEconomyModel.json",
+        "public_artifact_sha256": "2027b6e23169a78b572e5778d87be378571cf217c876e5cbe386963ad0f27598",
+        "original_source_sha256": "a32421a6f1e34e66cc5dcf1943c56a1c3efeacd8f3b762401b3c067e9960ca9b",
+        "source_class": "static_asset",
+        "build": "0.0.3129 host APK",
+        "scope": "Sanitized packaged default fullvalues only; not effective remote/selected config or runtime.",
+        "values": {
+          "refillPrice": 900,
+          "PlayOnPrice": 900,
+          "SecondPlayOnPrice": 1900,
+          "ThirdSecondPlayOnPrice": 2300,
+          "refillDurationAsMinutes": 30,
+          "maxLifeAmount": 5,
+          "initialCoin": 1000,
+          "initialUndoAmount": 3,
+          "initialShuffleAmount": 3,
+          "initialExtraBottleAmount": 3,
+          "initialFourthBoosterAmount": 3,
+          "undoUnlockAtLevel": 15,
+          "shuffleUnlockAtLevel": 15,
+          "extraBottleUnlockAtLevel": 15,
+          "UndoPrice": 300,
+          "ShufflePrice": 300,
+          "ExtraBottlePrice": 900,
+          "MegaShufflePrice": 900,
+          "RevealPrice": 900,
+          "RegularLevelWinCoinReward": 20,
+          "HardLevelWinCoinReward": 60,
+          "SuperHardLevelWinCoinReward": 100,
+          "IsFirstPlayOnFree": false,
+          "Hierarchy": 10000,
+          "PlayOnConfigModels": [
+            {
+              "PlayOnType": 0,
+              "Price": 900
+            },
+            {
+              "PlayOnType": 0,
+              "Price": 1900
+            },
+            {
+              "PlayOnType": 0,
+              "Price": 2300
+            }
+          ]
+        }
+      }
+    ],
+    "native_finding_ids": [],
+    "documentation_source_coverage": {
+      "dossier_present": true,
+      "use_case_catalog_count": 22,
+      "config_catalog_rows": 54,
+      "current_apk_default_model_links": 1,
+      "current_native_findings": 0,
+      "scope": "Documentation/source coverage only; not complete runtime verification."
+    },
+    "runtime_completion": {
+      "date": "2026-11-16",
+      "status": "device_unavailable",
+      "executed_case_count": 0,
+      "full_feature_runtime_verified": false
+    },
+    "planned_branch": "Quan sát timer hồi mạng qua hai mốc thời gian nếu số mạng dưới cap; mở tooltip rương/tiền sự kiện khi có; kiểm tra thiếu tài nguyên trên popup tự nhiên.",
+    "target_uc_ids": [
+      "UC-06",
+      "UC-15",
+      "UC-20",
+      "UC-22"
+    ],
+    "execution_phase": "noncore_first",
+    "core_or_levels_last": false,
+    "actionability_full_json": "facts/continuation_20261116/current/feature_actionability.json",
+    "actionability_site_data_path": "data/continuation_20261116/feature_actionability.json",
+    "source_classes": [
+      "static_asset"
+    ],
+    "full_feature_verified": false
+  }
+}

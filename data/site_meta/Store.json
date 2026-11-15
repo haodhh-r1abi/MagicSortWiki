@@ -1,0 +1,185 @@
+{
+  "id": "Store",
+  "title": "Cửa hàng, IAP và WebShop (Store)",
+  "tagline": "Cửa hàng trung tâm bán gói coin, gói đặc biệt theo hạng và gói vĩnh viễn, kèm kênh thanh toán web giảm giá.",
+  "infobox": [
+    ["Loại", "Kinh tế"],
+    ["Mở khóa", "Luôn có sẵn; WebShop cần IsEnabled và level >= FirstLevelToShow (mặc định 5000)"],
+    ["Tham gia", "Người chơi đơn"],
+    ["Tiền tệ", "Tiền thật (IAP) đổi lấy coin, Unlimited Lives theo giờ, Shuffle, Extra Bottle, Undo, quyền No Ads"],
+    ["Thưởng chính", "Gói coin từ 1.000 tới 100.000 coin; gói vĩnh viễn từ 2.000 coin tới 60.000 coin kèm booster"],
+    ["Điều kiện / phụ thuộc", "SpecialOffer, ChooseOneSpecialOffer, NoAdsOffer, PawTouchOffer, EndlessPortal, MagicPass, MiniGame, DailyReward, Ads, Lives"],
+    ["Manager", "StoreModelService, StoreViewService, HomeStoreController, IAPManager, IAPService, IAPPurchaseVerificationService, WebShopService, WebShopHandler"]
+  ],
+  "description": [
+    "Store gồm ba nhóm hàng: gói coin (StoreBundleModel), gói đặc biệt theo hạng (StoreSpecialBundleModel) và gói vĩnh viễn (StorePermanentBundleModel).",
+    "Gói đặc biệt có Rank tăng dần theo lịch sử mua: người chơi mua càng nhiều thì gói được chào càng cao hạng.",
+    "Gói vĩnh viễn có nhãn Popular và Best; ba gói lớn nhất kèm quyền No Ads (ShouldCloseAds = true).",
+    "Store còn nhúng các dòng riêng cho Daily Bonus, Magic Pass, bundle kèm No Ads và một dải offer cuộn ngang.",
+    "Danh sách dòng dựng theo enum StoreViewType với 10 loại, từ BasicHeader(0) tới MagicPass(9).",
+    "Toàn bộ giao dịch đi qua IAPManager (Unity IAP, IDetailedStoreListener) với xác thực bắt buộc ở backend.",
+    "IAPService là điểm vào duy nhất, phân phối kết quả mua tới đúng feature theo IAPOrigin (11 giá trị).",
+    "Song song với IAP trong app, game có WebShop (Appcharge) — thanh toán qua web với giá rẻ hơn, giảm tới 10%.",
+    "WebShop có luồng checkout riêng, theo dõi trạng thái giao dịch và trao bù khi người chơi quay lại app."
+  ],
+  "notes": [
+    "Lưu ý: Catalog Unity IAP trong build (Resources/IAPProductCatalog.json) chỉ có sản phẩm 'test'; danh mục thật đến từ remote config.",
+    "Lưu ý: Store nền trên Android chọn bằng Resources/BillingMode.json với giá trị {\"androidStore\": \"GooglePlay\"}.",
+    "Lưu ý: Giao dịch tới ngoài luồng người chơi vừa bấm được xử lý riêng (CompleteNotRequestedInApp) và bắn not_requested_iap.",
+    "Lưu ý: Nếu backend không xác thực được receipt thì bắn purchase_not_verified hoặc purchase_unable_to_verify, mã lỗi CouldNotVerifyFromBackend = 5.",
+    "Lưu ý: Mua thành công sẽ gọi AdService.HideBanner() và HomeStoreController.UpdateStoreAfterPurchase(isSuccess) dựng lại danh mục.",
+    "Lưu ý: WebShopDataModel.AppliedTransactions chống trao thưởng trùng cho cùng một giao dịch web.",
+    "Lưu ý: Header xác thực Appcharge là X-Client-Key (giá trị WebShopConfigModel.ClientKey, không chép ở đây) và X-Game-Key = \"magic\".",
+    "Lưu ý: StoreConfigModelV3.json mặc định IsEnabled = false — bản V3 chưa bật.",
+    "Lưu ý: Điều kiện chọn giữa Store V1 (StoreScrollController) và V2 (StoreScrollControllerV2) không đọc được từ pseudo-C (gap)."
+  ],
+  "how_it_works": [
+    "Khởi tạo: IAPService.CollectIAPConfigModels() gom IAPConfigModel{ProductId, ProductType, DollarEquivalent} từ mọi nguồn — Store, EndlessPortal, SpecialOffer, PawTouchOffer, NoAdsOffer, ChooseOneSpecialOffer, TreasureDrill, MagicPass, MiniGame, WebShop.",
+    "IAPManager.InitializeUnityServices(iapConfigModels) → InitializePurchasing() gọi AddProduct cho từng id rồi InitializeDefaultStore().",
+    "OnInitialized(controller, extensions) log 'Store initialized' cùng danh sách sản phẩm; lỗi thì OnInitializeFailed(InitializationFailureReason).",
+    "Danh mục: StoreModelService.GetCoinBundles() / GetSpecialBundles() / GetPermanentBundles() đọc từ StoreConfigModelV2.",
+    "StoreViewService dựng StoreViewModel với các trường StoreViewType, IAPConfigModel, HeaderKey, IsPopular, IsBest, DiscountText, LifeDurationInHours, ShuffleAmount, ExtraBottleAmount, UndoAmount, CoinAmount, PictureId, IsExistNoAds, ShouldCloseAds.",
+    "StoreScrollController / StoreScrollControllerV2 cùng StoreItemFactory / StoreBaseViewFactory dựng từng dòng theo StoreViewType.",
+    "Hạng gói đặc biệt: SetCurrentOfferRank(index) / GetCurrentOfferRank() và SetMaxPurchasedBundleIndex(index) lưu trong StoreModel{CurrentSpecialOfferRank, MaxPurchasedBundleIndex}.",
+    "TryGetCurrentSpecialOffer(out StoreSpecialBundleModel) trả gói đặc biệt đang chào theo hạng hiện tại.",
+    "Mua trong app: StorePurchaseClickCommand → IAPService.ProcessPurchase(productId, IAPOrigin, IAPReason, IAPContext, giveRewardsWithoutAnimation) → IAPHandler.OnClickButton() → PurchaseAsync().",
+    "IAPManager.TryPurchase(productId, iapReason) chặn khi chưa khởi tạo hoặc đang có giao dịch dở, rồi StartPurchaseProcess(productId) đẩy sang Unity IAP.",
+    "ProcessPurchase(PurchaseEventArgs) gọi ProcessPurchaseWithVerificationAsync() → IAPPurchaseVerificationService.GetVerificationResult(productId, args) xác thực ở backend trước khi trao hàng.",
+    "IsRequested(productId) phân biệt giao dịch do người chơi vừa bấm (CompleteRequestedInApp) với giao dịch tới ngoài luồng (CompleteNotRequestedInApp).",
+    "RestorePurchases() → TryRestoreTransaction(result, errorMessage) log 'Restore purchases succeeded./failed.' cho nút khôi phục trong Settings.",
+    "WebShop: CanShowWebShopOffer(productId) kiểm tra sản phẩm có bản web rẻ hơn không, dựa trên WebShopProduct{ProductId, WebProductId, Price, DiscountPercent, Reward}.",
+    "TryShowWebShopPromptCommand hỏi người chơi chọn kênh (WebShopPromptResultType: None=0, InApp=1, WebShop=2).",
+    "Chọn web → StartCheckout(...) → WebShopHandler.StartCheckoutAsync(...) tạo phiên Appcharge (platform 'ios' hoặc 'and' kèm countryCode) và mở WebShopPopup.",
+    "TryFetchTransactionStatus() theo dõi WebShopPurchaseStatus ('pending', 'fulfilled', 'needs_review', 'cancelled'); khi fulfilled thì TryClaimTransactionAsync() → SendClaimPurchaseRequest(purchaseId) trao thưởng.",
+    "Khi người chơi quay lại app, FetchFulfilledPurchases() / HandleClaimablePurchases() / ApplyNotRequestedTransactions() xử lý các giao dịch web hoàn tất ngoài app, thưởng bonus ghi CurrencyEarnReason.WebShopBonus (60)."
+  ],
+  "reward_tables": [
+    {
+      "title": "GÓI COIN (StoreConfigModelV2.json: StoreBundles, client default)",
+      "columns": ["Mốc", "ProductId / Giá", "Phần thưởng"],
+      "rows": [
+        ["Rank 1", "sort.coins2 — 1.99 USD", "1.000 coin"],
+        ["Rank 2", "sort.coins8 — 7.99 USD", "5.000 coin"],
+        ["Rank 3", "sort.coins15 — 14.99 USD", "10.000 coin"],
+        ["Rank 4", "sort.coins30 — 29.99 USD", "25.000 coin"],
+        ["Rank 5", "sort.coins55 — 54.99 USD", "50.000 coin"],
+        ["Rank 6", "sort.coins100 — 99.99 USD", "100.000 coin"]
+      ]
+    },
+    {
+      "title": "GÓI VĨNH VIỄN (StoreConfigModelV2.json: StorePermanentBundles, client default)",
+      "columns": ["Mốc", "ProductId / Giá", "Phần thưởng"],
+      "rows": [
+        ["Rank 1 — Apprentice Bundle", "sort.apprenticebundle5 — 4.99 USD", "2.000 coin, 3 giờ Unlimited Lives, 1 Shuffle, 1 Extra Bottle, 1 Undo"],
+        ["Rank 2 — Magician Bundle", "sort.magicianbundle10 — 9.99 USD", "4.000 coin, 6 giờ Unlimited Lives, 3 Shuffle, 3 Extra Bottle, 3 Undo"],
+        ["Rank 3 — Sorcerer Bundle (Popular)", "sort.sorcererbundle20 — 19.99 USD", "8.000 coin, 12 giờ Unlimited Lives, 8 Shuffle, 8 Extra Bottle, 8 Undo, quyền No Ads"],
+        ["Rank 4 — Mage Bundle", "sort.magebundle50 — 49.99 USD", "20.000 coin, 36 giờ Unlimited Lives, 18 Shuffle, 18 Extra Bottle, 18 Undo, quyền No Ads"],
+        ["Rank 5 — Wizard Bundle (Best)", "sort.wizardbundle100 — 99.99 USD", "60.000 coin, 72 giờ Unlimited Lives, 36 Shuffle, 36 Extra Bottle, 36 Undo, quyền No Ads"]
+      ]
+    },
+    {
+      "title": "GÓI ĐẶC BIỆT THEO HẠNG (StoreConfigModelV2.json: StoreSpecialBundles, client default)",
+      "columns": ["Mốc", "ProductId / Giá", "Phần thưởng"],
+      "rows": [
+        ["Rank 1 — Starter Bundle (90% OFF!)", "sort.starterbundle1 — 0.99 USD", "1.000 coin, 1 giờ Unlimited Lives, 1 Shuffle, 1 Extra Bottle, 1 Undo"]
+      ]
+    },
+    {
+      "title": "SẢN PHẨM WEBSHOP (WebShopConfigModel.json, client default)",
+      "columns": ["Sản phẩm", "Giá web", "Ưu đãi"],
+      "rows": [
+        ["sort.special1", "0.99 USD", "Thưởng thêm 250 coin"],
+        ["sort.special3", "2.69 USD", "Giảm 10%"],
+        ["sort.special4.99", "4.99 USD", "Thưởng thêm 500 coin"],
+        ["sort.special5", "4.49 USD", "Giảm 10%"],
+        ["sort.special10", "9.99 USD", "Thưởng thêm 1.000 coin"],
+        ["sort.special20", "17.99 USD", "Giảm 10%"],
+        ["sort.special40", "35.99 USD", "Giảm 10%"],
+        ["sort.special50", "44.99 USD", "Giảm 10%"],
+        ["sort.special80", "71.99 USD", "Giảm 10%"],
+        ["sort.special100", "89.99 USD", "Giảm 10%"]
+      ]
+    },
+    {
+      "title": "CÁC ENUM CHÍNH CỦA HỆ THỐNG MUA",
+      "columns": ["Enum", "Giá trị", "Ý nghĩa"],
+      "rows": [
+        ["StoreViewType", "BasicHeader=0, BasicBundle=1, SpecialHeader=2, SpecialBundle=3, CoinHeader=4, CoinBundle=5, BasicBundleWithNoAds=6, HorizontalOffer=7, DailyReward=8, MagicPass=9", "10 loại dòng trong cửa hàng"],
+        ["StorePopUpSource", "None=0, Booster=1, Navigation=2, PlayOn=3, Refill=4, Teams=5", "Nguồn mở cửa hàng (shop_opened / shop_closed)"],
+        ["StoreScrollPlace", "Home=0, Popup=1", "Cửa hàng nhúng ở Home hay trong popup"],
+        ["IAPContext", "None=0, Home=1, Store=2, Teams=3, Refill=4, RefillInGame=5, Booster=6, PlayOn=7, MiniGame=8", "Bối cảnh người chơi khi mua"],
+        ["IAPOrigin", "None=0, StorePreview=1, StoreExpanded=2, EndlessPortal=3, SpecialOffer=4, PawTouchOffer=5, NoAdsOffer=6, ChooseOneSpecialOffer=7, MagicPass=8, TreasureDrill=9, MiniGameOffer=10", "Nơi xuất phát giao dịch"],
+        ["IAPReason", "None=0, Booster=1, Navigation=2, PlayOn=3, Refill=4, Endless=5, SpecialOffer=6, PawTouchOffer=7, NoAdsOffer=8, ChooseOneSpecialOffer=9, MagicPass=10, TreasureDrill=11, MiniGameOffer=12", "Lý do mua"],
+        ["StorePurchaseFailureReason", "NotInitialized=1, NotRequestedInApp=2, ProductIdIsNull=3, ProductIdIsNotAvailableToPurchaseSomehow=4, CouldNotVerifyFromBackend=5", "Nguyên nhân mua thất bại"],
+        ["WebShopPurchaseStatus", "pending, fulfilled, needs_review, cancelled", "4 trạng thái giao dịch web"],
+        ["WebShopPromptResultType", "None=0, InApp=1, WebShop=2", "Kênh thanh toán người chơi chọn"]
+      ]
+    }
+  ],
+  "key_numbers": [
+    {"label": "Số gói coin", "value": "6 (1.99 … 99.99 USD)", "source": "StoreConfigModelV2.json: StoreBundles"},
+    {"label": "Số gói vĩnh viễn", "value": "5 (4.99 … 99.99 USD)", "source": "StoreConfigModelV2.json: StorePermanentBundles"},
+    {"label": "Số gói đặc biệt (client default)", "value": "1 (Starter Bundle 0.99 USD)", "source": "StoreConfigModelV2.json: StoreSpecialBundles"},
+    {"label": "Coin gói nhỏ nhất", "value": "1.000 coin (sort.coins2, 1.99 USD)", "source": "StoreBundles[0].CoinAmount"},
+    {"label": "Coin gói lớn nhất", "value": "100.000 coin (sort.coins100, 99.99 USD)", "source": "StoreBundles[5].CoinAmount"},
+    {"label": "Gói vĩnh viễn cao nhất", "value": "Wizard Bundle — 60.000 coin, 72 giờ Unlimited Lives, 36 Shuffle, 36 Extra Bottle, 36 Undo", "source": "StorePermanentBundles[4]"},
+    {"label": "Gói gắn nhãn Popular", "value": "Sorcerer Bundle (19.99 USD)", "source": "StorePermanentBundles[2].IsPopular"},
+    {"label": "Gói gắn nhãn Best", "value": "Wizard Bundle (99.99 USD)", "source": "StorePermanentBundles[4].IsBest"},
+    {"label": "Số gói kèm quyền No Ads", "value": "3 (Sorcerer, Mage, Wizard)", "source": "StorePermanentBundles[*].ShouldCloseAds"},
+    {"label": "Starter Bundle — nhãn giảm giá", "value": "90% OFF!", "source": "StoreSpecialBundles[0].DiscountText"},
+    {"label": "StoreConfigModelV2 bật mặc định", "value": "true", "source": "StoreConfigModelV2.json: IsEnabled"},
+    {"label": "StoreConfigModelV3 bật mặc định", "value": "false", "source": "StoreConfigModelV3.json: IsEnabled"},
+    {"label": "WebShop bật mặc định", "value": "false", "source": "WebShopConfigModel.json: IsEnabled"},
+    {"label": "WebShop — level mở khoá", "value": "5000", "source": "WebShopConfigModel.json: FirstLevelToShow"},
+    {"label": "Số sản phẩm WebShop", "value": "10", "source": "WebShopConfigModel.json: Products"},
+    {"label": "Mức giảm giá WebShop", "value": "10% (DiscountPercent trên 7 sản phẩm)", "source": "WebShopConfigModel.json: Products[*].DiscountPercent"},
+    {"label": "Thưởng thêm WebShop cao nhất", "value": "1.000 coin (sort.special10)", "source": "WebShopConfigModel.json: Products[4].Reward.Amount"},
+    {"label": "Số loại dòng trong cửa hàng", "value": "10 (StoreViewType 0–9)", "source": "StoreViewType"},
+    {"label": "Số IAPOrigin", "value": "11 (None=0 … MiniGameOffer=10)", "source": "IAPOrigin"},
+    {"label": "Số IAPReason", "value": "13 (None=0 … MiniGameOffer=12)", "source": "IAPReason"},
+    {"label": "Số IAPContext", "value": "9 (None=0 … MiniGame=8)", "source": "IAPContext"},
+    {"label": "CurrencyEarnReason.WebShopBonus", "value": "60", "source": "Inventory.Scripts.CurrencyEarnReason"},
+    {"label": "Store nền Android", "value": "GooglePlay", "source": "Resources/BillingMode.json"},
+    {"label": "Header xác thực Appcharge", "value": "X-Client-Key (không chép giá trị), X-Game-Key = \"magic\"", "source": "WebShopRemoteService"},
+    {"label": "Tên bản ghi đồng bộ", "value": "StoreModel và WebShopSyncDataModel", "source": "SyncService"}
+  ],
+  "config_highlights": [
+    {"key": "Resources/BillingMode.json", "value": "{\"androidStore\": \"GooglePlay\"}", "meaning": "Store nền cho Unity IAP trên Android"},
+    {"key": "Resources/IAPProductCatalog.json", "value": "products=[{id='test', type=0}]", "meaning": "Catalog trong build chỉ có sản phẩm test; danh mục thật đến từ remote config"},
+    {"key": "StoreConfigModelV2.StoreBundles / StoreSpecialBundles / StorePermanentBundles", "value": "6 / 1 / 5 gói (client default)", "meaning": "Ba nhóm hàng của cửa hàng"},
+    {"key": "StoreBundleModel", "value": "{IAPConfigModel, CoinAmount, PictureId, ShouldCloseAds}", "meaning": "Gói coin cơ bản"},
+    {"key": "StoreSpecialBundleModel", "value": "{Rank, DiscountText, LifeDurationInHours, ShuffleAmount, ExtraBottleAmount, UndoAmount, HeaderText, HeaderKey}", "meaning": "Gói đặc biệt theo hạng, chứa booster và Unlimited Lives theo giờ"},
+    {"key": "StorePermanentBundleModel", "value": "{IsPopular, IsBest, DiscountText, LifeDurationInHours, ShuffleAmount, ExtraBottleAmount, UndoAmount, HeaderText, HeaderKey}", "meaning": "Gói vĩnh viễn có nhãn Popular / Best"},
+    {"key": "StoreConfigModelV2.json: StoreBundles giá và coin", "value": "1.99→1.000, 7.99→5.000, 14.99→10.000, 29.99→25.000, 54.99→50.000, 99.99→100.000", "meaning": "Bảng quy đổi tiền thật sang coin"},
+    {"key": "StoreConfigModelV2.json: StorePermanentBundles[0]", "value": "sort.apprenticebundle5, 4.99, 2000 coin, 3 giờ, 1/1/1 booster, HeaderKey ShopBundleApprentice", "meaning": "Apprentice Bundle"},
+    {"key": "StoreConfigModelV2.json: StorePermanentBundles[1]", "value": "sort.magicianbundle10, 9.99, 4000 coin, 6 giờ, 3/3/3 booster, HeaderKey ShopBundleMagician", "meaning": "Magician Bundle"},
+    {"key": "StoreConfigModelV2.json: StorePermanentBundles[2]", "value": "sort.sorcererbundle20, 19.99, 8000 coin, 12 giờ, 8/8/8 booster, IsPopular=true, ShouldCloseAds=true", "meaning": "Sorcerer Bundle — gói Popular kèm No Ads"},
+    {"key": "StoreConfigModelV2.json: StorePermanentBundles[3]", "value": "sort.magebundle50, 49.99, 20000 coin, 36 giờ, 18/18/18 booster, ShouldCloseAds=true", "meaning": "Mage Bundle"},
+    {"key": "StoreConfigModelV2.json: StorePermanentBundles[4]", "value": "sort.wizardbundle100, 99.99, 60000 coin, 72 giờ, 36/36/36 booster, IsBest=true, ShouldCloseAds=true", "meaning": "Wizard Bundle — gói Best kèm No Ads"},
+    {"key": "StoreConfigModelV2.json: StoreSpecialBundles[0]", "value": "sort.starterbundle1, 0.99, 1000 coin, 1 giờ, 1/1/1 booster, DiscountText '90% OFF!', HeaderKey ShopBundleStarter", "meaning": "Starter Bundle hạng 1"},
+    {"key": "StoreConfigModelV3.json: IsEnabled", "value": "false", "meaning": "Bản cửa hàng V3 chưa bật"},
+    {"key": "WebShopConfigModel.json: IsEnabled / FirstLevelToShow", "value": "false / 5000", "meaning": "Bật tắt WebShop và level mở khoá"},
+    {"key": "WebShopConfigModel.json: ClientKey", "value": "(không chép giá trị)", "meaning": "Khoá xác thực gửi trong header X-Client-Key"},
+    {"key": "WebShopProduct", "value": "{ProductId, WebProductId, Price, DiscountPercent, Reward}", "meaning": "Ánh xạ sản phẩm in-app sang sản phẩm web, giá và mức giảm"},
+    {"key": "WebShopHandler.PlatformIos / PlatformAndroid", "value": "\"ios\" / \"and\"", "meaning": "Mã nền tảng gửi lên Appcharge"},
+    {"key": "HTTP header WebShop", "value": "X-Client-Key, X-Game-Key = \"magic\"", "meaning": "Header xác thực khi gọi Appcharge"},
+    {"key": "StoreViewType", "value": "BasicHeader=0 … MagicPass=9", "meaning": "10 loại dòng trong cửa hàng"},
+    {"key": "IAPOrigin / IAPReason / IAPContext", "value": "11 / 13 / 9 giá trị", "meaning": "Phân loại nguồn, lý do và bối cảnh của mỗi giao dịch"},
+    {"key": "StorePurchaseFailureReason", "value": "NotInitialized=1, NotRequestedInApp=2, ProductIdIsNull=3, ProductIdIsNotAvailableToPurchaseSomehow=4, CouldNotVerifyFromBackend=5", "meaning": "Nguyên nhân mua thất bại"},
+    {"key": "IAPConfigModel / IAPModel", "value": "{ProductId, ProductType, DollarEquivalent} / {ProductId, ProductType, PriceString, Title, Description, IsoCurrencyCode, LocalizedPrice, DollarEquivalent}", "meaning": "Cấu hình sản phẩm từ server và dữ liệu thật lấy từ store nền"},
+    {"key": "StoreModel", "value": "CurrentSpecialOfferRank, MaxPurchasedBundleIndex", "meaning": "Hạng gói đặc biệt đang chào và chỉ số gói lớn nhất từng mua"},
+    {"key": "WebShopDataModel.AppliedTransactions", "value": "client + server", "meaning": "Các giao dịch web đã trao thưởng, chống trao trùng"},
+    {"key": "WebShopTransactionDataModel", "value": "{TransactionId, ProductId, WebProductId, Origin, Context, Reason, GiveRewardsWithoutAnimation}", "meaning": "Bối cảnh của một giao dịch web đang chạy"},
+    {"key": "StoreModelService.IsSelectiveNoAdsBundleEnabled", "value": "(server)", "meaning": "Bật cơ chế chỉ hiện bundle kèm No Ads cho một số người chơi"},
+    {"key": "CurrencyEarnReason.WebShopBonus", "value": "60", "meaning": "Thưởng thêm khi mua qua WebShop"},
+    {"key": "StoreHorizontalOfferModel", "value": "{SpecialItemIndex, SelectedIndex, TotalCount, IsSlideable, ShouldResetScroll}", "meaning": "Điều khiển dải offer cuộn ngang"}
+  ],
+  "tips": [
+    "Bậc giá 1.99 → 99.99 USD phủ toàn dải chi tiêu, còn tỉ lệ coin trên đô tăng dần để đẩy người chơi lên gói lớn.",
+    "Gắn No Ads vào ba gói cao nhất biến quyền bỏ quảng cáo thành lý do nâng bậc thay vì bán riêng.",
+    "Nâng hạng gói đặc biệt theo lịch sử mua giữ offer luôn tương xứng với sức chi thực tế của từng người.",
+    "WebShop giảm 10% hoặc tặng coin bù chính là cách chuyển phí nền tảng thành ưu đãi cho người chơi.",
+    "Xác thực receipt bắt buộc ở backend chặn gian lận IAP trước khi bất kỳ phần thưởng nào được trao."
+  ],
+  "categories": ["Kinh tế", "Offer/IAP", "Meta"]
+}

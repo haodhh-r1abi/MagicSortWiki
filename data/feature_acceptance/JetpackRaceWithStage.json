@@ -1,0 +1,964 @@
+{
+  "id": "JetpackRaceWithStage",
+  "feature": "JetpackRaceWithStage",
+  "name": "Đua Jetpack 3 chặng",
+  "category": "Event",
+  "category_label": "Sự kiện",
+  "core_levels_last": false,
+  "acceptance_status": "documented_with_explicit_remaining_scope",
+  "full_feature_verified": false,
+  "checks": {
+    "purpose": {
+      "status": "documented_static_scope",
+      "source": "gdd/JetpackRaceWithStage.json#/summary",
+      "claim_excerpt": "Jetpack Race With Stage là bản 3 chặng của Jetpack Race, dùng bộ endpoint riêng /v1/*-jetpack-* và schema flatbuffer magicsort.schemas.v1.liveops.jet_pack_v2. Người chơi đua với một nhóm (có bot) trên bảng leaderboard riêng (leaderboardID tách khỏi tournamentID); thắng level thì tiến 1 nấc, thua thì mất chuỗi. Mỗi chặng (currentStage 1/2/3) có mốc đích riêng (maxReachableStageScore) và bộ thưởng r"
+    },
+    "unlock": {
+      "status": "described_historical_conditions_runtime_boundary_unverified",
+      "source": "gdd/JetpackRaceWithStage.json#/unlock",
+      "content": "JetpackRaceWithStageStateService.GetEventState(): Disable(0) nếu IsEnabled == false; ProgressNotEnough(1) nếu level < FirstLevelToShow; NoCache(2); Join(3); InProgress(4); LocalTimeIsUp(5); RemoteTimeIsUp(6); ClaimedLocally(7); LastStageWinLimitReached(8) khi đã đạt trần thắng ở chặng cuối. Client default: IsEnabled=false, EventType=6, MagicLabEventType=19, FirstLevelToShow=80, StreakDisabled=true, LastStageWinLimit=100 (Resources/defaultconfigs/JetpackRaceWithStageConfigModel.json)."
+    },
+    "entry_flow": {
+      "status": "documented_paths_not_all_executed",
+      "entry_points": [
+        "Nút lobby (IsLobbyIconVisible / IsLobbyIconVisibleAndNotIntroduced)",
+        "Banner lobby (ShouldShowJetpackRaceWithStageBanner)",
+        "Popup tham gia (ShouldShowJoinPopup / CanShowJoinPopupForce); có thể bị khoá nút đóng bởi CloseDisabledInJoinPopup",
+        "Popup đua tự mở khi về lobby / mở app (ShouldOpenAutomaticallyOnLobbyReturn / ShouldOpenAutomaticallyOnSessionStart)",
+        "Popup giải thích chế độ 'không mất chuỗi' (ShouldShowStreakDisabledPopup)",
+        "Popup xác nhận thoát level (ShouldShowAreYouSure)",
+        "Nguồn TryAgain sau khi thua"
+      ],
+      "flow_source": "gdd/JetpackRaceWithStage.json#/flow",
+      "acceptance_scope": "Three-stage score/reward/transition; CloseDisabledInJoinPopup, fail/retry/claim và protocol branch"
+    },
+    "config": {
+      "status": "source_bound_catalog_present",
+      "gdd_rows": 186,
+      "full_leaf_rows_associated": 438,
+      "snapshots": {
+        "default_0.0.3063": 50,
+        "cache_20260910": 157,
+        "cache_20261010": 157,
+        "firebase_20260910": 74
+      },
+      "models": [
+        {
+          "model": "jetpackRaceWithStageConfigModel",
+          "matching_basis": [
+            {
+              "kind": "explicit_gd_config_model_map",
+              "source": "gd_config.json#/defaultconfigs/map/JetpackRaceWithStage"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/JetpackRaceWithStage.json#/sources/3"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/JetpackRaceWithStage.json#/sources/6"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/JetpackRaceWithStage.json#/configs/0/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/JetpackRaceWithStage.json#/configs/1/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/JetpackRaceWithStage.json#/configs/2/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/JetpackRaceWithStage.json#/configs/3/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/JetpackRaceWithStage.json#/configs/4/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/JetpackRaceWithStage.json#/configs/5/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/JetpackRaceWithStage.json#/configs/6/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/JetpackRaceWithStage.json#/configs/7/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/JetpackRaceWithStage.json#/configs/8/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/JetpackRaceWithStage.json#/configs/9/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/JetpackRaceWithStage.json#/configs/10/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/JetpackRaceWithStage.json#/configs/11/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/JetpackRaceWithStage.json#/configs/12/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/JetpackRaceWithStage.json#/configs/24/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/JetpackRaceWithStage.json#/configs/25/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/JetpackRaceWithStage.json#/configs/26/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/JetpackRaceWithStage.json#/configs/27/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/JetpackRaceWithStage.json#/configs/28/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/JetpackRaceWithStage.json#/configs/29/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/JetpackRaceWithStage.json#/configs/30/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/JetpackRaceWithStage.json#/configs/31/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/JetpackRaceWithStage.json#/configs/32/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/JetpackRaceWithStage.json#/configs/33/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/JetpackRaceWithStage.json#/configs/34/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/JetpackRaceWithStage.json#/configs/35/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/JetpackRaceWithStage.json#/configs/36/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/JetpackRaceWithStage.json#/configs/37/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/JetpackRaceWithStage.json#/configs/38/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/JetpackRaceWithStage.json#/configs/39/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/JetpackRaceWithStage.json#/configs/40/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/JetpackRaceWithStage.json#/configs/41/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/JetpackRaceWithStage.json#/configs/42/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/JetpackRaceWithStage.json#/configs/43/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/JetpackRaceWithStage.json#/configs/44/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/JetpackRaceWithStage.json#/configs/45/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/JetpackRaceWithStage.json#/configs/46/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/JetpackRaceWithStage.json#/configs/47/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/JetpackRaceWithStage.json#/configs/48/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/JetpackRaceWithStage.json#/configs/49/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/JetpackRaceWithStage.json#/configs/50/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/JetpackRaceWithStage.json#/configs/51/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/JetpackRaceWithStage.json#/configs/52/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/JetpackRaceWithStage.json#/configs/53/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/JetpackRaceWithStage.json#/configs/54/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/JetpackRaceWithStage.json#/configs/55/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/JetpackRaceWithStage.json#/configs/56/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/JetpackRaceWithStage.json#/configs/57/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/JetpackRaceWithStage.json#/configs/58/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/JetpackRaceWithStage.json#/configs/59/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/JetpackRaceWithStage.json#/configs/60/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/JetpackRaceWithStage.json#/configs/61/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/JetpackRaceWithStage.json#/configs/62/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/JetpackRaceWithStage.json#/configs/63/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/JetpackRaceWithStage.json#/configs/64/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/JetpackRaceWithStage.json#/configs/65/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/JetpackRaceWithStage.json#/configs/66/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/JetpackRaceWithStage.json#/configs/67/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/JetpackRaceWithStage.json#/configs/68/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/JetpackRaceWithStage.json#/configs/69/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/JetpackRaceWithStage.json#/configs/70/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/JetpackRaceWithStage.json#/configs/71/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/JetpackRaceWithStage.json#/configs/72/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/JetpackRaceWithStage.json#/configs/73/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/JetpackRaceWithStage.json#/configs/74/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/JetpackRaceWithStage.json#/configs/75/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/JetpackRaceWithStage.json#/configs/76/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/JetpackRaceWithStage.json#/configs/77/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/JetpackRaceWithStage.json#/configs/78/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/JetpackRaceWithStage.json#/configs/79/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/JetpackRaceWithStage.json#/configs/80/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/JetpackRaceWithStage.json#/configs/81/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/JetpackRaceWithStage.json#/configs/82/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/JetpackRaceWithStage.json#/configs/83/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/JetpackRaceWithStage.json#/configs/84/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/JetpackRaceWithStage.json#/configs/85/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/JetpackRaceWithStage.json#/configs/86/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/JetpackRaceWithStage.json#/configs/87/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/JetpackRaceWithStage.json#/configs/88/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/JetpackRaceWithStage.json#/configs/89/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/JetpackRaceWithStage.json#/configs/90/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/JetpackRaceWithStage.json#/configs/91/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/JetpackRaceWithStage.json#/configs/92/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/JetpackRaceWithStage.json#/configs/93/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/JetpackRaceWithStage.json#/configs/94/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/JetpackRaceWithStage.json#/configs/95/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/JetpackRaceWithStage.json#/configs/96/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/JetpackRaceWithStage.json#/configs/97/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/JetpackRaceWithStage.json#/configs/98/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/JetpackRaceWithStage.json#/configs/99/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/JetpackRaceWithStage.json#/configs/100/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/JetpackRaceWithStage.json#/configs/101/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/JetpackRaceWithStage.json#/configs/102/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/JetpackRaceWithStage.json#/configs/103/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/JetpackRaceWithStage.json#/configs/104/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/JetpackRaceWithStage.json#/configs/105/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/JetpackRaceWithStage.json#/configs/106/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/JetpackRaceWithStage.json#/configs/107/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/JetpackRaceWithStage.json#/configs/108/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/JetpackRaceWithStage.json#/configs/109/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/JetpackRaceWithStage.json#/configs/110/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/JetpackRaceWithStage.json#/configs/111/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/JetpackRaceWithStage.json#/configs/112/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/JetpackRaceWithStage.json#/configs/113/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/JetpackRaceWithStage.json#/configs/114/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/JetpackRaceWithStage.json#/configs/115/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/JetpackRaceWithStage.json#/configs/116/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/JetpackRaceWithStage.json#/configs/117/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/JetpackRaceWithStage.json#/configs/118/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/JetpackRaceWithStage.json#/configs/119/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/JetpackRaceWithStage.json#/configs/120/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/JetpackRaceWithStage.json#/configs/121/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/JetpackRaceWithStage.json#/configs/122/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/JetpackRaceWithStage.json#/configs/123/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/JetpackRaceWithStage.json#/configs/124/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/JetpackRaceWithStage.json#/configs/125/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/JetpackRaceWithStage.json#/configs/126/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/JetpackRaceWithStage.json#/configs/127/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/JetpackRaceWithStage.json#/configs/128/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/JetpackRaceWithStage.json#/configs/129/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/JetpackRaceWithStage.json#/configs/130/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/JetpackRaceWithStage.json#/configs/131/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/JetpackRaceWithStage.json#/configs/132/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/JetpackRaceWithStage.json#/configs/133/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/JetpackRaceWithStage.json#/configs/134/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/JetpackRaceWithStage.json#/configs/135/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/JetpackRaceWithStage.json#/configs/136/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/JetpackRaceWithStage.json#/configs/137/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/JetpackRaceWithStage.json#/configs/138/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/JetpackRaceWithStage.json#/configs/139/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/JetpackRaceWithStage.json#/configs/140/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/JetpackRaceWithStage.json#/configs/141/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/JetpackRaceWithStage.json#/configs/142/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/JetpackRaceWithStage.json#/configs/143/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/JetpackRaceWithStage.json#/configs/144/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/JetpackRaceWithStage.json#/configs/145/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/JetpackRaceWithStage.json#/configs/146/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/JetpackRaceWithStage.json#/configs/147/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/JetpackRaceWithStage.json#/configs/148/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/JetpackRaceWithStage.json#/configs/149/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/JetpackRaceWithStage.json#/configs/150/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/JetpackRaceWithStage.json#/configs/151/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/JetpackRaceWithStage.json#/configs/152/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/JetpackRaceWithStage.json#/configs/153/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/JetpackRaceWithStage.json#/configs/154/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/JetpackRaceWithStage.json#/configs/155/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/JetpackRaceWithStage.json#/configs/156/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/JetpackRaceWithStage.json#/configs/157/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/JetpackRaceWithStage.json#/configs/158/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/JetpackRaceWithStage.json#/configs/159/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/JetpackRaceWithStage.json#/configs/160/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/JetpackRaceWithStage.json#/configs/161/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/JetpackRaceWithStage.json#/configs/162/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/JetpackRaceWithStage.json#/configs/163/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/JetpackRaceWithStage.json#/configs/164/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/JetpackRaceWithStage.json#/configs/165/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/JetpackRaceWithStage.json#/configs/166/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/JetpackRaceWithStage.json#/configs/167/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/JetpackRaceWithStage.json#/configs/168/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/JetpackRaceWithStage.json#/configs/169/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/JetpackRaceWithStage.json#/configs/170/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/JetpackRaceWithStage.json#/configs/171/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/JetpackRaceWithStage.json#/configs/172/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/JetpackRaceWithStage.json#/configs/173/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/JetpackRaceWithStage.json#/configs/174/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/JetpackRaceWithStage.json#/configs/175/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/JetpackRaceWithStage.json#/configs/176/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/JetpackRaceWithStage.json#/configs/177/key_where"
+            }
+          ]
+        }
+      ],
+      "declared_models_without_catalog_data": [],
+      "placeholder_rows_requiring_source_review": [],
+      "exact_placeholder_snapshot_values": [],
+      "dossier_abbreviated_values": [],
+      "note": "Model association uses explicitmap or exacttoken citations; fieldpresence does not prove allproductiondata. GDDsummaryrows and fullcatalogrows have separate counts. Abbreviated source summaries are not full arrays; catalog/source links remain authoritative."
+    },
+    "reward": {
+      "status": "documented_static_rewards_runtime_grant_not_fully_verified",
+      "entries": 4,
+      "tables_in_site_meta": 3,
+      "source": "gdd/JetpackRaceWithStage.json#/rewards"
+    },
+    "use_cases": {
+      "status": "specified_not_executed_in15nov_ledger",
+      "specified": 16,
+      "reviewed_uc_branch_count": 0,
+      "reviewed_uc_ids": [],
+      "not_reviewed_in_new_ledger": [
+        "UC-01",
+        "UC-02",
+        "UC-03",
+        "UC-04",
+        "UC-05",
+        "UC-06",
+        "UC-07",
+        "UC-08",
+        "UC-09",
+        "UC-10",
+        "UC-11",
+        "UC-12",
+        "UC-13",
+        "UC-14",
+        "UC-15",
+        "UC-16"
+      ],
+      "full_uc_pass_claimed": false
+    },
+    "screenshots": {
+      "historical_gallery_entries": 2,
+      "historical_uc_with_image_reference": 0,
+      "curated_new_images": [],
+      "curated_new_image_count": 0,
+      "status": "historical_references_only",
+      "source": "screens/web/screens.json#/JetpackRaceWithStage",
+      "note": "Image presence does not prove execution result or completeness."
+    },
+    "runtime_actual": {
+      "status": "not_observed_in15nov_ledger",
+      "case_count": 0,
+      "cases": [],
+      "mode": "offline_existing_fixture",
+      "build": "0.0.3129 ARM64"
+    },
+    "segment_ab": {
+      "status": "not_identified_in_sources",
+      "segment_ids": [],
+      "matching_basis": "explicit_gd_config_map_or_exact_model_token_in_gdd_configs_where_key_sources; rootfieldscoped",
+      "rows": [],
+      "classifications": {},
+      "assignment_verified": false,
+      "uplift_verified": false,
+      "note": "No matchingrow does not prove no segmentation/AB. Rewardbucketfalsepositives remain explicitly classified."
+    },
+    "storage_backend_analytics": {
+      "storage_keys": {
+        "entries": 12,
+        "status": "documented_static_contract_runtime_not_verified",
+        "source": "gdd/JetpackRaceWithStage.json#/storage_keys"
+      },
+      "backend": {
+        "entries": 6,
+        "status": "documented_static_contract_runtime_not_verified",
+        "source": "gdd/JetpackRaceWithStage.json#/backend"
+      },
+      "analytics": {
+        "entries": 5,
+        "status": "documented_static_contract_runtime_not_verified",
+        "source": "gdd/JetpackRaceWithStage.json#/analytics"
+      }
+    },
+    "remaining_next_step": {
+      "gap_count": 6,
+      "static_scoped_resolutions": 0,
+      "remaining_count": 6,
+      "all_gap_dispositions": [
+        {
+          "id": "MS-JetpackRaceWithStage-G001",
+          "feature": "JetpackRaceWithStage",
+          "source": "gdd/JetpackRaceWithStage.json#/gaps/0",
+          "original": "maxReachableStageScore của từng chặng do server, client không có mặc định.",
+          "current_note": "maxReachableStageScore của từng chặng do server, client không có mặc định.",
+          "status": "open_review_plan",
+          "review_status": "open_review_plan",
+          "dependency": "event_rotation_or_fresh_instance",
+          "next_action": "Trích target mỗi stage cùng reward/timer trong instance, nối stage UI.",
+          "remaining": "maxReachableStageScore của từng chặng do server, client không có mặc định."
+        },
+        {
+          "id": "MS-JetpackRaceWithStage-G002",
+          "feature": "JetpackRaceWithStage",
+          "source": "gdd/JetpackRaceWithStage.json#/gaps/1",
+          "original": "CloseDisabledInJoinPopup không xuất hiện trong file JSON mặc định — chỉ có trong class config, nên giá trị mặc định thực tế không xác định.",
+          "current_note": "15/11 — partial_actual_evidence: Default thiếu CloseDisabledInJoinPopup; cả cache09/10 và10/10 có closeDisabledInJoinPopup=false. Giá trị cache không chứng minh constructor fallback khi field absent hoặc runtime15/11. Còn lại: Đọc constructor cùng deserializer/caller CloseDisabledInJoinPopup; ghi fallback theo build, rồi kiểm join popup khi event hợp lệ.",
+          "status": "partial_actual_evidence",
+          "review_status": "preserved_partial_actual_evidence",
+          "dependency": "local_config_reconciliation",
+          "next_action": "Default thiếu CloseDisabledInJoinPopup; cả cache09/10 và10/10 có closeDisabledInJoinPopup=false. Giá trị cache không chứng minh constructor fallback khi field absent hoặc runtime15/11. Đọc constructor cùng deserializer/caller CloseDisabledInJoinPopup; ghi fallback theo build, rồi kiểm join popup khi event hợp lệ.",
+          "conclusion": "Default thiếu CloseDisabledInJoinPopup; cả cache09/10 và10/10 có closeDisabledInJoinPopup=false. Giá trị cache không chứng minh constructor fallback khi field absent hoặc runtime15/11.",
+          "evidence": [
+            "facts/local_asset_review_20261115/config_catalog.json"
+          ],
+          "remaining": "15/11 — partial_actual_evidence: Default thiếu CloseDisabledInJoinPopup; cả cache09/10 và10/10 có closeDisabledInJoinPopup=false. Giá trị cache không chứng minh constructor fallback khi field absent hoặc runtime15/11. Còn lại: Đọc constructor cùng deserializer/caller CloseDisabledInJoinPopup; ghi fallback theo build, rồi kiểm join popup khi event hợp lệ.",
+          "source_records": [
+            {
+              "snapshot": "default0.0.3063",
+              "model": "JetpackRaceWithStageConfigModel",
+              "source": "Resources\\defaultconfigs\\JetpackRaceWithStageConfigModel.json",
+              "root": "UnityExport Assets 0.0.3063",
+              "sha256": "de05a667a9738d160b2fce26fce193418d32ebaac842f679dd9f19683d88978a",
+              "line": 1,
+              "build": "0.0.3063 ARMv7"
+            },
+            {
+              "snapshot": "cache20260910",
+              "model": "JetpackRaceWithStageConfigModel",
+              "source": "facts\\runtime\\server_configs\\jetpackRaceWithStageConfigModel.json",
+              "root": "GameDesign",
+              "sha256": "a10c267f66dc1c44e5546ac70aa7961516b16d69ac7cb3897de6ba8db0f366e7",
+              "line": 1,
+              "build": "snapshot provenance at path"
+            },
+            {
+              "snapshot": "cache20261010",
+              "model": "JetpackRaceWithStageConfigModel",
+              "source": "facts\\runtime\\test_20261010\\before\\CachedRemoteConfigs",
+              "root": "GameDesign",
+              "sha256": "433164d4877b2dee55d2bbd79ef2fe83d3fe9519492fe15e3cb0926daf216050",
+              "line": 1,
+              "build": "snapshot provenance at path"
+            }
+          ],
+          "reviewed": "2026-11-15",
+          "scope": "question-specific source/observed branch only; no full-UC or production claim",
+          "full_uc_pass": false
+        },
+        {
+          "id": "MS-JetpackRaceWithStage-G003",
+          "feature": "JetpackRaceWithStage",
+          "source": "gdd/JetpackRaceWithStage.json#/gaps/2",
+          "original": "Cách server quyết định chuyển chặng (đủ điểm hay hết thời gian) không đọc được từ client.",
+          "current_note": "Cách server quyết định chuyển chặng (đủ điểm hay hết thời gian) không đọc được từ client.",
+          "status": "open_review_plan",
+          "review_status": "open_review_plan",
+          "dependency": "backend_contract_or_response",
+          "next_action": "Cần response progression/expiry tại stage boundary; client state chưa mô tả đầy đủ luật server.",
+          "remaining": "Cách server quyết định chuyển chặng (đủ điểm hay hết thời gian) không đọc được từ client."
+        },
+        {
+          "id": "MS-JetpackRaceWithStage-G004",
+          "feature": "JetpackRaceWithStage",
+          "source": "gdd/JetpackRaceWithStage.json#/gaps/3",
+          "original": "Quan hệ chạy song song/loại trừ với JetpackRace bản thường không rõ (EventType khác nhau: 4 vs 6).",
+          "current_note": "Quan hệ chạy song song/loại trừ với JetpackRace bản thường không rõ (EventType khác nhau: 4 vs 6).",
+          "status": "open_review_plan",
+          "review_status": "open_review_plan",
+          "dependency": "event_rotation_or_fresh_instance",
+          "next_action": "Quan sát registration+enable config hai bản và rotation; không gọi loại trừ từ EventType khác.",
+          "remaining": "Quan hệ chạy song song/loại trừ với JetpackRace bản thường không rõ (EventType khác nhau: 4 vs 6)."
+        },
+        {
+          "id": "MS-JetpackRaceWithStage-G005",
+          "feature": "JetpackRaceWithStage",
+          "source": "gdd/JetpackRaceWithStage.json#/gaps/4",
+          "original": "[Runtime 2026-09-10] Config server LIVE đã đọc trực tiếp từ cache máy (không cần request); các hàng 'server live' là giá trị server ghi đè/thêm so với default.",
+          "current_note": "[Runtime 2026-09-10] Config server LIVE đã đọc trực tiếp từ cache máy (không cần request); các hàng 'server live' là giá trị server ghi đè/thêm so với default.",
+          "status": "historical_evidence_annotation_not_test_result",
+          "review_status": "historical_evidence_annotation_not_test_result",
+          "dependency": "historical_note_requires_qualified_use",
+          "next_action": "Ghi chú cache đã đọc tháng9, từ LIVE phải hiểu snapshot lịch sử. Đối chiếu config catalog/source, giữ default/cache/production hiện tại riêng; không coi là fresh fetch15/11.",
+          "remaining": "[Runtime 2026-09-10] Config server LIVE đã đọc trực tiếp từ cache máy (không cần request); các hàng 'server live' là giá trị server ghi đè/thêm so với default."
+        },
+        {
+          "id": "MS-JetpackRaceWithStage-G006",
+          "feature": "JetpackRaceWithStage",
+          "source": "gdd/JetpackRaceWithStage.json#/gaps/5",
+          "original": "[Runtime 2026-09-10] Instance phiên event đang chạy đã đọc (JetpackRaceWithStageModel); phần từng ghi 'do server gửi' nay có giá trị thật trong các hàng 'server instance'.",
+          "current_note": "[Runtime 2026-09-10] Instance phiên event đang chạy đã đọc (JetpackRaceWithStageModel); phần từng ghi 'do server gửi' nay có giá trị thật trong các hàng 'server instance'.",
+          "status": "historical_evidence_annotation_not_test_result",
+          "review_status": "historical_evidence_annotation_not_test_result",
+          "dependency": "historical_note_requires_qualified_use",
+          "next_action": "Ghi chú instance đã đọc tháng9: kiểm model/snapshot trong GDD configs và báo cáo lịch sử; không đóng gap thuật toán/claim/rotation từ sự hiện diện model. Vòng mới cần event hợp lệ.",
+          "remaining": "[Runtime 2026-09-10] Instance phiên event đang chạy đã đọc (JetpackRaceWithStageModel); phần từng ghi 'do server gửi' nay có giá trị thật trong các hàng 'server instance'."
+        }
+      ],
+      "feature_specific_acceptance_questions": [
+        "Three-stage score/reward/transition",
+        " CloseDisabledInJoinPopup, fail/retry/claim và protocol branch"
+      ],
+      "next_steps": [
+        "Trích target mỗi stage cùng reward/timer trong instance, nối stage UI.",
+        "Default thiếu CloseDisabledInJoinPopup; cả cache09/10 và10/10 có closeDisabledInJoinPopup=false. Giá trị cache không chứng minh constructor fallback khi field absent hoặc runtime15/11. Đọc constructor cùng deserializer/caller CloseDisabledInJoinPopup; ghi fallback theo build, rồi kiểm join popup khi event hợp lệ.",
+        "Cần response progression/expiry tại stage boundary; client state chưa mô tả đầy đủ luật server.",
+        "Quan sát registration+enable config hai bản và rotation; không gọi loại trừ từ EventType khác.",
+        "Ghi chú cache đã đọc tháng9, từ LIVE phải hiểu snapshot lịch sử. Đối chiếu config catalog/source, giữ default/cache/production hiện tại riêng; không coi là fresh fetch15/11.",
+        "Ghi chú instance đã đọc tháng9: kiểm model/snapshot trong GDD configs và báo cáo lịch sử; không đóng gap thuật toán/claim/rotation từ sự hiện diện model. Vòng mới cần event hợp lệ."
+      ]
+    }
+  },
+  "use_cases": 16,
+  "configs": 186,
+  "new_review_case_count": 0,
+  "reviewed_uc_branch_count": 0,
+  "curated_new_image_count": 0,
+  "segment_ids": [],
+  "matching_basis": "explicit_gd_config_map_or_exact_model_token_in_gdd_configs_where_key_sources; rootfieldscoped",
+  "unmatched_segment_status": "not_identified_in_sources",
+  "local_document_repairs": [],
+  "sources": [
+    "GameDesign/features/JetpackRaceWithStageService.md",
+    "GameDesign/features/JetpackRaceWithStageStateService.md",
+    "GameDesign/features/JetpackRaceWithStageDataService.md",
+    "GameDesign/features/JetpackRaceWithStageConfigModel.md",
+    "RecoveredNative/PseudoC/Assembly-CSharp/Modules/Contexts/Home/JetpackRaceWithStage/Scripts/*.c",
+    "RecoveredNative/Il2CppDumper/dump.cs (TypeDefIndex 3802-3839)",
+    "UnityExport/ExportedProject/Assets/Resources/defaultconfigs/JetpackRaceWithStageConfigModel.json",
+    "UnityExport/ExportedProject/Assets/MonoBehaviour/BackendEnvironmentConfig.asset",
+    "RecoveredNative/strings-by-type.tsv (EventSender.SendJetpackRaceWithStage*)"
+  ],
+  "source_hashes": {
+    "gdd_sha256": "f19f0b046d20491ddf3f2fa97a661a67f2bc88014d4be857e3f11e806935cbc1",
+    "site_meta_sha256": "8b87d907f72bbe16781e37bb78ebde8246deb601e0ddfe499e22c5ca51ab5703"
+  }
+}

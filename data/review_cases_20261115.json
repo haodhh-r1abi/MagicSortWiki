@@ -1,0 +1,1484 @@
+[
+  {
+    "id": "MS-R15-ECO01",
+    "feature": "Store",
+    "uc": [
+      "UC-02",
+      "UC-11"
+    ],
+    "title": "Catalog Shop và giá hiển thị từ cache",
+    "precondition": "Build 0.0.3129 ARM64; level351; non-purchaser trong save; tài nguyên đã chỉnh từ trước; UID MagicSort bị chặn mạng IPv4/IPv6.",
+    "steps": [
+      "Mở tab Shop",
+      "Cuộn từ Starter Bundle tới Magic Bundles và Coins"
+    ],
+    "expected": "Catalog dựng được từ dữ liệu có sẵn, duyệt catalog không tự tiêu/cấp tài nguyên.",
+    "actual": "Starter 1.000 coin + 1h lives + ba booster x1: 29.000 VND; Apprentice 2.000 coin + 3h lives + ba booster x1 + No Ads:149.000 VND. Mage20.000/36h/x18:1.499.000 VND; Wizard60.000/72h/x36:2.999.000 VND. Coins1.000/5.000/10.000/25.000/50.000/100.000 hiện59.000/249.000/499.000/999.000/1.799.000/2.999.000 VND. Kho không đổi.",
+    "status": "observed_partial",
+    "limitations": "Giá cache/UI offline, không xác minh metadata store mới, productId bằng trace, purchase hay entitlement NoAds. Chưa chụp đủ nội dung Magician/Sorcerer.",
+    "images": [
+      "ECO04_store_ready",
+      "ECO05_bundles",
+      "ECO06_bundles",
+      "ECO07_coins"
+    ],
+    "before": "ECO02_wait",
+    "after": "ECO07_coins",
+    "currency_unchanged": true,
+    "build": "0.0.3129 ARM64",
+    "mode": "offline_existing_fixture",
+    "date": "2026-11-15",
+    "ledger": {
+      "before": "ECO02_wait.json",
+      "after": "ECO07_coins.json"
+    }
+  },
+  {
+    "id": "MS-R15-ECO02",
+    "feature": "Store",
+    "uc": [
+      "UC-04",
+      "UC-07"
+    ],
+    "title": "IAP lỗi không tìm thấy mặt hàng và trở lại Shop",
+    "precondition": "Cùng phiên offline fixture, nút gói1.000 coin hiện59.000 VND.",
+    "steps": [
+      "Bấm giá gói1.000 coin",
+      "Quan sát loading rồi store error",
+      "Bấm Tôi hiểu rồi",
+      "Quan sát Failed của game",
+      "Bấm Continue"
+    ],
+    "expected": "Giao dịch lỗi không cấp coin; UI trả lại Shop.",
+    "actual": "Store báo Không thể tìm thấy mặt hàng bạn đang cố gắng mua; game hiện Failed / Your account wasn't charged; Continue trả lại Shop. CurrencyAmountByType trước/sau bằng nhau, coin999995869. Không xác nhận hoặc hoàn tất thanh toán.",
+    "status": "verified_observed_branch",
+    "limitations": "Chỉ nhánh lỗi đã thấy; chưa kiểm chứng mọi mã lỗi, mua thành công, receipt/grant/refund. Không quy lỗi chắc chắn cho firewall vì chưa trace nguyên nhân store.",
+    "images": [
+      "ECO08_coin_request",
+      "ECO09_coin_response",
+      "ECO10_purchase_error_closed",
+      "ECO12_error_continue"
+    ],
+    "before": "ECO07_coins",
+    "after": "ECO12_error_continue",
+    "currency_unchanged": true,
+    "build": "0.0.3129 ARM64",
+    "mode": "offline_existing_fixture",
+    "date": "2026-11-15",
+    "ledger": {
+      "before": "ECO07_coins.json",
+      "after": "ECO12_error_continue.json"
+    }
+  },
+  {
+    "id": "MS-R15-ECO03",
+    "feature": "Inventory",
+    "uc": [],
+    "title": "Chạm vùng Lives khi đầy5 mạng",
+    "precondition": "Home hiện5 Full; không vào level.",
+    "steps": [
+      "Chạm dấu cộng Lives",
+      "Chạm vùng số mạng/Full"
+    ],
+    "expected": "Quan sát cách UI xử lý khi không cần refill.",
+    "actual": "Home vẫn hiển thị5 Full, không mở refill popup trong hai thao tác; coin và kho không đổi.",
+    "status": "observed_gate_only",
+    "limitations": "Chưa chứng minh nhánh mua refill, thiếu tiền hoặc hồi mạng. Không đánh dấu toàn UC-08 pass.",
+    "images": [
+      "ECO13_lives_full",
+      "ECO14_lives_touch"
+    ],
+    "before": "ECO12_error_continue",
+    "after": "ECO14_lives_touch",
+    "currency_unchanged": true,
+    "build": "0.0.3129 ARM64",
+    "mode": "offline_existing_fixture",
+    "date": "2026-11-15",
+    "ledger": {
+      "before": "ECO12_error_continue.json",
+      "after": "ECO14_lives_touch.json"
+    },
+    "related_uc": [
+      "UC-08"
+    ],
+    "uc_scope_note": "related_uc chỉ context/dependency: gate, chưa vào UC, khác subsystem hoặc teardown nội bộ chưa đo; không tính vào executed branch coverage."
+  },
+  {
+    "id": "MS-R15-META01",
+    "feature": "Settings",
+    "uc": [
+      "UC-01",
+      "UC-02",
+      "UC-05",
+      "UC-07"
+    ],
+    "title": "Bốn toggle: OFF, restart, khôi phục ON",
+    "precondition": "0.0.3129 ARM64, level351, offline UID MagicSort, tài nguyên fixture từ trước.",
+    "steps": [
+      "Mở Settings",
+      "Tắt Notifications/Sound/Haptic/Music",
+      "Force-stop và mở lại MagicSort",
+      "Mở Settings kiểm tra",
+      "Bật lại cả bốn"
+    ],
+    "expected": "UI và model ghi đúng lựa chọn; restart giữ lựa chọn.",
+    "actual": "Cả bốn OFF giữ qua restart. SoundModel isSoundEffectOn/isMusicOn=false; VibrationModel isVibrationOn=false; NotificationModel isNotificationOn=false. Bật lại đều true. settings_ledger.json có trạng thái từng bước.",
+    "status": "verified_observed_branch",
+    "limitations": "Xác minh UI/model/persistence; chưa xác minh âm thanh phát thực, rung vật lý hay delivery thông báo.",
+    "images": [
+      "META01_settings",
+      "META02_toggles_off",
+      "META03_restart_settings",
+      "META04_toggles_restored"
+    ],
+    "before": "META01_settings",
+    "after": "META04_toggles_restored",
+    "currency_unchanged": true,
+    "build": "0.0.3129 ARM64",
+    "mode": "offline_existing_fixture",
+    "date": "2026-11-15",
+    "ledger": {
+      "before": "META01_settings.json",
+      "after": "META04_toggles_restored.json"
+    }
+  },
+  {
+    "id": "MS-R15-META02",
+    "feature": "Collection",
+    "uc": [
+      "UC-01",
+      "UC-06"
+    ],
+    "title": "Collection: tổng quan và Bonus Chest khi thiếu sao",
+    "precondition": "0.0.3129 ARM64, level351, offline UID MagicSort, tài nguyên fixture từ trước.",
+    "steps": [
+      "Mở Collection",
+      "Mở Bonus Chest",
+      "Bấm nút100 sao khi đang0"
+    ],
+    "expected": "Thiếu sao không cấp rương.",
+    "actual": "Wonderland Collection hiển thị8/135,15 set (Snacks1/15), grand prize10.000 coin/token/boosterx5. Bonus Chest có giá100/250/500; hiện0 sao, nút xám; bấm100 không mở rương, kho không đổi.",
+    "status": "observed_partial",
+    "limitations": "Đếm/timer từ cache; chưa xác minh instance mới, nguồn thẻ, điều kiện đủ sao hoặc nhận thưởng.",
+    "images": [
+      "META06_collection",
+      "META09_bonus_chest",
+      "META10_bonus_insufficient"
+    ],
+    "before": "META06_collection",
+    "after": "META10_bonus_insufficient",
+    "currency_unchanged": true,
+    "build": "0.0.3129 ARM64",
+    "mode": "offline_existing_fixture",
+    "date": "2026-11-15",
+    "ledger": {
+      "before": "META06_collection.json",
+      "after": "META10_bonus_insufficient.json"
+    }
+  },
+  {
+    "id": "MS-R15-META03",
+    "feature": "Collection",
+    "uc": [
+      "UC-12"
+    ],
+    "title": "Badge New trên set sau mở/đóng",
+    "precondition": "0.0.3129 ARM64, level351, offline UID MagicSort, tài nguyên fixture từ trước.",
+    "steps": [
+      "Mở Snacks có2 thẻ New",
+      "Xem Wafer Rolls",
+      "Đóng chi tiết và set",
+      "Mở lại Snacks"
+    ],
+    "expected": "Ghi nhận phạm vi badge được xóa khi xem set.",
+    "actual": "Lần đầu Wafer Rolls và Gelato đều New; chỉ mở chi tiết Wafer Rolls. Sau đóng/mở lại set cả hai badge New biến mất; tiến độ vẫn2/9.",
+    "status": "observed_partial",
+    "limitations": "Chỉ xác nhận UI của phiên; XML giữa2snapshot cuối không đổi, chưa xác định thời điểm ghi seen hoặc persistence sau restart.",
+    "images": [
+      "META11_snacks_set",
+      "META12_card_detail",
+      "META13_set_reopen"
+    ],
+    "before": "META11_snacks_set",
+    "after": "META13_set_reopen",
+    "currency_unchanged": true,
+    "build": "0.0.3129 ARM64",
+    "mode": "offline_existing_fixture",
+    "date": "2026-11-15",
+    "ledger": {
+      "before": "META11_snacks_set.json",
+      "after": "META13_set_reopen.json"
+    }
+  },
+  {
+    "id": "MS-R15-EVT01",
+    "feature": "DuckFestival",
+    "uc": [
+      "UC-08",
+      "UC-12",
+      "UC-15"
+    ],
+    "title": "Event hết hạn: settlement và lỗi mạng",
+    "precondition": "0.0.3129 ARM64, level351, offline UID, instance cache cũ và tài nguyên fixture.",
+    "steps": [
+      "Mở Duck Finished",
+      "Đóng bảng tiến độ để hiện kết quả",
+      "Bấm Continue",
+      "Đóng bằng X"
+    ],
+    "expected": "Ghi nhận settlement và xử lý offline.",
+    "actual": "Hạng45/50,6điểm; panel Rank45/Reward-; Continue báo No Internet Connection; X về Home. Trong chuyển tiếp tiến độ→settlement Undo tăng9997→9998, nên không kết luận toàn quá trình không có thưởng.",
+    "status": "verified_observed_branch",
+    "limitations": "Chưa tách được callback cấp Undo/mốc tiến độ; chưa xác nhận settlement backend, bot hay nhận thưởng hạng. Tên file EVT02_magiclab_finished thực tế là màn Duck settlement.",
+    "images": [
+      "EVT01_duck_finished",
+      "EVT02_magiclab_finished",
+      "EVT03_duck_settled",
+      "EVT04_duck_exit"
+    ],
+    "before": "EVT01_duck_finished",
+    "after": "EVT04_duck_exit",
+    "currency_unchanged": false,
+    "build": "0.0.3129 ARM64",
+    "mode": "offline_existing_fixture",
+    "date": "2026-11-15",
+    "ledger": {
+      "before": "EVT01_duck_finished.json",
+      "after": "EVT04_duck_exit.json"
+    }
+  },
+  {
+    "id": "MS-R15-EVT02",
+    "feature": "MergeMiniGame",
+    "uc": [
+      "UC-02",
+      "UC-05"
+    ],
+    "title": "Vào event Finished, sinh item và hết chỗ",
+    "precondition": "0.0.3129 ARM64, level351, offline UID, instance cache cũ và tài nguyên fixture.",
+    "steps": [
+      "Mở Merge Bakery Finished",
+      "Continue vào bàn",
+      "Bấm máy phát lần đầu",
+      "Bấm thêm tới khi bàn hết chỗ",
+      "Thử thêm một lần"
+    ],
+    "expected": "Energy chỉ tiêu khi sinh item được.",
+    "actual": "Bàn hiển thịStage1/12, energy5. Lần đầu5→4; sinh thêm hai item tới2. Các lần khi đầy không giảm dưới2, hiện No Space. totalSpendEnergy0→1→3 rồi giữ3.",
+    "status": "verified_observed_branch",
+    "limitations": "Các file EVT09_merge_zero và EVT10_merge_noenergy thực tế là hết chỗ, không phải0energy. Không chứng minh biên hết energy hoặc event đang chạy production.",
+    "images": [
+      "EVT05_merge_open",
+      "EVT07_merge_board_ready",
+      "EVT08_merge_energy",
+      "EVT10_merge_noenergy"
+    ],
+    "before": "EVT07_merge_board_ready",
+    "after": "EVT10_merge_noenergy",
+    "currency_unchanged": false,
+    "build": "0.0.3129 ARM64",
+    "mode": "offline_existing_fixture",
+    "date": "2026-11-15",
+    "ledger": {
+      "before": "EVT07_merge_board_ready.json",
+      "after": "EVT10_merge_noenergy.json"
+    }
+  },
+  {
+    "id": "MS-R15-EVT03",
+    "feature": "MergeMiniGame",
+    "uc": [
+      "UC-06",
+      "UC-10"
+    ],
+    "title": "Merge cặp và đạt stage2",
+    "precondition": "0.0.3129 ARM64, level351, offline UID, instance cache cũ và tài nguyên fixture.",
+    "steps": [
+      "Kéo blueberry ở ô dưới sang blueberry cạnh bên"
+    ],
+    "expected": "Cặp cùng loại nâng cấp, tiến độ stage và thưởng được ghi đúng.",
+    "actual": "Hai blueberry thành hũ level2; UIStage2/12, mergeProgress[1,0,0,0,0]→[2,0,0,0,0]; energy giữ2. Icon30m hoàn tất nhưng limitless end chưa tăng ngay.",
+    "status": "verified_observed_branch",
+    "limitations": "Mới thử một cặp; chưa kiểm tra mọi chain, item khác loại, multiplier hay Grand Prize.",
+    "images": [
+      "EVT10_merge_noenergy",
+      "EVT11_merge_pair"
+    ],
+    "before": "EVT10_merge_noenergy",
+    "after": "EVT11_merge_pair",
+    "currency_unchanged": true,
+    "build": "0.0.3129 ARM64",
+    "mode": "offline_existing_fixture",
+    "date": "2026-11-15",
+    "ledger": {
+      "before": "EVT10_merge_noenergy.json",
+      "after": "EVT11_merge_pair.json"
+    }
+  },
+  {
+    "id": "MS-R15-EVT04",
+    "feature": "MergeMiniGame",
+    "uc": [
+      "UC-10",
+      "UC-13"
+    ],
+    "title": "Stay/quit event hết giờ và claim thưởng local",
+    "precondition": "0.0.3129 ARM64, level351, offline UID, instance cache cũ và tài nguyên fixture.",
+    "steps": [
+      "Bấm X",
+      "Stay quay lại",
+      "Bấm X rồi Quit",
+      "Time’s Up → Continue",
+      "Tap to Claim"
+    ],
+    "expected": "Ghi nhận cảnh báo và thời điểm áp phần thưởng.",
+    "actual": "X cảnh báo mất energy; Stay giữ2; Quit hiện Time’s Up. Sau Continue hiện Merge Stage Rewards30m. Claim làm isClaimed=true và limitlessLifeEnd=15:42:14UTC, Home29:58. Energy trong model vẫn2, không chứng minh bị xóa dù lời cảnh báo nói mất.",
+    "status": "verified_observed_branch",
+    "limitations": "Chỉ nhánh cache expired offline; chưa backend, reset kỳ mới, mọi phần thưởng hoặc chống claim lặp sau restart. Reward list14 phần tử không tự đồng nghĩa12 stage UI.",
+    "images": [
+      "EVT12_merge_return",
+      "EVT14_merge_quit",
+      "EVT15_merge_final",
+      "EVT16_merge_claimed"
+    ],
+    "before": "EVT11_merge_pair",
+    "after": "EVT16_merge_claimed",
+    "currency_unchanged": true,
+    "build": "0.0.3129 ARM64",
+    "mode": "offline_existing_fixture",
+    "date": "2026-11-15",
+    "ledger": {
+      "before": "EVT11_merge_pair.json",
+      "after": "EVT16_merge_claimed.json"
+    }
+  },
+  {
+    "id": "MS-R15-EVT05",
+    "feature": "TreasureDrill",
+    "uc": [
+      "UC-05",
+      "UC-11"
+    ],
+    "title": "Claim bị khóa và event hết hạn",
+    "precondition": "0.0.3129 ARM64, level351, UID offline; save fixture có sẵn và instance tháng10.",
+    "steps": [
+      "Mở Treasure Drill",
+      "Tap CLAIM bậc1",
+      "Mở info rồi đóng event"
+    ],
+    "expected": "Chỉ cấp thưởng khi đáp ứng điều kiện mua/kích hoạt.",
+    "actual": "UI Finished, giá59000VND, bậc1 yêu cầu1win đã đủ nhưng khóa; tap hiện Activate Treasure Drill!, coin/boosters không đổi. Đóng popup, icon biến mất.",
+    "status": "verified_observed_branch",
+    "limitations": "Không mua gói; giá cache, không xác nhận store mới. Chưa nhánh đãmua hay server reset.",
+    "images": [
+      "EVT17_drill_open",
+      "EVT18_drill_lockedclaim",
+      "EVT19_drill_info"
+    ],
+    "before": "EVT17_drill_open",
+    "after": "EVT20_wheel_open",
+    "currency_unchanged": true,
+    "build": "0.0.3129 ARM64",
+    "mode": "offline_existing_fixture",
+    "date": "2026-11-15",
+    "ledger": {
+      "before": "EVT17_drill_open.json",
+      "after": "EVT20_wheel_open.json"
+    }
+  },
+  {
+    "id": "MS-R15-EVT06",
+    "feature": "WheelOfFortune",
+    "uc": [
+      "UC-19"
+    ],
+    "title": "Mở Wheel khi offline",
+    "precondition": "0.0.3129 ARM64, level351, UID offline; save fixture có sẵn và instance tháng10.",
+    "steps": [
+      "Trở vềHome",
+      "Tap iconWheel Finished"
+    ],
+    "expected": "Ghi lỗi/fallback khi không có kết nối.",
+    "actual": "Hiện No Internet Connection!, chưa vào bảngspin; inventory không đổi.",
+    "status": "verified_observed_branch",
+    "limitations": "Không quan sát spin/probability/claim; icon4 không được coi là4chip.",
+    "images": [
+      "EVT20_wheel_open"
+    ],
+    "before": "EVT19_drill_info",
+    "after": "EVT20_wheel_open",
+    "currency_unchanged": true,
+    "build": "0.0.3129 ARM64",
+    "mode": "offline_existing_fixture",
+    "date": "2026-11-15",
+    "ledger": {
+      "before": "EVT19_drill_info.json",
+      "after": "EVT20_wheel_open.json"
+    }
+  },
+  {
+    "id": "MS-R15-EVT07",
+    "feature": "BroomStreak",
+    "uc": [
+      "UC-11",
+      "UC-13"
+    ],
+    "title": "Kết thúc BroomStreak từ cache",
+    "precondition": "0.0.3129 ARM64, level351, UID offline; save fixture có sẵn và instance tháng10.",
+    "steps": [
+      "MởBroom Finished",
+      "Continue"
+    ],
+    "expected": "Kết thúc event, bảo toàn thưởng đã nhận.",
+    "actual": "Popup có mốc0/2/5, rương2 đãcheck. Continue vềHome và icon biến mất; isClaimed false→true, currency không đổi.",
+    "status": "verified_observed_branch",
+    "limitations": "Chỉ finalization cache; chưa thử progress/fail checkpoint hay thưởng chưa nhận.",
+    "images": [
+      "EVT21_broom_open",
+      "EVT22_broom_continue"
+    ],
+    "before": "EVT21_broom_open",
+    "after": "EVT22_broom_continue",
+    "currency_unchanged": true,
+    "build": "0.0.3129 ARM64",
+    "mode": "offline_existing_fixture",
+    "date": "2026-11-15",
+    "ledger": {
+      "before": "EVT21_broom_open.json",
+      "after": "EVT22_broom_continue.json"
+    }
+  },
+  {
+    "id": "MS-R15-EVT08",
+    "feature": "MiniGame",
+    "uc": [
+      "UC-04",
+      "UC-05"
+    ],
+    "title": "Đào ô và chạm lặp",
+    "precondition": "0.0.3129 ARM64, level351, UID offline; save fixture có sẵn và instance tháng10.",
+    "steps": [
+      "Mở Underwater Treasures Finished",
+      "Tap ôđầu",
+      "Tap lại ôđãmở"
+    ],
+    "expected": "Một ômới tiêu1trident; ôđãmở không tiêu thêm.",
+    "actual": "Trident17→16→16, hitCells0→1→1, usedTrident0→1→1.",
+    "status": "verified_observed_branch",
+    "limitations": "Instanceexpired offline; không chứng minh toànboard seed/booster.",
+    "images": [
+      "EVT23_minigame_open",
+      "EVT25_minigame_repeat"
+    ],
+    "before": "EVT23_minigame_open",
+    "after": "EVT25_minigame_repeat",
+    "currency_unchanged": true,
+    "build": "0.0.3129 ARM64",
+    "mode": "offline_existing_fixture",
+    "date": "2026-11-15",
+    "ledger": {
+      "before": "EVT23_minigame_open.json",
+      "after": "EVT25_minigame_repeat.json"
+    }
+  },
+  {
+    "id": "MS-R15-EVT09",
+    "feature": "MiniGame",
+    "uc": [
+      "UC-07",
+      "UC-09"
+    ],
+    "title": "Hoàn thành stage và nhận thưởng sau khi vềHome",
+    "precondition": "0.0.3129 ARM64, level351, UID offline; save fixture có sẵn và instance tháng10.",
+    "steps": [
+      "Đào các ôcòn lại stage1",
+      "Đạt2/10",
+      "Dùng hết2trident",
+      "Thoát và Tap to Claim"
+    ],
+    "expected": "Stage tăng, thưởng cấp mộtlần tại bướcclaim.",
+    "actual": "Stage1→2/10, cache currentStage0→1, claimedStages[0]. Tridentcòn2 lúc chuyểnstage. Undo chưa tăng tại checkmark; khi claim9998→9999, isClaimedfalse→true.",
+    "status": "verified_observed_branch",
+    "limitations": "Chỉ1stage; chưa10stage, GrandPrize, Collectionpack hoặc claim backend.",
+    "images": [
+      "EVT29_minigame_complete",
+      "EVT30_minigame_stage2",
+      "EVT34_minigame_exit_zero",
+      "EVT35_minigame_claim"
+    ],
+    "before": "EVT25_minigame_repeat",
+    "after": "EVT35_minigame_claim",
+    "currency_unchanged": false,
+    "build": "0.0.3129 ARM64",
+    "mode": "offline_existing_fixture",
+    "date": "2026-11-15",
+    "ledger": {
+      "before": "EVT25_minigame_repeat.json",
+      "after": "EVT35_minigame_claim.json"
+    }
+  },
+  {
+    "id": "MS-R15-EVT10",
+    "feature": "MiniGame",
+    "uc": [
+      "UC-05",
+      "UC-13"
+    ],
+    "title": "Stay và biên0trident",
+    "precondition": "0.0.3129 ARM64, level351, UID offline; save fixture có sẵn và instance tháng10.",
+    "steps": [
+      "X khi còn2",
+      "Stay",
+      "Đào2ô",
+      "Tap ôthứ3 khi0",
+      "X"
+    ],
+    "expected": "Stay giữbàn;0chặnđào; cảnhbáo phụthuộc trident.",
+    "actual": "Còn2 hiện cảnhbáo mấttrident nếuQuit. Stay giữ2;2tap→0. Tapthứ3 hiện Get tridents from levels!, hitCells giữ2. X lúc0 vềHome và bậtclaim không có cảnhbáo.",
+    "status": "verified_observed_branch",
+    "limitations": "Không bấmQuit khi còntrident; không kếtluận xóasốdư ởnhánhđó.",
+    "images": [
+      "EVT31_minigame_exit",
+      "EVT32_minigame_zero",
+      "EVT33_minigame_no_trident"
+    ],
+    "before": "EVT30_minigame_stage2",
+    "after": "EVT34_minigame_exit_zero",
+    "currency_unchanged": true,
+    "build": "0.0.3129 ARM64",
+    "mode": "offline_existing_fixture",
+    "date": "2026-11-15",
+    "ledger": {
+      "before": "EVT30_minigame_stage2.json",
+      "after": "EVT34_minigame_exit_zero.json"
+    }
+  },
+  {
+    "id": "MS-R15-SOC01",
+    "feature": "Teams",
+    "uc": [],
+    "title": "TabTeams chưa mởtrong môi trường",
+    "precondition": "0.0.3129 ARM64, level351, UID offline; save fixture có sẵn và instance tháng10.",
+    "steps": [
+      "Chọn Teams từHome"
+    ],
+    "expected": "Ghi trạngthái entrypoint.",
+    "actual": "Teams hiện Coming Soon!, không có danh sách/tạođội/chat.",
+    "status": "blocked_feature_gate",
+    "limitations": "Không suy ra trạngthái toànproduction; haiaccount/backend/flag được bật là dependency.",
+    "images": [
+      "SOC01_teams"
+    ],
+    "before": "SOC01_teams",
+    "after": "SOC01_teams",
+    "currency_unchanged": true,
+    "build": "0.0.3129 ARM64",
+    "mode": "offline_existing_fixture",
+    "date": "2026-11-15",
+    "ledger": {
+      "before": "SOC01_teams.json",
+      "after": "SOC01_teams.json"
+    },
+    "related_uc": [
+      "UC-01",
+      "UC-25"
+    ],
+    "uc_scope_note": "related_uc chỉ context/dependency: gate, chưa vào UC, khác subsystem hoặc teardown nội bộ chưa đo; không tính vào executed branch coverage."
+  },
+  {
+    "id": "MS-R15-SOC02",
+    "feature": "Leaderboards",
+    "uc": [
+      "UC-06",
+      "UC-08"
+    ],
+    "title": "Leaderboard cached và các taboffline",
+    "precondition": "0.0.3129 ARM64, level351, UID offline; save fixture có sẵn và instance tháng10.",
+    "steps": [
+      "MởLeaderboard",
+      "ChọnFriends",
+      "ChọnTeams"
+    ],
+    "expected": "Phân biệt dữliệu cached, mấtkếtnối và chưa mở.",
+    "actual": "Weekly hiển thị leaderboard cũ Finished; Friends hiện No Internet Connection!; Teams World/Country hiện Coming Soon!. Currency không đổi.",
+    "status": "verified_observed_branch",
+    "limitations": "ẢnhWeekly raw giữlocal vì có tênngườichơi; không dùng bảngcache làmrank mới. Chưarefresh/country/2account.",
+    "images": [
+      "SOC03_friends",
+      "SOC04_teams_board"
+    ],
+    "before": "SOC02_leaderboard",
+    "after": "SOC04_teams_board",
+    "currency_unchanged": true,
+    "build": "0.0.3129 ARM64",
+    "mode": "offline_existing_fixture",
+    "date": "2026-11-15",
+    "ledger": {
+      "before": "SOC02_leaderboard.json",
+      "after": "SOC04_teams_board.json"
+    },
+    "related_uc": [
+      "UC-05",
+      "UC-11"
+    ],
+    "uc_scope_note": "related_uc chỉ context/dependency: gate, chưa vào UC, khác subsystem hoặc teardown nội bộ chưa đo; không tính vào executed branch coverage.",
+    "uc_scope": {
+      "UC-06": "attempted_entry_offline_error_only",
+      "UC-08": "cached_weekly_result_ui_only"
+    }
+  },
+  {
+    "id": "MS-R15-REC01",
+    "feature": "MergeMiniGame",
+    "uc": [
+      "UC-10",
+      "UC-13",
+      "UC-17"
+    ],
+    "title": "Claim Merge được giữ qua restart",
+    "precondition": "App 0.0.3129 ARM64, UID offline, tài nguyên fixture có sẵn; level 351 rồi 352. Nguồn code 0.0.3063 được phân biệt riêng.",
+    "steps": [
+      "Force-stop app sau các event",
+      "Khởi động lại và đợi Home"
+    ],
+    "expected": "Giữ cờ claim và thời hạn thưởng; không cộng lại.",
+    "actual": "isClaimed vẫn true; limitlessLifeEnd giữ 15:42:14.400145 UTC; không xuất hiện icon/claim Merge lần nữa.",
+    "status": "verified_observed_branch",
+    "limitations": "Chỉ một lần restart local; không kiểm tra khôi phục server, reinstall hoặc claim trên hai thiết bị.",
+    "images": [
+      "EVT16_merge_claimed",
+      "REC02_restart_ready"
+    ],
+    "before": "EVT16_merge_claimed",
+    "after": "REC02_restart_ready",
+    "currency_unchanged": false,
+    "build": "0.0.3129 ARM64",
+    "mode": "offline_existing_fixture",
+    "date": "2026-11-15",
+    "ledger": {
+      "before": "EVT16_merge_claimed.json",
+      "after": "REC02_restart_ready.json"
+    }
+  },
+  {
+    "id": "MS-R15-REC02",
+    "feature": "MiniGame",
+    "uc": [
+      "UC-09",
+      "UC-15"
+    ],
+    "title": "Claim Underwater được giữ qua restart",
+    "precondition": "App 0.0.3129 ARM64, UID offline, tài nguyên fixture có sẵn; level 351 rồi 352. Nguồn code 0.0.3063 được phân biệt riêng.",
+    "steps": [
+      "Force-stop app",
+      "Khởi động lại và đợi Home"
+    ],
+    "expected": "Không cấp lại thưởng stage đã claim.",
+    "actual": "Undo giữ 9999; isClaimed=true, currentStage=1, trident=0 đều được giữ; icon Underwater biến mất.",
+    "status": "verified_observed_branch",
+    "limitations": "Một checkpoint local; không chứng minh server idempotency hoặc mọi điểm crash.",
+    "images": [
+      "EVT35_minigame_claim",
+      "REC02_restart_ready"
+    ],
+    "before": "EVT35_minigame_claim",
+    "after": "REC02_restart_ready",
+    "currency_unchanged": true,
+    "build": "0.0.3129 ARM64",
+    "mode": "offline_existing_fixture",
+    "date": "2026-11-15",
+    "ledger": {
+      "before": "EVT35_minigame_claim.json",
+      "after": "REC02_restart_ready.json"
+    }
+  },
+  {
+    "id": "MS-R15-META04",
+    "feature": "Profile",
+    "uc": [
+      "UC-09"
+    ],
+    "title": "Thống kê Profile sau level351",
+    "precondition": "0.0.3129 ARM64; level352, UID MagicSort offline, save fixture có sẵn. Code/asset0.0.3063 là nguồn lịch sử riêng.",
+    "steps": [
+      "Mở Profile từ Home"
+    ],
+    "expected": "Đối chiếu thống kê được hiển thị.",
+    "actual": "Profile hiện level352, First Try Wins5, Broom Max Streak4; các mục league/cup/streak khác đang dấu gạch.",
+    "limitations": "Chỉ UI từ save/cache; không xác minh tính đúng toàn bộ lịch sử thống kê hoặc cập nhật server.",
+    "status": "observed_partial",
+    "before": "MORE04_profile",
+    "after": "MORE04_profile",
+    "images": [
+      "MORE04_profile"
+    ],
+    "build": "0.0.3129 ARM64",
+    "mode": "offline_existing_fixture",
+    "date": "2026-11-15",
+    "currency_unchanged": true,
+    "ledger": {
+      "before": "MORE04_profile.json",
+      "after": "MORE04_profile.json"
+    }
+  },
+  {
+    "id": "MS-R15-META05",
+    "feature": "Profile",
+    "uc": [
+      "UC-03",
+      "UC-15"
+    ],
+    "title": "Chọn avatar và Save khi offline",
+    "precondition": "0.0.3129 ARM64; level352, UID MagicSort offline, save fixture có sẵn. Code/asset0.0.3063 là nguồn lịch sử riêng.",
+    "steps": [
+      "Mở Edit Profile",
+      "Chọn avatar thứ2",
+      "Bấm Save",
+      "Đóng editor và mở lại Profile"
+    ],
+    "expected": "Ghi selection UI và kết quả lưu offline.",
+    "actual": "Editor có8avatar. Chọn avatar thứ2 hiện checkmark; Save báo No Internet Connection. Sau đóng editor, Profile vẫn tên và avatar ban đầu.",
+    "limitations": "Không xác minh lưu thành công/đồng bộ; selection checkmark không được coi là avatar đã lưu. Không suy ra cache avatar người khác.",
+    "status": "verified_observed_branch",
+    "before": "MORE05_profile_edit",
+    "after": "MORE16_profile_cancelled",
+    "images": [
+      "MORE05_profile_edit",
+      "MORE06_avatar_selected",
+      "MORE07_avatar_save",
+      "MORE16_profile_cancelled"
+    ],
+    "build": "0.0.3129 ARM64",
+    "mode": "offline_existing_fixture",
+    "date": "2026-11-15",
+    "uc_scope": {
+      "UC-03": "selection_ui_only_save_failed",
+      "UC-15": "offline_save_error_observed"
+    },
+    "currency_unchanged": true,
+    "ledger": {
+      "before": "MORE05_profile_edit.json",
+      "after": "MORE16_profile_cancelled.json"
+    }
+  },
+  {
+    "id": "MS-R15-META06",
+    "feature": "Profile",
+    "uc": [
+      "UC-05",
+      "UC-06",
+      "UC-07"
+    ],
+    "title": "Frame, Name style và Token bị khóa",
+    "precondition": "0.0.3129 ARM64; level352, UID MagicSort offline, save fixture có sẵn. Code/asset0.0.3063 là nguồn lịch sử riêng.",
+    "steps": [
+      "Chọn Frame",
+      "Chọn Name",
+      "Chọn Token",
+      "Tap token Wonderland"
+    ],
+    "expected": "Ghi các tùy chọn có sẵn và gate equip.",
+    "actual": "Frame và Name chỉ hiện lựa chọn mặc định. Token Wonderland có khóa; popup Wonderland Badge! có nút Equip màu xám.",
+    "limitations": "Chỉ UI/gate; chưa sở hữu token, equip thành công, unlock hoặc dùng style khác. MORE12_name_edit thực tế vẫn token popup nên không đưa vào gallery.",
+    "status": "observed_partial",
+    "before": "MORE08_frames",
+    "after": "MORE11_token_locked",
+    "images": [
+      "MORE08_frames",
+      "MORE09_name_styles",
+      "MORE10_tokens",
+      "MORE11_token_locked"
+    ],
+    "build": "0.0.3129 ARM64",
+    "mode": "offline_existing_fixture",
+    "date": "2026-11-15",
+    "currency_unchanged": true,
+    "ledger": {
+      "before": "MORE08_frames.json",
+      "after": "MORE11_token_locked.json"
+    }
+  },
+  {
+    "id": "MS-R15-META07",
+    "feature": "Profile",
+    "uc": [
+      "UC-02"
+    ],
+    "title": "Tên hai ký tự bị chặn, hủy giữ tên cũ",
+    "precondition": "0.0.3129 ARM64; level352, UID MagicSort offline, save fixture có sẵn. Code/asset0.0.3063 là nguồn lịch sử riêng.",
+    "steps": [
+      "Mở Change Name",
+      "Nhập AB",
+      "Quan sát Continue",
+      "Hủy và đóng editor"
+    ],
+    "expected": "Tên dưới minimum không được gửi/lưu.",
+    "actual": "Nhập AB làm Continue xám và hiện Name should be at least3 valid characters! Sau hủy, Profile giữ tên ban đầu.",
+    "limitations": "Chưa kiểm tra đúng3ký tự, maximum, Unicode, profanity, rename thành công hoặc phí. Không ghi AB thành tên đã lưu.",
+    "status": "verified_observed_branch",
+    "before": "MORE13_rename_popup",
+    "after": "MORE16_profile_cancelled",
+    "images": [
+      "MORE13_rename_popup",
+      "MORE14_short_name",
+      "MORE15_name_cancel",
+      "MORE16_profile_cancelled"
+    ],
+    "build": "0.0.3129 ARM64",
+    "mode": "offline_existing_fixture",
+    "date": "2026-11-15",
+    "currency_unchanged": true,
+    "ledger": {
+      "before": "MORE13_rename_popup.json",
+      "after": "MORE16_profile_cancelled.json"
+    }
+  },
+  {
+    "id": "MS-R15-META08",
+    "feature": "HomeUI",
+    "uc": [
+      "UC-03",
+      "UC-05",
+      "UC-12"
+    ],
+    "title": "Home navigation và số dư level352",
+    "precondition": "0.0.3129 ARM64; level352, UID MagicSort offline, save fixture có sẵn. Code/asset0.0.3063 là nguồn lịch sử riêng.",
+    "steps": [
+      "Quan sát Home/nav",
+      "Chọn Leaderboards rồi về Home",
+      "Thử swipe ngang ở vùng giữa"
+    ],
+    "expected": "Ghi navigation/số dư đã thấy; swipe không chuyển không được gọi pass.",
+    "actual": "Nav gồm Shop/Leaderboards/Home/Teams/Collection, cog Settings. Home hiện level352 và coin999995889. Swipe850→240 tại y1050 không chuyển màn.",
+    "limitations": "UC-03 chỉ tab navigation; chưa đo preload hay mọi trang/locale/resolution. UC-02 swipe chưa chứng minh hoạt động, không gắn executed link.",
+    "status": "observed_partial",
+    "before": "MORE03_ready",
+    "after": "MORE22_home_before_core",
+    "images": [
+      "MORE03_ready",
+      "MORE17_home_swipe",
+      "MORE22_home_before_core"
+    ],
+    "build": "0.0.3129 ARM64",
+    "mode": "offline_existing_fixture",
+    "date": "2026-11-15",
+    "currency_unchanged": true,
+    "ledger": {
+      "before": "MORE03_ready.json",
+      "after": "MORE22_home_before_core.json"
+    }
+  },
+  {
+    "id": "MS-R15-SOC03",
+    "feature": "Leaderboards",
+    "uc": [
+      "UC-02",
+      "UC-03",
+      "UC-04",
+      "UC-11"
+    ],
+    "title": "Players World và Country từ cache offline",
+    "precondition": "0.0.3129 ARM64; level352, UID MagicSort offline, save fixture có sẵn. Code/asset0.0.3063 là nguồn lịch sử riêng.",
+    "steps": [
+      "Chọn Players World",
+      "Chọn Country"
+    ],
+    "expected": "Phân biệt bảng Permanent cached với Weekly.",
+    "actual": "World hiện các hạng993–1000, dòng của mình hạng1000 với level352; Country hiển thị cache khác. Không có kết nối mới.",
+    "limitations": "Chỉ cached UI; không gắn UC-01 fetch/login mới, không coi rank hiện tại production hoặc đã refresh. UC-04 chỉ self row thấy được, chưa kiểm tra hành vi sticky khi cuộn.",
+    "status": "observed_partial",
+    "before": "MORE20_players",
+    "after": "MORE21_country",
+    "images": [
+      "MORE20_players",
+      "MORE21_country"
+    ],
+    "build": "0.0.3129 ARM64",
+    "mode": "offline_existing_fixture",
+    "date": "2026-11-15",
+    "currency_unchanged": true,
+    "ledger": {
+      "before": "MORE20_players.json",
+      "after": "MORE21_country.json"
+    }
+  },
+  {
+    "id": "MS-R15-CORE01",
+    "feature": "BottleSortMechanics",
+    "uc": [
+      "UC-01",
+      "UC-02",
+      "UC-03",
+      "UC-05",
+      "UC-11"
+    ],
+    "title": "Đổ hợp lệ, đổ khác màu và lộ ô dấu hỏi",
+    "precondition": "App 0.0.3129 ARM64, UID offline, tài nguyên fixture có sẵn; level 351 rồi 352. Nguồn code 0.0.3063 được phân biệt riêng.",
+    "steps": [
+      "Chai1 → chai9 trống",
+      "Chai2 màu xám → chai9 màu cam",
+      "Chai5 màu cam → chai9 màu cam"
+    ],
+    "expected": "Chỉ chuyển nước ở nhánh hợp lệ, mở màu nằm dưới lớp vừa đổ.",
+    "actual": "Lần đầu cam chuyển vào chai9, chai1 lộ đỏ; đổ xám lên cam bị từ chối, board không đổi; cam từ chai5 nhập chai9 và lộ xanh lá. Không tiêu coin/booster.",
+    "status": "verified_observed_branch",
+    "limitations": "Chai đánh số từ trái sang phải, hàng trên rồi hàng dưới. Một seed có dấu hỏi/Generator, chưa đại diện mọi obstacle hoặc cơ chế multi-wave.",
+    "images": [
+      "CORE01_prelevel",
+      "CORE02_pour_empty",
+      "CORE03_invalid_color",
+      "CORE04_pour_same"
+    ],
+    "before": "CORE01_prelevel",
+    "after": "CORE04_pour_same",
+    "currency_unchanged": true,
+    "build": "0.0.3129 ARM64",
+    "mode": "offline_existing_fixture",
+    "date": "2026-11-15",
+    "ledger": {
+      "before": "CORE01_prelevel.json",
+      "after": "CORE04_pour_same.json"
+    }
+  },
+  {
+    "id": "MS-R15-CORE02",
+    "feature": "Boosters",
+    "uc": [
+      "UC-02"
+    ],
+    "title": "Undo trả nước và giữ màu đã lộ",
+    "precondition": "App 0.0.3129 ARM64, UID offline, tài nguyên fixture có sẵn; level 351 rồi 352. Nguồn code 0.0.3063 được phân biệt riêng.",
+    "steps": [
+      "Bấm Undo sau nước chai5 → chai9"
+    ],
+    "expected": "Ghi cả board và tiêu hao; phân biệt nước với thông tin đã khám phá.",
+    "actual": "Cam trả về chai5, chai9 trở về một lớp cam. Undo 9999→9998. Xanh lá ở chai5 vẫn hiển thị, không trở lại dấu hỏi.",
+    "status": "verified_observed_branch",
+    "limitations": "Một lần Undo sau đổ hợp lệ; không kiểm tra chuỗi Undo dài hoặc Undo sau Generator.",
+    "images": [
+      "CORE04_pour_same",
+      "CORE05_undo"
+    ],
+    "before": "CORE04_pour_same",
+    "after": "CORE05_undo",
+    "currency_unchanged": false,
+    "build": "0.0.3129 ARM64",
+    "mode": "offline_existing_fixture",
+    "date": "2026-11-15",
+    "ledger": {
+      "before": "CORE04_pour_same.json",
+      "after": "CORE05_undo.json"
+    }
+  },
+  {
+    "id": "MS-R15-CORE03",
+    "feature": "Boosters",
+    "uc": [
+      "UC-03",
+      "UC-10"
+    ],
+    "title": "Hủy và áp dụng Shuffle có chọn chai",
+    "precondition": "App 0.0.3129 ARM64, UID offline, tài nguyên fixture có sẵn; level 351 rồi 352. Nguồn code 0.0.3063 được phân biệt riêng.",
+    "steps": [
+      "Bấm Shuffle",
+      "Tap nền để hủy",
+      "Mở lại Shuffle và chọn chai3"
+    ],
+    "expected": "Chọn/hủy chưa tiêu; áp dụng mới trừ kho.",
+    "actual": "Overlay SELECT BOTTLE TO SHUFFLE; hủy giữ 9998. Chọn chai3 giảm Shuffle 9998→9997; thứ tự đáy→đỉnh từ đỏ/hồng/tím/hồng thành tím/hồng/đỏ/hồng.",
+    "status": "verified_observed_branch",
+    "limitations": "Một chai, một lần; chưa xác minh phân phối random, trạng thái kẹt hoặc mục tiêu không đủ điều kiện.",
+    "images": [
+      "CORE06_shuffle_select",
+      "CORE07_shuffle_cancel",
+      "CORE08_shuffle_apply"
+    ],
+    "before": "CORE05_undo",
+    "after": "CORE08_shuffle_apply",
+    "currency_unchanged": false,
+    "build": "0.0.3129 ARM64",
+    "mode": "offline_existing_fixture",
+    "date": "2026-11-15",
+    "ledger": {
+      "before": "CORE05_undo.json",
+      "after": "CORE08_shuffle_apply.json"
+    }
+  },
+  {
+    "id": "MS-R15-CORE04",
+    "feature": "Boosters",
+    "uc": [
+      "UC-05"
+    ],
+    "title": "Thêm chai phụ và bố trí lại board",
+    "precondition": "App 0.0.3129 ARM64, UID offline, tài nguyên fixture có sẵn; level 351 rồi 352. Nguồn code 0.0.3063 được phân biệt riêng.",
+    "steps": [
+      "Bấm Extra Bottle"
+    ],
+    "expected": "Thêm một chai rỗng và giảm kho một đơn vị.",
+    "actual": "Board từ 12 lên 13 chai, hàng dưới bố trí lại; ExtraBottle 9990→9989. Chai mới dùng được làm chỗ chứa nhưng lượt giải này không cần đổ vào chai mới.",
+    "status": "verified_observed_branch",
+    "limitations": "Chưa kiểm tra giới hạn số lần, khi kho bằng 0 hoặc mua thêm.",
+    "images": [
+      "CORE08_shuffle_apply",
+      "CORE09_extra_bottle"
+    ],
+    "before": "CORE08_shuffle_apply",
+    "after": "CORE09_extra_bottle",
+    "currency_unchanged": false,
+    "build": "0.0.3129 ARM64",
+    "mode": "offline_existing_fixture",
+    "date": "2026-11-15",
+    "ledger": {
+      "before": "CORE08_shuffle_apply.json",
+      "after": "CORE09_extra_bottle.json"
+    }
+  },
+  {
+    "id": "MS-R15-CORE05",
+    "feature": "LevelFlow",
+    "uc": [
+      "UC-12",
+      "UC-20"
+    ],
+    "title": "Mở cài đặt và hủy thoát level",
+    "precondition": "App 0.0.3129 ARM64, UID offline, tài nguyên fixture có sẵn; level 351 rồi 352. Nguồn code 0.0.3063 được phân biệt riêng.",
+    "steps": [
+      "Mở gear",
+      "Bấm Exit",
+      "Bấm X trên cảnh báo"
+    ],
+    "expected": "Hủy thoát giữ board và phiên level.",
+    "actual": "Hiện cảnh báo You will lose 1 life! dù đang có unlimited lives; X trở về board đang chơi, inventory giữ nguyên, isLevelInProgress=true.",
+    "status": "verified_observed_branch",
+    "limitations": "Không xác nhận mất mạng vì chưa bấm Quit ở case này; chữ cảnh báo không đủ chứng minh mức trừ thực tế.",
+    "images": [
+      "CORE10_pause",
+      "CORE11_exit_warning",
+      "CORE12_exit_cancel"
+    ],
+    "before": "CORE09_extra_bottle",
+    "after": "CORE12_exit_cancel",
+    "currency_unchanged": true,
+    "build": "0.0.3129 ARM64",
+    "mode": "offline_existing_fixture",
+    "date": "2026-11-15",
+    "ledger": {
+      "before": "CORE09_extra_bottle.json",
+      "after": "CORE12_exit_cancel.json"
+    }
+  },
+  {
+    "id": "MS-R15-CORE06",
+    "feature": "BottleSortMechanics",
+    "uc": [
+      "UC-20"
+    ],
+    "title": "Generator tạo màu tiếp theo khi chai rỗng",
+    "precondition": "App 0.0.3129 ARM64, UID offline, tài nguyên fixture có sẵn; level 351 rồi 352. Nguồn code 0.0.3063 được phân biệt riêng.",
+    "steps": [
+      "Đổ chai nhỏ cam sang chai cam",
+      "Đợi animation",
+      "Đổ chai nhỏ xanh lá sang chai xanh lá"
+    ],
+    "expected": "Đối chiếu serialized OBIM với màu sinh và UI.",
+    "actual": "Chai nhỏ cam sinh xám, chai nhỏ xanh lá sinh nâu; đai số1 biến mất sau khi phát màu cuối. Source OBIM.Id=18 được converter ánh xạ GeneratorItemModel, NC=[10]/[11].",
+    "status": "verified_observed_branch",
+    "limitations": "Một màu dự trữ mỗi Generator. Không dùng ItemType enum18 để diễn giải serialized discriminator18. Màu enum code cũ khác palette runtime; giữ CI số và ảnh.",
+    "images": [
+      "CORE13_solver_step4",
+      "CORE14_generator_pour",
+      "CORE15_generator_ready",
+      "CORE16_generator_second"
+    ],
+    "before": "CORE13_solver_step4",
+    "after": "CORE16_generator_second",
+    "currency_unchanged": true,
+    "build": "0.0.3129 ARM64",
+    "mode": "offline_existing_fixture",
+    "date": "2026-11-15",
+    "ledger": {
+      "before": "CORE13_solver_step4.json",
+      "after": "CORE16_generator_second.json"
+    }
+  },
+  {
+    "id": "MS-R15-CORE07",
+    "feature": "LevelFlow",
+    "uc": [
+      "UC-11",
+      "UC-14"
+    ],
+    "title": "Thắng level351, reset retry và thưởng20coin",
+    "precondition": "App 0.0.3129 ARM64, UID offline, tài nguyên fixture có sẵn; level 351 rồi 352. Nguồn code 0.0.3063 được phân biệt riêng.",
+    "steps": [
+      "Giải seed351 với hỗ trợ tính đường đi từ JSON",
+      "Thực thi từng nhóm nước đổ qua ADB và đối chiếu ảnh",
+      "Continue ở popup Perfect"
+    ],
+    "expected": "Hoàn thành board, tiến level, thưởng và retry đúng thời điểm.",
+    "actual": "Win nâng PlayerModel351→352 và isLevelInProgress=false trước Continue; retry8→0, snitchRetry1→0. Popup thưởng20. Coin vẫn999995869 tại popup, sau Continue999995889. firstTryLevelWinCount giữ5.",
+    "status": "verified_observed_branch",
+    "limitations": "Đây là lượt có dùng Undo/Shuffle/ExtraBottle và đọc seed, không dùng thời lượng để đo độ khó tự nhiên. Chỉ seed...351_difficulty1-12; không phải toàn bộ level pass. Replay log ghi input, ảnh checkpoint và kết quả win xác nhận thực thi.",
+    "images": [
+      "CORE17_solver_6",
+      "CORE19_solver_18",
+      "CORE20_solver_finish",
+      "CORE21_win_ready",
+      "CORE22_win_continue"
+    ],
+    "before": "CORE01_prelevel",
+    "after": "CORE22_win_continue",
+    "currency_unchanged": false,
+    "build": "0.0.3129 ARM64",
+    "mode": "offline_existing_fixture",
+    "date": "2026-11-15",
+    "ledger": {
+      "before": "CORE01_prelevel.json",
+      "after": "CORE22_win_continue.json"
+    },
+    "related_uc": [
+      "UC-18"
+    ],
+    "uc_scope_note": "related_uc chỉ context/dependency: gate, chưa vào UC, khác subsystem hoặc teardown nội bộ chưa đo; không tính vào executed branch coverage."
+  },
+  {
+    "id": "MS-R15-CORE08",
+    "feature": "BoatRush",
+    "uc": [
+      "UC-11"
+    ],
+    "title": "Queue BoatRush đã hết hạn sau thắng level",
+    "precondition": "App 0.0.3129 ARM64, UID offline, tài nguyên fixture có sẵn; level 351 rồi 352. Nguồn code 0.0.3063 được phân biệt riêng.",
+    "steps": [
+      "Continue ở popup thắng351",
+      "Continue ở BoatRush"
+    ],
+    "expected": "Ghi thứ tự popup và thưởng thực nhận.",
+    "actual": "Sau thưởng20coin của win, BoatRush Finished tự mở, Stage1/4. Continue chuyển sang Duck settlement; CORE22→CORE23 coin và booster không đổi. Delta20coin CORE21→CORE22 thuộc win, không gán cho BoatRush.",
+    "status": "verified_observed_branch",
+    "limitations": "Không khẳng định rank mới hoặc server cập nhật. Kết quả các đối thủ là cache; nhánh race active chưa chạy.",
+    "images": [
+      "CORE22_win_continue"
+    ],
+    "before": "CORE22_win_continue",
+    "after": "CORE23_boat_continue",
+    "currency_unchanged": true,
+    "build": "0.0.3129 ARM64",
+    "mode": "offline_existing_fixture",
+    "date": "2026-11-15",
+    "ledger": {
+      "before": "CORE22_win_continue.json",
+      "after": "CORE23_boat_continue.json"
+    }
+  },
+  {
+    "id": "MS-R15-DAILY01",
+    "feature": "DailyLevel",
+    "uc": [
+      "UC-03",
+      "UC-09",
+      "UC-16"
+    ],
+    "title": "Lịch Daily tháng11 và mốc thưởng",
+    "precondition": "App 0.0.3129 ARM64, UID offline, tài nguyên fixture có sẵn; level 351 rồi 352. Nguồn code 0.0.3063 được phân biệt riêng.",
+    "steps": [
+      "Mở Daily từ Home",
+      "Tap ngày16 tương lai",
+      "Tap ngày14 đã qua"
+    ],
+    "expected": "Ghi ngày được chọn và các mốc thưởng.",
+    "actual": "Lịch November2026 chọn ngày15; progress0. Mốc3/7/14/25 ngày:100coin/30m/500coin/2500coin. Tap16 hoặc14 giữ nguyên màn hình (hash ảnh trùng).",
+    "status": "verified_observed_branch",
+    "limitations": "Không suy ra cơ chế unlock ngày cũ cho mọi account hoặc thay tháng; không đổi đồng hồ thiết bị.",
+    "images": [
+      "DAILY01_calendar"
+    ],
+    "before": "DAILY01_calendar",
+    "after": "DAILY03_past",
+    "currency_unchanged": true,
+    "build": "0.0.3129 ARM64",
+    "mode": "offline_existing_fixture",
+    "date": "2026-11-15",
+    "ledger": {
+      "before": "DAILY01_calendar.json",
+      "after": "DAILY03_past.json"
+    }
+  },
+  {
+    "id": "MS-R15-DAILY02",
+    "feature": "DailyLevel",
+    "uc": [
+      "UC-04"
+    ],
+    "title": "Play Daily không chuyển bàn trong phiên offline",
+    "precondition": "App 0.0.3129 ARM64, UID offline, tài nguyên fixture có sẵn; level 351 rồi 352. Nguồn code 0.0.3063 được phân biệt riêng.",
+    "steps": [
+      "Bấm Play November15",
+      "Quan sát sau khoảng56giây"
+    ],
+    "expected": "Ghi kết quả thực tế, không coi nhấn nút là đã vào bàn.",
+    "actual": "Màn hình vẫn là lịch; DAILY04 và DAILY05 có cùng hash, PlayerModel không vào level, coin không đổi. Không thấy popup lỗi trong hai capture.",
+    "status": "inconclusive_no_transition",
+    "limitations": "Chưa biết nguyên nhân là thiếu seed/cache hoặc mạng; chưa test timer/PlayOn Daily. Không ghi pass cho dựng bàn.",
+    "images": [
+      "DAILY04_play"
+    ],
+    "before": "DAILY01_calendar",
+    "after": "DAILY05_wait",
+    "currency_unchanged": true,
+    "build": "0.0.3129 ARM64",
+    "mode": "offline_existing_fixture",
+    "date": "2026-11-15",
+    "ledger": {
+      "before": "DAILY01_calendar.json",
+      "after": "DAILY05_wait.json"
+    },
+    "related_uc": [
+      "UC-05"
+    ],
+    "uc_scope_note": "related_uc chỉ context/dependency: gate, chưa vào UC, khác subsystem hoặc teardown nội bộ chưa đo; không tính vào executed branch coverage."
+  },
+  {
+    "id": "MS-R15-CORE09",
+    "feature": "Obstacles",
+    "uc": [
+      "UC-02"
+    ],
+    "title": "Hoàn thành màu mục tiêu mở sáu Curtain",
+    "precondition": "App 0.0.3129 ARM64, UID offline, tài nguyên fixture có sẵn; level 351 rồi 352. Nguồn code 0.0.3063 được phân biệt riêng.",
+    "steps": [
+      "Gom màu xám từ các chai dưới và Generator",
+      "Dùng thêm một ExtraBottle để dời màu vàng",
+      "Hoàn thành chai xám"
+    ],
+    "expected": "Đối chiếu token trên rèm với màu hoàn tất.",
+    "actual": "Sáu rèm hàng trên biến mất sau chai xám hoàn chỉnh; lộ chai và dấu hỏi bên dưới. Serialized OBIM.Id4 trên6chai có Obj.CI9; converter code cũ ánh xạ CurtainItemModel. Generator hiển thị2→1 sau một lần sinh màu.",
+    "status": "verified_observed_branch",
+    "limitations": "Tên file CORE26/27 chứa pillow do nhãn tạm lúc chụp, thực tế feature là Curtain. CI9 đang hiển thị xám trong level352, không áp palette của level351. Một trigger; chưa mọi loại target/Undo/rèm lồng.",
+    "images": [
+      "CORE24_level352",
+      "CORE26_pillow_progress",
+      "CORE27_pillow_unlock"
+    ],
+    "before": "CORE24_level352",
+    "after": "CORE27_pillow_unlock",
+    "currency_unchanged": false,
+    "build": "0.0.3129 ARM64",
+    "mode": "offline_existing_fixture",
+    "date": "2026-11-15",
+    "ledger": {
+      "before": "CORE24_level352.json",
+      "after": "CORE27_pillow_unlock.json"
+    }
+  },
+  {
+    "id": "MS-R15-CORE10",
+    "feature": "LevelFlow",
+    "uc": [
+      "UC-12",
+      "UC-13"
+    ],
+    "title": "Quit giữa level và popup Failed có phần thưởng hiển thị",
+    "precondition": "App 0.0.3129 ARM64, UID offline, tài nguyên fixture có sẵn; level 351 rồi 352. Nguồn code 0.0.3063 được phân biệt riêng.",
+    "steps": [
+      "Gear → Exit → Quit",
+      "Đóng popup Failed bằngX"
+    ],
+    "expected": "Ghi fail state, mức thưởng thật và phân biệt với nhãn UI.",
+    "actual": "Level352 giữ nguyên, isLevelInProgress true→false. Failed có TryAgain và vẫn hiển thị Rewards20; đóng bằngX vềHome, coin giữ999995889, không cấp20. RetryCount giữ1 trong khoảng quit; unlimitedLifeEnd/lifeFillDate không đổi.",
+    "status": "observed_ui_ledger_discrepancy",
+    "limitations": "Một lượt quit sau thắng351, có unlimited lives. Phần Rewards20 có thể là UI còn trạng thái cũ; chưa quy kết bug production hoặc tuyên bố fail có thưởng. Chưa bấmTryAgain.",
+    "images": [
+      "CORE25_quit352_warning",
+      "CORE28_quit352",
+      "CORE29_fail_close"
+    ],
+    "before": "CORE27_pillow_unlock",
+    "after": "CORE29_fail_close",
+    "currency_unchanged": true,
+    "build": "0.0.3129 ARM64",
+    "mode": "offline_existing_fixture",
+    "date": "2026-11-15",
+    "ledger": {
+      "before": "CORE27_pillow_unlock.json",
+      "after": "CORE29_fail_close.json"
+    },
+    "related_uc": [
+      "UC-18"
+    ],
+    "uc_scope_note": "related_uc chỉ context/dependency: gate, chưa vào UC, khác subsystem hoặc teardown nội bộ chưa đo; không tính vào executed branch coverage."
+  },
+  {
+    "id": "MS-R15-CORE11",
+    "feature": "Inventory",
+    "uc": [
+      "UC-06"
+    ],
+    "title": "LifeFillDate đã đổi ngay khi vào level352",
+    "precondition": "0.0.3129 ARM64; level352, UID MagicSort offline, save fixture có sẵn. Code/asset0.0.3063 là nguồn lịch sử riêng.",
+    "steps": [
+      "Từ Home5Full bấm Play352",
+      "Chụp board trước mọi nước đi"
+    ],
+    "expected": "Đối chiếu thời điểm timer/life state, không chỉ dựa chữ cảnh báo quit.",
+    "actual": "lifeFillDate từ15:47:37.481215UTC đổi thành16:21:23.276935UTC ngay snapshot ENTER15:51:23; isLevelInProgress false→true, coin/booster giữ nguyên. Sau quit Home hiện4mạng.",
+    "limitations": "Mạng được suy từ LifeFillDate và UI, không phải CurrencyAmountByType riêng. Đây là start/countdown observation; chưa đợi đủ30phút để chứng minh natural refill. Không gán life spend lần nữa ở Quit.",
+    "status": "observed_partial",
+    "before": "MORE22_home_before_core",
+    "after": "MORE23_level352",
+    "images": [
+      "MORE22_home_before_core",
+      "MORE23_level352"
+    ],
+    "build": "0.0.3129 ARM64",
+    "mode": "offline_existing_fixture",
+    "date": "2026-11-15",
+    "uc_scope": {
+      "UC-06": "life_timer_start_only_not_completed_regeneration"
+    },
+    "currency_unchanged": true,
+    "ledger": {
+      "before": "MORE22_home_before_core.json",
+      "after": "MORE23_level352.json"
+    }
+  },
+  {
+    "id": "MS-R15-CORE12",
+    "feature": "LevelFlow",
+    "uc": [
+      "UC-01",
+      "UC-12",
+      "UC-13"
+    ],
+    "title": "Vào rồi Quit352 khi không còn unlimited lives",
+    "precondition": "0.0.3129 ARM64; level352, UID MagicSort offline, save fixture có sẵn. Code/asset0.0.3063 là nguồn lịch sử riêng.",
+    "steps": [
+      "Bấm Play352",
+      "Không đổ nước/không booster",
+      "Gear→Exit→Quit",
+      "Đóng Failed bằngX"
+    ],
+    "expected": "Ghi entry/quit và số dư; phân biệt Reward label với actual grant.",
+    "actual": "isLevelInProgress true ở board, false sau Quit. Failed vẫn hiện Rewards20; coin giữ999995889 và không nhận20. Home4mạng, timer29:15; lifeFillDate đã đổi ở entry, không đổi thêm ở quit.",
+    "limitations": "Không gọi Dispose/memory verified; chưa bấmTryAgain hay thử stuck/fail mất hết nước. Một lượt không có nước đi, không booster; không đo natural regen.",
+    "status": "observed_ui_ledger_discrepancy",
+    "before": "MORE22_home_before_core",
+    "after": "MORE27_home_four_lives",
+    "images": [
+      "MORE23_level352",
+      "MORE24_game_settings",
+      "MORE25_quit_warning",
+      "MORE26_quit_fail",
+      "MORE27_home_four_lives"
+    ],
+    "build": "0.0.3129 ARM64",
+    "mode": "offline_existing_fixture",
+    "date": "2026-11-15",
+    "currency_unchanged": true,
+    "ledger": {
+      "before": "MORE22_home_before_core.json",
+      "after": "MORE27_home_four_lives.json"
+    }
+  },
+  {
+    "id": "MS-R15-CORE13",
+    "feature": "Ads",
+    "uc": [
+      "UC-06",
+      "UC-12"
+    ],
+    "title": "Rewarded +1 Life báo offline",
+    "precondition": "0.0.3129 ARM64; level352, UID MagicSort offline, save fixture có sẵn. Code/asset0.0.3063 là nguồn lịch sử riêng.",
+    "steps": [
+      "Mở More Lives khi còn4",
+      "Bấm quảng cáo +1Life"
+    ],
+    "expected": "Lỗi không được coi là video hoàn tất hoặc đã cấp mạng.",
+    "actual": "Popup có Refill900coin và +1Life. Bấm +1Life hiện No Internet Connection; không vào video; coin và lifeFillDate không đổi, vẫn4mạng.",
+    "limitations": "Chỉ offline error entry; chưa load/show SDK callback, complete reward, quota hoặc ad provider attribution.",
+    "status": "verified_observed_branch",
+    "before": "MORE28_refill",
+    "after": "MORE29_rewarded_life",
+    "images": [
+      "MORE28_refill",
+      "MORE29_rewarded_life"
+    ],
+    "build": "0.0.3129 ARM64",
+    "mode": "offline_existing_fixture",
+    "date": "2026-11-15",
+    "uc_scope": {
+      "UC-06": "attempted_rewarded_entry_only_no_video_no_reward",
+      "UC-12": "offline_ui_error_observed_no_sdk_trace"
+    },
+    "currency_unchanged": true,
+    "ledger": {
+      "before": "MORE28_refill.json",
+      "after": "MORE29_rewarded_life.json"
+    }
+  },
+  {
+    "id": "MS-R15-CORE14",
+    "feature": "Inventory",
+    "uc": [
+      "UC-08"
+    ],
+    "title": "Refill900coin từ4 lên5Full",
+    "precondition": "0.0.3129 ARM64; level352, UID MagicSort offline, save fixture có sẵn. Code/asset0.0.3063 là nguồn lịch sử riêng.",
+    "steps": [
+      "Từ More Lives bấm Refill900"
+    ],
+    "expected": "Trừ đúng900coin, hồi đầy mạng và reset timer.",
+    "actual": "Coin999995889→999994989 (−900); Home5Full. lifeFillDate về15:52:24.825648UTC. Các booster không đổi.",
+    "limitations": "Một mức4→5, có đủ coin; chưa thử thiếu tiền/0mạng hoặc giá theo segment. Đây là coin refill, không phải IAP hoặc ad reward.",
+    "status": "verified_observed_branch",
+    "before": "MORE29_rewarded_life",
+    "after": "MORE30_refill_paid",
+    "images": [
+      "MORE28_refill",
+      "MORE30_refill_paid"
+    ],
+    "build": "0.0.3129 ARM64",
+    "mode": "offline_existing_fixture",
+    "date": "2026-11-15",
+    "currency_unchanged": false,
+    "ledger": {
+      "before": "MORE29_rewarded_life.json",
+      "after": "MORE30_refill_paid.json"
+    }
+  },
+  {
+    "id": "MS-R15-CORE15",
+    "feature": "Inventory",
+    "uc": [
+      "UC-17"
+    ],
+    "title": "Refill và số dư giữ qua restart local",
+    "precondition": "0.0.3129 ARM64; level352, UID MagicSort offline, save fixture có sẵn. Code/asset0.0.3063 là nguồn lịch sử riêng.",
+    "steps": [
+      "Force-stop sau refill",
+      "Khởi động lại và đợi Home"
+    ],
+    "expected": "Đối chiếu số dư đã lưu, không coi local restart là server sync.",
+    "actual": "Home giữ level352,5Full, coin999994989 và booster. lifeFillDate reset khi đã Full tại15:52:49, không giữ nguyên timestamp refill15:52:24. more_ledger.json xác nhận profileInfo gốc không đổi từ MORE03 đến MORE31; retry2, snitchRetry0, seed v2betterdesign352_difficulty4-1.",
+    "limitations": "Chỉ local save/load; chưa Serialize/Overwrite từ server, reinstall hay đa thiết bị. ProfileInfo unchanged là đối chiếu phụ của more_ledger.json; không phải sửa profile thành công.",
+    "status": "verified_observed_branch",
+    "before": "MORE30_refill_paid",
+    "after": "MORE31_restart_final",
+    "images": [
+      "MORE30_refill_paid",
+      "MORE31_restart_final"
+    ],
+    "build": "0.0.3129 ARM64",
+    "mode": "offline_existing_fixture",
+    "date": "2026-11-15",
+    "uc_scope": {
+      "UC-17": "local_save_reload_only_no_server_sync"
+    },
+    "currency_unchanged": true,
+    "ledger": {
+      "before": "MORE30_refill_paid.json",
+      "after": "MORE31_restart_final.json"
+    }
+  }
+]

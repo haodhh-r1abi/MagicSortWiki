@@ -1,0 +1,272 @@
+{
+  "id": "SkyJump",
+  "feature": "SkyJump",
+  "name": "Sky Jump (đua leo thang)",
+  "category": "Event",
+  "category_label": "Sự kiện",
+  "core_levels_last": false,
+  "acceptance_status": "documented_with_explicit_remaining_scope",
+  "full_feature_verified": false,
+  "checks": {
+    "purpose": {
+      "status": "documented_static_scope",
+      "source": "gdd/SkyJump.json#/summary",
+      "claim_excerpt": "Sky Jump (backend gọi là 'lava tournament', endpoint /v1/*-lava-*) là giải đấu loại trực tiếp theo bậc thang. Người chơi Join vào một nhóm cùng lúc; mỗi lần thắng level thì leo lên 1 bậc (Score+1), mỗi lần THUA thì rơi khỏi giải (TryFall đặt Score = -1) và bị loại vĩnh viễn trong giải đó. Bậc tối đa là 10 (GetMaxReachableScore trả 10). Ai leo tới bậc 10 trước khi hết giờ là người thắng; toàn bộ gi"
+    },
+    "unlock": {
+      "status": "described_historical_conditions_runtime_boundary_unverified",
+      "source": "gdd/SkyJump.json#/unlock",
+      "content": "SkyJumpStateService.GetEventState(): Disable(0) nếu SkyJumpConfigModel.IsEnabled == false; ProgressNotEnough(1) nếu level < FirstLevelToShow; NoCache(2) nếu chưa fetch được; Join(3) khi có giải nhưng chưa tham gia; InProgress(4) khi đang đua; FinishedByLocal(5)/FinishedByRemote(6) khi kết thúc; ClaimedLocally(8) sau khi nhận thưởng. Client default: IsEnabled=false, EventType=1, FirstLevelToShow=120, RewardsAsCoin=10000 (Resources/defaultconfigs/SkyJumpConfigModel.json)."
+    },
+    "entry_flow": {
+      "status": "documented_paths_not_all_executed",
+      "entry_points": [
+        "SkyJumpLobbyButton ở lobby (IsLobbyIconVisible), kèm SkyJumpLobbyButtonTimer đếm ngược",
+        "SkyJumpJoinPopUp — mời tham gia (ShouldShowJoinPopup / CanShowJoinPopupForce / ShouldOpenJoinPopUpAutomaticallyOnLobbyReturn)",
+        "SkyJumpPopUp — màn hình thang đua (SkyJumpPopUpArguments, impression source)",
+        "SkyJumpSearchPopUp — hoạt ảnh 'đang tìm đối thủ' sau khi Join",
+        "Tự mở khi về lobby nếu vừa lên bậc (ShouldOpenStepIncreasedOnLobbyReturn) hoặc khi có kết quả (ShouldOpenResultOnLobbyReturn), hoặc khi mở app (ShouldOpenAutomaticallyOnSessionStart)",
+        "SkyJumpInfoPopUp qua SkyJumpInfoButton",
+        "SkyJumpAreYouSureView — cảnh báo mất suất khi định thoát level (ShouldShowAreYouSure)",
+        "SkyJumpTryAgainCommand — nút chơi lại"
+      ],
+      "flow_source": "gdd/SkyJump.json#/flow",
+      "acceptance_scope": "Join/elimination/step/opponents/reward/fail/retry; round timing, group size và reset"
+    },
+    "config": {
+      "status": "source_bound_catalog_present",
+      "gdd_rows": 25,
+      "full_leaf_rows_associated": 16,
+      "snapshots": {
+        "default_0.0.3063": 4,
+        "cache_20260910": 4,
+        "cache_20261010": 4,
+        "firebase_20260910": 4
+      },
+      "models": [
+        {
+          "model": "skyJumpConfigModel",
+          "matching_basis": [
+            {
+              "kind": "explicit_gd_config_model_map",
+              "source": "gd_config.json#/defaultconfigs/map/SkyJump"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/SkyJump.json#/sources/3"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/SkyJump.json#/sources/6"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/SkyJump.json#/configs/0/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/SkyJump.json#/configs/1/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/SkyJump.json#/configs/2/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/SkyJump.json#/configs/3/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/SkyJump.json#/configs/24/key_where"
+            }
+          ]
+        }
+      ],
+      "declared_models_without_catalog_data": [],
+      "placeholder_rows_requiring_source_review": [],
+      "exact_placeholder_snapshot_values": [],
+      "dossier_abbreviated_values": [],
+      "note": "Model association uses explicitmap or exacttoken citations; fieldpresence does not prove allproductiondata. GDDsummaryrows and fullcatalogrows have separate counts. Abbreviated source summaries are not full arrays; catalog/source links remain authoritative."
+    },
+    "reward": {
+      "status": "documented_static_rewards_runtime_grant_not_fully_verified",
+      "entries": 2,
+      "tables_in_site_meta": 4,
+      "source": "gdd/SkyJump.json#/rewards"
+    },
+    "use_cases": {
+      "status": "specified_not_executed_in15nov_ledger",
+      "specified": 15,
+      "reviewed_uc_branch_count": 0,
+      "reviewed_uc_ids": [],
+      "not_reviewed_in_new_ledger": [
+        "UC-01",
+        "UC-02",
+        "UC-03",
+        "UC-04",
+        "UC-05",
+        "UC-06",
+        "UC-07",
+        "UC-08",
+        "UC-09",
+        "UC-10",
+        "UC-11",
+        "UC-12",
+        "UC-13",
+        "UC-14",
+        "UC-15"
+      ],
+      "full_uc_pass_claimed": false
+    },
+    "screenshots": {
+      "historical_gallery_entries": 1,
+      "historical_uc_with_image_reference": 0,
+      "curated_new_images": [],
+      "curated_new_image_count": 0,
+      "status": "historical_references_only",
+      "source": "screens/web/screens.json#/SkyJump",
+      "note": "Image presence does not prove execution result or completeness."
+    },
+    "runtime_actual": {
+      "status": "not_observed_in15nov_ledger",
+      "case_count": 0,
+      "cases": [],
+      "mode": "offline_existing_fixture",
+      "build": "0.0.3129 ARM64"
+    },
+    "segment_ab": {
+      "status": "not_identified_in_sources",
+      "segment_ids": [],
+      "matching_basis": "explicit_gd_config_map_or_exact_model_token_in_gdd_configs_where_key_sources; rootfieldscoped",
+      "rows": [],
+      "classifications": {},
+      "assignment_verified": false,
+      "uplift_verified": false,
+      "note": "No matchingrow does not prove no segmentation/AB. Rewardbucketfalsepositives remain explicitly classified."
+    },
+    "storage_backend_analytics": {
+      "storage_keys": {
+        "entries": 11,
+        "status": "documented_static_contract_runtime_not_verified",
+        "source": "gdd/SkyJump.json#/storage_keys"
+      },
+      "backend": {
+        "entries": 6,
+        "status": "documented_static_contract_runtime_not_verified",
+        "source": "gdd/SkyJump.json#/backend"
+      },
+      "analytics": {
+        "entries": 6,
+        "status": "documented_static_contract_runtime_not_verified",
+        "source": "gdd/SkyJump.json#/analytics"
+      }
+    },
+    "remaining_next_step": {
+      "gap_count": 5,
+      "static_scoped_resolutions": 1,
+      "remaining_count": 4,
+      "all_gap_dispositions": [
+        {
+          "id": "MS-SkyJump-G001",
+          "feature": "SkyJump",
+          "source": "gdd/SkyJump.json#/gaps/0",
+          "original": "Số người trong một nhóm đua và cách ghép nhóm do server quyết định (total_user_count).",
+          "current_note": "Số người trong một nhóm đua và cách ghép nhóm do server quyết định (total_user_count).",
+          "status": "open_review_plan",
+          "review_status": "open_review_plan",
+          "dependency": "backend_contract_or_response",
+          "next_action": "Tổng user_count snapshot không cho algorithm grouping; cần backend response/cohort.",
+          "remaining": "Số người trong một nhóm đua và cách ghép nhóm do server quyết định (total_user_count)."
+        },
+        {
+          "id": "MS-SkyJump-G002",
+          "feature": "SkyJump",
+          "source": "gdd/SkyJump.json#/gaps/1",
+          "original": "Độ dài giải và khoảng nghỉ giữa hai giải hoàn toàn từ server (start_time/finish_time và /v1/get-lava-starttime).",
+          "current_note": "Độ dài giải và khoảng nghỉ giữa hai giải hoàn toàn từ server (start_time/finish_time và /v1/get-lava-starttime).",
+          "status": "open_review_plan",
+          "review_status": "open_review_plan",
+          "dependency": "event_rotation_or_fresh_instance",
+          "next_action": "So event/race startfinish và get-lava-starttime theo cùng instance; cần rotation mới để đo nghỉ/đổi giải.",
+          "remaining": "Độ dài giải và khoảng nghỉ giữa hai giải hoàn toàn từ server (start_time/finish_time và /v1/get-lava-starttime)."
+        },
+        {
+          "id": "MS-SkyJump-G003",
+          "feature": "SkyJump",
+          "source": "gdd/SkyJump.json#/gaps/2",
+          "original": "GetWinnerCount() đọc từ cache user_details_by_steps ở bậc tối đa; nếu cache chưa cập nhật thì trả 1 (người chơi nhận trọn 10.000 coin) — có thể lệch với server.",
+          "current_note": "GetWinnerCount() đọc từ cache user_details_by_steps ở bậc tối đa; nếu cache chưa cập nhật thì trả 1 (người chơi nhận trọn 10.000 coin) — có thể lệch với server.",
+          "status": "open_review_plan",
+          "review_status": "open_review_plan",
+          "dependency": "backend_contract_or_response",
+          "next_action": "Test cache stale winner count và settlement response; fallback1 không đảm bảo payout10000 offline.",
+          "remaining": "GetWinnerCount() đọc từ cache user_details_by_steps ở bậc tối đa; nếu cache chưa cập nhật thì trả 1 (người chơi nhận trọn 10.000 coin) — có thể lệch với server."
+        },
+        {
+          "id": "MS-SkyJump-G004",
+          "feature": "SkyJump",
+          "source": "gdd/SkyJump.json#/gaps/3",
+          "original": "Giá trị NotActiveStatusCode được gán trong .ctor, không đọc được số cụ thể từ pseudo-C (so sánh: TeamQuest dùng 425).",
+          "current_note": "15/11 — resolved_static_code_historical_build: SkyJumpService constructor gán _NotActiveStatusCode=0x1a9, tức425. Giá trị lấy từ chính SkyJump body, không mượn TeamQuest. Ý nghĩa response425 tại backend hiện tại chưa được test. Còn lại: Cần đối chiếu method/consumer trên app0.0.3129 ARM64; chưa là runtime pass.",
+          "status": "resolved_static_code_historical_build",
+          "review_status": "preserved_resolved_static_code_historical_build",
+          "dependency": "local_code_review",
+          "next_action": "SkyJumpService constructor gán _NotActiveStatusCode=0x1a9, tức425. Giá trị lấy từ chính SkyJump body, không mượn TeamQuest. Ý nghĩa response425 tại backend hiện tại chưa được test. Cần đối chiếu method/consumer trên app0.0.3129 ARM64; chưa là runtime pass.",
+          "conclusion": "SkyJumpService constructor gán _NotActiveStatusCode=0x1a9, tức425. Giá trị lấy từ chính SkyJump body, không mượn TeamQuest. Ý nghĩa response425 tại backend hiện tại chưa được test.",
+          "evidence": [
+            "../com.grandgames.magicsort_Unity_20260909_112501/RecoveredNative/PseudoC/Assembly-CSharp/Modules/Contexts/Home/SkyJump/Scripts/SkyJumpService.c:2123"
+          ],
+          "reviewed": "2026-11-15",
+          "mode": "file_only_recovered_native_0.0.3063",
+          "remaining": "15/11 — resolved_static_code_historical_build: SkyJumpService constructor gán _NotActiveStatusCode=0x1a9, tức425. Giá trị lấy từ chính SkyJump body, không mượn TeamQuest. Ý nghĩa response425 tại backend hiện tại chưa được test. Còn lại: Cần đối chiếu method/consumer trên app0.0.3129 ARM64; chưa là runtime pass."
+        },
+        {
+          "id": "MS-SkyJump-G005",
+          "feature": "SkyJump",
+          "source": "gdd/SkyJump.json#/gaps/4",
+          "original": "[Runtime 2026-09-10] Config server LIVE đã đọc trực tiếp từ cache máy (không cần request); các hàng 'server live' là giá trị server ghi đè/thêm so với default.",
+          "current_note": "[Runtime 2026-09-10] Config server LIVE đã đọc trực tiếp từ cache máy (không cần request); các hàng 'server live' là giá trị server ghi đè/thêm so với default.",
+          "status": "historical_evidence_annotation_not_test_result",
+          "review_status": "historical_evidence_annotation_not_test_result",
+          "dependency": "historical_note_requires_qualified_use",
+          "next_action": "Ghi chú cache đã đọc tháng9, từ LIVE phải hiểu snapshot lịch sử. Đối chiếu config catalog/source, giữ default/cache/production hiện tại riêng; không coi là fresh fetch15/11.",
+          "remaining": "[Runtime 2026-09-10] Config server LIVE đã đọc trực tiếp từ cache máy (không cần request); các hàng 'server live' là giá trị server ghi đè/thêm so với default."
+        }
+      ],
+      "feature_specific_acceptance_questions": [
+        "Join/elimination/step/opponents/reward/fail/retry",
+        " round timing, group size và reset"
+      ],
+      "next_steps": [
+        "Tổng user_count snapshot không cho algorithm grouping; cần backend response/cohort.",
+        "So event/race startfinish và get-lava-starttime theo cùng instance; cần rotation mới để đo nghỉ/đổi giải.",
+        "Test cache stale winner count và settlement response; fallback1 không đảm bảo payout10000 offline.",
+        "Ghi chú cache đã đọc tháng9, từ LIVE phải hiểu snapshot lịch sử. Đối chiếu config catalog/source, giữ default/cache/production hiện tại riêng; không coi là fresh fetch15/11."
+      ]
+    }
+  },
+  "use_cases": 15,
+  "configs": 25,
+  "new_review_case_count": 0,
+  "reviewed_uc_branch_count": 0,
+  "curated_new_image_count": 0,
+  "segment_ids": [],
+  "matching_basis": "explicit_gd_config_map_or_exact_model_token_in_gdd_configs_where_key_sources; rootfieldscoped",
+  "unmatched_segment_status": "not_identified_in_sources",
+  "local_document_repairs": [],
+  "sources": [
+    "GameDesign/features/SkyJumpService.md",
+    "GameDesign/features/SkyJumpStateService.md",
+    "GameDesign/features/SkyJumpDataService.md",
+    "GameDesign/features/SkyJumpConfigModel.md",
+    "RecoveredNative/PseudoC/Assembly-CSharp/Modules/Contexts/Home/SkyJump/Scripts/*.c",
+    "RecoveredNative/Il2CppDumper/dump.cs (TypeDefIndex 2497-2576)",
+    "UnityExport/ExportedProject/Assets/Resources/defaultconfigs/SkyJumpConfigModel.json",
+    "UnityExport/ExportedProject/Assets/MonoBehaviour/BackendEnvironmentConfig.asset",
+    "RecoveredNative/strings-by-type.tsv (EventSender.SendSkyJump*)"
+  ],
+  "source_hashes": {
+    "gdd_sha256": "328d7f260e6b70b9eff4bb4d5ce8e5e417e99a851057bf1fd0bd66103efcaafc",
+    "site_meta_sha256": "d57ab54e7c14ad571ca2747d4571a34ca936340f30136d85f3bb7f50e43a6578"
+  }
+}

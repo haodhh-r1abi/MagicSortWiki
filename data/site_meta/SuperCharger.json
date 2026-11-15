@@ -1,0 +1,495 @@
+{
+  "id": "SuperCharger",
+  "title": "Super Charger (trợ thủ nạp năng lượng)",
+  "tagline": "Trợ thủ nạp dần trong ván, khi đầy sẽ tự sắp xếp tối ưu nhiều chai hoặc tạo một chai mini đặc biệt.",
+  "infobox": [
+    [
+      "Loại",
+      "Cơ chế lõi"
+    ],
+    [
+      "Mở khóa",
+      "Level 5 (FirstLevelToShow; nếu cấu hình < 5 thì code dùng 10), IsEnabled mặc định false"
+    ],
+    [
+      "Thời lượng",
+      "Giữ trạng thái kích hoạt cho tới khi thua một ván"
+    ],
+    [
+      "Tham gia",
+      "Người chơi đơn"
+    ],
+    [
+      "Vật phẩm thu thập",
+      "Tiến độ Progress ở Home và thanh nạp trong ván"
+    ],
+    [
+      "Thưởng chính",
+      "BestSort: sắp xếp lại tới 4 chai; ChargeableBottle: một chai mini dùng một lần"
+    ],
+    [
+      "Điều kiện / phụ thuộc",
+      "EventsFramework, LiveOps, Analytics, MagicBottle, Snitch, Compensation"
+    ],
+    [
+      "Manager",
+      "SuperChargerService, SuperChargerDataService, SuperChargerInGameManager, SuperChargerConfigModel, SuperChargerStrategyFactory, BestSortSuperChargerStrategy, BestSortSolver, ChargeableBottleSuperChargerStrategy"
+    ]
+  ],
+  "description": [
+    "Super Charger là trợ thủ dùng trong level: người chơi phải thắng đủ số level ở Home để kích hoạt nó.",
+    "Trong mỗi ván có một nút Super Charger nạp dần theo tiến trình chơi — theo số nước đi hoặc theo số chai hoàn thành, tuỳ cấu hình.",
+    "Khi nút đầy, người chơi bấm để dùng một lần phép thuật; hiệu quả tuỳ biến thể SuperChargerType.",
+    "Biến thể BestSort (Type = 2, mặc định) tự sắp xếp lại nhiều chai cùng lúc cho tối ưu.",
+    "Biến thể ChargeableBottle (Type = 1) tạo hoặc nạp một chai mini đặc biệt trên bàn, dùng tự động.",
+    "Trạng thái kích hoạt là 'sống đến khi thua': thua một ván là mất Super Charger và phải làm lại tiến độ.",
+    "Game có popup Are You Sure cảnh báo trước khi người chơi bỏ ván để không mất trợ thủ.",
+    "BestSort giới hạn tối đa 4 chai bị tác động (BestSortMaxEffectedBottleCap).",
+    "Toàn bộ tính năng do khoá remote config SuperChargerConfigModel điều khiển, mặc định client là tắt."
+  ],
+  "notes": [
+    "Lưu ý: IsEligible() cần IsEnabled = true và tiến độ >= FirstLevelToShow; nếu FirstLevelToShow < 5 thì code dùng 10 để chống cấu hình sai.",
+    "Lưu ý: IsActive() = IsEligible() và Progress >= TargetLevelProgress (mặc định 0).",
+    "CheckMoveIsRepetitive chỉ đọc state hiện tại: reject khi (origin water list.Count==1 && target empty && !origin.HasBlocker(9)) OR (origin.Height==1 && !origin.HasBlocker(9)) OR target.EmptyCellCount<origin.TopWaterHeight. Không đọc SelectionSystem/history và không có history-depth N trong body; không được diễn giải thành undo/qua-lại filter. (Mã0.0.3063; chưa xác nhận runtime0.0.3129.)",
+    "Lưu ý: Khi ChargeWithMove = false, CountsTowardCharge chặn màu đã tính rồi nên mỗi màu chỉ tính một lần.",
+    "Lưu ý: ShouldHaveInitialCharge = true thì TryApplyInitialCharge đặt _remainingGoal = 0 ngay từ đầu, nút đầy sẵn.",
+    "Lưu ý: Biến thể ChargeableBottle dùng tự động (ShouldUseAutomatically() trả true); BestSort phải bấm nút.",
+    "Lưu ý: Nếu bàn kẹt sau khi dùng, TryRescueFromStuck thêm một chai và ghi cờ _addedBottleForStuck vào analytics supercharger_used.",
+    "Lưu ý: ForceTutorialShowCount không có trong file mặc định nên chưa biết giá trị vận hành thực tế (gap).",
+    "Lưu ý: Heuristic của BestSortSolver chỉ đọc được tên 5 pha, không có hằng số chấm điểm (gap)."
+  ],
+  "how_it_works": [
+    "Ở Home, mỗi lần thắng level SuperChargerService.TryIncreaseProgress() tăng SuperChargerModel.Progress thêm 1 (chỉ khi EventShownInLifeTime đã bật).",
+    "Khi Progress == TargetLevelProgress, service bật cờ ShouldShowInLevelActivationPopUp để lần vào level kế tiếp báo 'Super Charger đã sẵn sàng'.",
+    "Lần đầu đủ điều kiện, ShouldAutoOpenPopUp() trả true (EventShownInLifeTime còn false) nên mở SuperChargerJoinPopUp.",
+    "Lý do mở popup lấy từ GetJoinPopupShowReason: Activate(1) nếu đã đủ tiến độ, Tutorial(2) nếu chưa, Lose(0) sau khi mất; popup gọi MarkEventShownInLifeTime và MarkJoinPopUpShown.",
+    "SuperChargerProgressView vẽ thanh tiến độ có vạch ngăn, dùng chữ SuperChargerJoinProgressText khi chưa xong và SuperChargerIsActiveText khi đã kích hoạt.",
+    "Vào level: Initialize đọc ChargeMatchCount, reset useCount0 và lấy remainingGoal=ChargeMatchCount[0] khi strategy tạo được. Sau mỗi lần dùng, index=min(useCount+1,Count−1), lấy goal của index đó; phần tử cuối được dùng lại (mã0.0.3063).",
+    "SuperChargerStrategyFactory.Create(configModel) tạo chiến lược tương ứng; SuperChargerButtonUI.Initialize chọn view theo SuperChargerType.",
+    "CheckMoveIsRepetitive chỉ đọc state hiện tại: reject khi (origin water list.Count==1 && target empty && !origin.HasBlocker(9)) OR (origin.Height==1 && !origin.HasBlocker(9)) OR target.EmptyCellCount<origin.TopWaterHeight. Không đọc SelectionSystem/history và không có history-depth N trong body; không được diễn giải thành undo/qua-lại filter. (Mã0.0.3063; chưa xác nhận runtime0.0.3129.)",
+    "Nạp theo chai (ChargeWithMove = false): mỗi OnAnyBottleCompleted trừ 1, danh sách _completedColors bảo đảm mỗi màu chỉ tính một lần.",
+    "Khi _remainingGoal <= 0, nút chuyển trạng thái Ready (SuperChargerButtonInnerView.OnReady, hoạt ảnh readyClip kèm particle).",
+    "Với type ChargeableBottle, hệ thống tự kích hoạt và tạo hoặc nạp ChargeableBottleItem trên bàn.",
+    "Với type BestSort, người chơi bấm nút (OnUseChargerButtonClicked) → UseSuperCharger() → strategy.Use(source).",
+    "BestSortTargetFinder.FindSuitableTargets chọn tập chai ứng viên, giới hạn theo BestSortBottleCapByCandidateCount ({\"7\": 4}) và BestSortMaxEffectedBottleCap (4).",
+    "BestSortSolver.Solve chạy 5 pha theo thứ tự TagBottom → CompleteFill → TopColor → BestFit → RandomReverse để dựng BestSortSolution gồm danh sách BottleSolution.",
+    "PlaySuperChargerSequence bắn trail particle từ nút tới các chai đích (SuperChargerTrailAnimationController), rồi ApplySolutions ghi lại nội dung chai.",
+    "UnlockCompletedBottles mở khoá chai đã hoàn thành (đủ 4 đơn vị cùng màu) và CompleteOverBoardItemsOnEmptiedCells xử lý vật thể phủ trên ô vừa trống.",
+    "FinishCharge kiểm tra IsBoardStuck; bàn kẹt thì TryRescueFromStuck thêm một chai cứu và ghi nhận vào analytics.",
+    "Kết thúc ván: thắng thì CompleteSuperChargerTargetProgress; thua thì trạng thái ChargerStatus.Lost và tiến độ bị reset qua TryResetProgress.",
+    "Khi mở app, InitializeData → TryResetProgress(onAppLaunch: true) dọn tiến độ nếu người chơi không còn đủ điều kiện."
+  ],
+  "reward_tables": [
+    {
+      "title": "HAI BIẾN THỂ SUPER CHARGER (enum SuperChargerType)",
+      "columns": [
+        "Mã",
+        "Biến thể",
+        "Hiệu quả khi dùng"
+      ],
+      "rows": [
+        [
+          "0",
+          "None",
+          "Tắt tính năng"
+        ],
+        [
+          "1",
+          "ChargeableBottle",
+          "Tạo hoặc nạp một chai mini dùng được một lần; tự kích hoạt, không cần bấm"
+        ],
+        [
+          "2",
+          "BestSort (mặc định)",
+          "Sắp xếp lại tới 4 chai, hoàn thành ngay các chai đủ 4 đơn vị cùng màu; thêm 1 chai cứu nếu bàn kẹt"
+        ]
+      ]
+    },
+    {
+      "title": "CẤU HÌNH MẶC ĐỊNH (SuperChargerConfigModel.json, client default)",
+      "columns": [
+        "Khoá",
+        "Giá trị",
+        "Ý nghĩa"
+      ],
+      "rows": [
+        [
+          "IsEnabled",
+          "false",
+          "Tắt mặc định, server bật"
+        ],
+        [
+          "Type",
+          "2 (BestSort)",
+          "Biến thể phép thuật"
+        ],
+        [
+          "FirstLevelToShow",
+          "5",
+          "Level tối thiểu; nếu cấu hình < 5 thì code dùng 10"
+        ],
+        [
+          "TargetLevelProgress",
+          "0",
+          "Số level phải thắng để kích hoạt"
+        ],
+        [
+          "ChargeWithMove",
+          "false",
+          "Nạp theo chai hoàn thành thay vì theo nước đi"
+        ],
+        [
+          "CanIncreaseHealth",
+          "false",
+          "Cho phép tăng dung tích chai (biến thể ChargeableBottle)"
+        ],
+        [
+          "ShouldHaveInitialCharge",
+          "false",
+          "Không nạp sẵn đầy đầu ván"
+        ],
+        [
+          "ChargeMatchCount",
+          "[1]",
+          "Số lần match hoặc chai cần cho mỗi nấc nạp"
+        ],
+        [
+          "BestSortMaxEffectedBottleCap",
+          "4",
+          "Số chai tối đa BestSort được động vào"
+        ],
+        [
+          "BestSortBottleCapByCandidateCount",
+          "{\"7\": 4}",
+          "Có 7 chai ứng viên thì giới hạn tác động 4 chai"
+        ]
+      ]
+    },
+    {
+      "title": "NĂM PHA CỦA BESTSORTSOLVER",
+      "columns": [
+        "Thứ tự",
+        "Pha",
+        "Vai trò"
+      ],
+      "rows": [
+        [
+          "1",
+          "TagBottom",
+          "Xử lý đáy chai theo thẻ màu"
+        ],
+        [
+          "2",
+          "CompleteFill",
+          "Hoàn thành các chai gần đủ (CompleteFillCount = 4)"
+        ],
+        [
+          "3",
+          "TopColor",
+          "Gom theo màu ở lớp trên cùng"
+        ],
+        [
+          "4",
+          "BestFit",
+          "Ghép tối ưu phần còn lại (heuristic, không có hằng số)"
+        ],
+        [
+          "5",
+          "RandomReverse",
+          "Với solution đủ điều kiện và hơn1color, Random.Range(0,2)==0 thì Reverse; một trong hai outcome (mã0.0.3063)."
+        ]
+      ]
+    },
+    {
+      "title": "TRẠNG THÁI VÀ NGUỒN MỞ POPUP",
+      "columns": [
+        "Enum",
+        "Giá trị",
+        "Ý nghĩa"
+      ],
+      "rows": [
+        [
+          "ChargerStatus",
+          "Active=0, Passive=1, Lost=2, Activated=3",
+          "Trạng thái báo về analytics"
+        ],
+        [
+          "ChargerContext",
+          "level_start=0, level_end=1",
+          "Thời điểm báo trạng thái"
+        ],
+        [
+          "SuperChargerJoinPopupReason",
+          "Lose=0, Activate=1, Tutorial=2",
+          "Lý do mở join popup"
+        ],
+        [
+          "SuperChargerInfoPopUpImpressionSource",
+          "InfoButton=0, FirstOpen=1",
+          "Nguồn mở popup hướng dẫn"
+        ],
+        [
+          "SuperChargerJoinPopUpImpressionSource",
+          "LobbyIcon=0, FirstOpen=1",
+          "Nguồn mở join popup"
+        ]
+      ]
+    }
+  ],
+  "key_numbers": [
+    {
+      "label": "Bật mặc định (client)",
+      "value": "false",
+      "source": "SuperChargerConfigModel.json: IsEnabled"
+    },
+    {
+      "label": "Biến thể mặc định",
+      "value": "Type = 2 (BestSort)",
+      "source": "SuperChargerConfigModel.json: Type"
+    },
+    {
+      "label": "Level tối thiểu",
+      "value": "5 (dưới 5 thì code dùng 10)",
+      "source": "SuperChargerConfigModel.json: FirstLevelToShow"
+    },
+    {
+      "label": "Tiến độ mục tiêu",
+      "value": "0",
+      "source": "SuperChargerConfigModel.json: TargetLevelProgress"
+    },
+    {
+      "label": "Nạp theo nước đi",
+      "value": "false (nạp theo chai hoàn thành)",
+      "source": "SuperChargerConfigModel.json: ChargeWithMove"
+    },
+    {
+      "label": "Cho tăng dung tích chai",
+      "value": "false",
+      "source": "SuperChargerConfigModel.json: CanIncreaseHealth"
+    },
+    {
+      "label": "Nạp sẵn đầu ván",
+      "value": "false",
+      "source": "SuperChargerConfigModel.json: ShouldHaveInitialCharge"
+    },
+    {
+      "label": "Số lần cần cho mỗi nấc nạp",
+      "value": "[1]",
+      "source": "SuperChargerConfigModel.json: ChargeMatchCount"
+    },
+    {
+      "label": "Số chai tối đa BestSort tác động",
+      "value": "4",
+      "source": "SuperChargerConfigModel.json: BestSortMaxEffectedBottleCap"
+    },
+    {
+      "label": "Giới hạn theo số chai ứng viên",
+      "value": "{\"7\": 4}",
+      "source": "SuperChargerConfigModel.json: BestSortBottleCapByCandidateCount"
+    },
+    {
+      "label": "Số đơn vị nước để chai đầy",
+      "value": "4",
+      "source": "BestSortSolver.CompleteFillCount"
+    },
+    {
+      "label": "Giới hạn chai mặc định của BestSort",
+      "value": "4",
+      "source": "BestSortTargetFinder.DefaultBestSortBottleCap"
+    },
+    {
+      "label": "Số pha của BestSortSolver",
+      "value": "5",
+      "source": "BestSortSolver.Solve"
+    },
+    {
+      "label": "Số biến thể SuperChargerType",
+      "value": "3 (None=0, ChargeableBottle=1, BestSort=2)",
+      "source": "SuperChargerType"
+    },
+    {
+      "label": "Chiều dài thanh tiến độ trong level",
+      "value": "1.165 (đơn vị world)",
+      "source": "InLevelSuperChargerView._fullDistance"
+    },
+    {
+      "label": "Layer animator của nút",
+      "value": "0",
+      "source": "SuperChargerButtonInnerView.AnimatorBaseLayer"
+    },
+    {
+      "label": "Số trạng thái ChargerStatus",
+      "value": "4 (Active=0, Passive=1, Lost=2, Activated=3)",
+      "source": "ChargerStatus"
+    },
+    {
+      "label": "Số lý do mở join popup",
+      "value": "3 (Lose=0, Activate=1, Tutorial=2)",
+      "source": "SuperChargerJoinPopupReason"
+    },
+    {
+      "label": "Số điểm vào tính năng",
+      "value": "6",
+      "source": "SuperCharger.entry_points"
+    },
+    {
+      "label": "Số sự kiện analytics",
+      "value": "6",
+      "source": "SuperCharger.analytics"
+    },
+    {
+      "label": "Tên khối đồng bộ",
+      "value": "\"SuperChargerModel\"",
+      "source": "SuperChargerDataService"
+    },
+    {
+      "label": "Số trường của SuperChargerModel",
+      "value": "7",
+      "source": "SuperChargerModel"
+    }
+  ],
+  "config_highlights": [
+    {
+      "key": "SuperChargerConfigModel.json: IsEnabled",
+      "value": "false",
+      "meaning": "Bật/tắt toàn bộ tính năng (client default; server bật)"
+    },
+    {
+      "key": "SuperChargerConfigModel.json: Type",
+      "value": "2 (BestSort; 0=None, 1=ChargeableBottle)",
+      "meaning": "Biến thể phép thuật"
+    },
+    {
+      "key": "SuperChargerConfigModel.json: FirstLevelToShow",
+      "value": "5",
+      "meaning": "Level tối thiểu để thấy tính năng; nếu cấu hình < 5 thì code dùng 10"
+    },
+    {
+      "key": "SuperChargerConfigModel.json: TargetLevelProgress",
+      "value": "0",
+      "meaning": "Số level phải thắng để kích hoạt"
+    },
+    {
+      "key": "SuperChargerConfigModel.json: ChargeWithMove",
+      "value": "false",
+      "meaning": "true = nạp theo nước đi; false = nạp theo chai hoàn thành"
+    },
+    {
+      "key": "SuperChargerConfigModel.json: CanIncreaseHealth",
+      "value": "false",
+      "meaning": "Cho phép tăng dung tích chai (biến thể ChargeableBottle)"
+    },
+    {
+      "key": "SuperChargerConfigModel.json: ShouldHaveInitialCharge",
+      "value": "false",
+      "meaning": "Nạp sẵn đầy ngay đầu ván"
+    },
+    {
+      "key": "SuperChargerConfigModel.json: ChargeMatchCount",
+      "value": "[1]",
+      "meaning": "Số lần match hoặc chai cần cho mỗi nấc nạp"
+    },
+    {
+      "key": "SuperChargerConfigModel.json: BestSortMaxEffectedBottleCap",
+      "value": "4",
+      "meaning": "Số chai tối đa BestSort được động vào"
+    },
+    {
+      "key": "SuperChargerConfigModel.json: BestSortBottleCapByCandidateCount",
+      "value": "{\"7\": 4}",
+      "meaning": "Giới hạn số chai bị tác động theo số chai ứng viên trên bàn"
+    },
+    {
+      "key": "SuperChargerConfigModel.ForceTutorialShowCount",
+      "value": "(không có trong file mặc định — server cấp)",
+      "meaning": "Số lần ép hiện tutorial"
+    },
+    {
+      "key": "BestSortTargetFinder.CompleteFillCount / DefaultBestSortBottleCap",
+      "value": "4 / 4",
+      "meaning": "Số đơn vị nước để một chai đầy; giới hạn chai mặc định khi không có mục trong dictionary"
+    },
+    {
+      "key": "BestSortSolver.CompleteFillCount",
+      "value": "4",
+      "meaning": "Số đơn vị nước tính là chai hoàn chỉnh"
+    },
+    {
+      "key": "InLevelSuperChargerView._fullDistance",
+      "value": "1.165",
+      "meaning": "Chiều dài thanh tiến độ trong level (đơn vị world)"
+    },
+    {
+      "key": "SuperChargerButtonInnerView.AnimatorBaseLayer",
+      "value": "0",
+      "meaning": "Layer animator dùng cho các clip ready/idle/use"
+    },
+    {
+      "key": "SuperChargerProgressView khoá chữ",
+      "value": "\"SuperChargerJoinProgressText\" / \"SuperChargerIsActiveText\"",
+      "meaning": "Chữ cho thanh tiến độ ở popup trước và sau khi kích hoạt"
+    },
+    {
+      "key": "SuperChargerInfoPopUp khoá chữ",
+      "value": "\"SuperChargerInfoText1\", \"SuperChargerInfoText3WithMove\", \"SuperChargerInfoText3WithMatch\"",
+      "meaning": "Chữ hướng dẫn, chọn theo cờ ChargeWithMove"
+    },
+    {
+      "key": "SuperChargerTrailAnimationConfig.asset",
+      "value": "BestSortTrailAnimationTime, TrailAnimationDuration, TrailAnimationDurationForChargeableBottle, ChargeAnimationStartTime, BestSortBottleAnimationBottleCoverTime, BestSortBottleAnimationRemainingTime, TrailDelayForChargeableBottle",
+      "meaning": "Nhịp hoạt ảnh trail và nạp chai"
+    },
+    {
+      "key": "SuperChargerType",
+      "value": "None=0, ChargeableBottle=1, BestSort=2",
+      "meaning": "Ba biến thể của trợ thủ"
+    },
+    {
+      "key": "ChargerStatus",
+      "value": "Active=0, Passive=1, Lost=2, Activated=3",
+      "meaning": "Trạng thái báo về analytics"
+    },
+    {
+      "key": "ChargerContext",
+      "value": "level_start=0, level_end=1",
+      "meaning": "Thời điểm báo trạng thái"
+    },
+    {
+      "key": "SuperChargerJoinPopupReason",
+      "value": "Lose=0, Activate=1, Tutorial=2",
+      "meaning": "Lý do mở join popup"
+    },
+    {
+      "key": "SuperChargerInfoPopUpImpressionSource / SuperChargerJoinPopUpImpressionSource",
+      "value": "InfoButton=0, FirstOpen=1 / LobbyIcon=0, FirstOpen=1",
+      "meaning": "Nguồn mở popup, gửi trong analytics"
+    },
+    {
+      "key": "SuperChargerModel",
+      "value": "Progress, ShouldShowJoinPopUp, ShouldShowInLevelActivationPopUp, EventShownInLifeTime, IsInfoPopUpIntroduced, ForceTutorialShowCount, GetChargableBottleTutorialShowCount",
+      "meaning": "Toàn bộ dữ liệu lưu của tính năng"
+    },
+    {
+      "key": "SuperChargerDataService — sync name",
+      "value": "\"SuperChargerModel\"",
+      "meaning": "Khoá lưu và đồng bộ dữ liệu Super Charger"
+    },
+    {
+      "key": "Backend get-compensation / claim-compensation",
+      "value": "tham số is_super_charger",
+      "meaning": "Bù trừ liên quan Super Charger"
+    }
+  ],
+  "tips": [
+    "Cơ chế 'mất khi thua' biến Super Charger thành phần thưởng cho chuỗi thắng, tăng áp lực giữ streak.",
+    "CheckMoveIsRepetitive chỉ đọc state hiện tại: reject khi (origin water list.Count==1 && target empty && !origin.HasBlocker(9)) OR (origin.Height==1 && !origin.HasBlocker(9)) OR target.EmptyCellCount<origin.TopWaterHeight. Không đọc SelectionSystem/history và không có history-depth N trong body; không được diễn giải thành undo/qua-lại filter. (Mã0.0.3063; chưa xác nhận runtime0.0.3129.)",
+    "Giới hạn 4 chai giữ sức mạnh của BestSort ở mức hữu ích mà không phá vỡ độ khó của level.",
+    "Cơ chế cứu bàn kẹt sau khi dùng tránh tình huống trợ thủ lại làm người chơi thua ngay.",
+    "Hai biến thể dùng chung hạ tầng cho phép A/B test hai kiểu trợ thủ hoàn toàn khác nhau bằng một khoá config."
+  ],
+  "categories": [
+    "Cơ chế lõi",
+    "Live-ops",
+    "Tiến trình"
+  ]
+}

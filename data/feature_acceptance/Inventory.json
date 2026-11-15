@@ -1,0 +1,632 @@
+{
+  "id": "Inventory",
+  "feature": "Inventory",
+  "name": "Kho đồ & tiền tệ",
+  "category": "Economy",
+  "category_label": "Kinh tế & Shop",
+  "core_levels_last": false,
+  "acceptance_status": "documented_with_explicit_remaining_scope",
+  "full_feature_verified": false,
+  "checks": {
+    "purpose": {
+      "status": "documented_static_scope",
+      "source": "gdd/Inventory.json#/summary",
+      "claim_excerpt": "InventoryService là sổ cái duy nhất cho mọi thứ người chơi sở hữu: coin, mạng (Life), ba booster cơ bản (Undo, Shuffle, ExtraBottle) cùng các booster mở rộng (MegaShuffle, Reveal), vé/đồng xu sự kiện (DuckMultiplier, MiniGameTrident, WheelOfFortuneCurrency, MergeMiniGameEnergy), rương, gói thẻ sưu tập, token hồ sơ và quyền NoAds. Một CurrencyType có thể tồn tại ở ba dạng: theo số lượng (amount), t"
+    },
+    "unlock": {
+      "status": "described_historical_conditions_runtime_boundary_unverified",
+      "source": "gdd/Inventory.json#/unlock",
+      "content": "Có từ đầu game. Số dư khởi tạo và mốc mở khoá booster lấy từ Firebase Remote Config key 'GameEconomyModel': InitialCoin, InitialUndoAmount, InitialShuffleAmount, InitialExtraBottleAmount, InitialFourthBoosterAmount và UndoUnlockAtLevel / ShuffleUnlockAtLevel / ExtraBottleUnlockAtLevel; InventoryService.InitializeForNewDownload() áp các giá trị này cho tài khoản mới và GiveFourthBoosterIfEnabled(amount) cấp booster thứ tư khi bật."
+    },
+    "entry_flow": {
+      "status": "documented_paths_not_all_executed",
+      "entry_points": [
+        "Thanh tiền tệ ở Home (CurrencyDisplayerController)",
+        "Popup More Lives / Refill (localize 'RefillPopupTitle', 'Refill')",
+        "Nút booster trong màn chơi (BoosterManager.TryUseBooster)",
+        "Popup Play On khi thua (localize 'PlayOn', 'StuckAreYouSurePlayOn1')",
+        "Mọi nguồn thưởng: rương, sự kiện, cửa hàng, Teams, Referral (CurrencyEarnReason có 61 giá trị)"
+      ],
+      "flow_source": "gdd/Inventory.json#/flow",
+      "acceptance_scope": "All currencies/booster prices/lives refill/limitless/maxLife; earn/spend ledgers, expiry và save consistency"
+    },
+    "config": {
+      "status": "source_bound_catalog_present",
+      "gdd_rows": 54,
+      "full_leaf_rows_associated": 118,
+      "snapshots": {
+        "default_0.0.3063": 29,
+        "cache_20260910": 29,
+        "cache_20261010": 29,
+        "firebase_20260910": 31
+      },
+      "models": [
+        {
+          "model": "gameEconomyConfigModelFromBackend",
+          "matching_basis": [
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/Inventory.json#/configs/52/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/Inventory.json#/configs/53/key_where"
+            }
+          ]
+        },
+        {
+          "model": "gameEconomyModel",
+          "matching_basis": [
+            {
+              "kind": "explicit_gd_config_model_map",
+              "source": "gd_config.json#/defaultconfigs/map/Inventory"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/Inventory.json#/sources/0"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/Inventory.json#/configs/4/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/Inventory.json#/configs/5/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/Inventory.json#/configs/6/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/Inventory.json#/configs/7/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/Inventory.json#/configs/8/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/Inventory.json#/configs/9/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/Inventory.json#/configs/10/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/Inventory.json#/configs/11/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/Inventory.json#/configs/12/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/Inventory.json#/configs/21/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/Inventory.json#/configs/22/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/Inventory.json#/configs/23/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/Inventory.json#/configs/24/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/Inventory.json#/configs/25/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/Inventory.json#/configs/26/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/Inventory.json#/configs/27/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/Inventory.json#/configs/28/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/Inventory.json#/configs/29/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/Inventory.json#/configs/30/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/Inventory.json#/configs/31/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/Inventory.json#/configs/32/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/Inventory.json#/configs/33/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/Inventory.json#/configs/34/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/Inventory.json#/configs/35/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/Inventory.json#/configs/36/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/Inventory.json#/configs/37/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/Inventory.json#/configs/38/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/Inventory.json#/configs/39/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/Inventory.json#/configs/40/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/Inventory.json#/configs/41/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/Inventory.json#/configs/42/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/Inventory.json#/configs/43/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/Inventory.json#/configs/44/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/Inventory.json#/configs/45/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/Inventory.json#/configs/46/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/Inventory.json#/configs/47/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/Inventory.json#/configs/48/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/Inventory.json#/configs/49/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/Inventory.json#/configs/50/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/Inventory.json#/configs/51/key_where"
+            }
+          ]
+        }
+      ],
+      "declared_models_without_catalog_data": [],
+      "placeholder_rows_requiring_source_review": [
+        {
+          "index": 5,
+          "key": "GameEconomyModel.PlayOnPrice / SecondPlayOnPrice / ThirdSecondPlayOnPrice",
+          "value": "server",
+          "source": "remote config"
+        },
+        {
+          "index": 6,
+          "key": "GameEconomyModel.PlayOnConfigModels",
+          "value": "server",
+          "source": "remote config"
+        },
+        {
+          "index": 10,
+          "key": "GameEconomyModel.InitialCoin / InitialUndoAmount / InitialShuffleAmount / InitialExtraBottleAmount / InitialFourthBoosterAmount",
+          "value": "server",
+          "source": "remote config"
+        },
+        {
+          "index": 11,
+          "key": "GameEconomyModel.UndoUnlockAtLevel / ShuffleUnlockAtLevel / ExtraBottleUnlockAtLevel",
+          "value": "server",
+          "source": "remote config"
+        },
+        {
+          "index": 12,
+          "key": "GameEconomyModel.UndoPrice / ShufflePrice / ExtraBottlePrice / MegaShufflePrice / RevealPrice",
+          "value": "server",
+          "source": "remote config"
+        }
+      ],
+      "exact_placeholder_snapshot_values": [
+        {
+          "gdd_config_index": 5,
+          "key": "GameEconomyModel.PlayOnPrice / SecondPlayOnPrice / ThirdSecondPlayOnPrice",
+          "status": "no_unambiguous_exact_field_match",
+          "matches": [],
+          "basis": "Model explicitly cited in key/where, or sole declaredmodel; fieldpath exactcasefold, no alias guessing."
+        },
+        {
+          "gdd_config_index": 6,
+          "key": "GameEconomyModel.PlayOnConfigModels",
+          "status": "no_unambiguous_exact_field_match",
+          "matches": [],
+          "basis": "Model explicitly cited in key/where, or sole declaredmodel; fieldpath exactcasefold, no alias guessing."
+        },
+        {
+          "gdd_config_index": 10,
+          "key": "GameEconomyModel.InitialCoin / InitialUndoAmount / InitialShuffleAmount / InitialExtraBottleAmount / InitialFourthBoosterAmount",
+          "status": "no_unambiguous_exact_field_match",
+          "matches": [],
+          "basis": "Model explicitly cited in key/where, or sole declaredmodel; fieldpath exactcasefold, no alias guessing."
+        },
+        {
+          "gdd_config_index": 11,
+          "key": "GameEconomyModel.UndoUnlockAtLevel / ShuffleUnlockAtLevel / ExtraBottleUnlockAtLevel",
+          "status": "no_unambiguous_exact_field_match",
+          "matches": [],
+          "basis": "Model explicitly cited in key/where, or sole declaredmodel; fieldpath exactcasefold, no alias guessing."
+        },
+        {
+          "gdd_config_index": 12,
+          "key": "GameEconomyModel.UndoPrice / ShufflePrice / ExtraBottlePrice / MegaShufflePrice / RevealPrice",
+          "status": "no_unambiguous_exact_field_match",
+          "matches": [],
+          "basis": "Model explicitly cited in key/where, or sole declaredmodel; fieldpath exactcasefold, no alias guessing."
+        }
+      ],
+      "dossier_abbreviated_values": [],
+      "note": "Model association uses explicitmap or exacttoken citations; fieldpresence does not prove allproductiondata. GDDsummaryrows and fullcatalogrows have separate counts. Abbreviated source summaries are not full arrays; catalog/source links remain authoritative."
+    },
+    "reward": {
+      "status": "documented_static_rewards_runtime_grant_not_fully_verified",
+      "entries": 5,
+      "tables_in_site_meta": 6,
+      "source": "gdd/Inventory.json#/rewards"
+    },
+    "use_cases": {
+      "status": "reviewed_branches_only",
+      "specified": 22,
+      "reviewed_uc_branch_count": 3,
+      "reviewed_uc_ids": [
+        "UC-06",
+        "UC-08",
+        "UC-17"
+      ],
+      "not_reviewed_in_new_ledger": [
+        "UC-01",
+        "UC-02",
+        "UC-03",
+        "UC-04",
+        "UC-05",
+        "UC-07",
+        "UC-09",
+        "UC-10",
+        "UC-11",
+        "UC-12",
+        "UC-13",
+        "UC-14",
+        "UC-15",
+        "UC-16",
+        "UC-18",
+        "UC-19",
+        "UC-20",
+        "UC-21",
+        "UC-22"
+      ],
+      "full_uc_pass_claimed": false
+    },
+    "screenshots": {
+      "historical_gallery_entries": 3,
+      "historical_uc_with_image_reference": 2,
+      "curated_new_images": [
+        "ECO13_lives_full",
+        "ECO14_lives_touch",
+        "MORE22_home_before_core",
+        "MORE23_level352",
+        "MORE28_refill",
+        "MORE30_refill_paid",
+        "MORE31_restart_final"
+      ],
+      "curated_new_image_count": 7,
+      "status": "new_case_evidence_available",
+      "source": "screens/web/screens.json#/Inventory",
+      "note": "Image presence does not prove execution result or completeness."
+    },
+    "runtime_actual": {
+      "status": "observed_subset_offline_fixture",
+      "case_count": 4,
+      "cases": [
+        {
+          "id": "MS-R15-ECO03",
+          "title": "Chạm vùng Lives khi đầy5 mạng",
+          "status": "observed_gate_only",
+          "uc": [],
+          "actual": "Home vẫn hiển thị5 Full, không mở refill popup trong hai thao tác; coin và kho không đổi.",
+          "limitations": "Chưa chứng minh nhánh mua refill, thiếu tiền hoặc hồi mạng. Không đánh dấu toàn UC-08 pass.",
+          "images": [
+            "ECO13_lives_full",
+            "ECO14_lives_touch"
+          ],
+          "before": "ECO12_error_continue",
+          "after": "ECO14_lives_touch"
+        },
+        {
+          "id": "MS-R15-CORE11",
+          "title": "LifeFillDate đã đổi ngay khi vào level352",
+          "status": "observed_partial",
+          "uc": [
+            "UC-06"
+          ],
+          "actual": "lifeFillDate từ15:47:37.481215UTC đổi thành16:21:23.276935UTC ngay snapshot ENTER15:51:23; isLevelInProgress false→true, coin/booster giữ nguyên. Sau quit Home hiện4mạng.",
+          "limitations": "Mạng được suy từ LifeFillDate và UI, không phải CurrencyAmountByType riêng. Đây là start/countdown observation; chưa đợi đủ30phút để chứng minh natural refill. Không gán life spend lần nữa ở Quit.",
+          "images": [
+            "MORE22_home_before_core",
+            "MORE23_level352"
+          ],
+          "before": "MORE22_home_before_core",
+          "after": "MORE23_level352"
+        },
+        {
+          "id": "MS-R15-CORE14",
+          "title": "Refill900coin từ4 lên5Full",
+          "status": "verified_observed_branch",
+          "uc": [
+            "UC-08"
+          ],
+          "actual": "Coin999995889→999994989 (−900); Home5Full. lifeFillDate về15:52:24.825648UTC. Các booster không đổi.",
+          "limitations": "Một mức4→5, có đủ coin; chưa thử thiếu tiền/0mạng hoặc giá theo segment. Đây là coin refill, không phải IAP hoặc ad reward.",
+          "images": [
+            "MORE28_refill",
+            "MORE30_refill_paid"
+          ],
+          "before": "MORE29_rewarded_life",
+          "after": "MORE30_refill_paid"
+        },
+        {
+          "id": "MS-R15-CORE15",
+          "title": "Refill và số dư giữ qua restart local",
+          "status": "verified_observed_branch",
+          "uc": [
+            "UC-17"
+          ],
+          "actual": "Home giữ level352,5Full, coin999994989 và booster. lifeFillDate reset khi đã Full tại15:52:49, không giữ nguyên timestamp refill15:52:24. more_ledger.json xác nhận profileInfo gốc không đổi từ MORE03 đến MORE31; retry2, snitchRetry0, seed v2betterdesign352_difficulty4-1.",
+          "limitations": "Chỉ local save/load; chưa Serialize/Overwrite từ server, reinstall hay đa thiết bị. ProfileInfo unchanged là đối chiếu phụ của more_ledger.json; không phải sửa profile thành công.",
+          "images": [
+            "MORE30_refill_paid",
+            "MORE31_restart_final"
+          ],
+          "before": "MORE30_refill_paid",
+          "after": "MORE31_restart_final"
+        }
+      ],
+      "mode": "offline_existing_fixture",
+      "build": "0.0.3129 ARM64"
+    },
+    "segment_ab": {
+      "status": "not_identified_in_sources",
+      "segment_ids": [],
+      "matching_basis": "explicit_gd_config_map_or_exact_model_token_in_gdd_configs_where_key_sources; rootfieldscoped",
+      "rows": [],
+      "classifications": {},
+      "assignment_verified": false,
+      "uplift_verified": false,
+      "note": "No matchingrow does not prove no segmentation/AB. Rewardbucketfalsepositives remain explicitly classified."
+    },
+    "storage_backend_analytics": {
+      "storage_keys": {
+        "entries": 1,
+        "status": "documented_static_contract_runtime_not_verified",
+        "source": "gdd/Inventory.json#/storage_keys"
+      },
+      "backend": {
+        "entries": 2,
+        "status": "documented_static_contract_runtime_not_verified",
+        "source": "gdd/Inventory.json#/backend"
+      },
+      "analytics": {
+        "entries": 7,
+        "status": "documented_static_contract_runtime_not_verified",
+        "source": "gdd/Inventory.json#/analytics"
+      }
+    },
+    "remaining_next_step": {
+      "gap_count": 6,
+      "static_scoped_resolutions": 2,
+      "remaining_count": 4,
+      "all_gap_dispositions": [
+        {
+          "id": "MS-Inventory-G001",
+          "feature": "Inventory",
+          "source": "gdd/Inventory.json#/gaps/0",
+          "original": "Toàn bộ giá trị số của GameEconomyModel (giá booster, giá refill, số mạng tối đa, thời gian hồi, số dư khởi tạo, mốc mở khoá) do Firebase Remote Config quyết định và không có trong build.",
+          "current_note": "15/11 — resolved_historical_snapshot: Đã trích toàn bộ field/value của GameEconomyModel từ default0.0.3063 và cache lịch sử hiện có. Nhận định không có giá trị trong client đã được đối chiếu bằng file thật; không xác nhận effective runtime. Còn lại: Kiểm chứng effective config/asset và nhánh runtime trên đúng build nếu cần.",
+          "status": "resolved_historical_snapshot",
+          "review_status": "preserved_resolved_historical_snapshot",
+          "dependency": "local_config_reconciliation",
+          "next_action": "Đã trích toàn bộ field/value của GameEconomyModel từ default0.0.3063 và cache lịch sử hiện có. Nhận định không có giá trị trong client đã được đối chiếu bằng file thật; không xác nhận effective runtime. Kiểm chứng effective config/asset và nhánh runtime trên đúng build nếu cần.",
+          "conclusion": "Đã trích toàn bộ field/value của GameEconomyModel từ default0.0.3063 và cache lịch sử hiện có. Nhận định không có giá trị trong client đã được đối chiếu bằng file thật; không xác nhận effective runtime.",
+          "evidence": [
+            "facts/local_asset_review_20261115/config_catalog.json"
+          ],
+          "remaining": "15/11 — resolved_historical_snapshot: Đã trích toàn bộ field/value của GameEconomyModel từ default0.0.3063 và cache lịch sử hiện có. Nhận định không có giá trị trong client đã được đối chiếu bằng file thật; không xác nhận effective runtime. Còn lại: Kiểm chứng effective config/asset và nhánh runtime trên đúng build nếu cần.",
+          "source_records": [
+            {
+              "snapshot": "default0.0.3063",
+              "model": "GameEconomyModel",
+              "source": "Resources\\defaultconfigs\\GameEconomyModel.json",
+              "root": "UnityExport Assets 0.0.3063",
+              "sha256": "faf7a71fc3818165f8a5eb34c29898d84bda8db5d68afe8b9ad390fbd083c66e",
+              "line": 1,
+              "build": "0.0.3063 ARMv7"
+            },
+            {
+              "snapshot": "cache20260910",
+              "model": "GameEconomyModel",
+              "source": "facts\\runtime\\server_configs\\gameEconomyModel.json",
+              "root": "GameDesign",
+              "sha256": "1f9c3ed2cf7b354b2c4c791432cb9ce28cadc5f2ae8ece878cd98b4db56b1ec9",
+              "line": 1,
+              "build": "snapshot provenance at path"
+            },
+            {
+              "snapshot": "cache20261010",
+              "model": "GameEconomyModel",
+              "source": "facts\\runtime\\test_20261010\\before\\CachedRemoteConfigs",
+              "root": "GameDesign",
+              "sha256": "433164d4877b2dee55d2bbd79ef2fe83d3fe9519492fe15e3cb0926daf216050",
+              "line": 1,
+              "build": "snapshot provenance at path"
+            }
+          ],
+          "reviewed": "2026-11-15",
+          "scope": "question-specific source/observed branch only; no full-UC or production claim",
+          "full_uc_pass": false
+        },
+        {
+          "id": "MS-Inventory-G002",
+          "feature": "Inventory",
+          "source": "gdd/Inventory.json#/gaps/1",
+          "original": "GetMagicPassMaxLifeAmount() lấy số từ MagicPassService (thuộc nhóm tính năng khác), chưa xác định giá trị.",
+          "current_note": "15/11 — resolved_historical_snapshot: GetMagicPassMaxLifeAmount trả literal8 trong native0.0.3063, không phải chỉ suy từ localization hoặc một field config chưa biết. GameEconomy base maxLife5 ở snapshots là scope khác. Còn lại: Đối chiếu native0.0.3129 và active-pass finite-life ledger khi có sandbox hợp lệ.",
+          "status": "resolved_historical_snapshot",
+          "review_status": "preserved_resolved_historical_snapshot",
+          "dependency": "local_config_reconciliation",
+          "next_action": "GetMagicPassMaxLifeAmount trả literal8 trong native0.0.3063, không phải chỉ suy từ localization hoặc một field config chưa biết. GameEconomy base maxLife5 ở snapshots là scope khác. Đối chiếu native0.0.3129 và active-pass finite-life ledger khi có sandbox hợp lệ.",
+          "conclusion": "GetMagicPassMaxLifeAmount trả literal8 trong native0.0.3063, không phải chỉ suy từ localization hoặc một field config chưa biết. GameEconomy base maxLife5 ở snapshots là scope khác.",
+          "evidence": [
+            "facts/final_data_review_20261115/source_evidence.json"
+          ],
+          "remaining": "15/11 — resolved_historical_snapshot: GetMagicPassMaxLifeAmount trả literal8 trong native0.0.3063, không phải chỉ suy từ localization hoặc một field config chưa biết. GameEconomy base maxLife5 ở snapshots là scope khác. Còn lại: Đối chiếu native0.0.3129 và active-pass finite-life ledger khi có sandbox hợp lệ.",
+          "source_records": [
+            {
+              "source": "com.grandgames.magicsort_Unity_20260909_112501/RecoveredNative/PseudoC/Assembly-CSharp/Modules/Contexts/Home/MagicPass/Scripts/MagicPassService.c",
+              "sha256": "e31a692d032e508dd433fedb95ae26bcf113f7d86b0ea0290c25d5fbdb753e37",
+              "line": 11135,
+              "build": "0.0.3063 ARMv7",
+              "meaning": "GetMagicPassMaxLifeAmount returns literal8"
+            }
+          ],
+          "reviewed": "2026-11-15",
+          "scope": "question-specific source/observed branch only; no full-UC or production claim",
+          "full_uc_pass": false
+        },
+        {
+          "id": "MS-Inventory-G003",
+          "feature": "Inventory",
+          "source": "gdd/Inventory.json#/gaps/2",
+          "original": "Nội dung ChestSpriteLibraryModels và phần thưởng thật của từng ChestId nằm ngoài phạm vi feature này.",
+          "current_note": "15/11 — partial_actual_evidence: Đã xuất đủ 25 ánh xạ sprite và 8 ánh xạ SpriteLibrary trong ChestSpriteConfig. Nội dung thưởng thực tế nằm trong RewardModel của từng event/config/instance, không phải một bảng thưởng duy nhất chỉ dựa trên ChestId. Còn lại: Nối RewardModel của từng instance thực với ChestId; giữ danh tính hình tách khỏi nội dung được cấp.",
+          "status": "partial_actual_evidence",
+          "review_status": "preserved_partial_actual_evidence",
+          "dependency": "local_asset_or_missing_bundle",
+          "next_action": "Đã xuất đủ 25 ánh xạ sprite và 8 ánh xạ SpriteLibrary trong ChestSpriteConfig. Nội dung thưởng thực tế nằm trong RewardModel của từng event/config/instance, không phải một bảng thưởng duy nhất chỉ dựa trên ChestId. Nối RewardModel của từng instance thực với ChestId; giữ danh tính hình tách khỏi nội dung được cấp.",
+          "conclusion": "Đã xuất đủ 25 ánh xạ sprite và 8 ánh xạ SpriteLibrary trong ChestSpriteConfig. Nội dung thưởng thực tế nằm trong RewardModel của từng event/config/instance, không phải một bảng thưởng duy nhất chỉ dựa trên ChestId.",
+          "evidence": [
+            "facts/remaining_asset_review_20261115/chest_sources.json",
+            "facts/remaining_asset_review_20261115/asset_catalog.json"
+          ],
+          "remaining": "15/11 — partial_actual_evidence: Đã xuất đủ 25 ánh xạ sprite và 8 ánh xạ SpriteLibrary trong ChestSpriteConfig. Nội dung thưởng thực tế nằm trong RewardModel của từng event/config/instance, không phải một bảng thưởng duy nhất chỉ dựa trên ChestId. Còn lại: Nối RewardModel của từng instance thực với ChestId; giữ danh tính hình tách khỏi nội dung được cấp.",
+          "scope": "Asset/native export 0.0.3063 và cache UnityFS đọc ngày 15/11 từ app 0.0.3129 được giữ riêng; ảnh render asset không phải ảnh chụp playtest.",
+          "reviewed": "2026-11-15",
+          "full_uc_pass": false
+        },
+        {
+          "id": "MS-Inventory-G004",
+          "feature": "Inventory",
+          "source": "gdd/Inventory.json#/gaps/3",
+          "original": "CurrencyType bỏ trống các giá trị 3 và 8–12 — nhiều khả năng là loại tiền tệ cũ đã gỡ (suy luận).",
+          "current_note": "15/11 — partial_static_code_unresolved: CurrencyType enum đónggói có0/1/2/4/5/6/7/13..21, không khai báo3/8..12. Đó là reserved/undefined trongmetadata này; không có bằngchứng lịch sử rằng đãgỡ. Giữrawvalueunknown và không cấp têncurrency cũ. Còn lại: Muốn kết luận removal cần metadata/build cũ hoặc backendcontract; enumgap hiện tại không đủ.",
+          "status": "partial_static_code_unresolved",
+          "review_status": "preserved_partial_static_code_unresolved",
+          "dependency": "local_code_review",
+          "next_action": "CurrencyType enum đónggói có0/1/2/4/5/6/7/13..21, không khai báo3/8..12. Đó là reserved/undefined trongmetadata này; không có bằngchứng lịch sử rằng đãgỡ. Giữrawvalueunknown và không cấp têncurrency cũ. Muốn kết luận removal cần metadata/build cũ hoặc backendcontract; enumgap hiện tại không đủ.",
+          "conclusion": "CurrencyType enum đónggói có0/1/2/4/5/6/7/13..21, không khai báo3/8..12. Đó là reserved/undefined trongmetadata này; không có bằngchứng lịch sử rằng đãgỡ. Giữrawvalueunknown và không cấp têncurrency cũ.",
+          "evidence": [
+            "../com.grandgames.magicsort_Unity_20260909_112501/UnityExport/ExportedProject/Assets/Scripts/Assembly-CSharp/Modules/Contexts/Application/Inventory/Scripts/CurrencyType.cs:3"
+          ],
+          "reviewed": "2026-11-15",
+          "mode": "file_only_recovered_native_0.0.3063",
+          "remaining": "15/11 — partial_static_code_unresolved: CurrencyType enum đónggói có0/1/2/4/5/6/7/13..21, không khai báo3/8..12. Đó là reserved/undefined trongmetadata này; không có bằngchứng lịch sử rằng đãgỡ. Giữrawvalueunknown và không cấp têncurrency cũ. Còn lại: Muốn kết luận removal cần metadata/build cũ hoặc backendcontract; enumgap hiện tại không đủ."
+        },
+        {
+          "id": "MS-Inventory-G005",
+          "feature": "Inventory",
+          "source": "gdd/Inventory.json#/gaps/4",
+          "original": "[Runtime 2026-09-10] Config server LIVE đã đọc trực tiếp từ cache máy (không cần request); các hàng 'server live' là giá trị server ghi đè/thêm so với default.",
+          "current_note": "[Runtime 2026-09-10] Config server LIVE đã đọc trực tiếp từ cache máy (không cần request); các hàng 'server live' là giá trị server ghi đè/thêm so với default.",
+          "status": "historical_evidence_annotation_not_test_result",
+          "review_status": "historical_evidence_annotation_not_test_result",
+          "dependency": "historical_note_requires_qualified_use",
+          "next_action": "Ghi chú cache đã đọc tháng9, từ LIVE phải hiểu snapshot lịch sử. Đối chiếu config catalog/source, giữ default/cache/production hiện tại riêng; không coi là fresh fetch15/11.",
+          "remaining": "[Runtime 2026-09-10] Config server LIVE đã đọc trực tiếp từ cache máy (không cần request); các hàng 'server live' là giá trị server ghi đè/thêm so với default."
+        },
+        {
+          "id": "MS-Inventory-G006",
+          "feature": "Inventory",
+          "source": "gdd/Inventory.json#/gaps/5",
+          "original": "[Runtime 2026-09-10] Model server-only gameEconomyConfigModelFromBackend (không có trong Resources/defaultconfigs) đã đọc từ cache live.",
+          "current_note": "[Runtime 2026-09-10] Model server-only gameEconomyConfigModelFromBackend (không có trong Resources/defaultconfigs) đã đọc từ cache live.",
+          "status": "historical_evidence_annotation_not_test_result",
+          "review_status": "historical_evidence_annotation_not_test_result",
+          "dependency": "historical_note_requires_qualified_use",
+          "next_action": "Ghi chú model cache lịch sử đã có; xác minh schema/source và default-path theo đúng build. Server-only không chứng minh không có default ở mọi version.",
+          "remaining": "[Runtime 2026-09-10] Model server-only gameEconomyConfigModelFromBackend (không có trong Resources/defaultconfigs) đã đọc từ cache live."
+        }
+      ],
+      "feature_specific_acceptance_questions": [
+        "All currencies/booster prices/lives refill/limitless/maxLife",
+        " earn/spend ledgers, expiry và save consistency"
+      ],
+      "next_steps": [
+        "Đã xuất đủ 25 ánh xạ sprite và 8 ánh xạ SpriteLibrary trong ChestSpriteConfig. Nội dung thưởng thực tế nằm trong RewardModel của từng event/config/instance, không phải một bảng thưởng duy nhất chỉ dựa trên ChestId. Nối RewardModel của từng instance thực với ChestId; giữ danh tính hình tách khỏi nội dung được cấp.",
+        "CurrencyType enum đónggói có0/1/2/4/5/6/7/13..21, không khai báo3/8..12. Đó là reserved/undefined trongmetadata này; không có bằngchứng lịch sử rằng đãgỡ. Giữrawvalueunknown và không cấp têncurrency cũ. Muốn kết luận removal cần metadata/build cũ hoặc backendcontract; enumgap hiện tại không đủ.",
+        "Ghi chú cache đã đọc tháng9, từ LIVE phải hiểu snapshot lịch sử. Đối chiếu config catalog/source, giữ default/cache/production hiện tại riêng; không coi là fresh fetch15/11.",
+        "Ghi chú model cache lịch sử đã có; xác minh schema/source và default-path theo đúng build. Server-only không chứng minh không có default ở mọi version."
+      ]
+    }
+  },
+  "use_cases": 22,
+  "configs": 54,
+  "new_review_case_count": 4,
+  "reviewed_uc_branch_count": 3,
+  "curated_new_image_count": 7,
+  "segment_ids": [],
+  "matching_basis": "explicit_gd_config_map_or_exact_model_token_in_gdd_configs_where_key_sources; rootfieldscoped",
+  "unmatched_segment_status": "not_identified_in_sources",
+  "local_document_repairs": [],
+  "sources": [
+    "Il2CppDumper/dump.cs: InventoryService, InventoryModel, CurrencyType, CurrencyEarnReason, CurrencySpendReason, EarnReason, InventoryParametersProvider, RewardService, RewardModel, OrderedRewardAnimationService, BulkRewardAnimationService, ChestSpriteConfig, GameEconomyModel, BoosterManager",
+    "Assets/MonoBehaviour/ChestSpriteConfig.asset (33 ChestId), các *CurrencyViewFactory/*AnimationConfig.asset",
+    "RecoveredNative/PseudoC/Assembly-CSharp/Modules/Contexts/Application/{Inventory,Reward}/**",
+    "RecoveredNative/strings-by-type.tsv (InventoryService, InventoryParametersProvider, RewardService, EventSender)",
+    "GameDesign/appendix/localization.tsv (Refill*, PlayOn, MegaShuffle*, Reveal*, noads_*)"
+  ],
+  "source_hashes": {
+    "gdd_sha256": "481e768871f2acd193bf541633c29959fc453fa54ed32862c13a72bd03f96336",
+    "site_meta_sha256": "09072e065ee0858736c48c9904f3040e6b8ae9773c7e866389160e3d53d95fdb"
+  }
+}

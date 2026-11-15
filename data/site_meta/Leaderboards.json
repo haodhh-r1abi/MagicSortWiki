@@ -1,0 +1,452 @@
+{
+ "id": "Leaderboards",
+ "title": "Bảng xếp hạng (Leaderboards)",
+ "tagline": "Trang xếp hạng thường trực gom bốn tab Players, Teams, Friends và Weekly vào một khung duy nhất.",
+ "infobox": [
+  [
+   "Loại",
+   "Xã hội"
+  ],
+  [
+   "Mở khóa",
+   "Level 40 (localize LeaderboardSectionInfo 'Unlocks at Level 40')"
+  ],
+  [
+   "Chu kỳ / lịch",
+   "Bảng thường trực không có thời hạn; chu kỳ reset nếu có do server quyết định"
+  ],
+  [
+   "Tham gia",
+   "Cá nhân và đội"
+  ],
+  [
+   "Thưởng chính",
+   "Không phát thưởng trực tiếp; tab Weekly do Weekly Tournament trao"
+  ],
+  [
+   "Điều kiện / phụ thuộc",
+   "Tab Teams và Friends phụ thuộc TeamsConfigModel.IsEnable và FriendsConfigModel.IsEnabled"
+  ],
+  [
+   "Manager",
+   "PermanentLeaderboardService"
+  ]
+ ],
+ "description": [
+  "Bảng xếp hạng thường trực là một trang riêng trong Home, gom nhiều bảng vào một khung bốn tab.",
+  "Tab Players lại chia hai tab con: World cho toàn cầu và Country cho quốc gia của người chơi.",
+  "Tab Teams tái sử dụng dữ liệu của Teams, tab Friends tái sử dụng dữ liệu của Friends, tab Weekly do giải tuần cung cấp.",
+  "Dòng của chính người chơi được đánh dấu bằng cờ IsMe và được ghim lại khi cuộn ra ngoài tầm nhìn.",
+  "Danh sách chia thành các mốc thứ hạng, hiển thị bằng phần tử mốc riêng trong dải cuộn.",
+  "Client cache bảng gần nhất để hiển thị ngay khi offline và chỉ gọi lại server sau mỗi lần thắng level.",
+  "Có hai đường dữ liệu song song cho cùng nội dung: FlatBuffers và JSON, chọn theo cờ remote config.",
+  "Các dòng bảng dùng object pool để tránh cấp phát bộ nhớ khi cuộn danh sách dài.",
+  "Từ bảng xếp hạng có thể mở hồ sơ người chơi khác để kết bạn hoặc xóa bạn."
+ ],
+ "notes": [
+  "Lưu ý: mốc Level 40 chỉ xuất hiện trong chuỗi localize; hằng số điều kiện thật không lộ trong LeaderboardController (gaps).",
+  "Lưu ý: cách backend tính Score (theo level đã qua hay điểm riêng) không nhìn thấy được từ client (gaps).",
+  "Lưu ý: chu kỳ reset của bảng thường trực, nếu có, do server quyết định (gaps).",
+  "Lưu ý: schema lava_leaderboard tồn tại trong build nhưng chưa thấy service nào trong nhóm này dùng (gaps).",
+  "Lưu ý: khi tab Teams hoặc Friends bị tắt, khung hiện trạng thái Coming soon thay vì danh sách.",
+  "Lưu ý: quốc gia do backend suy ra và trả về trong response, người chơi không chọn tay ở màn này.",
+  "Lưu ý: hệ thống phân biệt việc đổi tab do người chơi và do hệ thống để không ghi analytics sai."
+ ],
+ "how_it_works": [
+  "Sau khi đăng nhập, dịch vụ bảng xếp hạng chạy như một late login service và gọi cập nhật bảng ngay (UpdateLeaderboard).",
+  "Giao thức chọn theo cờ IsFlatBuffer: bật thì lấy dữ liệu dạng FlatBuffers, tắt thì lấy dạng JSON.",
+  "Cả hai nhánh đều trả về cùng nội dung: danh sách người chơi toàn cầu, danh sách theo quốc gia và mã quốc gia.",
+  "Dữ liệu được chép sang danh sách LeaderboardPlayer lấy từ object pool để tránh cấp phát, rồi lưu xuống LeaderboardModel.",
+  "Khung leaderboard quản lý bốn tab Players, Teams, Friends và Weekly; tab Players chia tiếp thành World và Country.",
+  "Mỗi dòng dựng thành view model từ pool, nạp avatar qua bộ cache ảnh hồ sơ, rồi tính các mốc thứ hạng.",
+  "Dòng có cờ IsMe được ghim dính trên hoặc dưới khung nhìn khi người chơi cuộn ra xa (StickyScrollElementsController).",
+  "Bảng đội lấy dữ liệu từ Teams, tìm vị trí đội của người chơi rồi ghim tương tự bảng người chơi.",
+  "Bảng bạn bè chờ Friends đồng bộ xong mới đổ danh sách; nếu chưa có bạn thì hiện màn hình mời thêm bạn.",
+  "Từ bảng bạn bè, người chơi có thể liên kết Facebook để nhận phần thưởng FbConnectReward; nếu không có thưởng thì khung thu hẹp lại.",
+  "Nếu có kết quả giải tuần chưa xem, khung tự chuyển sang tab Weekly rồi hạ cờ sau khi người chơi đã xem.",
+  "Tab Weekly chọn giữa giao diện đang diễn ra và giao diện kết quả tùy trạng thái giải.",
+  "Sau mỗi lần thắng level, một cờ được bật và lần cập nhật kế tiếp sẽ gọi lại API rồi hạ cờ.",
+  "Khi offline, bảng hiển thị từ cache; nếu chưa từng có cache thì hiện thông báo mất mạng.",
+  "Bấm vào một dòng sẽ mở hồ sơ người chơi đó, kèm nút kết bạn hoặc xóa bạn.",
+  "Khi xóa tài khoản, LeaderboardModel bị xóa cùng dữ liệu các tính năng khác."
+ ],
+ "reward_tables": [
+  {
+   "title": "PHẦN THƯỞNG LIÊN QUAN TỚI BẢNG XẾP HẠNG",
+   "columns": [
+    "Mốc",
+    "Điều kiện",
+    "Phần thưởng"
+   ],
+   "rows": [
+    [
+     "Bảng thường trực (Players, Teams, Friends)",
+     "Chỉ hiển thị thứ hạng",
+     "Không có phần thưởng trực tiếp"
+    ],
+    [
+     "Tab Weekly",
+     "Kết thúc giải tuần",
+     "Do WeeklyTournamentService quản lý (server)"
+    ],
+    [
+     "Liên kết Facebook từ tab Friends",
+     "Đăng nhập Facebook lần đầu",
+     "FriendsConfigModel.FbConnectReward (300 coin theo json default của Friends)"
+    ]
+   ]
+  },
+  {
+   "title": "CẤU TRÚC TAB VÀ NGUỒN DỮ LIỆU",
+   "columns": [
+    "Tab",
+    "Nguồn dữ liệu",
+    "Ghi chú"
+   ],
+   "rows": [
+    [
+     "Players / World",
+     "PermanentLeaderboardService.GetWorldLeaderboard()",
+     "Xếp hạng toàn cầu"
+    ],
+    [
+     "Players / Country",
+     "PermanentLeaderboardService.GetCountryLeaderboard()",
+     "Quốc gia do backend suy ra"
+    ],
+    [
+     "Teams",
+     "TeamsDataService.GetGlobalLeaderboard / GetCountryLeaderboard",
+     "Tắt thì hiện Coming soon"
+    ],
+    [
+     "Friends",
+     "FriendsService",
+     "Chưa có bạn thì hiện màn hình thêm bạn"
+    ],
+    [
+     "Weekly",
+     "WeeklyTournamentService",
+     "Tự chọn khi có kết quả chưa xem"
+    ]
+   ]
+  },
+  {
+   "title": "CÁC ENDPOINT BẢNG XẾP HẠNG (BackendEnvironmentConfig)",
+   "columns": [
+    "Endpoint",
+    "Dùng cho",
+    "Ghi chú"
+   ],
+   "rows": [
+    [
+     "/v1/get-leaderboards",
+     "Bảng thường trực (world và country)",
+     "Có cờ HttpConfig.UsePermanentLeaderboardV2 để chuyển thế hệ 2"
+    ],
+    [
+     "/v1/get-weekly-leaderboard",
+     "Giải tuần",
+     "FlatBuffers"
+    ],
+    [
+     "/v1/get-streak-leaderboard",
+     "Bảng chuỗi thắng",
+     ""
+    ],
+    [
+     "/v1/get-magicstreak-leaderboard",
+     "Bảng Magic Streak",
+     ""
+    ],
+    [
+     "/v2/get-team-leaderboard",
+     "Bảng xếp hạng đội",
+     ""
+    ]
+   ]
+  }
+ ],
+ "key_numbers": [
+  {
+   "label": "Mốc mở khóa khu vực bảng xếp hạng",
+   "value": "Level 40 (theo localize LeaderboardSectionInfo)",
+   "source": "appendix/localization.tsv"
+  },
+  {
+   "label": "Số tab trong khung leaderboard",
+   "value": "4 (Players, Teams, Friends, Weekly)",
+   "source": "LeaderboardController"
+  },
+  {
+   "label": "Số tab con của Players",
+   "value": "2 (World, Country)",
+   "source": "PlayersLeaderboardController"
+  },
+  {
+   "label": "Số loại huy chương theo hạng",
+   "value": "4 (None=0, Golden=1, Silver=2, Bronze=3)",
+   "source": "LeaderboardMedalType"
+  },
+  {
+   "label": "Số trường của một dòng bảng người chơi",
+   "value": "11 (PublicID … TeamName)",
+   "source": "LeaderboardPlayer"
+  },
+  {
+   "label": "Số trường của bản ghi FlatBuffers",
+   "value": "7 (UserPublicID, NickName, Score, Rank, IsMe, ImageUrl, ImageID)",
+   "source": "GlobalLeaderboardPlayer"
+  },
+  {
+   "label": "Số trường của LeaderboardModel",
+   "value": "3 (WorldLeaderboard, CountryLeaderboard, Country)",
+   "source": "LeaderboardModel"
+  },
+  {
+   "label": "Số endpoint bảng xếp hạng",
+   "value": "5",
+   "source": "BackendEnvironmentConfig.asset"
+  },
+  {
+   "label": "Số họ schema FlatBuffers liên quan",
+   "value": "6 (global_leaderboard, lava_leaderboard, weekly_leaderboard, streak_leaderboard, magic_streak_leaderboard, champions_league)",
+   "source": "magicsort.schemas.v1.liveops"
+  },
+  {
+   "label": "Cờ chọn giao thức",
+   "value": "IsFlatBuffer (server)",
+   "source": "PermanentLeaderboardService.UpdateLeaderboard"
+  },
+  {
+   "label": "Cờ chuyển endpoint thế hệ 2",
+   "value": "HttpConfig.UsePermanentLeaderboardV2 (server)",
+   "source": "Firebase Remote Config key HttpConfig"
+  },
+  {
+   "label": "Điều kiện hiện tab Teams",
+   "value": "TeamsConfigModel.IsEnable (server)",
+   "source": "TeamsLeaderboardController"
+  },
+  {
+   "label": "Điều kiện hiện tab Friends",
+   "value": "FriendsConfigModel.IsEnabled (server)",
+   "source": "FriendsLeaderboardController"
+  },
+  {
+   "label": "Nhịp làm mới bảng",
+   "value": "Sau mỗi lần thắng level",
+   "source": "PermanentLeaderboardService.OnLevelWin"
+  },
+  {
+   "label": "Khóa lưu duy nhất",
+   "value": "LeaderboardModel",
+   "source": "ISaveLoad<LeaderboardModel>"
+  },
+  {
+   "label": "Cơ chế chống cấp phát khi cuộn",
+   "value": "ObjectPool<LeaderboardPlayer> và ObjectPool<PermanentLeaderboardPlayerViewModel>",
+   "source": "PermanentLeaderboardDataService; WorldLeaderboardController"
+  },
+  {
+   "label": "Tên tab trong mã",
+   "value": "Players, Teams, Weekly, Friends, World, Country",
+   "source": "strings-by-type.tsv"
+  },
+  {
+   "label": "Số factory prefab dòng bảng",
+   "value": "4 (LeaderboardViewFactory, TeamLeaderboardViewFactory, WeeklyTournamentLeaderboardViewFactory, FriendsScrollViewFactory)",
+   "source": "Assets/MonoBehaviour/"
+  },
+  {
+   "label": "Nhãn giao diện",
+   "value": "Leaderboard, Rank, World, Country",
+   "source": "appendix/localization.tsv"
+  },
+  {
+   "label": "Text mời thưởng Facebook",
+   "value": "FriendsGetYourCoin 'Get your rewards!'",
+   "source": "FriendsLeaderboardController"
+  },
+  {
+   "label": "Tiền tố log lỗi remote",
+   "value": "\"error: \"",
+   "source": "PermanentLeaderboardRemoteService"
+  },
+  {
+   "label": "Số sự kiện analytics",
+   "value": "3 (leaderboard_id, leaderboard_faulted, leaderboard_model)",
+   "source": "Leaderboards analytics"
+  }
+ ],
+ "config_highlights": [
+  {
+   "key": "IsFlatBuffer",
+   "value": "server",
+   "meaning": "Chọn giao thức FlatBuffers hay JSON cho bảng xếp hạng"
+  },
+  {
+   "key": "HttpConfig.UsePermanentLeaderboardV2",
+   "value": "server",
+   "meaning": "Chuyển sang endpoint bảng xếp hạng thế hệ 2"
+  },
+  {
+   "key": "TeamsConfigModel.IsEnable",
+   "value": "server",
+   "meaning": "Quyết định tab Teams hiện danh sách hay Coming soon"
+  },
+  {
+   "key": "FriendsConfigModel.IsEnabled",
+   "value": "server",
+   "meaning": "Quyết định tab Friends hiện danh sách hay Coming soon"
+  },
+  {
+   "key": "Tên tab cấp một",
+   "value": "\"Players\", \"Teams\", \"Weekly\"",
+   "meaning": "Định danh tab trong khung leaderboard"
+  },
+  {
+   "key": "Tên tab con của Players",
+   "value": "\"World\", \"Country\"",
+   "meaning": "Hai bảng người chơi"
+  },
+  {
+   "key": "Tên tab Friends",
+   "value": "\"Friends\"",
+   "meaning": "Định danh tab bạn bè"
+  },
+  {
+   "key": "LeaderboardMedalType",
+   "value": "None=0, Golden=1, Silver=2, Bronze=3",
+   "meaning": "Huy chương theo hạng"
+  },
+  {
+   "key": "LeaderboardPlayer",
+   "value": "PublicID, Nickname, Score, Rank, IsMe, ImageUrl, ImageID, TokenID, FrameId, NameStyle, TeamName",
+   "meaning": "Một dòng bảng xếp hạng người chơi ở bản cache client"
+  },
+  {
+   "key": "PermanentLeaderboardPlayerResponse",
+   "value": "PublicID, Nickname, Score, Rank, IsMe, ImageUrl, ImageID, TokenID, FrameID, NameStyle, TeamName",
+   "meaning": "Bản ghi trả về theo nhánh JSON"
+  },
+  {
+   "key": "GlobalLeaderboardPlayer (FlatBuffers)",
+   "value": "UserPublicID, NickName, Score (long), Rank (long), IsMe, ImageUrl, ImageID",
+   "meaning": "Bản ghi trả về theo nhánh FlatBuffers, ít trường hơn bản JSON"
+  },
+  {
+   "key": "GetLeaderboardsResponse (FlatBuffers)",
+   "value": "GlobalPlayers[], CountryPlayers[], Country",
+   "meaning": "Gói dữ liệu bảng thế giới và quốc gia"
+  },
+  {
+   "key": "PermanentLeaderboardResponse (JSON)",
+   "value": "Players, CountryPlayers, Country",
+   "meaning": "Cùng nội dung ở nhánh JSON"
+  },
+  {
+   "key": "LeaderboardModel",
+   "value": "WorldLeaderboard, CountryLeaderboard, Country",
+   "meaning": "Cache bảng xếp hạng lưu qua ISaveLoad"
+  },
+  {
+   "key": "ObjectPool<LeaderboardPlayer>",
+   "value": "-",
+   "meaning": "Tái sử dụng đối tượng dòng để tránh GC khi cuộn"
+  },
+  {
+   "key": "/v1/get-leaderboards",
+   "value": "endpoint",
+   "meaning": "Bảng thường trực world và country"
+  },
+  {
+   "key": "/v1/get-weekly-leaderboard",
+   "value": "endpoint",
+   "meaning": "Bảng giải tuần"
+  },
+  {
+   "key": "/v1/get-streak-leaderboard",
+   "value": "endpoint",
+   "meaning": "Bảng chuỗi thắng"
+  },
+  {
+   "key": "/v1/get-magicstreak-leaderboard",
+   "value": "endpoint",
+   "meaning": "Bảng Magic Streak"
+  },
+  {
+   "key": "/v2/get-team-leaderboard",
+   "value": "endpoint",
+   "meaning": "Bảng xếp hạng đội"
+  },
+  {
+   "key": "Schema global_leaderboard",
+   "value": "magicsort.schemas.v1.liveops.global_leaderboard",
+   "meaning": "Khuôn FlatBuffers của bảng thường trực"
+  },
+  {
+   "key": "Schema lava_leaderboard",
+   "value": "magicsort.schemas.v1.liveops.lava_leaderboard",
+   "meaning": "Tồn tại trong build nhưng chưa thấy service nào dùng"
+  },
+  {
+   "key": "LeaderboardSectionInfo",
+   "value": "\"Unlocks at Level 40\"",
+   "meaning": "Text mốc mở khóa khu vực bảng xếp hạng"
+  },
+  {
+   "key": "Nhãn Leaderboard / Rank / World / Country",
+   "value": "\"Leaderboard\", \"Rank\", \"World\", \"Country\"",
+   "meaning": "Nhãn tiêu đề và cột"
+  },
+  {
+   "key": "FriendsGetYourCoin",
+   "value": "\"Get your rewards!\"",
+   "meaning": "Text mời liên kết Facebook trên bảng bạn bè"
+  },
+  {
+   "key": "LeaderboardViewFactory.asset",
+   "value": "asset",
+   "meaning": "Prefab dòng bảng người chơi"
+  },
+  {
+   "key": "TeamLeaderboardViewFactory.asset",
+   "value": "asset",
+   "meaning": "Prefab dòng bảng đội"
+  },
+  {
+   "key": "WeeklyTournamentLeaderboardViewFactory.asset",
+   "value": "asset",
+   "meaning": "Prefab dòng bảng giải tuần"
+  },
+  {
+   "key": "FriendsScrollViewFactory.asset",
+   "value": "asset",
+   "meaning": "Prefab dòng bảng bạn bè"
+  },
+  {
+   "key": "analytics leaderboard_faulted",
+   "value": "-",
+   "meaning": "Bắn khi nạp bảng xếp hạng thất bại"
+  },
+  {
+   "key": "PermanentLeaderboardRemoteService log",
+   "value": "tiền tố \"error: \"",
+   "meaning": "Định dạng log lỗi khi gọi API thất bại"
+  }
+ ],
+ "tips": [
+  "Ghim dòng của chính người chơi giải quyết vấn đề lớn nhất của bảng xếp hạng dài: người chơi luôn thấy mình ở đâu.",
+  "Tách bảng theo quốc gia cho người chơi ở thị trường nhỏ một cơ hội vào top thực tế hơn bảng toàn cầu.",
+  "Gom bốn bảng vào một khung tab giúp trang xếp hạng luôn có nội dung, kể cả khi một hệ bị tắt.",
+  "Cache bảng gần nhất khiến trang mở tức thì và vẫn dùng được khi mất mạng.",
+  "Hai đường dữ liệu FlatBuffers và JSON cho phép đổi giao thức bằng remote config mà không cần cập nhật app."
+ ],
+ "categories": [
+  "Xã hội",
+  "Có bảng xếp hạng",
+  "Meta",
+  "Tiến trình"
+ ]
+}

@@ -1,0 +1,1876 @@
+{
+  "id": "LevelFlow",
+  "feature": "LevelFlow",
+  "name": "Vòng đời màn chơi (LevelFlow)",
+  "category": "Core",
+  "category_label": "Lõi gameplay",
+  "core_levels_last": true,
+  "acceptance_status": "documented_with_explicit_remaining_scope",
+  "full_feature_verified": false,
+  "checks": {
+    "purpose": {
+      "status": "documented_static_scope",
+      "source": "gdd/LevelFlow.json#/summary",
+      "claim_excerpt": "LevelFlow là khung điều khiển toàn bộ một lượt chơi Magic Sort: từ lúc bấm Play ở Home, nạp model level theo seed, chơi, tới các nhánh kết thúc (thắng / thua / kẹt / thoát) và chuỗi lệnh đưa người chơi trở lại Home. Hai lớp song song cùng chạy: RegularLevelManager giữ trạng thái dữ liệu của level (enum LevelState) còn RegularGamePlayStateManager là máy trạng thái UI/luồng (enum GamePlayStateType) "
+    },
+    "unlock": {
+      "status": "described_historical_conditions_runtime_boundary_unverified",
+      "source": "gdd/LevelFlow.json#/unlock",
+      "content": "Có từ level 1, không có điều kiện mở khoá. Các nhánh phụ mới bật dần: quảng cáo Play On chỉ bật khi AdConfigModel.PlayOnWithRewardedEnabled = true và người chơi đã qua AdConfigModel.FirstLevelToShowPlayOnWithRewarded (AdService.GetPlayOnWithRewardedFirstLevelToShow, kiểm trong PlayOnWithRewardedService.CanUsePlayOnWithRewarded); luồng TryAgain mới bật bằng cờ RootLevelConfigModel.IsNewTryAgainFlowEnabled; giới hạn popup sau level theo RootLevelConfigModel.LevelEndPopupsAbGroup / HomeReturnPopupShowLimit (ReturnToHomeSequenceService.get_IsPopupLimitAbEnabled)."
+    },
+    "entry_flow": {
+      "status": "documented_paths_not_all_executed",
+      "entry_points": [
+        "Nút Play ở Home (PreLevelPopUp → analytics play_button_clicked / play_button_click_failed)",
+        "Popup PreLevel trong level (InLevelPreLevelPopUp) và popup level kế tiếp (NextLevelPreLevelPopUp)",
+        "Nút Try Again trên TryAgainPopup sau khi thua/thoát (TryAgainPopupOpenPlace.Quit / .Stuck)",
+        "Nút Continue trên LevelWinPopUp (analytics level_win_pop_up_continue_clicked)",
+        "Daily Level (DailyStateManager dùng cùng bộ state ở namespace Loop.Scripts.Daily)",
+        "Cheat/Level Editor (LevelStats.GetLevelType trả 'editor')"
+      ],
+      "flow_source": "gdd/LevelFlow.json#/flow",
+      "acceptance_scope": "Entry/prelevel/ongoing/pause/quit/stuck/PlayOn/win/return sequence; retries/reward/life cost và board restore"
+    },
+    "config": {
+      "status": "source_bound_catalog_present",
+      "gdd_rows": 138,
+      "full_leaf_rows_associated": 554,
+      "snapshots": {
+        "default_0.0.3063": 58,
+        "cache_20260910": 172,
+        "cache_20261010": 172,
+        "firebase_20260910": 152
+      },
+      "models": [
+        {
+          "model": "adConfigModel",
+          "matching_basis": [
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/LevelFlow.json#/sources/13"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/LevelFlow.json#/configs/23/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/LevelFlow.json#/configs/24/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/LevelFlow.json#/configs/25/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/LevelFlow.json#/configs/26/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/LevelFlow.json#/configs/28/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/LevelFlow.json#/configs/29/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/LevelFlow.json#/configs/30/key_where"
+            }
+          ]
+        },
+        {
+          "model": "beLevelConfig",
+          "matching_basis": [
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/LevelFlow.json#/configs/42/key_where"
+            }
+          ]
+        },
+        {
+          "model": "BlockerIntroConfigModel",
+          "matching_basis": [
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/LevelFlow.json#/configs/39/key_where"
+            }
+          ]
+        },
+        {
+          "model": "BottleVar",
+          "matching_basis": [
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/LevelFlow.json#/configs/128/key_where"
+            }
+          ]
+        },
+        {
+          "model": "BottlesAreTaller",
+          "matching_basis": [
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/LevelFlow.json#/configs/129/key_where"
+            }
+          ]
+        },
+        {
+          "model": "ColorVariant",
+          "matching_basis": [
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/LevelFlow.json#/configs/38/key_where"
+            }
+          ]
+        },
+        {
+          "model": "egoOfferConfigModel",
+          "matching_basis": [
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/LevelFlow.json#/configs/40/key_where"
+            }
+          ]
+        },
+        {
+          "model": "ExtraBottleHeightOnPlayOn",
+          "matching_basis": [
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/LevelFlow.json#/configs/130/key_where"
+            }
+          ]
+        },
+        {
+          "model": "gameEconomyModel",
+          "matching_basis": [
+            {
+              "kind": "explicit_gd_config_model_map",
+              "source": "gd_config.json#/defaultconfigs/map/LevelFlow"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/LevelFlow.json#/sources/12"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/LevelFlow.json#/configs/14/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/LevelFlow.json#/configs/15/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/LevelFlow.json#/configs/16/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/LevelFlow.json#/configs/17/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/LevelFlow.json#/configs/18/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/LevelFlow.json#/configs/19/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/LevelFlow.json#/configs/20/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/LevelFlow.json#/configs/21/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/LevelFlow.json#/configs/22/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/LevelFlow.json#/configs/43/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/LevelFlow.json#/configs/44/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/LevelFlow.json#/configs/45/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/LevelFlow.json#/configs/46/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/LevelFlow.json#/configs/47/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/LevelFlow.json#/configs/48/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/LevelFlow.json#/configs/49/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/LevelFlow.json#/configs/50/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/LevelFlow.json#/configs/51/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/LevelFlow.json#/configs/52/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/LevelFlow.json#/configs/53/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/LevelFlow.json#/configs/54/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/LevelFlow.json#/configs/55/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/LevelFlow.json#/configs/56/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/LevelFlow.json#/configs/57/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/LevelFlow.json#/configs/58/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/LevelFlow.json#/configs/59/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/LevelFlow.json#/configs/60/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/LevelFlow.json#/configs/61/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/LevelFlow.json#/configs/62/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/LevelFlow.json#/configs/63/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/LevelFlow.json#/configs/64/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/LevelFlow.json#/configs/65/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/LevelFlow.json#/configs/66/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/LevelFlow.json#/configs/67/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/LevelFlow.json#/configs/68/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/LevelFlow.json#/configs/69/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/LevelFlow.json#/configs/70/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/LevelFlow.json#/configs/71/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/LevelFlow.json#/configs/72/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/LevelFlow.json#/configs/73/key_where"
+            }
+          ]
+        },
+        {
+          "model": "HomeReturnPopupShowLimit",
+          "matching_basis": [
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/LevelFlow.json#/configs/33/key_where"
+            }
+          ]
+        },
+        {
+          "model": "InGameBoosterVariant",
+          "matching_basis": [
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/LevelFlow.json#/configs/38/key_where"
+            }
+          ]
+        },
+        {
+          "model": "IsAlternativeFailFlow",
+          "matching_basis": [
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/LevelFlow.json#/configs/131/key_where"
+            }
+          ]
+        },
+        {
+          "model": "IsHomeReturnPopupShowLimitEnabled",
+          "matching_basis": [
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/LevelFlow.json#/configs/33/key_where"
+            }
+          ]
+        },
+        {
+          "model": "IsMusicEnabled",
+          "matching_basis": [
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/LevelFlow.json#/configs/37/key_where"
+            }
+          ]
+        },
+        {
+          "model": "IsNewBottleParticlesEnabled",
+          "matching_basis": [
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/LevelFlow.json#/configs/132/key_where"
+            }
+          ]
+        },
+        {
+          "model": "IsNewBottleVisualsEnabled",
+          "matching_basis": [
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/LevelFlow.json#/configs/133/key_where"
+            }
+          ]
+        },
+        {
+          "model": "IsNewTryAgainFlowEnabled",
+          "matching_basis": [
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/LevelFlow.json#/configs/31/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/LevelFlow.json#/configs/134/key_where"
+            }
+          ]
+        },
+        {
+          "model": "IsOgPlayStyle",
+          "matching_basis": [
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/LevelFlow.json#/configs/37/key_where"
+            }
+          ]
+        },
+        {
+          "model": "IsSessionStartPopupShowLimitEnabled",
+          "matching_basis": [
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/LevelFlow.json#/configs/34/key_where"
+            }
+          ]
+        },
+        {
+          "model": "IsVibrationOn",
+          "matching_basis": [
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/LevelFlow.json#/configs/37/key_where"
+            }
+          ]
+        },
+        {
+          "model": "LevelEndPopupsAbGroup",
+          "matching_basis": [
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/LevelFlow.json#/configs/32/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/LevelFlow.json#/configs/135/key_where"
+            }
+          ]
+        },
+        {
+          "model": "MegaShuffleEmptyBottleProbability",
+          "matching_basis": [
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/LevelFlow.json#/configs/36/key_where"
+            }
+          ]
+        },
+        {
+          "model": "MegaShuffleRetryCount",
+          "matching_basis": [
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/LevelFlow.json#/configs/35/key_where"
+            }
+          ]
+        },
+        {
+          "model": "playOnMultipleBottlesConfigModel",
+          "matching_basis": [
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/LevelFlow.json#/configs/74/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/LevelFlow.json#/configs/75/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/LevelFlow.json#/configs/76/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/LevelFlow.json#/configs/77/key_where"
+            }
+          ]
+        },
+        {
+          "model": "playOnRewardedConfigModel",
+          "matching_basis": [
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/LevelFlow.json#/configs/27/key_where"
+            }
+          ]
+        },
+        {
+          "model": "PlayOnTwoBottlesLimit",
+          "matching_basis": [
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/LevelFlow.json#/configs/136/key_where"
+            }
+          ]
+        },
+        {
+          "model": "preGameConfigModel",
+          "matching_basis": [
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/LevelFlow.json#/configs/78/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/LevelFlow.json#/configs/79/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/LevelFlow.json#/configs/80/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/LevelFlow.json#/configs/81/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/LevelFlow.json#/configs/82/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/LevelFlow.json#/configs/83/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/LevelFlow.json#/configs/84/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/LevelFlow.json#/configs/85/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/LevelFlow.json#/configs/86/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/LevelFlow.json#/configs/87/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/LevelFlow.json#/configs/88/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/LevelFlow.json#/configs/89/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/LevelFlow.json#/configs/90/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/LevelFlow.json#/configs/91/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/LevelFlow.json#/configs/92/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/LevelFlow.json#/configs/93/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/LevelFlow.json#/configs/94/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/LevelFlow.json#/configs/95/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/LevelFlow.json#/configs/96/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/LevelFlow.json#/configs/97/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/LevelFlow.json#/configs/98/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/LevelFlow.json#/configs/99/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/LevelFlow.json#/configs/100/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/LevelFlow.json#/configs/101/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/LevelFlow.json#/configs/102/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/LevelFlow.json#/configs/103/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/LevelFlow.json#/configs/104/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/LevelFlow.json#/configs/105/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/LevelFlow.json#/configs/106/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/LevelFlow.json#/configs/107/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/LevelFlow.json#/configs/108/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/LevelFlow.json#/configs/109/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/LevelFlow.json#/configs/110/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/LevelFlow.json#/configs/111/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/LevelFlow.json#/configs/112/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/LevelFlow.json#/configs/113/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/LevelFlow.json#/configs/114/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/LevelFlow.json#/configs/115/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/LevelFlow.json#/configs/116/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/LevelFlow.json#/configs/117/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/LevelFlow.json#/configs/118/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/LevelFlow.json#/configs/119/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/LevelFlow.json#/configs/120/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/LevelFlow.json#/configs/121/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/LevelFlow.json#/configs/122/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/LevelFlow.json#/configs/123/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/LevelFlow.json#/configs/124/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/LevelFlow.json#/configs/125/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/LevelFlow.json#/configs/126/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/LevelFlow.json#/configs/127/key_where"
+            }
+          ]
+        },
+        {
+          "model": "SessionStartPopUpShowLimit",
+          "matching_basis": [
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/LevelFlow.json#/configs/34/key_where"
+            }
+          ]
+        },
+        {
+          "model": "StuckPopupAbGroup",
+          "matching_basis": [
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/LevelFlow.json#/configs/137/key_where"
+            }
+          ]
+        },
+        {
+          "model": "rootLevelConfigModel",
+          "matching_basis": [
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/LevelFlow.json#/sources/12"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/LevelFlow.json#/configs/31/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/LevelFlow.json#/configs/32/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/LevelFlow.json#/configs/33/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/LevelFlow.json#/configs/34/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/LevelFlow.json#/configs/35/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/LevelFlow.json#/configs/36/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/LevelFlow.json#/configs/37/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/LevelFlow.json#/configs/38/key_where"
+            }
+          ]
+        }
+      ],
+      "declared_models_without_catalog_data": [],
+      "placeholder_rows_requiring_source_review": [
+        {
+          "index": 29,
+          "key": "AdConfigModel.CoinAmountNew2xRewardedForRegular / ForHard / ForSuperHard",
+          "value": "server",
+          "source": "server info"
+        },
+        {
+          "index": 33,
+          "key": "RootLevelConfigModel.HomeReturnPopupShowLimit / IsHomeReturnPopupShowLimitEnabled",
+          "value": "server",
+          "source": "server info"
+        },
+        {
+          "index": 34,
+          "key": "RootLevelConfigModel.SessionStartPopUpShowLimit / IsSessionStartPopupShowLimitEnabled",
+          "value": "server",
+          "source": "server info"
+        },
+        {
+          "index": 37,
+          "key": "RootLevelConfigModel.IsOgPlayStyle / IsVibrationOn / IsMusicEnabled",
+          "value": "server",
+          "source": "server info"
+        },
+        {
+          "index": 38,
+          "key": "RootLevelConfigModel.InGameBoosterVariant / ColorVariant",
+          "value": "server",
+          "source": "server info"
+        },
+        {
+          "index": 39,
+          "key": "BlockerIntroConfigModel.Curtain / Plaster / Clay / LockAndKey",
+          "value": "server",
+          "source": "server info"
+        }
+      ],
+      "exact_placeholder_snapshot_values": [
+        {
+          "gdd_config_index": 29,
+          "key": "AdConfigModel.CoinAmountNew2xRewardedForRegular / ForHard / ForSuperHard",
+          "status": "no_unambiguous_exact_field_match",
+          "matches": [],
+          "basis": "Model explicitly cited in key/where, or sole declaredmodel; fieldpath exactcasefold, no alias guessing."
+        },
+        {
+          "gdd_config_index": 33,
+          "key": "RootLevelConfigModel.HomeReturnPopupShowLimit / IsHomeReturnPopupShowLimitEnabled",
+          "status": "no_unambiguous_exact_field_match",
+          "matches": [],
+          "basis": "Model explicitly cited in key/where, or sole declaredmodel; fieldpath exactcasefold, no alias guessing."
+        },
+        {
+          "gdd_config_index": 34,
+          "key": "RootLevelConfigModel.SessionStartPopUpShowLimit / IsSessionStartPopupShowLimitEnabled",
+          "status": "no_unambiguous_exact_field_match",
+          "matches": [],
+          "basis": "Model explicitly cited in key/where, or sole declaredmodel; fieldpath exactcasefold, no alias guessing."
+        },
+        {
+          "gdd_config_index": 37,
+          "key": "RootLevelConfigModel.IsOgPlayStyle / IsVibrationOn / IsMusicEnabled",
+          "status": "no_unambiguous_exact_field_match",
+          "matches": [],
+          "basis": "Model explicitly cited in key/where, or sole declaredmodel; fieldpath exactcasefold, no alias guessing."
+        },
+        {
+          "gdd_config_index": 38,
+          "key": "RootLevelConfigModel.InGameBoosterVariant / ColorVariant",
+          "status": "no_unambiguous_exact_field_match",
+          "matches": [],
+          "basis": "Model explicitly cited in key/where, or sole declaredmodel; fieldpath exactcasefold, no alias guessing."
+        },
+        {
+          "gdd_config_index": 39,
+          "key": "BlockerIntroConfigModel.Curtain / Plaster / Clay / LockAndKey",
+          "status": "no_unambiguous_exact_field_match",
+          "matches": [],
+          "basis": "Model explicitly cited in key/where, or sole declaredmodel; fieldpath exactcasefold, no alias guessing."
+        }
+      ],
+      "dossier_abbreviated_values": [],
+      "note": "Model association uses explicitmap or exacttoken citations; fieldpresence does not prove allproductiondata. GDDsummaryrows and fullcatalogrows have separate counts. Abbreviated source summaries are not full arrays; catalog/source links remain authoritative."
+    },
+    "reward": {
+      "status": "documented_static_rewards_runtime_grant_not_fully_verified",
+      "entries": 5,
+      "tables_in_site_meta": 5,
+      "source": "gdd/LevelFlow.json#/rewards"
+    },
+    "use_cases": {
+      "status": "reviewed_branches_only",
+      "specified": 20,
+      "reviewed_uc_branch_count": 6,
+      "reviewed_uc_ids": [
+        "UC-01",
+        "UC-11",
+        "UC-12",
+        "UC-13",
+        "UC-14",
+        "UC-20"
+      ],
+      "not_reviewed_in_new_ledger": [
+        "UC-02",
+        "UC-03",
+        "UC-04",
+        "UC-05",
+        "UC-06",
+        "UC-07",
+        "UC-08",
+        "UC-09",
+        "UC-10",
+        "UC-15",
+        "UC-16",
+        "UC-17",
+        "UC-18",
+        "UC-19"
+      ],
+      "full_uc_pass_claimed": false
+    },
+    "screenshots": {
+      "historical_gallery_entries": 24,
+      "historical_uc_with_image_reference": 10,
+      "curated_new_images": [
+        "CORE10_pause",
+        "CORE11_exit_warning",
+        "CORE12_exit_cancel",
+        "CORE17_solver_6",
+        "CORE19_solver_18",
+        "CORE20_solver_finish",
+        "CORE21_win_ready",
+        "CORE22_win_continue",
+        "CORE25_quit352_warning",
+        "CORE28_quit352",
+        "CORE29_fail_close",
+        "MORE23_level352",
+        "MORE24_game_settings",
+        "MORE25_quit_warning",
+        "MORE26_quit_fail",
+        "MORE27_home_four_lives"
+      ],
+      "curated_new_image_count": 16,
+      "status": "new_case_evidence_available",
+      "source": "screens/web/screens.json#/LevelFlow",
+      "note": "Image presence does not prove execution result or completeness."
+    },
+    "runtime_actual": {
+      "status": "observed_subset_offline_fixture",
+      "case_count": 4,
+      "cases": [
+        {
+          "id": "MS-R15-CORE05",
+          "title": "Mở cài đặt và hủy thoát level",
+          "status": "verified_observed_branch",
+          "uc": [
+            "UC-12",
+            "UC-20"
+          ],
+          "actual": "Hiện cảnh báo You will lose 1 life! dù đang có unlimited lives; X trở về board đang chơi, inventory giữ nguyên, isLevelInProgress=true.",
+          "limitations": "Không xác nhận mất mạng vì chưa bấm Quit ở case này; chữ cảnh báo không đủ chứng minh mức trừ thực tế.",
+          "images": [
+            "CORE10_pause",
+            "CORE11_exit_warning",
+            "CORE12_exit_cancel"
+          ],
+          "before": "CORE09_extra_bottle",
+          "after": "CORE12_exit_cancel"
+        },
+        {
+          "id": "MS-R15-CORE07",
+          "title": "Thắng level351, reset retry và thưởng20coin",
+          "status": "verified_observed_branch",
+          "uc": [
+            "UC-11",
+            "UC-14"
+          ],
+          "actual": "Win nâng PlayerModel351→352 và isLevelInProgress=false trước Continue; retry8→0, snitchRetry1→0. Popup thưởng20. Coin vẫn999995869 tại popup, sau Continue999995889. firstTryLevelWinCount giữ5.",
+          "limitations": "Đây là lượt có dùng Undo/Shuffle/ExtraBottle và đọc seed, không dùng thời lượng để đo độ khó tự nhiên. Chỉ seed...351_difficulty1-12; không phải toàn bộ level pass. Replay log ghi input, ảnh checkpoint và kết quả win xác nhận thực thi.",
+          "images": [
+            "CORE17_solver_6",
+            "CORE19_solver_18",
+            "CORE20_solver_finish",
+            "CORE21_win_ready",
+            "CORE22_win_continue"
+          ],
+          "before": "CORE01_prelevel",
+          "after": "CORE22_win_continue"
+        },
+        {
+          "id": "MS-R15-CORE10",
+          "title": "Quit giữa level và popup Failed có phần thưởng hiển thị",
+          "status": "observed_ui_ledger_discrepancy",
+          "uc": [
+            "UC-12",
+            "UC-13"
+          ],
+          "actual": "Level352 giữ nguyên, isLevelInProgress true→false. Failed có TryAgain và vẫn hiển thị Rewards20; đóng bằngX vềHome, coin giữ999995889, không cấp20. RetryCount giữ1 trong khoảng quit; unlimitedLifeEnd/lifeFillDate không đổi.",
+          "limitations": "Một lượt quit sau thắng351, có unlimited lives. Phần Rewards20 có thể là UI còn trạng thái cũ; chưa quy kết bug production hoặc tuyên bố fail có thưởng. Chưa bấmTryAgain.",
+          "images": [
+            "CORE25_quit352_warning",
+            "CORE28_quit352",
+            "CORE29_fail_close"
+          ],
+          "before": "CORE27_pillow_unlock",
+          "after": "CORE29_fail_close"
+        },
+        {
+          "id": "MS-R15-CORE12",
+          "title": "Vào rồi Quit352 khi không còn unlimited lives",
+          "status": "observed_ui_ledger_discrepancy",
+          "uc": [
+            "UC-01",
+            "UC-12",
+            "UC-13"
+          ],
+          "actual": "isLevelInProgress true ở board, false sau Quit. Failed vẫn hiện Rewards20; coin giữ999995889 và không nhận20. Home4mạng, timer29:15; lifeFillDate đã đổi ở entry, không đổi thêm ở quit.",
+          "limitations": "Không gọi Dispose/memory verified; chưa bấmTryAgain hay thử stuck/fail mất hết nước. Một lượt không có nước đi, không booster; không đo natural regen.",
+          "images": [
+            "MORE23_level352",
+            "MORE24_game_settings",
+            "MORE25_quit_warning",
+            "MORE26_quit_fail",
+            "MORE27_home_four_lives"
+          ],
+          "before": "MORE22_home_before_core",
+          "after": "MORE27_home_four_lives"
+        }
+      ],
+      "mode": "offline_existing_fixture",
+      "build": "0.0.3129 ARM64"
+    },
+    "segment_ab": {
+      "status": "reviewed_rows_associated_assignment_not_proven",
+      "segment_ids": [
+        "MS-SEG-001",
+        "MS-SEG-060",
+        "MS-SEG-083",
+        "MS-SEG-084",
+        "MS-SEG-085",
+        "MS-SEG-109",
+        "MS-SEG-110",
+        "MS-SEG-111",
+        "MS-SEG-112",
+        "MS-SEG-158",
+        "MS-SEG-159",
+        "MS-SEG-160",
+        "MS-SEG-220"
+      ],
+      "matching_basis": "explicit_gd_config_map_or_exact_model_token_in_gdd_configs_where_key_sources; rootfieldscoped",
+      "rows": [
+        {
+          "snapshot": "default_0.0.3063",
+          "model": "AdConfigModel",
+          "key": "PlayOnWithRewardedVariantType",
+          "value": 0,
+          "type": "int",
+          "source": "../com.grandgames.magicsort_Unity_20260909_112501/UnityExport/ExportedProject/Assets/Resources/defaultconfigs/AdConfigModel.json",
+          "classification": "config_candidate_not_backend_assignment_proof",
+          "review_id": "MS-SEG-001",
+          "review_classification": "variant_config",
+          "review_status": "missing_experiment_assignment_and_outcome",
+          "consumer": {
+            "source": "com.grandgames.magicsort_Unity_20260909_112501/RecoveredNative/PseudoC/Assembly-CSharp/Modules/Contexts/Application/Ads/Scripts/ConfigService/AdConfigService.c",
+            "line": 830,
+            "marker": "// ===== AdConfigService :: public void SetAdConfigModels",
+            "build": "0.0.3063 ARMv7",
+            "evidence": "recovered_native_historical_version"
+          },
+          "interpretation": "Giá trị variant được cache/default/Firebase; chưa có experimentID hoặc traffic split.",
+          "next_action": "Cần experimentID, variant, allocation, activation timestamp, consumer effect và đối chứng cùng điều kiện.",
+          "assignment_proof": false,
+          "uplift_proof": false,
+          "matching_basis": [
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/LevelFlow.json#/sources/13"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/LevelFlow.json#/configs/23/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/LevelFlow.json#/configs/24/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/LevelFlow.json#/configs/25/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/LevelFlow.json#/configs/26/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/LevelFlow.json#/configs/28/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/LevelFlow.json#/configs/29/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/LevelFlow.json#/configs/30/key_where"
+            }
+          ]
+        },
+        {
+          "snapshot": "cache_20260910",
+          "model": "adConfigModel",
+          "key": "playOnWithRewardedVariantType",
+          "value": 0,
+          "type": "int",
+          "source": "facts/runtime/server_configs/adConfigModel.json",
+          "classification": "config_candidate_not_backend_assignment_proof",
+          "review_id": "MS-SEG-060",
+          "review_classification": "variant_config",
+          "review_status": "missing_experiment_assignment_and_outcome",
+          "consumer": {
+            "source": "com.grandgames.magicsort_Unity_20260909_112501/RecoveredNative/PseudoC/Assembly-CSharp/Modules/Contexts/Application/Ads/Scripts/ConfigService/AdConfigService.c",
+            "line": 830,
+            "marker": "// ===== AdConfigService :: public void SetAdConfigModels",
+            "build": "0.0.3063 ARMv7",
+            "evidence": "recovered_native_historical_version"
+          },
+          "interpretation": "Giá trị variant được cache/default/Firebase; chưa có experimentID hoặc traffic split.",
+          "next_action": "Cần experimentID, variant, allocation, activation timestamp, consumer effect và đối chứng cùng điều kiện.",
+          "assignment_proof": false,
+          "uplift_proof": false,
+          "matching_basis": [
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/LevelFlow.json#/sources/13"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/LevelFlow.json#/configs/23/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/LevelFlow.json#/configs/24/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/LevelFlow.json#/configs/25/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/LevelFlow.json#/configs/26/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/LevelFlow.json#/configs/28/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/LevelFlow.json#/configs/29/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/LevelFlow.json#/configs/30/key_where"
+            }
+          ]
+        },
+        {
+          "snapshot": "cache_20260910",
+          "model": "rootLevelConfigModel",
+          "key": "colorVariant",
+          "value": 2,
+          "type": "int",
+          "source": "facts/runtime/server_configs/rootLevelConfigModel.json",
+          "classification": "config_candidate_not_backend_assignment_proof",
+          "review_id": "MS-SEG-083",
+          "review_classification": "variant_config",
+          "review_status": "missing_experiment_assignment_and_outcome",
+          "consumer": {
+            "source": "com.grandgames.magicsort_Unity_20260909_112501/RecoveredNative/PseudoC/Assembly-CSharp/Modules/Contexts/Application/FirebaseNS/Scripts/FirebaseRemoteConfigResolver.c",
+            "line": 863,
+            "marker": "/* \"ColorVariant\" */",
+            "build": "0.0.3063 ARMv7",
+            "evidence": "recovered_native_historical_version"
+          },
+          "interpretation": "Giá trị variant được cache/default/Firebase; chưa có experimentID hoặc traffic split.",
+          "next_action": "Cần experimentID, variant, allocation, activation timestamp, consumer effect và đối chứng cùng điều kiện.",
+          "assignment_proof": false,
+          "uplift_proof": false,
+          "matching_basis": [
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/LevelFlow.json#/sources/12"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/LevelFlow.json#/configs/31/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/LevelFlow.json#/configs/32/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/LevelFlow.json#/configs/33/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/LevelFlow.json#/configs/34/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/LevelFlow.json#/configs/35/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/LevelFlow.json#/configs/36/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/LevelFlow.json#/configs/37/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/LevelFlow.json#/configs/38/key_where"
+            }
+          ]
+        },
+        {
+          "snapshot": "cache_20260910",
+          "model": "rootLevelConfigModel",
+          "key": "levelEndPopupsAbGroup",
+          "value": 0,
+          "type": "int",
+          "source": "facts/runtime/server_configs/rootLevelConfigModel.json",
+          "classification": "config_candidate_not_backend_assignment_proof",
+          "review_id": "MS-SEG-084",
+          "review_classification": "variant_config",
+          "review_status": "missing_experiment_assignment_and_outcome",
+          "consumer": {
+            "source": "com.grandgames.magicsort_Unity_20260909_112501/RecoveredNative/PseudoC/Assembly-CSharp/Modules/Contexts/Application/FirebaseNS/Scripts/FirebaseRemoteConfigResolver.c",
+            "line": 863,
+            "marker": "/* \"ColorVariant\" */",
+            "build": "0.0.3063 ARMv7",
+            "evidence": "recovered_native_historical_version"
+          },
+          "interpretation": "Giá trị variant được cache/default/Firebase; chưa có experimentID hoặc traffic split.",
+          "next_action": "Cần experimentID, variant, allocation, activation timestamp, consumer effect và đối chứng cùng điều kiện.",
+          "assignment_proof": false,
+          "uplift_proof": false,
+          "matching_basis": [
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/LevelFlow.json#/sources/12"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/LevelFlow.json#/configs/31/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/LevelFlow.json#/configs/32/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/LevelFlow.json#/configs/33/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/LevelFlow.json#/configs/34/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/LevelFlow.json#/configs/35/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/LevelFlow.json#/configs/36/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/LevelFlow.json#/configs/37/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/LevelFlow.json#/configs/38/key_where"
+            }
+          ]
+        },
+        {
+          "snapshot": "cache_20260910",
+          "model": "rootLevelConfigModel",
+          "key": "inGameBoosterVariant",
+          "value": 0,
+          "type": "int",
+          "source": "facts/runtime/server_configs/rootLevelConfigModel.json",
+          "classification": "config_candidate_not_backend_assignment_proof",
+          "review_id": "MS-SEG-085",
+          "review_classification": "variant_config",
+          "review_status": "missing_experiment_assignment_and_outcome",
+          "consumer": {
+            "source": "com.grandgames.magicsort_Unity_20260909_112501/RecoveredNative/PseudoC/Assembly-CSharp/Modules/Contexts/Application/Inventory/Scripts/InventoryService.c",
+            "line": 388,
+            "marker": "_InGameBoosterVariant_k__BackingField",
+            "build": "0.0.3063 ARMv7",
+            "evidence": "recovered_native_historical_version"
+          },
+          "interpretation": "Giá trị variant được cache/default/Firebase; chưa có experimentID hoặc traffic split.",
+          "next_action": "Cần experimentID, variant, allocation, activation timestamp, consumer effect và đối chứng cùng điều kiện.",
+          "assignment_proof": false,
+          "uplift_proof": false,
+          "matching_basis": [
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/LevelFlow.json#/sources/12"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/LevelFlow.json#/configs/31/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/LevelFlow.json#/configs/32/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/LevelFlow.json#/configs/33/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/LevelFlow.json#/configs/34/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/LevelFlow.json#/configs/35/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/LevelFlow.json#/configs/36/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/LevelFlow.json#/configs/37/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/LevelFlow.json#/configs/38/key_where"
+            }
+          ]
+        },
+        {
+          "snapshot": "cache_20261010",
+          "model": "rootLevelConfigModel",
+          "key": "colorVariant",
+          "value": 2,
+          "type": "int",
+          "source": "facts/runtime/test_20261010/before/CachedRemoteConfigs",
+          "classification": "config_candidate_not_backend_assignment_proof",
+          "review_id": "MS-SEG-109",
+          "review_classification": "variant_config",
+          "review_status": "missing_experiment_assignment_and_outcome",
+          "consumer": {
+            "source": "com.grandgames.magicsort_Unity_20260909_112501/RecoveredNative/PseudoC/Assembly-CSharp/Modules/Contexts/Application/FirebaseNS/Scripts/FirebaseRemoteConfigResolver.c",
+            "line": 863,
+            "marker": "/* \"ColorVariant\" */",
+            "build": "0.0.3063 ARMv7",
+            "evidence": "recovered_native_historical_version"
+          },
+          "interpretation": "Giá trị variant được cache/default/Firebase; chưa có experimentID hoặc traffic split.",
+          "next_action": "Cần experimentID, variant, allocation, activation timestamp, consumer effect và đối chứng cùng điều kiện.",
+          "assignment_proof": false,
+          "uplift_proof": false,
+          "matching_basis": [
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/LevelFlow.json#/sources/12"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/LevelFlow.json#/configs/31/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/LevelFlow.json#/configs/32/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/LevelFlow.json#/configs/33/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/LevelFlow.json#/configs/34/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/LevelFlow.json#/configs/35/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/LevelFlow.json#/configs/36/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/LevelFlow.json#/configs/37/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/LevelFlow.json#/configs/38/key_where"
+            }
+          ]
+        },
+        {
+          "snapshot": "cache_20261010",
+          "model": "rootLevelConfigModel",
+          "key": "levelEndPopupsAbGroup",
+          "value": 0,
+          "type": "int",
+          "source": "facts/runtime/test_20261010/before/CachedRemoteConfigs",
+          "classification": "config_candidate_not_backend_assignment_proof",
+          "review_id": "MS-SEG-110",
+          "review_classification": "variant_config",
+          "review_status": "missing_experiment_assignment_and_outcome",
+          "consumer": {
+            "source": "com.grandgames.magicsort_Unity_20260909_112501/RecoveredNative/PseudoC/Assembly-CSharp/Modules/Contexts/Application/FirebaseNS/Scripts/FirebaseRemoteConfigResolver.c",
+            "line": 863,
+            "marker": "/* \"ColorVariant\" */",
+            "build": "0.0.3063 ARMv7",
+            "evidence": "recovered_native_historical_version"
+          },
+          "interpretation": "Giá trị variant được cache/default/Firebase; chưa có experimentID hoặc traffic split.",
+          "next_action": "Cần experimentID, variant, allocation, activation timestamp, consumer effect và đối chứng cùng điều kiện.",
+          "assignment_proof": false,
+          "uplift_proof": false,
+          "matching_basis": [
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/LevelFlow.json#/sources/12"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/LevelFlow.json#/configs/31/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/LevelFlow.json#/configs/32/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/LevelFlow.json#/configs/33/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/LevelFlow.json#/configs/34/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/LevelFlow.json#/configs/35/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/LevelFlow.json#/configs/36/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/LevelFlow.json#/configs/37/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/LevelFlow.json#/configs/38/key_where"
+            }
+          ]
+        },
+        {
+          "snapshot": "cache_20261010",
+          "model": "rootLevelConfigModel",
+          "key": "inGameBoosterVariant",
+          "value": 0,
+          "type": "int",
+          "source": "facts/runtime/test_20261010/before/CachedRemoteConfigs",
+          "classification": "config_candidate_not_backend_assignment_proof",
+          "review_id": "MS-SEG-111",
+          "review_classification": "variant_config",
+          "review_status": "missing_experiment_assignment_and_outcome",
+          "consumer": {
+            "source": "com.grandgames.magicsort_Unity_20260909_112501/RecoveredNative/PseudoC/Assembly-CSharp/Modules/Contexts/Application/Inventory/Scripts/InventoryService.c",
+            "line": 388,
+            "marker": "_InGameBoosterVariant_k__BackingField",
+            "build": "0.0.3063 ARMv7",
+            "evidence": "recovered_native_historical_version"
+          },
+          "interpretation": "Giá trị variant được cache/default/Firebase; chưa có experimentID hoặc traffic split.",
+          "next_action": "Cần experimentID, variant, allocation, activation timestamp, consumer effect và đối chứng cùng điều kiện.",
+          "assignment_proof": false,
+          "uplift_proof": false,
+          "matching_basis": [
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/LevelFlow.json#/sources/12"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/LevelFlow.json#/configs/31/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/LevelFlow.json#/configs/32/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/LevelFlow.json#/configs/33/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/LevelFlow.json#/configs/34/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/LevelFlow.json#/configs/35/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/LevelFlow.json#/configs/36/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/LevelFlow.json#/configs/37/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/LevelFlow.json#/configs/38/key_where"
+            }
+          ]
+        },
+        {
+          "snapshot": "cache_20261010",
+          "model": "adConfigModel",
+          "key": "playOnWithRewardedVariantType",
+          "value": 0,
+          "type": "int",
+          "source": "facts/runtime/test_20261010/before/CachedRemoteConfigs",
+          "classification": "config_candidate_not_backend_assignment_proof",
+          "review_id": "MS-SEG-112",
+          "review_classification": "variant_config",
+          "review_status": "missing_experiment_assignment_and_outcome",
+          "consumer": {
+            "source": "com.grandgames.magicsort_Unity_20260909_112501/RecoveredNative/PseudoC/Assembly-CSharp/Modules/Contexts/Application/Ads/Scripts/ConfigService/AdConfigService.c",
+            "line": 830,
+            "marker": "// ===== AdConfigService :: public void SetAdConfigModels",
+            "build": "0.0.3063 ARMv7",
+            "evidence": "recovered_native_historical_version"
+          },
+          "interpretation": "Giá trị variant được cache/default/Firebase; chưa có experimentID hoặc traffic split.",
+          "next_action": "Cần experimentID, variant, allocation, activation timestamp, consumer effect và đối chứng cùng điều kiện.",
+          "assignment_proof": false,
+          "uplift_proof": false,
+          "matching_basis": [
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/LevelFlow.json#/sources/13"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/LevelFlow.json#/configs/23/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/LevelFlow.json#/configs/24/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/LevelFlow.json#/configs/25/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/LevelFlow.json#/configs/26/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/LevelFlow.json#/configs/28/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/LevelFlow.json#/configs/29/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/LevelFlow.json#/configs/30/key_where"
+            }
+          ]
+        },
+        {
+          "snapshot": "firebase_20260910",
+          "model": "ColorVariant",
+          "key": "",
+          "value": "2",
+          "type": "str",
+          "source": "facts/runtime/decoded/firebase_rc.json",
+          "classification": "config_candidate_not_backend_assignment_proof",
+          "review_id": "MS-SEG-158",
+          "review_classification": "variant_config",
+          "review_status": "missing_experiment_assignment_and_outcome",
+          "consumer": {
+            "source": "com.grandgames.magicsort_Unity_20260909_112501/RecoveredNative/PseudoC/Assembly-CSharp/Modules/Contexts/Application/FirebaseNS/Scripts/FirebaseRemoteConfigResolver.c",
+            "line": 863,
+            "marker": "/* \"ColorVariant\" */",
+            "build": "0.0.3063 ARMv7",
+            "evidence": "recovered_native_historical_version"
+          },
+          "interpretation": "Giá trị variant được cache/default/Firebase; chưa có experimentID hoặc traffic split.",
+          "next_action": "Cần experimentID, variant, allocation, activation timestamp, consumer effect và đối chứng cùng điều kiện.",
+          "assignment_proof": false,
+          "uplift_proof": false,
+          "matching_basis": [
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/LevelFlow.json#/configs/38/key_where"
+            }
+          ]
+        },
+        {
+          "snapshot": "firebase_20260910",
+          "model": "InGameBoosterVariant",
+          "key": "",
+          "value": "0",
+          "type": "str",
+          "source": "facts/runtime/decoded/firebase_rc.json",
+          "classification": "config_candidate_not_backend_assignment_proof",
+          "review_id": "MS-SEG-159",
+          "review_classification": "variant_config",
+          "review_status": "missing_experiment_assignment_and_outcome",
+          "consumer": {
+            "source": "com.grandgames.magicsort_Unity_20260909_112501/RecoveredNative/PseudoC/Assembly-CSharp/Modules/Contexts/Application/Inventory/Scripts/InventoryService.c",
+            "line": 388,
+            "marker": "_InGameBoosterVariant_k__BackingField",
+            "build": "0.0.3063 ARMv7",
+            "evidence": "recovered_native_historical_version"
+          },
+          "interpretation": "Giá trị variant được cache/default/Firebase; chưa có experimentID hoặc traffic split.",
+          "next_action": "Cần experimentID, variant, allocation, activation timestamp, consumer effect và đối chứng cùng điều kiện.",
+          "assignment_proof": false,
+          "uplift_proof": false,
+          "matching_basis": [
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/LevelFlow.json#/configs/38/key_where"
+            }
+          ]
+        },
+        {
+          "snapshot": "firebase_20260910",
+          "model": "LevelEndPopupsAbGroup",
+          "key": "",
+          "value": "0",
+          "type": "str",
+          "source": "facts/runtime/decoded/firebase_rc.json",
+          "classification": "config_candidate_not_backend_assignment_proof",
+          "review_id": "MS-SEG-160",
+          "review_classification": "variant_config",
+          "review_status": "missing_experiment_assignment_and_outcome",
+          "consumer": {
+            "source": "com.grandgames.magicsort_Unity_20260909_112501/RecoveredNative/PseudoC/Assembly-CSharp/Modules/Contexts/Application/FirebaseNS/Scripts/FirebaseRemoteConfigResolver.c",
+            "line": 863,
+            "marker": "/* \"ColorVariant\" */",
+            "build": "0.0.3063 ARMv7",
+            "evidence": "recovered_native_historical_version"
+          },
+          "interpretation": "Giá trị variant được cache/default/Firebase; chưa có experimentID hoặc traffic split.",
+          "next_action": "Cần experimentID, variant, allocation, activation timestamp, consumer effect và đối chứng cùng điều kiện.",
+          "assignment_proof": false,
+          "uplift_proof": false,
+          "matching_basis": [
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/LevelFlow.json#/configs/32/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/LevelFlow.json#/configs/135/key_where"
+            }
+          ]
+        },
+        {
+          "snapshot": "firebase_20260910",
+          "model": "StuckPopupAbGroup",
+          "key": "",
+          "value": "0",
+          "type": "str",
+          "source": "facts/runtime/decoded/firebase_rc.json",
+          "classification": "config_candidate_not_backend_assignment_proof",
+          "review_id": "MS-SEG-220",
+          "review_classification": "variant_config",
+          "review_status": "firebase_key_observed_consumer_unresolved",
+          "consumer": null,
+          "interpretation": "Firebase key có tên AB; chưa tìm được consumer trong phần PseudoC được audit. Không gán vào RootLevelConfigModel theo tên.",
+          "next_action": "Cần experimentID, variant, allocation, activation timestamp, consumer effect và đối chứng cùng điều kiện.",
+          "assignment_proof": false,
+          "uplift_proof": false,
+          "matching_basis": [
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/LevelFlow.json#/configs/137/key_where"
+            }
+          ]
+        }
+      ],
+      "classifications": {
+        "variant_config": 13
+      },
+      "assignment_verified": false,
+      "uplift_verified": false,
+      "note": "No matchingrow does not prove no segmentation/AB. Rewardbucketfalsepositives remain explicitly classified."
+    },
+    "storage_backend_analytics": {
+      "storage_keys": {
+        "entries": 1,
+        "status": "documented_static_contract_runtime_not_verified",
+        "source": "gdd/LevelFlow.json#/storage_keys"
+      },
+      "backend": {
+        "entries": 4,
+        "status": "documented_static_contract_runtime_not_verified",
+        "source": "gdd/LevelFlow.json#/backend"
+      },
+      "analytics": {
+        "entries": 15,
+        "status": "documented_static_contract_runtime_not_verified",
+        "source": "gdd/LevelFlow.json#/analytics"
+      }
+    },
+    "remaining_next_step": {
+      "gap_count": 8,
+      "static_scoped_resolutions": 3,
+      "remaining_count": 5,
+      "all_gap_dispositions": [
+        {
+          "id": "MS-LevelFlow-G001",
+          "feature": "LevelFlow",
+          "source": "gdd/LevelFlow.json#/gaps/0",
+          "original": "Giá trị remote thật do Firebase quyết định lúc chạy; các số ghi trong file này là mặc định đóng gói trong Resources/defaultconfigs/*.json (client default) và có thể bị server ghi đè.",
+          "current_note": "15/11 — resolved_historical_snapshot: Đã có default/cache/Firebase theo snapshot và77fieldplaceholder được nối giá trị exactpath cótype/hash. Không còn chỉ có default; đây là catalog nguồn lịch sử, không xác nhận configeffective của mọi nhánh. Còn lại: Dùngsnapshot_values trongGDD, đối chiếu ledger chỉ vớicase đã thựcthi.",
+          "status": "resolved_historical_snapshot",
+          "review_status": "preserved_resolved_historical_snapshot",
+          "dependency": "local_config_reconciliation",
+          "next_action": "Đã có default/cache/Firebase theo snapshot và77fieldplaceholder được nối giá trị exactpath cótype/hash. Không còn chỉ có default; đây là catalog nguồn lịch sử, không xác nhận configeffective của mọi nhánh. Dùngsnapshot_values trongGDD, đối chiếu ledger chỉ vớicase đã thựcthi.",
+          "conclusion": "Đã có default/cache/Firebase theo snapshot và77fieldplaceholder được nối giá trị exactpath cótype/hash. Không còn chỉ có default; đây là catalog nguồn lịch sử, không xác nhận configeffective của mọi nhánh.",
+          "evidence": [
+            "facts/config_placeholder_patchset_20261115.json",
+            "facts/audit_20261115/config_leaves.json"
+          ],
+          "remaining": "15/11 — resolved_historical_snapshot: Đã có default/cache/Firebase theo snapshot và77fieldplaceholder được nối giá trị exactpath cótype/hash. Không còn chỉ có default; đây là catalog nguồn lịch sử, không xác nhận configeffective của mọi nhánh. Còn lại: Dùngsnapshot_values trongGDD, đối chiếu ledger chỉ vớicase đã thựcthi.",
+          "source_records": [],
+          "reviewed": "2026-11-15",
+          "scope": "question-specific source/observed branch only; no full-UC or production claim",
+          "full_uc_pass": false
+        },
+        {
+          "id": "MS-LevelFlow-G002",
+          "feature": "LevelFlow",
+          "source": "gdd/LevelFlow.json#/gaps/1",
+          "original": "Danh sách chính xác các IReturnToHomeSequenceCommand trong từng cấu hình (regular/daily × win/lose) chỉ suy ra được từ tập class trong Loop/Scripts, chưa đọc được thứ tự chính xác trong ReturnToHomeSequenceService.Initialize (pseudo-C quá dài).",
+          "current_note": "15/11 — resolved_static_code_historical_build: Constructor ReturnToHomeSequenceService dựng 4 danh sách có số phần tử9 regularLose,57 regularWin,2 dailyLose,6 dailyWin; ordered type rows đã lưu tại local_code_gap_results.supporting_tables.return_home_sequences. Đây là queue command count, không phải57 popup đều xuất hiện. Còn lại: Đối chiếu nhánh này trên app0.0.3129 ARM64; chưa là runtime pass.",
+          "status": "resolved_static_code_historical_build",
+          "review_status": "preserved_resolved_static_code_historical_build",
+          "dependency": "core_gameplay_and_levels_last",
+          "next_action": "Constructor ReturnToHomeSequenceService dựng 4 danh sách có số phần tử9 regularLose,57 regularWin,2 dailyLose,6 dailyWin; ordered type rows đã lưu tại local_code_gap_results.supporting_tables.return_home_sequences. Đây là queue command count, không phải57 popup đều xuất hiện. Đối chiếu nhánh này trên app0.0.3129 ARM64; chưa là runtime pass.",
+          "conclusion": "Constructor ReturnToHomeSequenceService dựng 4 danh sách có số phần tử9 regularLose,57 regularWin,2 dailyLose,6 dailyWin; ordered type rows đã lưu tại local_code_gap_results.supporting_tables.return_home_sequences. Đây là queue command count, không phải57 popup đều xuất hiện.",
+          "evidence": [
+            "../com.grandgames.magicsort_Unity_20260909_112501/RecoveredNative/PseudoC/Assembly-CSharp/Modules/Contexts/GamePlay/Loop/Scripts/ReturnToHomeSequenceService.c:1015"
+          ],
+          "reviewed": "2026-11-15",
+          "mode": "file_only_recovered_native_0.0.3063",
+          "finding_id": "MS-CORE-BODY-07",
+          "remaining": "15/11 — resolved_static_code_historical_build: Constructor ReturnToHomeSequenceService dựng 4 danh sách có số phần tử9 regularLose,57 regularWin,2 dailyLose,6 dailyWin; ordered type rows đã lưu tại local_code_gap_results.supporting_tables.return_home_sequences. Đây là queue command count, không phải57 popup đều xuất hiện. Còn lại: Đối chiếu nhánh này trên app0.0.3129 ARM64; chưa là runtime pass."
+        },
+        {
+          "id": "MS-LevelFlow-G003",
+          "feature": "LevelFlow",
+          "source": "gdd/LevelFlow.json#/gaps/2",
+          "original": "Ánh xạ chi tiết PlayOnWithRewardedVariantType → PlayOnBehaviourType trong GetPlayOnBehaviours mới đọc được nhánh AddUndoAndExtraBottle (=3); các nhánh còn lại dùng GetDefaultPlayOnBehaviour theo bảng nhảy chưa giải mã hết.",
+          "current_note": "15/11 — resolved_static_code_historical_build: GetDefaultPlayOnBehaviour: variant0/out-of-range→ExtraBottle0; table variant1..9=[Tiny1,Extra0,Extra0,Tiny1,Tiny1,Tiny1,Tiny1,Undo3,Mega4]. GetPlayOnBehaviours special variant3: watchedCount1→[Undo3],<2→[],>=2→[Undo3,Extra0]. Các variant khác dùng table. Disabled99 default0 trong helper này không chứng minh offer enabled; eligibility nằm caller khác. Còn lại: Đối chiếu nhánh này trên app0.0.3129 ARM64; chưa là runtime pass.",
+          "status": "resolved_static_code_historical_build",
+          "review_status": "preserved_resolved_static_code_historical_build",
+          "dependency": "core_gameplay_and_levels_last",
+          "next_action": "GetDefaultPlayOnBehaviour: variant0/out-of-range→ExtraBottle0; table variant1..9=[Tiny1,Extra0,Extra0,Tiny1,Tiny1,Tiny1,Tiny1,Undo3,Mega4]. GetPlayOnBehaviours special variant3: watchedCount1→[Undo3],<2→[],>=2→[Undo3,Extra0]. Các variant khác dùng table. Disabled99 default0 trong helper này không chứng minh offer enabled; eligibility nằm caller khác. Đối chiếu nhánh này trên app0.0.3129 ARM64; chưa là runtime pass.",
+          "conclusion": "GetDefaultPlayOnBehaviour: variant0/out-of-range→ExtraBottle0; table variant1..9=[Tiny1,Extra0,Extra0,Tiny1,Tiny1,Tiny1,Tiny1,Undo3,Mega4]. GetPlayOnBehaviours special variant3: watchedCount1→[Undo3],<2→[],>=2→[Undo3,Extra0]. Các variant khác dùng table. Disabled99 default0 trong helper này không chứng minh offer enabled; eligibility nằm caller khác.",
+          "evidence": [
+            "../com.grandgames.magicsort_Unity_20260909_112501/RecoveredNative/PseudoC/Assembly-CSharp/Modules/Contexts/GamePlay/PlayOn/Scripts/PlayOnWithRewarded/PlayOnWithRewardedService.c:687",
+            "../com.grandgames.magicsort_Unity_20260909_112501/RecoveredNative/PseudoC/Assembly-CSharp/Modules/Contexts/GamePlay/PlayOn/Scripts/PlayOnWithRewarded/PlayOnWithRewardedService.c:824"
+          ],
+          "reviewed": "2026-11-15",
+          "mode": "file_only_recovered_native_0.0.3063",
+          "finding_id": "MS-CORE-BODY-08",
+          "remaining": "15/11 — resolved_static_code_historical_build: GetDefaultPlayOnBehaviour: variant0/out-of-range→ExtraBottle0; table variant1..9=[Tiny1,Extra0,Extra0,Tiny1,Tiny1,Tiny1,Tiny1,Undo3,Mega4]. GetPlayOnBehaviours special variant3: watchedCount1→[Undo3],<2→[],>=2→[Undo3,Extra0]. Các variant khác dùng table. Disabled99 default0 trong helper này không chứng minh offer enabled; eligibility nằm caller khác. Còn lại: Đối chiếu nhánh này trên app0.0.3129 ARM64; chưa là runtime pass."
+        },
+        {
+          "id": "MS-LevelFlow-G004",
+          "feature": "LevelFlow",
+          "source": "gdd/LevelFlow.json#/gaps/3",
+          "original": "CommandHistoryManager là lớp hạ tầng chung; chưa xác nhận được toàn bộ loại IUndoableCommand mà gameplay đẩy vào.",
+          "current_note": "15/11 — partial_actual_evidence: Ledger/board chứng minhUndo mộtpour vàShuffle chọn/hủy. Còn lại: Thựcthi đúng câu hỏi còn lại trên fixture phù hợp; không nâng một nhánh thànhfullUCpass.",
+          "status": "partial_actual_evidence",
+          "review_status": "preserved_partial_actual_evidence",
+          "dependency": "core_gameplay_and_levels_last",
+          "next_action": "Ledger/board chứng minhUndo mộtpour vàShuffle chọn/hủy. Thựcthi đúng câu hỏi còn lại trên fixture phù hợp; không nâng một nhánh thànhfullUCpass.",
+          "conclusion": "Ledger/board chứng minhUndo mộtpour vàShuffle chọn/hủy.",
+          "evidence": [
+            "facts/review_cases_20261115.json#MS-R15-CORE02",
+            "facts/review_cases_20261115.json#MS-R15-CORE03"
+          ],
+          "remaining": "15/11 — partial_actual_evidence: Ledger/board chứng minhUndo mộtpour vàShuffle chọn/hủy. Còn lại: Thựcthi đúng câu hỏi còn lại trên fixture phù hợp; không nâng một nhánh thànhfullUCpass.",
+          "source_records": [],
+          "reviewed": "2026-11-15",
+          "scope": "question-specific source/observed branch only; no full-UC or production claim",
+          "full_uc_pass": false
+        },
+        {
+          "id": "MS-LevelFlow-G005",
+          "feature": "LevelFlow",
+          "source": "gdd/LevelFlow.json#/gaps/4",
+          "original": "[Runtime 2026-09-10] Config server LIVE đã đọc trực tiếp từ cache máy (không cần request); các hàng 'server live' là giá trị server ghi đè/thêm so với default.",
+          "current_note": "[Runtime 2026-09-10] Config server LIVE đã đọc trực tiếp từ cache máy (không cần request); các hàng 'server live' là giá trị server ghi đè/thêm so với default.",
+          "status": "historical_evidence_annotation_not_test_result",
+          "review_status": "historical_evidence_annotation_not_test_result",
+          "dependency": "historical_note_requires_qualified_use",
+          "next_action": "Ghi chú cache đã đọc tháng9, từ LIVE phải hiểu snapshot lịch sử. Đối chiếu config catalog/source, giữ default/cache/production hiện tại riêng; không coi là fresh fetch15/11.",
+          "remaining": "[Runtime 2026-09-10] Config server LIVE đã đọc trực tiếp từ cache máy (không cần request); các hàng 'server live' là giá trị server ghi đè/thêm so với default."
+        },
+        {
+          "id": "MS-LevelFlow-G006",
+          "feature": "LevelFlow",
+          "source": "gdd/LevelFlow.json#/gaps/5",
+          "original": "[Runtime 2026-09-10] Model server-only playOnMultipleBottlesConfigModel (không có trong Resources/defaultconfigs) đã đọc từ cache live.",
+          "current_note": "[Runtime 2026-09-10] Model server-only playOnMultipleBottlesConfigModel (không có trong Resources/defaultconfigs) đã đọc từ cache live.",
+          "status": "historical_evidence_annotation_not_test_result",
+          "review_status": "historical_evidence_annotation_not_test_result",
+          "dependency": "historical_note_requires_qualified_use",
+          "next_action": "Ghi chú model cache lịch sử đã có; xác minh schema/source và default-path theo đúng build. Server-only không chứng minh không có default ở mọi version.",
+          "remaining": "[Runtime 2026-09-10] Model server-only playOnMultipleBottlesConfigModel (không có trong Resources/defaultconfigs) đã đọc từ cache live."
+        },
+        {
+          "id": "MS-LevelFlow-G007",
+          "feature": "LevelFlow",
+          "source": "gdd/LevelFlow.json#/gaps/6",
+          "original": "[Runtime 2026-09-10] Model server-only preGameConfigModel (không có trong Resources/defaultconfigs) đã đọc từ cache live.",
+          "current_note": "[Runtime 2026-09-10] Model server-only preGameConfigModel (không có trong Resources/defaultconfigs) đã đọc từ cache live.",
+          "status": "historical_evidence_annotation_not_test_result",
+          "review_status": "historical_evidence_annotation_not_test_result",
+          "dependency": "historical_note_requires_qualified_use",
+          "next_action": "Ghi chú model cache lịch sử đã có; xác minh schema/source và default-path theo đúng build. Server-only không chứng minh không có default ở mọi version.",
+          "remaining": "[Runtime 2026-09-10] Model server-only preGameConfigModel (không có trong Resources/defaultconfigs) đã đọc từ cache live."
+        },
+        {
+          "id": "MS-LevelFlow-G008",
+          "feature": "LevelFlow",
+          "source": "gdd/LevelFlow.json#/gaps/7",
+          "original": "[Runtime 2026-09-10] Cờ AB/tinh chỉnh server-only đọc từ Firebase Remote Config (template 3197).",
+          "current_note": "[Runtime 2026-09-10] Cờ AB/tinh chỉnh server-only đọc từ Firebase Remote Config (template 3197).",
+          "status": "historical_evidence_annotation_not_test_result",
+          "review_status": "historical_evidence_annotation_not_test_result",
+          "dependency": "historical_note_requires_qualified_use",
+          "next_action": "Ghi chú Firebase template3197 lịch sử, chưa có experiment assignment/traffic/outcome; dùng bài21 và row classifications, không gọi mọi key là A/B.",
+          "remaining": "[Runtime 2026-09-10] Cờ AB/tinh chỉnh server-only đọc từ Firebase Remote Config (template 3197)."
+        }
+      ],
+      "feature_specific_acceptance_questions": [
+        "Entry/prelevel/ongoing/pause/quit/stuck/PlayOn/win/return sequence",
+        " retries/reward/life cost và board restore"
+      ],
+      "next_steps": [
+        "Ledger/board chứng minhUndo mộtpour vàShuffle chọn/hủy. Thựcthi đúng câu hỏi còn lại trên fixture phù hợp; không nâng một nhánh thànhfullUCpass.",
+        "Ghi chú cache đã đọc tháng9, từ LIVE phải hiểu snapshot lịch sử. Đối chiếu config catalog/source, giữ default/cache/production hiện tại riêng; không coi là fresh fetch15/11.",
+        "Ghi chú model cache lịch sử đã có; xác minh schema/source và default-path theo đúng build. Server-only không chứng minh không có default ở mọi version.",
+        "Ghi chú model cache lịch sử đã có; xác minh schema/source và default-path theo đúng build. Server-only không chứng minh không có default ở mọi version.",
+        "Ghi chú Firebase template3197 lịch sử, chưa có experiment assignment/traffic/outcome; dùng bài21 và row classifications, không gọi mọi key là A/B."
+      ]
+    }
+  },
+  "use_cases": 20,
+  "configs": 138,
+  "new_review_case_count": 4,
+  "reviewed_uc_branch_count": 6,
+  "curated_new_image_count": 16,
+  "segment_ids": [
+    "MS-SEG-001",
+    "MS-SEG-060",
+    "MS-SEG-083",
+    "MS-SEG-084",
+    "MS-SEG-085",
+    "MS-SEG-109",
+    "MS-SEG-110",
+    "MS-SEG-111",
+    "MS-SEG-112",
+    "MS-SEG-158",
+    "MS-SEG-159",
+    "MS-SEG-160",
+    "MS-SEG-220"
+  ],
+  "matching_basis": "explicit_gd_config_map_or_exact_model_token_in_gdd_configs_where_key_sources; rootfieldscoped",
+  "unmatched_segment_status": null,
+  "local_document_repairs": [],
+  "sources": [
+    "features/RegularLevelManager.md",
+    "features/GameStateService.md",
+    "features/PlayOnManager.md",
+    "features/PlayOnWithRewardedService.md",
+    "features/PlayOnWithRewardedDataService.md",
+    "features/MegaShuffleManager.md",
+    "features/CommandHistoryManager.md",
+    "features/ReturnToHomeSequenceService.md",
+    "RecoveredNative/PseudoC/Assembly-CSharp/Modules/Contexts/GamePlay/PlayOn/Scripts/PlayOnManager.c",
+    "RecoveredNative/PseudoC/Assembly-CSharp/Modules/Contexts/GamePlay/PlayOn/Scripts/PlayOnWithRewarded/PlayOnWithRewardedService.c",
+    "RecoveredNative/PseudoC/Assembly-CSharp/Modules/Contexts/GamePlay/Loop/Scripts/Regular/*.c",
+    "UnityExport/.../Assembly-CSharp/Modules/Contexts/GamePlay/Levels/Scripts/LevelState.cs, StuckType.cs, LevelStats.cs",
+    "UnityExport/.../Modules/Contexts/Application/RemoteConfig/Scripts/GameEconomyModel.cs, RootLevelConfigModel.cs",
+    "UnityExport/.../Modules/Contexts/Application/Ads/Scripts/AdConfigModel.cs",
+    "RecoveredNative/strings-by-type.tsv (GrandEventSender, EventSender, LevelStats)"
+  ],
+  "source_hashes": {
+    "gdd_sha256": "cc2ca2bb7ab0eb3a4a46e3e428c7f4c1716910b1849d058033e6eac75ad2cddd",
+    "site_meta_sha256": "6758b596f771d025620dae289f093d7c9fcc3bf0a20e700ceca43c2220e48c84"
+  }
+}

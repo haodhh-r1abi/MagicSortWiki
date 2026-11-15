@@ -1,0 +1,262 @@
+{
+  "id": "MagicPass",
+  "title": "Magic Pass (Battle Pass)",
+  "tagline": "Battle pass theo mùa: thắng level nhặt Key, mở 30 mốc thưởng Free/Paid, kết thúc bằng Bonus Vault coin.",
+  "infobox": [
+    ["Loại", "Pass"],
+    ["Mở khóa", "Level 44 (MagicPassConfigModel.FirstLevelToShow, mặc định client)"],
+    ["Thời lượng", "Theo StartTime → FinishTime của mùa do server gửi"],
+    ["Chu kỳ / lịch", "Từng mùa, EventType = 1 (mặc định client)"],
+    ["Tham gia", "Người chơi đơn (có tương tác team qua ticket quà)"],
+    ["Vật phẩm thu thập", "Key (chìa khoá) nhận khi thắng level"],
+    ["Tiền tệ", "Coin, Undo, Shuffle, Extra Bottle, Limitless Life, gói thẻ Collection"],
+    ["Thưởng chính", "30 mốc thưởng hai nhánh Free/Paid + Bonus Vault 50 bậc × 100 coin"],
+    ["Điều kiện / phụ thuộc", "MagicPassConfigModel.IsEnabled = true, có cache sự kiện; nhánh Paid cần mua Pass qua IAP"],
+    ["Manager", "MagicPassService (kèm MagicPassDataService, MagicPassStateService, MagicPassRemoteService)"]
+  ],
+  "description": [
+    "Magic Pass là battle pass theo mùa: người chơi thắng level để nhặt Key, mỗi mốc đủ Key mở một cặp thưởng Free và Paid.",
+    "Nhánh Free ai cũng nhận được; nhánh Paid chỉ mở khi đã kích hoạt Pass bằng IAP.",
+    "Số Key nhận theo độ khó level: 1 Key với Regular, 3 Key với Hard, 5 Key với Super Hard (mặc định client).",
+    "Bảng mặc định có 30 mốc, ngưỡng Key tăng dần từ 0 lên 60; các mốc 5, 10, 15, 20, 25 là rương nhiều món (CurrencyType 13).",
+    "Sau khi hết mốc thường, Key tiếp tục đổ vào Bonus Vault: 50 bậc, mỗi bậc 20 Key = 100 coin, chỉ lĩnh khi sự kiện kết thúc.",
+    "Kích hoạt Pass kèm quyền lợi thường trực suốt sự kiện: trần mạng lên 8, khung avatar magic_pass_frame, kiểu tên magic_pass_name_style, thêm 1 lượt Play On mỗi level.",
+    "Người mua Pass còn gửi được quà ticket cho đồng đội qua chat team; người nhận lĩnh 50 coin mỗi ticket (mặc định client).",
+    "Mỗi mốc có hai biến thể thưởng: bản thường và bản WithCollection thay một món bằng gói thẻ Collection khi Collection đang chạy.",
+    "Pass còn được chào bán ở popup Refill (hết mạng) và Play On (thua level) qua banner MagicPassOfferView, cùng một dòng riêng trong cửa hàng.",
+    "Sự kiện do server phát (event_id, start/finish time, segment, bảng steps), client cache lại và tự chạy offline."
+  ],
+  "notes": [
+    "Lưu ý: mặc định client IsEnabled = false, EventType = 1, FirstLevelToShow = 44 — server ghi đè toàn bộ.",
+    "Lưu ý: bảng Steps thực tế do server gửi trong MagicPassEventInfoResponse; bảng 30 mốc dưới đây là bản mặc định đóng gói trong app.",
+    "Lưu ý: mốc đầu tiên (Steps[0], KeyCount = 0) có Free = 15 phút Limitless Life, còn nhánh Paid CurrencyType = 0 (không có thưởng).",
+    "Lưu ý: mua Pass sẽ tự ClaimPaidStep cho mọi mốc đã vượt qua trước đó.",
+    "Lưu ý: nếu mua thành công nhưng chưa verify được, lần vào game sau IAPManager phát lại giao dịch và bắn magic_pass_purchased_fallback.",
+    "Lưu ý: hết giờ thì đặc quyền 8 mạng và +1 Play On bị gỡ cùng khung/kiểu tên (UnequipMagicPassProfileFrameAndNameStyle).",
+    "Lưu ý: có thể nhận thưởng offline trước (MarkAsClaimedLocally) rồi mới gửi Claim khi có mạng.",
+    "Lưu ý: ProductId của gói Magic Pass không có trong Resources/IAPProductCatalog.json — giá và id đến từ IAPConfigModel (server).",
+    "Lưu ý: con số 8 mạng suy từ localization MagicPassBuyPopupInfoLives; hằng số thật do GetMagicPassMaxLifeAmount đọc từ config (server).",
+    "Lưu ý: tên gọi phần thưởng trong bảng dịch từ CurrencyType — 1 = coin, 2 = Limitless Life (kèm TimeSpan), 4 = Undo, 5 = Shuffle, 6 = Extra Bottle, 13 = rương (kèm ChestType và danh sách Rewards), 14 = gói thẻ Collection (kèm CollectionPackType); riêng 13 và 14 là (suy luận) từ cấu trúc dữ liệu."
+  ],
+  "how_it_works": [
+    "MagicPassStateService.GetEventState() phân loại trạng thái theo thứ tự Disable → InsufficientLevel → NotIntroduced → NoCachedEvent → InProgress → ClaimedLocally → LocalTimeIsUp → RemoteTimeIsUp.",
+    "Khi ShouldFetchCurrentEvent() đúng, MagicPassRemoteService.GetEventInfo(EventType) trả EventId, StartTime, FinishTime, Segment, IsFinished, IsClaimed, Steps.",
+    "EventId khác cache → StartNewEvent() reset toàn bộ (KeyCount = 0, ClaimedFreeSteps/ClaimedPaidSteps rỗng, IsPassActivated = false) và bắn magic_pass_started với readable_event_id \"mp_{0}_{1:yyyyMMdd}\".",
+    "Lần đầu: TryShowMagicPassTutorialCommand mở MagicPassPopUp (source Force) rồi MagicPassInfoPopUp 3 bước kèm bảng Key Multipliers.",
+    "Thắng level: TryIncreaseProgress(levelDifficulty) tra GetKeyIncreaseCountByLevelDifficulty — Regular 1 Key, Hard 3 Key, SuperHard 5 Key (mặc định).",
+    "AddKey(n) cộng vào MagicPassCacheModel.KeyCount, tính lại step bằng GetStepByKeyCount và cập nhật LastCompletedStep.",
+    "Vượt mốc thì bắn magic_pass_step_completed; về Home, icon lobby chạy hoạt ảnh bay Key và vòng tiến độ theo MagicPassLobbyButtonAnimationConfig.",
+    "Trong MagicPassPopUp, ô Free mở khi step ≤ mốc hiện tại và chưa nằm trong ClaimedFreeSteps; bấm gọi ClaimFreeStep(step).",
+    "Ô Paid chỉ mở khi IsPassActivated() = true; chưa mua thì hiện khoá với tooltip MagicPassTooltipActivate.",
+    "Mỗi lần claim, GetStepReward chọn FreeReward/PaidReward hoặc bản WithCollection tuỳ Collection có đang chạy, rồi RewardService trao với CurrencyEarnReason.MagicPass (41).",
+    "Mua Pass: ActivatePass(source) gọi IAPService.Purchase với IAPOrigin.MagicPass (8), IAPReason.MagicPass (10) và IAPContext suy từ nguồn (Refill → RefillInGame).",
+    "Verify thành công → MarkPassAsActivated(), EquipMagicPassProfileFrameAndNameStyle(), tự claim các mốc Paid đã vượt, và TeamChatService đăng tin khoe cho đồng đội.",
+    "Hết mốc thường: mỗi 20 Key mở thêm một bậc Vault cộng 100 coin, tối đa 50 bậc; bắn magic_pass_bonus_vault_activated rồi _completed.",
+    "Hết giờ: QueueUnclaimedRewards() gom mọi thưởng chưa nhận và coin Vault vào hàng đợi, MarkEventAsFinished(), gỡ khung/kiểu tên và gửi Claim(eventId, eventType).",
+    "Về Home, MagicPassFinishedPopUp trao thưởng gộp (TryMergeReward gộp cùng CurrencyType) và MagicPassVaultRewardPopUp trao coin Vault; nếu bỏ qua popup thì GiveUnclaimedRewardsDirectly()."
+  ],
+  "reward_tables": [
+    {
+      "title": "BẢNG 30 MỐC MẶC ĐỊNH (MagicPassConfigModel.json — Steps)",
+      "columns": ["Mốc", "KeyCount", "Thưởng Free", "Thưởng Paid"],
+      "rows": [
+        ["Mốc 1 (Steps[0])", "0", "15 phút Limitless Life", "Không có (CurrencyType 0)"],
+        ["Mốc 2 (Steps[1])", "1", "1 Undo", "1 Shuffle"],
+        ["Mốc 3 (Steps[2])", "3", "1 Shuffle", "1 Extra Bottle"],
+        ["Mốc 4 (Steps[3])", "3", "30 phút Limitless Life", "100 coin"],
+        ["Mốc 5 (Steps[4])", "5", "50 coin", "30 phút Limitless Life"],
+        ["Mốc 6 (Steps[5])", "5", "Rương (ChestType 14): 1 Shuffle, 100 coin", "Rương (ChestType 15): 2 Undo, 200 coin"],
+        ["Mốc 7 (Steps[6])", "5", "100 coin", "300 coin"],
+        ["Mốc 8 (Steps[7])", "10", "1 Shuffle", "2 Undo"],
+        ["Mốc 9 (Steps[8])", "10", "1 Undo", "1 giờ Limitless Life"],
+        ["Mốc 10 (Steps[9])", "10", "30 phút Limitless Life", "1 Shuffle"],
+        ["Mốc 11 (Steps[10])", "10", "Rương (ChestType 14): 1 Undo, 30 phút Limitless Life", "Rương (ChestType 16): 2 Shuffle, 1 giờ Limitless Life"],
+        ["Mốc 12 (Steps[11])", "15", "150 coin", "400 coin"],
+        ["Mốc 13 (Steps[12])", "15", "1 giờ Limitless Life", "2 giờ Limitless Life"],
+        ["Mốc 14 (Steps[13])", "15", "1 Shuffle", "2 Undo"],
+        ["Mốc 15 (Steps[14])", "15", "2 Undo", "2 Shuffle"],
+        ["Mốc 16 (Steps[15])", "15", "Rương (ChestType 14): 100 coin, 1 giờ Limitless Life", "Rương (ChestType 17): 2 giờ Limitless Life, 1 Extra Bottle"],
+        ["Mốc 17 (Steps[16])", "20", "100 coin", "200 coin"],
+        ["Mốc 18 (Steps[17])", "20", "1 Shuffle", "2 giờ Limitless Life"],
+        ["Mốc 19 (Steps[18])", "20", "1 giờ Limitless Life", "1 Extra Bottle"],
+        ["Mốc 20 (Steps[19])", "20", "100 coin", "300 coin"],
+        ["Mốc 21 (Steps[20])", "20", "Rương (ChestType 14): 1 Shuffle, 2 Undo, 30 phút Limitless Life", "Rương (ChestType 18): 2 Shuffle, 2 Undo, 1 giờ Limitless Life"],
+        ["Mốc 22 (Steps[21])", "25", "1 giờ Limitless Life", "3 giờ Limitless Life"],
+        ["Mốc 23 (Steps[22])", "25", "2 Undo", "400 coin"],
+        ["Mốc 24 (Steps[23])", "30", "2 Shuffle", "3 Undo"],
+        ["Mốc 25 (Steps[24])", "30", "200 coin", "800 coin"],
+        ["Mốc 26 (Steps[25])", "40", "Rương (ChestType 14): 3 giờ Limitless Life, 100 coin", "Rương (ChestType 19): 6 giờ Limitless Life, 200 coin"],
+        ["Mốc 27 (Steps[26])", "40", "3 Undo", "2 Extra Bottle"],
+        ["Mốc 28 (Steps[27])", "50", "300 coin", "600 coin"],
+        ["Mốc 29 (Steps[28])", "50", "2 Shuffle", "3 Shuffle"],
+        ["Mốc 30 (Steps[29])", "60", "1 Extra Bottle", "1000 coin"]
+      ]
+    },
+    {
+      "title": "CÁC MỐC CÓ BIẾN THỂ WithCollection (thay bằng gói thẻ khi Collection đang chạy)",
+      "columns": ["Mốc", "Nhánh Free (WithCollection)", "Nhánh Paid (WithCollection)"],
+      "rows": [
+        ["Mốc 2 (Steps[1])", "1 Undo (giữ nguyên)", "1 gói thẻ Collection loại 2"],
+        ["Mốc 3 (Steps[2])", "1 gói thẻ Collection loại 1", "1 Extra Bottle (giữ nguyên)"],
+        ["Mốc 6 (Steps[5])", "Rương: 1 Shuffle, 1 gói thẻ loại 1", "Rương: 2 Undo, 1 gói thẻ loại 2"],
+        ["Mốc 8 (Steps[7])", "1 gói thẻ Collection loại 2", "1 gói thẻ Collection loại 3"],
+        ["Mốc 13 (Steps[12])", "1 gói thẻ Collection loại 3", "1 gói thẻ Collection loại 4"],
+        ["Mốc 16 (Steps[15])", "Rương: 1 gói thẻ loại 1, 1 giờ Limitless Life", "Rương: 1 gói thẻ loại 3, 2 giờ Limitless Life, 1 Extra Bottle"],
+        ["Mốc 17 (Steps[16])", "100 coin (giữ nguyên)", "1 gói thẻ Collection loại 4"],
+        ["Mốc 21 (Steps[20])", "Rương: 1 gói thẻ loại 2, 2 Undo", "Rương: 1 gói thẻ loại 3, 2 Shuffle, 1 giờ Limitless Life"],
+        ["Mốc 23 (Steps[22])", "1 gói thẻ Collection loại 2", "400 coin (giữ nguyên)"],
+        ["Mốc 26 (Steps[25])", "Rương: 3 giờ Limitless Life, 1 gói thẻ loại 3", "Rương: 6 giờ Limitless Life, 1 gói thẻ loại 4"],
+        ["Mốc 29 (Steps[28])", "1 gói thẻ Collection loại 1", "1 gói thẻ Collection loại 4"]
+      ]
+    },
+    {
+      "title": "BONUS VAULT (mặc định client)",
+      "columns": ["Tham số", "Giá trị", "Ghi chú"],
+      "rows": [
+        ["VaultStepCount", "50 bậc", "Số bậc tối đa"],
+        ["VaultStepKeyCount", "20 Key mỗi bậc", "Key cần cho một bậc"],
+        ["VaultStepCoinAmount", "100 coin mỗi bậc", "Coin cộng vào Vault"],
+        ["Tổng Vault tối đa", "5000 coin (50 × 100)", "(suy luận từ VaultStepCount × VaultStepCoinAmount)"],
+        ["Điều kiện nhận", "Chỉ khi sự kiện kết thúc", "Chưa mua Pass thì Vault khoá (MagicPassBonusVaultInfoLocked)"]
+      ]
+    },
+    {
+      "title": "KEY NHẬN THEO ĐỘ KHÓ LEVEL",
+      "columns": ["Độ khó", "Khoá cấu hình", "Key nhận"],
+      "rows": [
+        ["Regular (0)", "NormalLevelKeyCount", "1 Key"],
+        ["Hard (1)", "HardLevelKeyCount", "3 Key"],
+        ["SuperHard (2)", "SuperHardLevelKeyCount", "5 Key"],
+        ["Khác", "-", "0 Key"]
+      ]
+    },
+    {
+      "title": "ĐẶC QUYỀN KHI KÍCH HOẠT PASS",
+      "columns": ["Quyền lợi", "Giá trị", "Nguồn"],
+      "rows": [
+        ["Trần mạng", "8 mạng thay vì 5", "GetMagicPassMaxLifeAmount, localization MagicPassBuyPopupInfoLives"],
+        ["Khung avatar", "magic_pass_frame", "MagicPassService.GetMagicPassFrameInfo"],
+        ["Kiểu tên", "magic_pass_name_style", "MagicPassService.GetMagicPassNameStyleInfo"],
+        ["Play On", "+1 lượt mỗi level", "MagicPassService.IsPlayOnActive, localization MagicPassOfferPlayOn"],
+        ["Quà cho team", "Ticket quà đăng vào chat team", "MagicPassTeamGotTheMagicPass"],
+        ["Nhánh Paid", "Mở toàn bộ 30 mốc Paid + Bonus Vault", "MagicPassService.IsPaidStepClaimable"]
+      ]
+    },
+    {
+      "title": "TICKET QUÀ TỪ ĐỒNG ĐỘI",
+      "columns": ["Mốc", "Điều kiện", "Phần thưởng"],
+      "rows": [
+        ["Nhận ticket", "Một thành viên team mua Magic Pass, messageId chưa nằm trong ClaimedTickets", "50 coin (TicketClaimReward, mặc định client)"]
+      ]
+    },
+    {
+      "title": "CẤU HÌNH MẶC ĐỊNH (MagicPassConfigModel.json)",
+      "columns": ["Khoá", "Giá trị mặc định", "Ý nghĩa"],
+      "rows": [
+        ["IsEnabled", "false", "Bật/tắt Magic Pass"],
+        ["EventType", "1", "Loại sự kiện gửi lên GetEventInfo/Claim"],
+        ["FirstLevelToShow", "44", "Level tối thiểu để thấy sự kiện"],
+        ["NormalLevelKeyCount", "1", "Key khi thắng level Regular"],
+        ["HardLevelKeyCount", "3", "Key khi thắng level Hard"],
+        ["SuperHardLevelKeyCount", "5", "Key khi thắng level SuperHard"],
+        ["TicketClaimReward", "50", "Coin nhận khi lĩnh ticket từ đồng đội"],
+        ["VaultStepCount", "50", "Số bậc Bonus Vault"],
+        ["VaultStepKeyCount", "20", "Key cho mỗi bậc Vault"],
+        ["VaultStepCoinAmount", "100", "Coin cộng thêm mỗi bậc Vault"],
+        ["Steps[]", "30 mốc", "Bảng mốc mặc định"]
+      ]
+    },
+    {
+      "title": "MÁY TRẠNG THÁI (MagicPassStateType)",
+      "columns": ["Giá trị", "Trạng thái", "Ý nghĩa"],
+      "rows": [
+        ["0", "Disable", "Server tắt tính năng"],
+        ["1", "InsufficientLevel", "Level dưới FirstLevelToShow"],
+        ["2", "NotIntroduced", "Chưa xem giới thiệu"],
+        ["3", "NoCachedEvent", "Chưa có cache sự kiện, icon ẩn"],
+        ["4", "InProgress", "Đang chạy"],
+        ["5", "ClaimedLocally", "Đã nhận offline, chờ gửi Claim"],
+        ["6", "LocalTimeIsUp", "Client tính là hết giờ"],
+        ["7", "RemoteTimeIsUp", "Server báo IsFinished"]
+      ]
+    },
+    {
+      "title": "NGUỒN MỞ POPUP MUA (MagicPassActivationSource)",
+      "columns": ["Giá trị", "Nguồn", "Ghi chú"],
+      "rows": [
+        ["0", "ActivationButton", "Nút Activate trong popup chính"],
+        ["1", "Store", "Dòng Magic Pass trong cửa hàng"],
+        ["2", "Refill", "Banner ở popup hết mạng (IAPContext.RefillInGame)"],
+        ["3", "Stuck", "Banner ở Play On khi thua level"],
+        ["4", "Force", "Mở ép"],
+        ["5", "Debugger", "Công cụ nội bộ"],
+        ["6", "None", "-"]
+      ]
+    }
+  ],
+  "key_numbers": [
+    {"label": "Số mốc mặc định", "value": "30 (Steps[0..29])", "source": "MagicPassConfigModel.json: Steps"},
+    {"label": "Ngưỡng Key mốc đầu và mốc cuối", "value": "0 → 60", "source": "MagicPassConfigModel.json: Steps[0].KeyCount / Steps[29].KeyCount"},
+    {"label": "Key khi thắng level Regular", "value": "1", "source": "MagicPassConfigModel.json: NormalLevelKeyCount"},
+    {"label": "Key khi thắng level Hard", "value": "3", "source": "MagicPassConfigModel.json: HardLevelKeyCount"},
+    {"label": "Key khi thắng level SuperHard", "value": "5", "source": "MagicPassConfigModel.json: SuperHardLevelKeyCount"},
+    {"label": "Số bậc Bonus Vault", "value": "50", "source": "MagicPassConfigModel.json: VaultStepCount"},
+    {"label": "Key mỗi bậc Vault", "value": "20", "source": "MagicPassConfigModel.json: VaultStepKeyCount"},
+    {"label": "Coin mỗi bậc Vault", "value": "100 coin", "source": "MagicPassConfigModel.json: VaultStepCoinAmount"},
+    {"label": "Tổng coin Vault tối đa", "value": "5000 coin (suy luận)", "source": "VaultStepCount × VaultStepCoinAmount"},
+    {"label": "Coin nhận từ ticket đồng đội", "value": "50 coin", "source": "MagicPassConfigModel.json: TicketClaimReward"},
+    {"label": "Level mở khoá", "value": "44", "source": "MagicPassConfigModel.json: FirstLevelToShow"},
+    {"label": "Loại sự kiện", "value": "EventType = 1", "source": "MagicPassConfigModel.json"},
+    {"label": "Bật/tắt mặc định", "value": "IsEnabled = false", "source": "MagicPassConfigModel.json"},
+    {"label": "Trần mạng khi có Pass", "value": "8 (thay vì 5)", "source": "MagicPassService.GetMagicPassMaxLifeAmount"},
+    {"label": "Play On thêm khi có Pass", "value": "+1 mỗi level", "source": "MagicPassService.IsPlayOnActive"},
+    {"label": "Số mốc dạng rương", "value": "5 mốc (Steps[5], [10], [15], [20], [25])", "source": "MagicPassConfigModel.json: Steps[i].ChestType"},
+    {"label": "ChestType của rương Free", "value": "14 ở cả 5 mốc", "source": "MagicPassConfigModel.json: Steps[i].FreeReward.ChestType"},
+    {"label": "ChestType của rương Paid", "value": "15, 16, 17, 18, 19 tăng dần", "source": "MagicPassConfigModel.json: Steps[i].PaidReward.ChestType"},
+    {"label": "Lý do nhận thưởng", "value": "MagicPass = 41, MagicPassFinished = 42, MagicPassTicketClaim = 43", "source": "CurrencyEarnReason"},
+    {"label": "Phân loại giao dịch IAP", "value": "IAPOrigin.MagicPass = 8, IAPReason.MagicPass = 10", "source": "Modules.Contexts.Application.IAP.Scripts"},
+    {"label": "Định dạng readable event id", "value": "\"mp_{0}_{1:yyyyMMdd}\" (fallback \"mp_unknown_data\")", "source": "MagicPassService.GetReadableEventId"},
+    {"label": "Id khung avatar và kiểu tên", "value": "\"magic_pass_frame\" / \"magic_pass_name_style\"", "source": "MagicPassService.GetMagicPassFrameInfo / GetMagicPassNameStyleInfo"},
+    {"label": "Khoá lưu/đồng bộ", "value": "\"MagicPassModel\"", "source": "MagicPassDataService.GetSyncName"},
+    {"label": "Số field cấu hình hoạt ảnh", "value": "MagicPassAnimationConfig 27 field, MagicPassLobbyButtonAnimationConfig 17 field", "source": "Assets/MonoBehaviour"},
+    {"label": "Số tooltip trạng thái ô thưởng", "value": "4", "source": "MagicPassRewardElementView"}
+  ],
+  "config_highlights": [
+    {"key": "MagicPassConfigModel.json: IsEnabled", "value": "false", "meaning": "Bật/tắt Magic Pass (client default, remote config ghi đè)"},
+    {"key": "MagicPassConfigModel.json: EventType", "value": "1", "meaning": "Loại sự kiện gửi lên GetEventInfo/Claim"},
+    {"key": "MagicPassConfigModel.json: FirstLevelToShow", "value": "44", "meaning": "Level tối thiểu để thấy sự kiện"},
+    {"key": "MagicPassConfigModel.json: NormalLevelKeyCount", "value": "1", "meaning": "Key nhận khi thắng level Regular"},
+    {"key": "MagicPassConfigModel.json: HardLevelKeyCount", "value": "3", "meaning": "Key nhận khi thắng level Hard"},
+    {"key": "MagicPassConfigModel.json: SuperHardLevelKeyCount", "value": "5", "meaning": "Key nhận khi thắng level SuperHard"},
+    {"key": "MagicPassConfigModel.json: TicketClaimReward", "value": "50", "meaning": "Số coin nhận khi lĩnh ticket quà từ đồng đội"},
+    {"key": "MagicPassConfigModel.json: VaultStepCount", "value": "50", "meaning": "Số bậc Bonus Vault"},
+    {"key": "MagicPassConfigModel.json: VaultStepKeyCount", "value": "20", "meaning": "Số Key cho mỗi bậc Vault"},
+    {"key": "MagicPassConfigModel.json: VaultStepCoinAmount", "value": "100", "meaning": "Coin cộng thêm mỗi bậc Vault"},
+    {"key": "MagicPassConfigModel.Steps[]", "value": "30 mốc, mỗi mốc có KeyCount, FreeReward, PaidReward, FreeRewardWithCollection, PaidRewardWithCollection", "meaning": "Bảng mốc thưởng"},
+    {"key": "MagicPassConfigModel.IAPConfigModel", "value": "ProductId, ProductType, DollarEquivalent (server)", "meaning": "Sản phẩm IAP kích hoạt Pass"},
+    {"key": "MagicPassConfigModel.IAPConfigModelsSegmented", "value": "Dictionary<string, IAPConfigModel> (server)", "meaning": "Giá theo segment người chơi"},
+    {"key": "MagicPassEventInfoResponse", "value": "EventId, StartTime, FinishTime, Segment, IsFinished, IsClaimed, Steps (server)", "meaning": "Thông tin phiên sự kiện"},
+    {"key": "MagicPassStateType", "value": "Disable=0, InsufficientLevel=1, NotIntroduced=2, NoCachedEvent=3, InProgress=4, ClaimedLocally=5, LocalTimeIsUp=6, RemoteTimeIsUp=7", "meaning": "Máy trạng thái sự kiện"},
+    {"key": "MagicPassActivationSource", "value": "ActivationButton=0, Store=1, Refill=2, Stuck=3, Force=4, Debugger=5, None=6", "meaning": "Nguồn mở popup mua"},
+    {"key": "MagicPassPopUpImpressionSource / MagicPassInfoPopUpImpressionSource", "value": "LobbyButton=0, Force=1 / InfoButton=0, ProgressBar=1, Force=2", "meaning": "Nguồn mở popup cho analytics"},
+    {"key": "CurrencyEarnReason", "value": "MagicPass=41, MagicPassFinished=42, MagicPassTicketClaim=43", "meaning": "Lý do nhận thưởng ghi vào analytics 'earned'"},
+    {"key": "IAPOrigin.MagicPass / IAPReason.MagicPass", "value": "8 / 10", "meaning": "Phân loại giao dịch IAP"},
+    {"key": "ProfileFrameInfo id / ProfileNameStyleInfo id", "value": "\"magic_pass_frame\" / \"magic_pass_name_style\"", "meaning": "Khung avatar và kiểu tên tặng kèm Pass"},
+    {"key": "readable event id format", "value": "\"mp_{0}_{1:yyyyMMdd}\" (fallback \"mp_unknown_data\")", "meaning": "Id dễ đọc cho analytics"},
+    {"key": "MagicPassRewardElementView.localization_*", "value": "\"MagicPassTooltipAlreadyCollected\", \"MagicPassTooltipCollectMore\", \"MagicPassTooltipCollectMorePaid\", \"MagicPassTooltipActivate\"", "meaning": "4 tooltip trạng thái ô thưởng"},
+    {"key": "MagicPassBuyPopUp.localization_finished_term", "value": "\"MagicPassIsFinished\"", "meaning": "Text khi bấm mua nhưng sự kiện đã kết thúc"},
+    {"key": "MagicPassRewardsViewAdapter view id", "value": "header 0, reward 1, vault 2", "meaning": "Id loại view trong danh sách mốc"},
+    {"key": "MagicPassCacheModel", "value": "KeyCount, LastSeenKeyCount, LastSeenLobbyButtonKeyCount, LastCompletedStep, ClaimedFreeSteps, ClaimedPaidSteps, ClaimedTickets, Steps, IsPassActivated, IsIntroduced, IsFinished, IsClaimed, IsClaimedLocally, IsVaultClaimed", "meaning": "Toàn bộ trạng thái mùa hiện tại"},
+    {"key": "MagicPassModel.IsEventIntroducedEverInLifeTime", "value": "bool (client)", "meaning": "Đã từng xem Magic Pass lần nào chưa"},
+    {"key": "MagicPassAnimationConfig / MagicPassLobbyButtonAnimationConfig", "value": "27 field / 17 field", "meaning": "Cấu hình hoạt ảnh popup và icon lobby"},
+    {"key": "Các loại tiền tệ xuất hiện trong thưởng", "value": "coin, life, life_in_seconds, additional_life_inventory, undo, shuffle, extra_bottle, duck_x2_in_seconds, merge_energy, collection_pack_1..5", "meaning": "Danh mục ghi trong analytics 'earned'"}
+  ],
+  "tips": [
+    "Cân bằng nhánh Paid rõ ràng gấp 2–3 lần nhánh Free ở các mốc coin (100 vs 300, 200 vs 800, 300 vs 600).",
+    "Rương Paid nâng ChestType dần 15 → 19 để tạo cảm giác phần thưởng ngày càng lớn.",
+    "Bonus Vault là cần câu dài hạn: 5000 coin chỉ trả một lần khi sự kiện kết thúc, giữ chân người chơi tới phút chót.",
+    "Chào bán ở đúng hai điểm đau — hết mạng và thua level — với thông điệp riêng cho từng ngữ cảnh.",
+    "Ticket quà cho đồng đội biến việc mua Pass thành hành vi xã hội, tăng áp lực nhóm."
+  ],
+  "categories": ["Pass", "Offer/IAP", "Live-ops", "Tiến trình", "Xã hội"]
+}

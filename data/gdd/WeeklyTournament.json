@@ -1,0 +1,1535 @@
+{
+  "id": "WeeklyTournament",
+  "name": "Giải đấu tuần (Weekly)",
+  "category": "Event",
+  "managers": [
+    "Modules.Contexts.Home.WeeklyTournament.Scripts.WeeklyTournamentService",
+    "Modules.Contexts.Home.WeeklyTournament.Scripts.WeeklyTournamentDataService",
+    "Modules.Contexts.Home.WeeklyTournament.Scripts.WeeklyTournamentStateService",
+    "Modules.Contexts.Home.WeeklyTournament.Scripts.WeeklyTournamentRemoteService",
+    "Modules.Contexts.Home.WeeklyTournament.Scripts.WeeklyTournamentConfigModel"
+  ],
+  "summary": "Weekly Tournament là bảng xếp hạng thi đua theo tuần, chạy liên tục và tự động lặp lại. Mỗi lần thắng một level người chơi được +1 điểm (score) vào bảng xếp hạng tuần của mình; bảng gồm cả người thật lẫn bot (WeeklyLeaderBoardPlayer.IsBot). Khi tuần kết thúc, người chơi mở bảng để xem kết quả và nhận thưởng coin theo hạng: hạng 1 = 1000, hạng 2 = 500, hạng 3 = 250 (mặc định client); từ hạng 4 trở đi không có thưởng. Nhận thưởng đồng thời là hành động 'claim' để backend cấp giải đấu tuần mới (ClaimRewardRequestAndGetNewWeeklyTournament trả luôn bảng mới). Người vô địch (rank 1) được cộng WinCount — số cúp hiển thị trên hồ sơ. Đây là feature social/retention nền, mở rất sớm (level 40) và bật mặc định.",
+  "unlock": "WeeklyTournamentStateService.IsUnlocked()/IsVisible(): WeeklyTournamentConfigModel.IsTournamentEnable == true && level người chơi >= FirstLevelToShow. Client default: IsTournamentEnable = true, FirstLevelToShow = 40 (Resources/defaultconfigs/WeeklyTournamentConfigModel.json). Nếu chưa đủ level → WeeklyTournamentStateType.InsufficientLevel(3); nếu tắt → Disable(2); nếu chưa có bảng cache → NoCachedTournament(4).",
+  "entry_points": [
+    "Nút Leaderboard / cúp ở lobby (WeeklyTournamentLeaderboardController)",
+    "WeeklyNewFeatureAlertView — highlight lần đầu mở khóa (ShouldShowNewFeatureAlertView)",
+    "WeeklyTournamentHomeWelcomingCommand — chèn vào chuỗi welcome khi vào Home",
+    "Tự mở bảng kết quả khi về lobby (ShouldOpenAutomaticallyOnLobbyReturnOnResult) hoặc khi mở app (ShouldOpenAutomaticallyOnSessionStartOnResult)",
+    "WeeklyTournamentInfoPopup — nút info giải thích luật",
+    "Local notification WeeklyTournamentEndNotificationSo (Id 1124) khi giải kết thúc"
+  ],
+  "flow": "Initialize/InitializeData → nếu StateService.ShouldSendGetLeaderboardRequest() thì SendGetLeaderboardRequest() gọi WeeklyTournamentRemoteService.GetLeaderboard(progress) (hoặc GetLeaderboardWithFlatBuffer) tới getWeeklyLeaderboardUrl /v1/get-weekly-leaderboard. Response WeeklyGetLeaderboardResponse{tournamentID, Players[], startTime, finishTime, isClaimed, isFinished}. CacheLeaderboardResponse lưu vào WeeklyTournamentModel.CachedLeaderboardResponse; ManipulateLeaderboardResponse + TryHandleNotSyncedScoreAndManipulateResponse trộn điểm chưa kịp đồng bộ của client vào bảng để UI không nhảy số. Trong phiên chơi: WinState gọi WeeklyTournamentService.TryIncreaseScore(); CanIncreaseScore() yêu cầu state == InProgress(0); IncreaseScoreAndManipulateCachedLeaderboard() tăng Score và sắp xếp lại bảng cache ngay tại client (optimistic), phát WeeklyTournamentLeaderboardDataFetchedSignal. SendSetScoreRequest() đẩy điểm lên setWeeklyScoreUrl /v1/set-weekly-tournament-points bằng SetWeeklyRequest{progress, points, tournament_id}. IntervalUpdate + SecondTimer đếm ngược GetRemainingSeconds()/GetEndDate() từ finishTime. Khi hết giờ hoặc server báo isFinished, GetLeaderboardState() trả Result(1) (hoặc các state lệch NotFinishedAtBackendResponseButTimeIsUp(5) / FinishedAtBackendResponseButTimeIsNotUp(6)); TrySendTournamentFinishEvent gửi analytics weekly_tournament_finished. Người chơi mở bảng → TryGetTournamentReward(out rewards) tạo RewardModel{CurrencyType=Coin(1), Amount=GetRewardAmountByRank(rank)} → ClaimRewardRequestAndGetNewWeeklyTournament() gọi claimWeeklyLeaderboardUrl /v1/claim-weekly-tournament, CacheLeaderBoardClaimResponse ghi bảng mới, ResetScore()/OnNewTournamentStarted() đặt Score=0, LastSeenRank=-1 và đăng ký notification kết thúc giải mới. TryIncreaseWinCount(rank) chỉ cộng WinCount khi rank == 1. State cuối ResultIntroduced(7) sau OnResultShowed().",
+  "use_cases": [
+    {
+      "id": "UC-01",
+      "title": "Mở khóa và hiện bảng xếp hạng tuần",
+      "actor": "System",
+      "trigger": "Vào lobby",
+      "precondition": "RemoteConfigs đã tải",
+      "steps": [
+        "WeeklyTournamentStateService.GetConfig() lấy WeeklyTournamentConfigModel",
+        "IsUnlocked(): IsTournamentEnable && level >= FirstLevelToShow",
+        "IsVisible() quyết định hiển thị icon; IsNotIntroducedAndVisible() cho lần đầu",
+        "ShouldShowNewFeatureAlertView() bật WeeklyNewFeatureAlertView"
+      ],
+      "result": "Icon cúp xuất hiện ở lobby; MarkWeeklyIntroduced() sau khi người chơi xem",
+      "rules": "Client default: IsTournamentEnable=true, FirstLevelToShow=40",
+      "evidence": "WeeklyTournamentStateService.IsUnlocked; WeeklyTournamentStateService.IsVisible; WeeklyTournamentStateService.ShouldShowNewFeatureAlertView; WeeklyTournamentService.MarkWeeklyIntroduced; WeeklyTournamentDataService.IsWeeklyIntroduced"
+    },
+    {
+      "id": "UC-02",
+      "title": "Tải bảng xếp hạng từ server",
+      "actor": "Server",
+      "trigger": "InitializeData / IntervalUpdate / sau khi login trễ (ILateLoginService)",
+      "precondition": "ShouldSendGetLeaderboardRequest() == true",
+      "steps": [
+        "WeeklyTournamentService.SendGetLeaderboardRequest()",
+        "WeeklyTournamentRemoteService.GetLeaderboard(progress) → getWeeklyLeaderboardUrl (/v1/get-weekly-leaderboard); biến thể nhị phân GetLeaderboardWithFlatBuffer dùng schema magicsort.schemas.v1.liveops.weekly_leaderboard.GetWeeklyLeaderboardResponse",
+        "CacheLeaderboardResponse(response) → WeeklyTournamentDataService.CacheLeaderboardResponse",
+        "ManipulateLeaderboardResponse + TryHandleNotSyncedScoreAndManipulateResponse ghép điểm local chưa sync",
+        "OnCachedLeaderboardChanged phát WeeklyTournamentLeaderboardDataFetchedSignal"
+      ],
+      "result": "WeeklyTournamentModel.CachedLeaderboardResponse có tournamentID, Players, startTime, finishTime, isClaimed, isFinished",
+      "rules": "Bảng gồm cả bot (WeeklyLeaderBoardPlayer.IsBot); người chơi được đánh dấu IsMe",
+      "evidence": "WeeklyTournamentService.SendGetLeaderboardRequest; WeeklyTournamentRemoteService.GetLeaderboard; WeeklyTournamentRemoteService.GetLeaderboardWithFlatBuffer; WeeklyTournamentService.CacheLeaderboardResponse; WeeklyTournamentService.ManipulateLeaderboardResponse; WeeklyTournamentService.OnCachedLeaderboardChanged"
+    },
+    {
+      "id": "UC-03",
+      "title": "Thắng level → +1 điểm giải tuần",
+      "actor": "Player",
+      "trigger": "Hoàn thành một level (WinState)",
+      "precondition": "CanIncreaseScore(): WeeklyTournamentStateService state == InProgress(0)",
+      "steps": [
+        "WinState gọi WeeklyTournamentService.TryIncreaseScore()",
+        "IncreaseScoreAndManipulateCachedLeaderboard(): WeeklyTournamentDataService.SetScore(score+1) và sắp lại thứ hạng trong bảng cache",
+        "FindPlayer(players) tìm entry IsMe để cập nhật Score/Rank",
+        "MarkDataForLateUpdate → lưu ở LateUpdate"
+      ],
+      "result": "Bảng xếp hạng trong UI cập nhật ngay, thứ hạng người chơi có thể nhảy lên",
+      "rules": "Mỗi level thắng = 1 điểm. Thua level KHÔNG trừ điểm (không có hàm giảm Score).",
+      "evidence": "WeeklyTournamentService.TryIncreaseScore; WeeklyTournamentService.CanIncreaseScore; WeeklyTournamentService.IncreaseScoreAndManipulateCachedLeaderboard; WeeklyTournamentDataService.SetScore; WeeklyTournamentService.FindPlayer"
+    },
+    {
+      "id": "UC-04",
+      "title": "Đẩy điểm lên server",
+      "actor": "System",
+      "trigger": "Sau khi tăng điểm / theo nhịp IntervalUpdate",
+      "precondition": "Có tournamentId hợp lệ",
+      "steps": [
+        "WeeklyTournamentService.SendSetScoreRequest()",
+        "WeeklyTournamentRemoteService.SetScore(score, playerProgress, tournamentId) → setWeeklyScoreUrl (/v1/set-weekly-tournament-points)",
+        "Payload SetWeeklyRequest{progress, points, tournament_id}; response SetWeeklyResponse{statusCode}"
+      ],
+      "result": "Điểm chính thức trên server; nếu lỗi thì điểm vẫn giữ local và được ghép lại lần fetch sau",
+      "rules": "TryHandleNotSyncedScoreAndManipulateResponse xử lý trường hợp response server có điểm thấp hơn local",
+      "evidence": "WeeklyTournamentService.SendSetScoreRequest; WeeklyTournamentRemoteService.SetScore; WeeklyTournamentService.TryHandleNotSyncedScoreAndManipulateResponse"
+    },
+    {
+      "id": "UC-05",
+      "title": "Đếm ngược thời gian còn lại của giải",
+      "actor": "System",
+      "trigger": "Mỗi giây (SecondTimer) khi mở bảng",
+      "precondition": "State InProgress",
+      "steps": [
+        "WeeklyTournamentService.GetRemainingSeconds() = finishTime − thời gian hiện tại",
+        "GetEndDate() / GetStartTimeAsUnix() cho UI",
+        "WeeklyTournamentLeaderboardTimer hiển thị",
+        "WeeklyTournamentStateService.ShouldHideLeaderboardTimer() ẩn đồng hồ ở trạng thái Result"
+      ],
+      "result": "Người chơi thấy thời gian còn lại; hết giờ → IsLocalTimeUp()",
+      "rules": "-",
+      "evidence": "WeeklyTournamentService.GetRemainingSeconds; WeeklyTournamentService.GetEndDate; WeeklyTournamentService.GetStartTimeAsUnix; WeeklyTournamentStateService.ShouldHideLeaderboardTimer; WeeklyTournamentStateService.IsLocalTimeUp"
+    },
+    {
+      "id": "UC-06",
+      "title": "Giải kết thúc → chuyển sang trạng thái Result",
+      "actor": "System",
+      "trigger": "Hết giờ hoặc server trả isFinished = true",
+      "precondition": "Có bảng cache",
+      "steps": [
+        "WeeklyTournamentStateService.GetLeaderboardState() so sánh isFinished (server) với IsLocalTimeUp (client)",
+        "Trả về Result(1), hoặc NotFinishedAtBackendResponseButTimeIsUp(5) / FinishedAtBackendResponseButTimeIsNotUp(6) khi lệch",
+        "UpdateLeaderboardState() phát WeeklyTournamentLeaderboardStateChangedSignal",
+        "TrySendTournamentFinishEvent(responseData) gửi analytics weekly_tournament_finished (chỉ khi state == 5)"
+      ],
+      "result": "UI đổi từ WeeklyTournamentInProgressView sang WeeklyTournamentInResultView",
+      "rules": "Hai state lệch 5/6 dùng để chống chênh giờ client-server",
+      "evidence": "WeeklyTournamentStateService.GetLeaderboardState; WeeklyTournamentStateService.UpdateLeaderboardState; WeeklyTournamentStateService.IsResultState; WeeklyTournamentService.TrySendTournamentFinishEvent"
+    },
+    {
+      "id": "UC-07",
+      "title": "Tự động mở bảng kết quả",
+      "actor": "System",
+      "trigger": "Về lobby sau level hoặc mở app",
+      "precondition": "State là Result và chưa introduce kết quả",
+      "steps": [
+        "WeeklyTournamentStateService.ShouldOpenAutomaticallyOnLobbyReturn() đọc ShouldOpenAutomaticallyOnLobbyReturnOnResult",
+        "ShouldOpenAutomaticallyOnSessionStart() đọc ShouldOpenAutomaticallyOnSessionStartOnResult",
+        "IsResultStateNotIntroduced() đảm bảo chỉ mở 1 lần",
+        "Mở WeeklyTournamentInResultView"
+      ],
+      "result": "Người chơi luôn thấy kết quả tuần trước, không bỏ lỡ thưởng",
+      "rules": "Client default: cả hai cờ = true",
+      "evidence": "WeeklyTournamentStateService.ShouldOpenAutomaticallyOnLobbyReturn; WeeklyTournamentStateService.ShouldOpenAutomaticallyOnSessionStart; WeeklyTournamentStateService.IsResultStateNotIntroduced; WeeklyTournamentService.OnResultShowed"
+    },
+    {
+      "id": "UC-08",
+      "title": "Nhận thưởng theo hạng và bắt đầu giải mới",
+      "actor": "Player",
+      "trigger": "Bấm Claim ở bảng kết quả",
+      "precondition": "State Result, isClaimed == false",
+      "steps": [
+        "WeeklyTournamentService.TryGetTournamentReward(out rewards): GetRewardAmountByRank(rank) → nếu > 0 tạo RewardModel{CurrencyType = 1 (Coin), Amount}",
+        "ClaimRewardRequestAndGetNewWeeklyTournament() gọi WeeklyTournamentRemoteService.ClaimWeeklyLeaderboard(progress) tới claimWeeklyLeaderboardUrl (/v1/claim-weekly-tournament), payload WeeklyLeaderboardClaimRequest{Progress}",
+        "CacheLeaderBoardClaimResponse(claimResponse) ghi luôn bảng của giải MỚI (WeeklyLeaderboardClaimResponse có cùng cấu trúc tournamentID/Players/startTime/finishTime)",
+        "TryIncreaseWinCount(rank): chỉ khi rank == 1 mới WeeklyTournamentDataService.IncreaseWinCount()",
+        "ResetScore() + OnNewTournamentStarted()"
+      ],
+      "result": "Coin vào túi; WinCount (số cúp) tăng nếu vô địch; bảng mới bắt đầu với Score = 0, LastSeenRank = -1",
+      "rules": "GetRewardAmountByRank: rank 1 → FirstRankCoinRewardAmount (1000), rank 2 → SecondRankCoinRewardAmount (500), rank 3 → ThirdRankCoinRewardAmount (250), khác → return 0",
+      "evidence": "WeeklyTournamentService.TryGetTournamentReward; WeeklyTournamentService.GetRewardAmountByRank; WeeklyTournamentService.ClaimRewardRequestAndGetNewWeeklyTournament; WeeklyTournamentService.CacheLeaderBoardClaimResponse; WeeklyTournamentService.TryIncreaseWinCount; WeeklyTournamentDataService.IncreaseWinCount"
+    },
+    {
+      "id": "UC-09",
+      "title": "Bắt đầu giải mới và đặt lịch nhắc",
+      "actor": "System",
+      "trigger": "Sau claim hoặc khi server trả tournamentID khác",
+      "precondition": "-",
+      "steps": [
+        "WeeklyTournamentService.ResetScore() đặt Score = 0",
+        "OnNewTournamentStarted(): LastSeenRank = -1, đánh dấu dirty để lưu",
+        "Huỷ notification cũ theo Id rồi tạo GameNotification mới: set_Title/set_Body/set_Id từ WeeklyTournamentEndNotificationSo (Id 1124), body thay chuỗi ' NEWLINE ' bằng Environment.NewLine",
+        "Đặt lịch bắn vào thời điểm kết thúc giải mới"
+      ],
+      "result": "Người chơi được nhắc 'Weekly Tournament Ended! Check your final ranking and rewards now!'",
+      "rules": "Chuỗi ' NEWLINE ' là placeholder xuống dòng trong asset text",
+      "evidence": "WeeklyTournamentService.ResetScore; WeeklyTournamentService.OnNewTournamentStarted; NotificationSamples.GameNotification.set_Title; NotificationSamples.GameNotification.set_Body; NotificationSamples.GameNotification.set_Id"
+    },
+    {
+      "id": "UC-10",
+      "title": "Hiển thị huy chương và thứ hạng người chơi",
+      "actor": "Player",
+      "trigger": "Mở bảng xếp hạng",
+      "precondition": "Có dữ liệu bảng",
+      "steps": [
+        "WeeklyTournamentService.GetLeaderboardViewModels() dựng WeeklyTournamentLeaderboardPlayerViewModel từ WeeklyLeaderBoardPlayer (Nickname, Score, PublicID, Rank, IsMe, IsBot, ImageUrl, ImageID, TokenID, FrameID, NameStyle, TeamName)",
+        "ProfileSpriteCacheService tải avatar theo ImageUrl/ImageID",
+        "LeaderboardMedalType gán Golden(1)/Silver(2)/Bronze(3) cho top 3, None(0) cho phần còn lại",
+        "WeeklyTournamentLeaderboardViewAdapter + WeeklyTournamentLeaderboardViewFactory dựng scroll list",
+        "WeeklyTournamentLeaderboardDegreeElementView vẽ vạch phân hạng thưởng"
+      ],
+      "result": "Danh sách xếp hạng có avatar, khung, tên đội, huy chương",
+      "rules": "IsLeaderboardEntitySelectable() quyết định có bấm vào người chơi khác để xem profile hay không",
+      "evidence": "WeeklyTournamentService.GetLeaderboardViewModels; WeeklyTournamentService.GetRank; WeeklyTournamentStateService.IsLeaderboardEntitySelectable; WeeklyTournamentLeaderboardViewFactory"
+    },
+    {
+      "id": "UC-11",
+      "title": "Chấm đỏ khi thứ hạng thay đổi",
+      "actor": "System",
+      "trigger": "Bảng được fetch lại và hạng khác lần xem trước",
+      "precondition": "Đã từng xem bảng",
+      "steps": [
+        "WeeklyTournamentDataService.SetLastFetchedRank(rank) khi nhận response",
+        "DidUserRankChange() so LastSeenRank với LastFetchedRank",
+        "Khi mở bảng: SetWeeklyTournamentSeenByUser() / OnWeeklyTournamentSeenByUser() → SetLastSeenRank(rank), phát WeeklyTournamentSeenByUserSignal"
+      ],
+      "result": "Icon lobby có chấm đỏ khi tụt/lên hạng",
+      "rules": "-",
+      "evidence": "WeeklyTournamentDataService.SetLastFetchedRank; WeeklyTournamentDataService.DidUserRankChange; WeeklyTournamentDataService.SetLastSeenRank; WeeklyTournamentService.SetWeeklyTournamentSeenByUser; WeeklyTournamentService.OnWeeklyTournamentSeenByUser"
+    },
+    {
+      "id": "UC-12",
+      "title": "Đồng bộ dữ liệu giải tuần qua sync",
+      "actor": "Server",
+      "trigger": "Sync định kỳ / đổi thiết bị",
+      "precondition": "ISyncable",
+      "steps": [
+        "WeeklyTournamentDataService.GetSyncName() = 'WeeklyTournamentSyncModel'",
+        "SerializeModelForSync() gửi WeeklyTournamentSyncModel (tập con của WeeklyTournamentModel)",
+        "OverwriteModelFromSync(data) khi server mới hơn; DataSynced() reset cờ dirty"
+      ],
+      "result": "WinCount, Score, trạng thái introduced giữ nguyên khi đổi máy",
+      "rules": "CachedLeaderboardResponse là dữ liệu tạm, có thể fetch lại",
+      "evidence": "WeeklyTournamentDataService.GetSyncName; WeeklyTournamentDataService.SerializeModelForSync; WeeklyTournamentDataService.OverwriteModelFromSync; WeeklyTournamentDataService.DataSynced"
+    },
+    {
+      "id": "UC-13",
+      "title": "Dữ liệu hỏng hoặc không có bảng (offline / lỗi)",
+      "actor": "System",
+      "trigger": "GetLeaderboard thất bại hoặc cache null",
+      "precondition": "-",
+      "steps": [
+        "GetLeaderboardState() trả NoCachedTournament(4)",
+        "WeeklyTournamentStateService.OnDataCorrupted() xử lý khi dữ liệu không hợp lệ",
+        "WeeklyTournamentService.DeleteCachedLeaderboard() xoá cache hỏng",
+        "IntervalUpdate thử fetch lại"
+      ],
+      "result": "Icon ẩn / bảng trống thay vì crash; điểm local vẫn tiếp tục tích và gửi khi có mạng",
+      "rules": "DeleteData() (IDeletable) xoá toàn bộ khi reset tài khoản",
+      "evidence": "WeeklyTournamentStateService.OnDataCorrupted; WeeklyTournamentService.DeleteCachedLeaderboard; WeeklyTournamentService.DeleteData; WeeklyTournamentDataService.DeleteData"
+    },
+    {
+      "id": "UC-14",
+      "title": "Cung cấp trạng thái cho sự kiện trong màn chơi",
+      "actor": "System",
+      "trigger": "Level UI cần biết trạng thái liveops",
+      "precondition": "-",
+      "steps": [
+        "WeeklyTournamentService.GetLiveOpsStateForLevelEvent() ủy quyền cho WeeklyTournamentStateService.GetLiveOpsStateForLevelEvent()",
+        "Trả về giá trị WeeklyTournamentStateType để gắn vào event analytics của level"
+      ],
+      "result": "Analytics level có cột trạng thái giải tuần",
+      "rules": "-",
+      "evidence": "WeeklyTournamentService.GetLiveOpsStateForLevelEvent; WeeklyTournamentStateService.GetLiveOpsStateForLevelEvent"
+    }
+  ],
+  "configs": [
+    {
+      "source": "json default",
+      "key": "IsTournamentEnable",
+      "type": "bool",
+      "value": "true",
+      "meaning": "Bật giải tuần",
+      "where": "Resources/defaultconfigs/WeeklyTournamentConfigModel.json"
+    },
+    {
+      "source": "json default",
+      "key": "FirstLevelToShow",
+      "type": "int",
+      "value": "40",
+      "meaning": "Level tối thiểu để thấy bảng xếp hạng tuần",
+      "where": "WeeklyTournamentConfigModel.json"
+    },
+    {
+      "source": "json default",
+      "key": "ShouldOpenAutomaticallyOnLobbyReturnOnResult",
+      "type": "bool",
+      "value": "true",
+      "meaning": "Tự mở bảng kết quả khi về lobby",
+      "where": "WeeklyTournamentConfigModel.json"
+    },
+    {
+      "source": "json default",
+      "key": "ShouldOpenAutomaticallyOnSessionStartOnResult",
+      "type": "bool",
+      "value": "true",
+      "meaning": "Tự mở bảng kết quả khi mở app",
+      "where": "WeeklyTournamentConfigModel.json"
+    },
+    {
+      "source": "json default",
+      "key": "Rewards.FirstRankCoinRewardAmount",
+      "type": "int",
+      "value": "1000",
+      "meaning": "Coin cho hạng 1",
+      "where": "WeeklyTournamentConfigModel.json / WeeklyTournamentRewards"
+    },
+    {
+      "source": "json default",
+      "key": "Rewards.SecondRankCoinRewardAmount",
+      "type": "int",
+      "value": "500",
+      "meaning": "Coin cho hạng 2",
+      "where": "WeeklyTournamentConfigModel.json"
+    },
+    {
+      "source": "json default",
+      "key": "Rewards.ThirdRankCoinRewardAmount",
+      "type": "int",
+      "value": "250",
+      "meaning": "Coin cho hạng 3",
+      "where": "WeeklyTournamentConfigModel.json"
+    },
+    {
+      "source": "code const",
+      "key": "Reward CurrencyType",
+      "type": "enum",
+      "value": "1 (Coin)",
+      "meaning": "Giải tuần chỉ trả coin",
+      "where": "WeeklyTournamentService.TryGetTournamentReward (pseudo-C `obj._CurrencyType = 1;`)"
+    },
+    {
+      "source": "code const",
+      "key": "Điều kiện tăng WinCount",
+      "type": "int",
+      "value": "rank == 1",
+      "meaning": "Chỉ nhà vô địch mới được +1 cúp",
+      "where": "WeeklyTournamentService.TryIncreaseWinCount (pseudo-C `if (rank != 1)` thoát sớm)"
+    },
+    {
+      "source": "code enum",
+      "key": "WeeklyTournamentStateType",
+      "type": "enum",
+      "value": "InProgress=0, Result=1, Disable=2, InsufficientLevel=3, NoCachedTournament=4, NotFinishedAtBackendResponseButTimeIsUp=5, FinishedAtBackendResponseButTimeIsNotUp=6, ResultIntroduced=7",
+      "meaning": "Trạng thái giải",
+      "where": "dump.cs TypeDefIndex 1822"
+    },
+    {
+      "source": "code enum",
+      "key": "LeaderboardMedalType",
+      "type": "enum",
+      "value": "None=0, Golden=1, Silver=2, Bronze=3",
+      "meaning": "Huy chương top 3",
+      "where": "dump.cs TypeDefIndex 1840"
+    },
+    {
+      "source": "server info",
+      "key": "WeeklyGetLeaderboardResponse",
+      "type": "object",
+      "value": "tournamentID, Players[], startTime, finishTime, isClaimed, isFinished",
+      "meaning": "Bảng xếp hạng hiện tại",
+      "where": "dump.cs TypeDefIndex 1805"
+    },
+    {
+      "source": "server info",
+      "key": "WeeklyLeaderBoardPlayer",
+      "type": "object",
+      "value": "Nickname, Score, PublicID, Rank, IsMe, IsBot, ImageUrl, ImageID, TokenID, FrameID, NameStyle, TeamName",
+      "meaning": "Một dòng trong bảng",
+      "where": "dump.cs TypeDefIndex 1806"
+    },
+    {
+      "source": "server info",
+      "key": "SetWeeklyRequest",
+      "type": "object",
+      "value": "progress, points, tournament_id",
+      "meaning": "Payload đẩy điểm",
+      "where": "dump.cs TypeDefIndex 1807"
+    },
+    {
+      "source": "server info",
+      "key": "WeeklyLeaderboardClaimRequest / Response",
+      "type": "object",
+      "value": "Progress → tournamentID, Players[], startTime, finishTime, isClaimed, isFinished",
+      "meaning": "Claim thưởng và nhận giải mới trong 1 request",
+      "where": "dump.cs TypeDefIndex 1809/1810"
+    },
+    {
+      "source": "server info",
+      "key": "FlatBuffer schema",
+      "type": "string",
+      "value": "magicsort.schemas.v1.liveops.weekly_leaderboard (GetWeeklyLeaderboardResponse, WeeklyLeaderboardPlayer)",
+      "meaning": "Biến thể nhị phân của cùng response",
+      "where": "PseudoC/Assembly-CSharp/MagicSort/schemas/v1/liveops/weekly_leaderboard/"
+    },
+    {
+      "source": "asset",
+      "key": "WeeklyTournamentEndNotificationSo.Id / Title / Message",
+      "type": "int/string",
+      "value": "1124 / 'Weekly Tournament Ended!' / 'Check your final ranking and rewards now!'",
+      "meaning": "Local notification kết thúc giải",
+      "where": "Assets/MonoBehaviour/WeeklyTournamentEndNotificationSo.asset"
+    },
+    {
+      "source": "asset",
+      "key": "WeeklyTournamentLeaderboardViewFactory._factoryPrefabs",
+      "type": "list",
+      "value": "1 mục: Id 0, InitialSize 0",
+      "meaning": "Prefab dòng bảng xếp hạng",
+      "where": "Assets/MonoBehaviour/WeeklyTournamentLeaderboardViewFactory.asset"
+    },
+    {
+      "source": "storage key",
+      "key": "WeeklyTournamentSyncModel",
+      "type": "string",
+      "value": "-",
+      "meaning": "Tên khối sync",
+      "where": "WeeklyTournamentDataService.GetSyncName"
+    },
+    {
+      "source": "storage key",
+      "key": "WeeklyTournamentModel.{WinCount, Score, LastSeenRank, LastFetchedRank, WeeklyIntroduced, IsResultIntroduced, CachedLeaderboardResponse}",
+      "type": "object",
+      "value": "-",
+      "meaning": "Dữ liệu lưu cục bộ",
+      "where": "WeeklyTournamentModel"
+    },
+    {
+      "source": "code const",
+      "key": "Notification body placeholder",
+      "type": "string",
+      "value": "' NEWLINE '",
+      "meaning": "Được thay bằng Environment.NewLine khi tạo notification",
+      "where": "WeeklyTournamentService.OnNewTournamentStarted"
+    },
+    {
+      "source": "server cache (historical)",
+      "key": "WeeklyTournamentConfigModel (live) = default?",
+      "type": "",
+      "value": "7/7 key trùng default, 0 key khác/thêm",
+      "meaning": "Đối chiếu config server thật (CachedRemoteConfigs) với WeeklyTournamentConfigModel.json",
+      "where": "Configs/CachedRemoteConfigs + Firebase RC template 3197 — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server instance (historical)",
+      "key": "WeeklyTournamentModel (instance)",
+      "type": "",
+      "value": "131 key, xem facts/runtime/event_instances/WeeklyTournamentModel.json",
+      "meaning": "Dữ liệu phiên event đang chạy (ngày, mốc, thưởng, đối thủ)",
+      "where": "PlayerPrefs WeeklyTournamentModel (instance event đang chạy) — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server instance (historical)",
+      "key": "WeeklyTournamentModel: winCount",
+      "type": "",
+      "value": "0",
+      "meaning": "",
+      "where": "PlayerPrefs WeeklyTournamentModel (instance event đang chạy) — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server instance (historical)",
+      "key": "WeeklyTournamentModel: score",
+      "type": "",
+      "value": "0",
+      "meaning": "",
+      "where": "PlayerPrefs WeeklyTournamentModel (instance event đang chạy) — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server instance (historical)",
+      "key": "WeeklyTournamentModel: lastSeenRank",
+      "type": "",
+      "value": "9",
+      "meaning": "",
+      "where": "PlayerPrefs WeeklyTournamentModel (instance event đang chạy) — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server instance (historical)",
+      "key": "WeeklyTournamentModel: lastFetchedRank",
+      "type": "",
+      "value": "9",
+      "meaning": "",
+      "where": "PlayerPrefs WeeklyTournamentModel (instance event đang chạy) — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server instance (historical)",
+      "key": "WeeklyTournamentModel: weeklyIntroduced",
+      "type": "",
+      "value": "false",
+      "meaning": "",
+      "where": "PlayerPrefs WeeklyTournamentModel (instance event đang chạy) — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server instance (historical)",
+      "key": "WeeklyTournamentModel: isResultIntroduced",
+      "type": "",
+      "value": "false",
+      "meaning": "",
+      "where": "PlayerPrefs WeeklyTournamentModel (instance event đang chạy) — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server instance (historical)",
+      "key": "WeeklyTournamentModel: cachedLeaderboardResponse.tournamentID",
+      "type": "",
+      "value": "4daafa5e-8a21-44e4-8126-296940598ace",
+      "meaning": "",
+      "where": "PlayerPrefs WeeklyTournamentModel (instance event đang chạy) — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server instance (historical)",
+      "key": "WeeklyTournamentModel: cachedLeaderboardResponse.Players[0].Nickname",
+      "type": "",
+      "value": "player_746a576",
+      "meaning": "",
+      "where": "PlayerPrefs WeeklyTournamentModel (instance event đang chạy) — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server instance (historical)",
+      "key": "WeeklyTournamentModel: cachedLeaderboardResponse.Players[0].Score",
+      "type": "",
+      "value": "11",
+      "meaning": "",
+      "where": "PlayerPrefs WeeklyTournamentModel (instance event đang chạy) — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server instance (historical)",
+      "key": "WeeklyTournamentModel: cachedLeaderboardResponse.Players[0].PublicID",
+      "type": "",
+      "value": "746a576",
+      "meaning": "",
+      "where": "PlayerPrefs WeeklyTournamentModel (instance event đang chạy) — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server instance (historical)",
+      "key": "WeeklyTournamentModel: cachedLeaderboardResponse.Players[0].Rank",
+      "type": "",
+      "value": "1",
+      "meaning": "",
+      "where": "PlayerPrefs WeeklyTournamentModel (instance event đang chạy) — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server instance (historical)",
+      "key": "WeeklyTournamentModel: cachedLeaderboardResponse.Players[0].IsMe",
+      "type": "",
+      "value": "false",
+      "meaning": "",
+      "where": "PlayerPrefs WeeklyTournamentModel (instance event đang chạy) — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server instance (historical)",
+      "key": "WeeklyTournamentModel: cachedLeaderboardResponse.Players[0].IsBot",
+      "type": "",
+      "value": "false",
+      "meaning": "",
+      "where": "PlayerPrefs WeeklyTournamentModel (instance event đang chạy) — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server instance (historical)",
+      "key": "WeeklyTournamentModel: cachedLeaderboardResponse.Players[0].ImageUrl",
+      "type": "",
+      "value": "",
+      "meaning": "",
+      "where": "PlayerPrefs WeeklyTournamentModel (instance event đang chạy) — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server instance (historical)",
+      "key": "WeeklyTournamentModel: cachedLeaderboardResponse.Players[0].ImageID",
+      "type": "",
+      "value": "",
+      "meaning": "",
+      "where": "PlayerPrefs WeeklyTournamentModel (instance event đang chạy) — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server instance (historical)",
+      "key": "WeeklyTournamentModel: cachedLeaderboardResponse.Players[0].TokenID",
+      "type": "",
+      "value": "",
+      "meaning": "",
+      "where": "PlayerPrefs WeeklyTournamentModel (instance event đang chạy) — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server instance (historical)",
+      "key": "WeeklyTournamentModel: cachedLeaderboardResponse.Players[0].FrameID",
+      "type": "",
+      "value": "",
+      "meaning": "",
+      "where": "PlayerPrefs WeeklyTournamentModel (instance event đang chạy) — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server instance (historical)",
+      "key": "WeeklyTournamentModel: cachedLeaderboardResponse.Players[0].NameStyle",
+      "type": "",
+      "value": "",
+      "meaning": "",
+      "where": "PlayerPrefs WeeklyTournamentModel (instance event đang chạy) — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server instance (historical)",
+      "key": "WeeklyTournamentModel: cachedLeaderboardResponse.Players[0].TeamName",
+      "type": "",
+      "value": "",
+      "meaning": "",
+      "where": "PlayerPrefs WeeklyTournamentModel (instance event đang chạy) — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server instance (historical)",
+      "key": "WeeklyTournamentModel: cachedLeaderboardResponse.Players[1].Nickname",
+      "type": "",
+      "value": "swiftpiratequeen",
+      "meaning": "",
+      "where": "PlayerPrefs WeeklyTournamentModel (instance event đang chạy) — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server instance (historical)",
+      "key": "WeeklyTournamentModel: cachedLeaderboardResponse.Players[1].Score",
+      "type": "",
+      "value": "10",
+      "meaning": "",
+      "where": "PlayerPrefs WeeklyTournamentModel (instance event đang chạy) — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server instance (historical)",
+      "key": "WeeklyTournamentModel: cachedLeaderboardResponse.Players[1].PublicID",
+      "type": "",
+      "value": "weekly_bot_n99c8ddfu",
+      "meaning": "",
+      "where": "PlayerPrefs WeeklyTournamentModel (instance event đang chạy) — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server instance (historical)",
+      "key": "WeeklyTournamentModel: cachedLeaderboardResponse.Players[1].Rank",
+      "type": "",
+      "value": "2",
+      "meaning": "",
+      "where": "PlayerPrefs WeeklyTournamentModel (instance event đang chạy) — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server instance (historical)",
+      "key": "WeeklyTournamentModel: cachedLeaderboardResponse.Players[1].IsMe",
+      "type": "",
+      "value": "false",
+      "meaning": "",
+      "where": "PlayerPrefs WeeklyTournamentModel (instance event đang chạy) — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server instance (historical)",
+      "key": "WeeklyTournamentModel: cachedLeaderboardResponse.Players[1].IsBot",
+      "type": "",
+      "value": "true",
+      "meaning": "",
+      "where": "PlayerPrefs WeeklyTournamentModel (instance event đang chạy) — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server instance (historical)",
+      "key": "WeeklyTournamentModel: cachedLeaderboardResponse.Players[1].ImageUrl",
+      "type": "",
+      "value": "",
+      "meaning": "",
+      "where": "PlayerPrefs WeeklyTournamentModel (instance event đang chạy) — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server instance (historical)",
+      "key": "WeeklyTournamentModel: cachedLeaderboardResponse.Players[1].ImageID",
+      "type": "",
+      "value": "1",
+      "meaning": "",
+      "where": "PlayerPrefs WeeklyTournamentModel (instance event đang chạy) — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server instance (historical)",
+      "key": "WeeklyTournamentModel: cachedLeaderboardResponse.Players[1].TokenID",
+      "type": "",
+      "value": "",
+      "meaning": "",
+      "where": "PlayerPrefs WeeklyTournamentModel (instance event đang chạy) — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server instance (historical)",
+      "key": "WeeklyTournamentModel: cachedLeaderboardResponse.Players[1].FrameID",
+      "type": "",
+      "value": "",
+      "meaning": "",
+      "where": "PlayerPrefs WeeklyTournamentModel (instance event đang chạy) — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server instance (historical)",
+      "key": "WeeklyTournamentModel: cachedLeaderboardResponse.Players[1].NameStyle",
+      "type": "",
+      "value": "",
+      "meaning": "",
+      "where": "PlayerPrefs WeeklyTournamentModel (instance event đang chạy) — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server instance (historical)",
+      "key": "WeeklyTournamentModel: cachedLeaderboardResponse.Players[1].TeamName",
+      "type": "",
+      "value": "",
+      "meaning": "",
+      "where": "PlayerPrefs WeeklyTournamentModel (instance event đang chạy) — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server instance (historical)",
+      "key": "WeeklyTournamentModel: cachedLeaderboardResponse.Players[2].Nickname",
+      "type": "",
+      "value": "electricliongal",
+      "meaning": "",
+      "where": "PlayerPrefs WeeklyTournamentModel (instance event đang chạy) — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server instance (historical)",
+      "key": "WeeklyTournamentModel: cachedLeaderboardResponse.Players[2].Score",
+      "type": "",
+      "value": "7",
+      "meaning": "",
+      "where": "PlayerPrefs WeeklyTournamentModel (instance event đang chạy) — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server instance (historical)",
+      "key": "WeeklyTournamentModel: cachedLeaderboardResponse.Players[2].PublicID",
+      "type": "",
+      "value": "weekly_bot_0zops1jyj",
+      "meaning": "",
+      "where": "PlayerPrefs WeeklyTournamentModel (instance event đang chạy) — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server instance (historical)",
+      "key": "WeeklyTournamentModel: cachedLeaderboardResponse.Players[2].Rank",
+      "type": "",
+      "value": "3",
+      "meaning": "",
+      "where": "PlayerPrefs WeeklyTournamentModel (instance event đang chạy) — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server instance (historical)",
+      "key": "WeeklyTournamentModel: cachedLeaderboardResponse.Players[2].IsMe",
+      "type": "",
+      "value": "false",
+      "meaning": "",
+      "where": "PlayerPrefs WeeklyTournamentModel (instance event đang chạy) — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server instance (historical)",
+      "key": "WeeklyTournamentModel: cachedLeaderboardResponse.Players[2].IsBot",
+      "type": "",
+      "value": "true",
+      "meaning": "",
+      "where": "PlayerPrefs WeeklyTournamentModel (instance event đang chạy) — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server instance (historical)",
+      "key": "WeeklyTournamentModel: cachedLeaderboardResponse.Players[2].ImageUrl",
+      "type": "",
+      "value": "",
+      "meaning": "",
+      "where": "PlayerPrefs WeeklyTournamentModel (instance event đang chạy) — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server instance (historical)",
+      "key": "WeeklyTournamentModel: cachedLeaderboardResponse.Players[2].ImageID",
+      "type": "",
+      "value": "7",
+      "meaning": "",
+      "where": "PlayerPrefs WeeklyTournamentModel (instance event đang chạy) — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server instance (historical)",
+      "key": "WeeklyTournamentModel: cachedLeaderboardResponse.Players[2].TokenID",
+      "type": "",
+      "value": "",
+      "meaning": "",
+      "where": "PlayerPrefs WeeklyTournamentModel (instance event đang chạy) — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server instance (historical)",
+      "key": "WeeklyTournamentModel: cachedLeaderboardResponse.Players[2].FrameID",
+      "type": "",
+      "value": "",
+      "meaning": "",
+      "where": "PlayerPrefs WeeklyTournamentModel (instance event đang chạy) — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server instance (historical)",
+      "key": "WeeklyTournamentModel: cachedLeaderboardResponse.Players[2].NameStyle",
+      "type": "",
+      "value": "",
+      "meaning": "",
+      "where": "PlayerPrefs WeeklyTournamentModel (instance event đang chạy) — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server instance (historical)",
+      "key": "WeeklyTournamentModel: cachedLeaderboardResponse.Players[2].TeamName",
+      "type": "",
+      "value": "",
+      "meaning": "",
+      "where": "PlayerPrefs WeeklyTournamentModel (instance event đang chạy) — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server instance (historical)",
+      "key": "WeeklyTournamentModel: cachedLeaderboardResponse.Players[3].Nickname",
+      "type": "",
+      "value": "Hannah",
+      "meaning": "",
+      "where": "PlayerPrefs WeeklyTournamentModel (instance event đang chạy) — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server instance (historical)",
+      "key": "WeeklyTournamentModel: cachedLeaderboardResponse.Players[3].Score",
+      "type": "",
+      "value": "3",
+      "meaning": "",
+      "where": "PlayerPrefs WeeklyTournamentModel (instance event đang chạy) — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server instance (historical)",
+      "key": "WeeklyTournamentModel: cachedLeaderboardResponse.Players[3].PublicID",
+      "type": "",
+      "value": "b362e4tpe",
+      "meaning": "",
+      "where": "PlayerPrefs WeeklyTournamentModel (instance event đang chạy) — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server instance (historical)",
+      "key": "WeeklyTournamentModel: cachedLeaderboardResponse.Players[3].Rank",
+      "type": "",
+      "value": "4",
+      "meaning": "",
+      "where": "PlayerPrefs WeeklyTournamentModel (instance event đang chạy) — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server instance (historical)",
+      "key": "WeeklyTournamentModel: cachedLeaderboardResponse.Players[3].IsMe",
+      "type": "",
+      "value": "false",
+      "meaning": "",
+      "where": "PlayerPrefs WeeklyTournamentModel (instance event đang chạy) — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server instance (historical)",
+      "key": "WeeklyTournamentModel: cachedLeaderboardResponse.Players[3].IsBot",
+      "type": "",
+      "value": "false",
+      "meaning": "",
+      "where": "PlayerPrefs WeeklyTournamentModel (instance event đang chạy) — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server instance (historical)",
+      "key": "WeeklyTournamentModel: cachedLeaderboardResponse.Players[3].ImageUrl",
+      "type": "",
+      "value": "",
+      "meaning": "",
+      "where": "PlayerPrefs WeeklyTournamentModel (instance event đang chạy) — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server instance (historical)",
+      "key": "WeeklyTournamentModel: cachedLeaderboardResponse.Players[3].ImageID",
+      "type": "",
+      "value": "5",
+      "meaning": "",
+      "where": "PlayerPrefs WeeklyTournamentModel (instance event đang chạy) — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server instance (historical)",
+      "key": "WeeklyTournamentModel: cachedLeaderboardResponse.Players[3].TokenID",
+      "type": "",
+      "value": "",
+      "meaning": "",
+      "where": "PlayerPrefs WeeklyTournamentModel (instance event đang chạy) — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server instance (historical)",
+      "key": "WeeklyTournamentModel: cachedLeaderboardResponse.Players[3].FrameID",
+      "type": "",
+      "value": "",
+      "meaning": "",
+      "where": "PlayerPrefs WeeklyTournamentModel (instance event đang chạy) — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server instance (historical)",
+      "key": "WeeklyTournamentModel: cachedLeaderboardResponse.Players[3].NameStyle",
+      "type": "",
+      "value": "",
+      "meaning": "",
+      "where": "PlayerPrefs WeeklyTournamentModel (instance event đang chạy) — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server instance (historical)",
+      "key": "WeeklyTournamentModel: cachedLeaderboardResponse.Players[3].TeamName",
+      "type": "",
+      "value": "",
+      "meaning": "",
+      "where": "PlayerPrefs WeeklyTournamentModel (instance event đang chạy) — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server instance (historical)",
+      "key": "WeeklyTournamentModel: cachedLeaderboardResponse.Players[4].Nickname",
+      "type": "",
+      "value": "SaltyWizardPro",
+      "meaning": "",
+      "where": "PlayerPrefs WeeklyTournamentModel (instance event đang chạy) — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server instance (historical)",
+      "key": "WeeklyTournamentModel: cachedLeaderboardResponse.Players[4].Score",
+      "type": "",
+      "value": "3",
+      "meaning": "",
+      "where": "PlayerPrefs WeeklyTournamentModel (instance event đang chạy) — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server instance (historical)",
+      "key": "WeeklyTournamentModel: cachedLeaderboardResponse.Players[4].PublicID",
+      "type": "",
+      "value": "weekly_bot_b6dbhcjfr",
+      "meaning": "",
+      "where": "PlayerPrefs WeeklyTournamentModel (instance event đang chạy) — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server instance (historical)",
+      "key": "WeeklyTournamentModel: cachedLeaderboardResponse.Players[4].Rank",
+      "type": "",
+      "value": "5",
+      "meaning": "",
+      "where": "PlayerPrefs WeeklyTournamentModel (instance event đang chạy) — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server instance (historical)",
+      "key": "WeeklyTournamentModel: cachedLeaderboardResponse.Players[4].IsMe",
+      "type": "",
+      "value": "false",
+      "meaning": "",
+      "where": "PlayerPrefs WeeklyTournamentModel (instance event đang chạy) — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server instance (historical)",
+      "key": "WeeklyTournamentModel: cachedLeaderboardResponse.Players[4].IsBot",
+      "type": "",
+      "value": "true",
+      "meaning": "",
+      "where": "PlayerPrefs WeeklyTournamentModel (instance event đang chạy) — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server instance (historical)",
+      "key": "WeeklyTournamentModel: cachedLeaderboardResponse.Players[4].ImageUrl",
+      "type": "",
+      "value": "",
+      "meaning": "",
+      "where": "PlayerPrefs WeeklyTournamentModel (instance event đang chạy) — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server instance (historical)",
+      "key": "WeeklyTournamentModel: cachedLeaderboardResponse.Players[4].ImageID",
+      "type": "",
+      "value": "1",
+      "meaning": "",
+      "where": "PlayerPrefs WeeklyTournamentModel (instance event đang chạy) — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server instance (historical)",
+      "key": "WeeklyTournamentModel: cachedLeaderboardResponse.Players[4].TokenID",
+      "type": "",
+      "value": "",
+      "meaning": "",
+      "where": "PlayerPrefs WeeklyTournamentModel (instance event đang chạy) — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server instance (historical)",
+      "key": "WeeklyTournamentModel: cachedLeaderboardResponse.Players[4].FrameID",
+      "type": "",
+      "value": "",
+      "meaning": "",
+      "where": "PlayerPrefs WeeklyTournamentModel (instance event đang chạy) — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server instance (historical)",
+      "key": "WeeklyTournamentModel: cachedLeaderboardResponse.Players[4].NameStyle",
+      "type": "",
+      "value": "",
+      "meaning": "",
+      "where": "PlayerPrefs WeeklyTournamentModel (instance event đang chạy) — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server instance (historical)",
+      "key": "WeeklyTournamentModel: cachedLeaderboardResponse.Players[4].TeamName",
+      "type": "",
+      "value": "",
+      "meaning": "",
+      "where": "PlayerPrefs WeeklyTournamentModel (instance event đang chạy) — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server instance (historical)",
+      "key": "WeeklyTournamentModel: cachedLeaderboardResponse.Players[5].Nickname",
+      "type": "",
+      "value": "James",
+      "meaning": "",
+      "where": "PlayerPrefs WeeklyTournamentModel (instance event đang chạy) — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server instance (historical)",
+      "key": "WeeklyTournamentModel: cachedLeaderboardResponse.Players[5].Score",
+      "type": "",
+      "value": "1",
+      "meaning": "",
+      "where": "PlayerPrefs WeeklyTournamentModel (instance event đang chạy) — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server instance (historical)",
+      "key": "WeeklyTournamentModel: cachedLeaderboardResponse.Players[5].PublicID",
+      "type": "",
+      "value": "084nzwzhg",
+      "meaning": "",
+      "where": "PlayerPrefs WeeklyTournamentModel (instance event đang chạy) — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server instance (historical)",
+      "key": "WeeklyTournamentModel: cachedLeaderboardResponse.Players[5].Rank",
+      "type": "",
+      "value": "6",
+      "meaning": "",
+      "where": "PlayerPrefs WeeklyTournamentModel (instance event đang chạy) — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server instance (historical)",
+      "key": "WeeklyTournamentModel: cachedLeaderboardResponse.Players[5].IsMe",
+      "type": "",
+      "value": "false",
+      "meaning": "",
+      "where": "PlayerPrefs WeeklyTournamentModel (instance event đang chạy) — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server instance (historical)",
+      "key": "WeeklyTournamentModel: cachedLeaderboardResponse.Players[5].IsBot",
+      "type": "",
+      "value": "false",
+      "meaning": "",
+      "where": "PlayerPrefs WeeklyTournamentModel (instance event đang chạy) — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server instance (historical)",
+      "key": "WeeklyTournamentModel: cachedLeaderboardResponse.Players[5].ImageUrl",
+      "type": "",
+      "value": "",
+      "meaning": "",
+      "where": "PlayerPrefs WeeklyTournamentModel (instance event đang chạy) — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server instance (historical)",
+      "key": "WeeklyTournamentModel: cachedLeaderboardResponse.Players[5].ImageID",
+      "type": "",
+      "value": "7",
+      "meaning": "",
+      "where": "PlayerPrefs WeeklyTournamentModel (instance event đang chạy) — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server instance (historical)",
+      "key": "WeeklyTournamentModel: cachedLeaderboardResponse.Players[5].TokenID",
+      "type": "",
+      "value": "",
+      "meaning": "",
+      "where": "PlayerPrefs WeeklyTournamentModel (instance event đang chạy) — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server instance (historical)",
+      "key": "WeeklyTournamentModel: cachedLeaderboardResponse.Players[5].FrameID",
+      "type": "",
+      "value": "",
+      "meaning": "",
+      "where": "PlayerPrefs WeeklyTournamentModel (instance event đang chạy) — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server instance (historical)",
+      "key": "WeeklyTournamentModel: cachedLeaderboardResponse.Players[5].NameStyle",
+      "type": "",
+      "value": "",
+      "meaning": "",
+      "where": "PlayerPrefs WeeklyTournamentModel (instance event đang chạy) — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server instance (historical)",
+      "key": "WeeklyTournamentModel: cachedLeaderboardResponse.Players[5].TeamName",
+      "type": "",
+      "value": "",
+      "meaning": "",
+      "where": "PlayerPrefs WeeklyTournamentModel (instance event đang chạy) — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server instance (historical)",
+      "key": "WeeklyTournamentModel: cachedLeaderboardResponse.Players[6].Nickname",
+      "type": "",
+      "value": "K2M",
+      "meaning": "",
+      "where": "PlayerPrefs WeeklyTournamentModel (instance event đang chạy) — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server instance (historical)",
+      "key": "WeeklyTournamentModel: cachedLeaderboardResponse.Players[6].Score",
+      "type": "",
+      "value": "0",
+      "meaning": "",
+      "where": "PlayerPrefs WeeklyTournamentModel (instance event đang chạy) — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server instance (historical)",
+      "key": "WeeklyTournamentModel: cachedLeaderboardResponse.Players[6].PublicID",
+      "type": "",
+      "value": "h3m847lkj",
+      "meaning": "",
+      "where": "PlayerPrefs WeeklyTournamentModel (instance event đang chạy) — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server instance (historical)",
+      "key": "WeeklyTournamentModel: cachedLeaderboardResponse.Players[6].Rank",
+      "type": "",
+      "value": "7",
+      "meaning": "",
+      "where": "PlayerPrefs WeeklyTournamentModel (instance event đang chạy) — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server instance (historical)",
+      "key": "WeeklyTournamentModel: cachedLeaderboardResponse.Players[6].IsMe",
+      "type": "",
+      "value": "false",
+      "meaning": "",
+      "where": "PlayerPrefs WeeklyTournamentModel (instance event đang chạy) — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server instance (historical)",
+      "key": "WeeklyTournamentModel: cachedLeaderboardResponse.Players[6].IsBot",
+      "type": "",
+      "value": "false",
+      "meaning": "",
+      "where": "PlayerPrefs WeeklyTournamentModel (instance event đang chạy) — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server instance (historical)",
+      "key": "WeeklyTournamentModel: cachedLeaderboardResponse.Players[6].ImageUrl",
+      "type": "",
+      "value": "",
+      "meaning": "",
+      "where": "PlayerPrefs WeeklyTournamentModel (instance event đang chạy) — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server instance (historical)",
+      "key": "WeeklyTournamentModel: cachedLeaderboardResponse.Players[6].ImageID",
+      "type": "",
+      "value": "1",
+      "meaning": "",
+      "where": "PlayerPrefs WeeklyTournamentModel (instance event đang chạy) — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server instance (historical)",
+      "key": "WeeklyTournamentModel: cachedLeaderboardResponse.Players[6].TokenID",
+      "type": "",
+      "value": "",
+      "meaning": "",
+      "where": "PlayerPrefs WeeklyTournamentModel (instance event đang chạy) — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server instance (historical)",
+      "key": "WeeklyTournamentModel: cachedLeaderboardResponse.Players[6].FrameID",
+      "type": "",
+      "value": "",
+      "meaning": "",
+      "where": "PlayerPrefs WeeklyTournamentModel (instance event đang chạy) — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server instance (historical)",
+      "key": "WeeklyTournamentModel: cachedLeaderboardResponse.Players[6].NameStyle",
+      "type": "",
+      "value": "",
+      "meaning": "",
+      "where": "PlayerPrefs WeeklyTournamentModel (instance event đang chạy) — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server instance (historical)",
+      "key": "WeeklyTournamentModel: cachedLeaderboardResponse.Players[6].TeamName",
+      "type": "",
+      "value": "Maui's friends",
+      "meaning": "",
+      "where": "PlayerPrefs WeeklyTournamentModel (instance event đang chạy) — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server instance (historical)",
+      "key": "WeeklyTournamentModel: cachedLeaderboardResponse.Players[7].Nickname",
+      "type": "",
+      "value": "Magic",
+      "meaning": "",
+      "where": "PlayerPrefs WeeklyTournamentModel (instance event đang chạy) — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server instance (historical)",
+      "key": "WeeklyTournamentModel: cachedLeaderboardResponse.Players[7].Score",
+      "type": "",
+      "value": "0",
+      "meaning": "",
+      "where": "PlayerPrefs WeeklyTournamentModel (instance event đang chạy) — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server instance (historical)",
+      "key": "WeeklyTournamentModel: cachedLeaderboardResponse.Players[7].PublicID",
+      "type": "",
+      "value": "tj99arf6o",
+      "meaning": "",
+      "where": "PlayerPrefs WeeklyTournamentModel (instance event đang chạy) — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server instance (historical)",
+      "key": "WeeklyTournamentModel: cachedLeaderboardResponse.Players[7].Rank",
+      "type": "",
+      "value": "8",
+      "meaning": "",
+      "where": "PlayerPrefs WeeklyTournamentModel (instance event đang chạy) — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server instance (historical)",
+      "key": "WeeklyTournamentModel: cachedLeaderboardResponse.Players[7].IsMe",
+      "type": "",
+      "value": "false",
+      "meaning": "",
+      "where": "PlayerPrefs WeeklyTournamentModel (instance event đang chạy) — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server instance (historical)",
+      "key": "WeeklyTournamentModel: cachedLeaderboardResponse.Players[7].IsBot",
+      "type": "",
+      "value": "false",
+      "meaning": "",
+      "where": "PlayerPrefs WeeklyTournamentModel (instance event đang chạy) — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server instance (historical)",
+      "key": "WeeklyTournamentModel: cachedLeaderboardResponse.Players[7].ImageUrl",
+      "type": "",
+      "value": "",
+      "meaning": "",
+      "where": "PlayerPrefs WeeklyTournamentModel (instance event đang chạy) — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server instance (historical)",
+      "key": "WeeklyTournamentModel: cachedLeaderboardResponse.Players[7].ImageID",
+      "type": "",
+      "value": "5",
+      "meaning": "",
+      "where": "PlayerPrefs WeeklyTournamentModel (instance event đang chạy) — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server instance (historical)",
+      "key": "WeeklyTournamentModel: cachedLeaderboardResponse.Players[7].TokenID",
+      "type": "",
+      "value": "",
+      "meaning": "",
+      "where": "PlayerPrefs WeeklyTournamentModel (instance event đang chạy) — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server instance (historical)",
+      "key": "WeeklyTournamentModel …",
+      "type": "",
+      "value": "còn 31 key",
+      "meaning": "xem facts/runtime/event_instances/WeeklyTournamentModel.json",
+      "where": ""
+    },
+    {
+      "source": "server instance (historical)",
+      "key": "WeeklyTournament leaderboard: IsBot",
+      "type": "",
+      "value": "3/10 bot (swiftpiratequeen, electricliongal, SaltyWizardPro)",
+      "meaning": "Mỗi entry có field IsBot; server độn ~30% bot vào bảng 10 người, bot tự tăng điểm theo thời gian",
+      "where": "PlayerPrefs WeeklyTournamentModel (instance event đang chạy) — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "device event cache (observed 2026-11-15)",
+      "key": "WeeklyTournamentModel.cachedLeaderboardResponse.startTime",
+      "type": "int",
+      "value": "1792567879",
+      "meaning": "Cache instance/progress lịch sử đọc15/11; một mẫu fixture offline, không xác nhận production hoặc mọi rotation.",
+      "where": "facts/runtime/review_20261115/event_instances/WeeklyTournamentModel.json#cachedLeaderboardResponse.startTime"
+    },
+    {
+      "source": "device event cache (observed 2026-11-15)",
+      "key": "WeeklyTournamentModel.cachedLeaderboardResponse.finishTime",
+      "type": "int",
+      "value": "1792998000",
+      "meaning": "Cache instance/progress lịch sử đọc15/11; một mẫu fixture offline, không xác nhận production hoặc mọi rotation.",
+      "where": "facts/runtime/review_20261115/event_instances/WeeklyTournamentModel.json#cachedLeaderboardResponse.finishTime"
+    },
+    {
+      "source": "device event cache (observed 2026-11-15)",
+      "key": "WeeklyTournamentModel.cachedLeaderboardResponse.isClaimed",
+      "type": "bool",
+      "value": "false",
+      "meaning": "Cache instance/progress lịch sử đọc15/11; một mẫu fixture offline, không xác nhận production hoặc mọi rotation.",
+      "where": "facts/runtime/review_20261115/event_instances/WeeklyTournamentModel.json#cachedLeaderboardResponse.isClaimed"
+    },
+    {
+      "source": "device event cache (observed 2026-11-15)",
+      "key": "WeeklyTournamentModel.cachedLeaderboardResponse.isFinished",
+      "type": "bool",
+      "value": "false",
+      "meaning": "Cache instance/progress lịch sử đọc15/11; một mẫu fixture offline, không xác nhận production hoặc mọi rotation.",
+      "where": "facts/runtime/review_20261115/event_instances/WeeklyTournamentModel.json#cachedLeaderboardResponse.isFinished"
+    }
+  ],
+  "rewards": [
+    {
+      "context": "Hạng 1 cuối tuần",
+      "reward": "1000 Coin + 1 WinCount (cúp hồ sơ)",
+      "evidence": "WeeklyTournamentService.GetRewardAmountByRank; WeeklyTournamentService.TryIncreaseWinCount"
+    },
+    {
+      "context": "Hạng 2",
+      "reward": "500 Coin",
+      "evidence": "WeeklyTournamentService.GetRewardAmountByRank"
+    },
+    {
+      "context": "Hạng 3",
+      "reward": "250 Coin",
+      "evidence": "WeeklyTournamentService.GetRewardAmountByRank"
+    },
+    {
+      "context": "Hạng 4 trở đi",
+      "reward": "Không có (GetRewardAmountByRank trả 0)",
+      "evidence": "WeeklyTournamentService.GetRewardAmountByRank"
+    }
+  ],
+  "backend": [
+    {
+      "command": "getWeeklyLeaderboardUrl = {base}/v1/get-weekly-leaderboard",
+      "direction": "client→server",
+      "purpose": "Lấy bảng xếp hạng tuần (WeeklyGetLeaderboardRequest{progress})"
+    },
+    {
+      "command": "setWeeklyScoreUrl = {base}/v1/set-weekly-tournament-points",
+      "direction": "client→server",
+      "purpose": "Đẩy điểm (SetWeeklyRequest{progress, points, tournament_id})"
+    },
+    {
+      "command": "claimWeeklyLeaderboardUrl = {base}/v1/claim-weekly-tournament",
+      "direction": "client→server",
+      "purpose": "Nhận thưởng và nhận luôn giải mới (WeeklyLeaderboardClaimRequest{Progress})"
+    },
+    {
+      "command": "Sync block 'WeeklyTournamentSyncModel'",
+      "direction": "client↔server",
+      "purpose": "Đồng bộ WinCount/Score/cờ introduced"
+    }
+  ],
+  "ui": [
+    {
+      "element": "Bảng xếp hạng",
+      "class": "WeeklyTournamentLeaderboardController / WeeklyTournamentLeaderboardViewAdapter / WeeklyTournamentLeaderboardElementView / WeeklyTournamentLeaderboardViewFactory",
+      "purpose": "Danh sách người chơi cuộn"
+    },
+    {
+      "element": "View trạng thái",
+      "class": "WeeklyTournamentInProgressView / WeeklyTournamentInResultView",
+      "purpose": "Đang diễn ra vs kết quả + claim"
+    },
+    {
+      "element": "Đồng hồ",
+      "class": "WeeklyTournamentLeaderboardTimer",
+      "purpose": "Đếm ngược tới finishTime"
+    },
+    {
+      "element": "Vạch phân hạng",
+      "class": "WeeklyTournamentLeaderboardDegreeElementView",
+      "purpose": "Đánh dấu mốc thưởng top 1/2/3"
+    },
+    {
+      "element": "Popup thông tin",
+      "class": "WeeklyTournamentInfoPopup",
+      "purpose": "Luật chơi"
+    },
+    {
+      "element": "Alert tính năng mới",
+      "class": "WeeklyNewFeatureAlertView",
+      "purpose": "Giới thiệu khi vừa mở khoá"
+    },
+    {
+      "element": "Command welcome",
+      "class": "WeeklyTournamentHomeWelcomingCommand (IHomeWelcomingSequenceCommand)",
+      "purpose": "Chèn bảng kết quả vào chuỗi mở app"
+    },
+    {
+      "element": "Signals",
+      "class": "WeeklyTournamentLeaderboardStateChangedSignal, WeeklyTournamentLeaderboardDataFetchedSignal, WeeklyTournamentSeenByUserSignal",
+      "purpose": "Đồng bộ UI"
+    },
+    {
+      "element": "ViewModel",
+      "class": "WeeklyTournamentLeaderboardPlayerViewModel",
+      "purpose": "Dữ liệu 1 dòng bảng"
+    }
+  ],
+  "analytics": [
+    {
+      "event": "weekly_tournament_finished",
+      "params": "last_tournament_id, last_score, remote_tournament_id, remote_score, tournament_start_time",
+      "when": "WeeklyTournamentService.TrySendTournamentFinishEvent khi phát hiện giải đã kết thúc (state NotFinishedAtBackendResponseButTimeIsUp)"
+    }
+  ],
+  "storage_keys": [
+    "WeeklyTournamentSyncModel",
+    "WeeklyTournamentModel.WinCount",
+    "WeeklyTournamentModel.Score",
+    "WeeklyTournamentModel.LastSeenRank",
+    "WeeklyTournamentModel.LastFetchedRank",
+    "WeeklyTournamentModel.WeeklyIntroduced",
+    "WeeklyTournamentModel.IsResultIntroduced",
+    "WeeklyTournamentModel.CachedLeaderboardResponse"
+  ],
+  "related_features": [
+    "ChampionsLeague",
+    "Teams",
+    "Profile",
+    "MagicStreakTournament",
+    "EventsFramework"
+  ],
+  "gaps": [
+    "Độ dài chu kỳ giải (7 ngày) không có hằng số trong client — startTime/finishTime hoàn toàn do server quyết định.",
+    "Số lượng người chơi trong một bảng và tỉ lệ bot do server quyết định (Players[] chỉ có cờ IsBot).",
+    "Không thấy thưởng vật phẩm ngoài coin cho giải tuần trong build này.",
+    "[Runtime 2026-09-10] Config server LIVE đã đọc trực tiếp từ cache máy (không cần request); các hàng 'server live' là giá trị server ghi đè/thêm so với default.",
+    "[Runtime 2026-09-10] Instance phiên event đang chạy đã đọc (WeeklyTournamentModel); phần từng ghi 'do server gửi' nay có giá trị thật trong các hàng 'server instance'."
+  ],
+  "sources": [
+    "GameDesign/features/WeeklyTournamentService.md",
+    "GameDesign/features/WeeklyTournamentStateService.md",
+    "GameDesign/features/WeeklyTournamentDataService.md",
+    "GameDesign/features/WeeklyTournamentModel.md",
+    "RecoveredNative/PseudoC/Assembly-CSharp/Modules/Contexts/Home/WeeklyTournament/Scripts/*.c",
+    "RecoveredNative/Il2CppDumper/dump.cs (TypeDefIndex 1796-1840)",
+    "UnityExport/ExportedProject/Assets/Resources/defaultconfigs/WeeklyTournamentConfigModel.json",
+    "UnityExport/ExportedProject/Assets/MonoBehaviour/WeeklyTournamentEndNotificationSo.asset",
+    "UnityExport/ExportedProject/Assets/MonoBehaviour/BackendEnvironmentConfig.asset",
+    "facts/runtime/review_20261115/event_instances/WeeklyTournamentModel.json"
+  ],
+  "related_feature_aliases": [
+    {
+      "original": "LobbyEventsService",
+      "feature": "EventsFramework"
+    }
+  ],
+  "audit_provenance": {
+    "review_date": "2026-11-15",
+    "mode": "offline_existing_files",
+    "code_build": "0.0.3063 ARMv7",
+    "runtime_build_observed_historically": "0.0.3129 ARM64 (audit 2026-10-18); not rechecked 2026-11-15",
+    "new_playtests": 0,
+    "uc_status": "See facts/audit_20261115/uc_registry.json; image reference is not pass",
+    "workbook_status": "Existing XLSX is historical; JSON and local web include 2026-11-15 corrections",
+    "static_review": "facts/local_code_gap_results_20261115.json; facts/local_asset_gap_results_20261115.json; facts/final_data_gap_decisions_20261115.json; facts/core_body_gap_decisions_20261115.json; facts/remaining_asset_gap_decisions_20261115.json"
+  },
+  "static_review_20261115": {
+    "date": "2026-11-15",
+    "scope": "Historical code/assets 0.0.3063, dated caches, device 0.0.3129 cached bundles and explicitly scoped runtime evidence. Not full runtime pass.",
+    "findings": []
+  },
+  "acceptance_review_20261115": {
+    "source": "facts/feature_acceptance_20261115.json",
+    "feature_id": "WeeklyTournament",
+    "scope": "All eleven dossier dimensions reviewed; full_feature_verified is not implied; read per-dimension gaps and actual runtime evidence."
+  },
+  "segment_ab_review_20261115": {
+    "status": "not_identified_in_sources",
+    "segment_ids": [],
+    "matching_basis": "explicit_gd_config_map_or_exact_model_token_in_gdd_configs_where_key_sources; rootfieldscoped",
+    "rows": [],
+    "classifications": {},
+    "assignment_verified": false,
+    "uplift_verified": false,
+    "note": "No matchingrow does not prove no segmentation/AB. Rewardbucketfalsepositives remain explicitly classified."
+  },
+  "continuation_review_20261116": {
+    "date": "2026-11-16",
+    "build": "0.0.3129 ARM64 host APK",
+    "build_scope": "Host APK version3129 matches LAST observed installed version15/11 only; installed bytes/live device16/11 not verified.",
+    "runtime_status": "device_unavailable",
+    "runtime_case_ids": [],
+    "current_apk_model_links": {
+      "feature": "WeeklyTournament",
+      "models": [
+        {
+          "model": "WeeklyTournamentConfigModel",
+          "current_default_file": "facts/review_20261116/public_current_config_3129/defaults/WeeklyTournamentConfigModel.json",
+          "resource_path": "defaultconfigs/weeklytournamentconfigmodel",
+          "sha256": "fc3b4a58d8b5180baf9f3c933aaf4be6a4ecfdc8bc6c4860d9e2873918c22c24",
+          "matching_basis": [
+            "gdd/WeeklyTournament.json#/configs",
+            "gdd/WeeklyTournament.json#/sources",
+            "gdd/WeeklyTournament.json#/managers"
+          ],
+          "scope": "Packaged default3129, not effective server config.",
+          "site_data_path": "data/current_config_3129/defaults/WeeklyTournamentConfigModel.json",
+          "original_source_sha256": "fc3b4a58d8b5180baf9f3c933aaf4be6a4ecfdc8bc6c4860d9e2873918c22c24",
+          "public_artifact_sha256": "2f66930f191759faa8114db4ed08f5e666f2160eae347cf5410d1cbc3fdce0bf",
+          "sha256_scope": "sha256 is original raw model; public_artifact_sha256 is the sanitized download"
+        }
+      ],
+      "status": "exact_model_source_association",
+      "distribution": "sanitized_public",
+      "public_mapping_pending": false
+    },
+    "current_packaged_defaults": [
+      {
+        "model": "WeeklyTournamentConfigModel",
+        "source": "facts/review_20261116/public_current_config_3129/defaults/WeeklyTournamentConfigModel.json",
+        "site_data_path": "data/current_config_3129/defaults/WeeklyTournamentConfigModel.json",
+        "public_artifact_sha256": "2f66930f191759faa8114db4ed08f5e666f2160eae347cf5410d1cbc3fdce0bf",
+        "original_source_sha256": "fc3b4a58d8b5180baf9f3c933aaf4be6a4ecfdc8bc6c4860d9e2873918c22c24",
+        "source_class": "static_asset",
+        "build": "0.0.3129 host APK",
+        "scope": "Sanitized packaged default fullvalues only; not effective remote/selected config or runtime.",
+        "values": {
+          "IsTournamentEnable": true,
+          "FirstLevelToShow": 40,
+          "ShouldOpenAutomaticallyOnLobbyReturnOnResult": true,
+          "ShouldOpenAutomaticallyOnSessionStartOnResult": true,
+          "Rewards": {
+            "FirstRankCoinRewardAmount": 1000,
+            "SecondRankCoinRewardAmount": 500,
+            "ThirdRankCoinRewardAmount": 250
+          }
+        }
+      }
+    ],
+    "native_finding_ids": [],
+    "documentation_source_coverage": {
+      "dossier_present": true,
+      "use_case_catalog_count": 14,
+      "config_catalog_rows": 129,
+      "current_apk_default_model_links": 1,
+      "current_native_findings": 0,
+      "scope": "Documentation/source coverage only; not complete runtime verification."
+    },
+    "runtime_completion": {
+      "date": "2026-11-16",
+      "status": "device_unavailable",
+      "executed_case_count": 0,
+      "full_feature_runtime_verified": false
+    },
+    "planned_branch": "Tìm tab weekly trong leaderboard, xem timer/medal/reward rank info, đóng; chụp empty/error khác Players World.",
+    "target_uc_ids": [
+      "UC-01",
+      "UC-05",
+      "UC-10",
+      "UC-13"
+    ],
+    "execution_phase": "noncore_first",
+    "core_or_levels_last": false,
+    "actionability_full_json": "facts/continuation_20261116/current/feature_actionability.json",
+    "actionability_site_data_path": "data/continuation_20261116/feature_actionability.json",
+    "source_classes": [
+      "static_asset"
+    ],
+    "full_feature_verified": false
+  }
+}

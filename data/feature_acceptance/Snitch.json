@@ -1,0 +1,359 @@
+{
+  "id": "Snitch",
+  "feature": "Snitch",
+  "name": "Snitch (Snitch Hunt)",
+  "category": "Core",
+  "category_label": "Lõi gameplay",
+  "core_levels_last": true,
+  "acceptance_status": "documented_with_explicit_remaining_scope",
+  "full_feature_verified": false,
+  "checks": {
+    "purpose": {
+      "status": "documented_static_scope",
+      "source": "gdd/Snitch.json#/summary",
+      "claim_excerpt": "Snitch Hunt là trợ thủ dạng 'sinh vật bay' trong level. Người chơi thắng đủ số level ở Home để kích hoạt, sau đó khi vào ván sẽ có một cái hộp thả ra các con Snitch. Có hai loại: Snitch Thường (Normal/Silver) bay tới một ô ẩn và lật mở nó (bỏ dấu hỏi, để lộ màu nước), và Snitch Đỏ (Red/Power) bay tới một vật cản (blocker) và phá nó. Snitch được đặt sẵn trong dữ liệu level (SnitchSpawnInfo) hoặc ba"
+    },
+    "unlock": {
+      "status": "described_historical_conditions_runtime_boundary_unverified",
+      "source": "gdd/Snitch.json#/unlock",
+      "content": "SnitchService.IsEligible(): SnitchConfigModel.IsEnabled = true và tiến độ người chơi ≥ FirstLevelToShow (mặc định client 290). SnitchService.IsActive() thêm điều kiện Progress ≥ TargetLevelProgress (mặc định client 10)."
+    },
+    "entry_flow": {
+      "status": "documented_paths_not_all_executed",
+      "entry_points": [
+        "SnitchLobbyButton ở Home (vòng tròn tiến độ {0}/{1}, bấm mở SnitchJoinPopUp — impression source LobbyIcon)",
+        "SnitchJoinPopUp tự bật khi về Home (TryShowSnitchPopUpCommand / TryShowSnitchPopUpOnLobbyReturnCommand)",
+        "SnitchActivationPopUp khi vừa đủ tiến độ (TryPlaySnitchActivationCommand — đứng trước MagicBottleCongrats trong chuỗi return-to-home)",
+        "SnitchInfoButton → SnitchInfoPopUp",
+        "Trong level: hộp Snitch (SnitchBoxView) và SnitchLevelTutorialPopUp lần đầu",
+        "SnitchAreYouSureContainer khi định bỏ ván"
+      ],
+      "flow_source": "gdd/Snitch.json#/flow",
+      "acceptance_scope": "Progress/activation/seed priority/normal-red count; blocker targeting/explosion/reward/reset và animation timing"
+    },
+    "config": {
+      "status": "source_bound_catalog_present",
+      "gdd_rows": 27,
+      "full_leaf_rows_associated": 20,
+      "snapshots": {
+        "default_0.0.3063": 5,
+        "cache_20260910": 5,
+        "cache_20261010": 5,
+        "firebase_20260910": 5
+      },
+      "models": [
+        {
+          "model": "snitchConfigModel",
+          "matching_basis": [
+            {
+              "kind": "explicit_gd_config_model_map",
+              "source": "gd_config.json#/defaultconfigs/map/Snitch"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/Snitch.json#/sources/2"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/Snitch.json#/configs/0/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/Snitch.json#/configs/1/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/Snitch.json#/configs/2/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/Snitch.json#/configs/3/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/Snitch.json#/configs/4/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/Snitch.json#/configs/19/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/Snitch.json#/configs/20/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/Snitch.json#/configs/21/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/Snitch.json#/configs/22/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/Snitch.json#/configs/23/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/Snitch.json#/configs/24/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/Snitch.json#/configs/25/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/Snitch.json#/configs/26/key_where"
+            }
+          ]
+        }
+      ],
+      "declared_models_without_catalog_data": [],
+      "placeholder_rows_requiring_source_review": [],
+      "exact_placeholder_snapshot_values": [],
+      "dossier_abbreviated_values": [],
+      "note": "Model association uses explicitmap or exacttoken citations; fieldpresence does not prove allproductiondata. GDDsummaryrows and fullcatalogrows have separate counts. Abbreviated source summaries are not full arrays; catalog/source links remain authoritative."
+    },
+    "reward": {
+      "status": "documented_static_rewards_runtime_grant_not_fully_verified",
+      "entries": 2,
+      "tables_in_site_meta": 4,
+      "source": "gdd/Snitch.json#/rewards"
+    },
+    "use_cases": {
+      "status": "specified_not_executed_in15nov_ledger",
+      "specified": 18,
+      "reviewed_uc_branch_count": 0,
+      "reviewed_uc_ids": [],
+      "not_reviewed_in_new_ledger": [
+        "UC-01",
+        "UC-02",
+        "UC-03",
+        "UC-04",
+        "UC-05",
+        "UC-06",
+        "UC-07",
+        "UC-08",
+        "UC-09",
+        "UC-10",
+        "UC-11",
+        "UC-12",
+        "UC-13",
+        "UC-14",
+        "UC-15",
+        "UC-16",
+        "UC-17",
+        "UC-18"
+      ],
+      "full_uc_pass_claimed": false
+    },
+    "screenshots": {
+      "historical_gallery_entries": 6,
+      "historical_uc_with_image_reference": 6,
+      "curated_new_images": [],
+      "curated_new_image_count": 0,
+      "status": "historical_references_only",
+      "source": "screens/web/screens.json#/Snitch",
+      "note": "Image presence does not prove execution result or completeness."
+    },
+    "runtime_actual": {
+      "status": "not_observed_in15nov_ledger",
+      "case_count": 0,
+      "cases": [],
+      "mode": "offline_existing_fixture",
+      "build": "0.0.3129 ARM64"
+    },
+    "segment_ab": {
+      "status": "not_identified_in_sources",
+      "segment_ids": [],
+      "matching_basis": "explicit_gd_config_map_or_exact_model_token_in_gdd_configs_where_key_sources; rootfieldscoped",
+      "rows": [],
+      "classifications": {},
+      "assignment_verified": false,
+      "uplift_verified": false,
+      "note": "No matchingrow does not prove no segmentation/AB. Rewardbucketfalsepositives remain explicitly classified."
+    },
+    "storage_backend_analytics": {
+      "storage_keys": {
+        "entries": 1,
+        "status": "documented_static_contract_runtime_not_verified",
+        "source": "gdd/Snitch.json#/storage_keys"
+      },
+      "backend": {
+        "entries": 1,
+        "status": "documented_static_contract_runtime_not_verified",
+        "source": "gdd/Snitch.json#/backend"
+      },
+      "analytics": {
+        "entries": 5,
+        "status": "documented_static_contract_runtime_not_verified",
+        "source": "gdd/Snitch.json#/analytics"
+      }
+    },
+    "remaining_next_step": {
+      "gap_count": 6,
+      "static_scoped_resolutions": 2,
+      "remaining_count": 4,
+      "all_gap_dispositions": [
+        {
+          "id": "MS-Snitch-G001",
+          "feature": "Snitch",
+          "source": "gdd/Snitch.json#/gaps/0",
+          "original": "Số Snitch tối đa mỗi ván không có hằng số rõ ràng; chỉ suy ra từ SnitchAnimationConfig có delay cho tối đa 3 Snitch xám và 2 Snitch vàng (suy luận)",
+          "current_note": "15/11 — partial_static_code_unresolved: OnLevelStart lưu externalSnitches và levelSnitchInfo; GetRedSnitchMoveTargetByIndex/GetNormalSnitchMoveTargetForIndex lọc/duyệt nguồn external+level lists. Không có literal max2/max3 trong các body target/entrance đã đọc; count phụ thuộc input, filtering và số target hợp lệ. Còn lại: Max thiết kế/global cap chưa được chứng minh; cần external grant consumer/config và stress board, không đổi thành unlimited.",
+          "status": "partial_static_code_unresolved",
+          "review_status": "preserved_partial_static_code_unresolved",
+          "dependency": "core_gameplay_and_levels_last",
+          "next_action": "OnLevelStart lưu externalSnitches và levelSnitchInfo; GetRedSnitchMoveTargetByIndex/GetNormalSnitchMoveTargetForIndex lọc/duyệt nguồn external+level lists. Không có literal max2/max3 trong các body target/entrance đã đọc; count phụ thuộc input, filtering và số target hợp lệ. Max thiết kế/global cap chưa được chứng minh; cần external grant consumer/config và stress board, không đổi thành unlimited.",
+          "conclusion": "OnLevelStart lưu externalSnitches và levelSnitchInfo; GetRedSnitchMoveTargetByIndex/GetNormalSnitchMoveTargetForIndex lọc/duyệt nguồn external+level lists. Không có literal max2/max3 trong các body target/entrance đã đọc; count phụ thuộc input, filtering và số target hợp lệ.",
+          "evidence": [
+            "../com.grandgames.magicsort_Unity_20260909_112501/RecoveredNative/PseudoC/Assembly-CSharp/Modules/Contexts/GamePlay/Snitch/Scripts/SnitchInGameManager.c:751",
+            "../com.grandgames.magicsort_Unity_20260909_112501/RecoveredNative/PseudoC/Assembly-CSharp/Modules/Contexts/GamePlay/Snitch/Scripts/SnitchInGameManager.c:795",
+            "../com.grandgames.magicsort_Unity_20260909_112501/RecoveredNative/PseudoC/Assembly-CSharp/Modules/Contexts/GamePlay/Snitch/Scripts/SnitchInGameManager.c:1152"
+          ],
+          "reviewed": "2026-11-15",
+          "mode": "file_only_recovered_native_0.0.3063",
+          "finding_id": "MS-CORE-BODY-13",
+          "remaining": "15/11 — partial_static_code_unresolved: OnLevelStart lưu externalSnitches và levelSnitchInfo; GetRedSnitchMoveTargetByIndex/GetNormalSnitchMoveTargetForIndex lọc/duyệt nguồn external+level lists. Không có literal max2/max3 trong các body target/entrance đã đọc; count phụ thuộc input, filtering và số target hợp lệ. Còn lại: Max thiết kế/global cap chưa được chứng minh; cần external grant consumer/config và stress board, không đổi thành unlimited."
+        },
+        {
+          "id": "MS-Snitch-G002",
+          "feature": "Snitch",
+          "source": "gdd/Snitch.json#/gaps/1",
+          "original": "Công thức GetBlockerPriorityScore (cách chấm điểm blocker) không đọc được con số từ pseudo-C",
+          "current_note": "15/11 — partial_static_code_unresolved: GetBlockerPriorityScore trả int.MinValue cho target khônghợp lệ; các nhánh có ưu tiên2/1 theo fillamount,15 khi waterpredicate và4 khi chaiempty; forceTarget bỏ một số gate. Khi đãchọn blocker type, score giảm1000×sốlần typeđãchọn. Nhiều nhánh typehierarchy/vtable chưa map đủ sang blocker names nên không phát một bảng heuristic hoànchỉnh. Còn lại: Map toàn bộ type-hierarchy branches và lambda predicates với ItemType; cần disassembly/board minimal xácminh từngnhánh.",
+          "status": "partial_static_code_unresolved",
+          "review_status": "preserved_partial_static_code_unresolved",
+          "dependency": "local_code_review",
+          "next_action": "GetBlockerPriorityScore trả int.MinValue cho target khônghợp lệ; các nhánh có ưu tiên2/1 theo fillamount,15 khi waterpredicate và4 khi chaiempty; forceTarget bỏ một số gate. Khi đãchọn blocker type, score giảm1000×sốlần typeđãchọn. Nhiều nhánh typehierarchy/vtable chưa map đủ sang blocker names nên không phát một bảng heuristic hoànchỉnh. Map toàn bộ type-hierarchy branches và lambda predicates với ItemType; cần disassembly/board minimal xácminh từngnhánh.",
+          "conclusion": "GetBlockerPriorityScore trả int.MinValue cho target khônghợp lệ; các nhánh có ưu tiên2/1 theo fillamount,15 khi waterpredicate và4 khi chaiempty; forceTarget bỏ một số gate. Khi đãchọn blocker type, score giảm1000×sốlần typeđãchọn. Nhiều nhánh typehierarchy/vtable chưa map đủ sang blocker names nên không phát một bảng heuristic hoànchỉnh.",
+          "evidence": [
+            "../com.grandgames.magicsort_Unity_20260909_112501/RecoveredNative/PseudoC/Assembly-CSharp/Modules/Contexts/GamePlay/Snitch/Scripts/SnitchTargetFinder.c:6660"
+          ],
+          "reviewed": "2026-11-15",
+          "mode": "file_only_recovered_native_0.0.3063",
+          "remaining": "15/11 — partial_static_code_unresolved: GetBlockerPriorityScore trả int.MinValue cho target khônghợp lệ; các nhánh có ưu tiên2/1 theo fillamount,15 khi waterpredicate và4 khi chaiempty; forceTarget bỏ một số gate. Khi đãchọn blocker type, score giảm1000×sốlần typeđãchọn. Nhiều nhánh typehierarchy/vtable chưa map đủ sang blocker names nên không phát một bảng heuristic hoànchỉnh. Còn lại: Map toàn bộ type-hierarchy branches và lambda predicates với ItemType; cần disassembly/board minimal xácminh từngnhánh."
+        },
+        {
+          "id": "MS-Snitch-G003",
+          "feature": "Snitch",
+          "source": "gdd/Snitch.json#/gaps/2",
+          "original": "Giá trị số thực trong SnitchAnimationConfig.asset và SnitchLobbyButtonAnimationConfig.asset chưa được trích ra (file .asset chỉ chứa tham chiếu curve)",
+          "current_note": "15/11 — resolved_static_snapshot: Hai Snitch animation asset có numeric và curve inline đầy đủ; không phải chỉ có curve reference. Xuất toàn bộ keyframe/tangent/weight cùng giá trị duration. Còn lại: Kiểm chứng effective config/asset và nhánh runtime trên đúng build nếu cần.",
+          "status": "resolved_static_snapshot",
+          "review_status": "preserved_resolved_static_snapshot",
+          "dependency": "local_asset_or_missing_bundle",
+          "next_action": "Hai Snitch animation asset có numeric và curve inline đầy đủ; không phải chỉ có curve reference. Xuất toàn bộ keyframe/tangent/weight cùng giá trị duration. Kiểm chứng effective config/asset và nhánh runtime trên đúng build nếu cần.",
+          "conclusion": "Hai Snitch animation asset có numeric và curve inline đầy đủ; không phải chỉ có curve reference. Xuất toàn bộ keyframe/tangent/weight cùng giá trị duration.",
+          "evidence": [
+            "facts/local_asset_review_20261115/asset_catalog.json"
+          ],
+          "data": "asset_catalog.json",
+          "scope": "static_export0.0.3063_or_historical_cache_not_runtime_pass",
+          "reviewed": "2026-11-15",
+          "source_records": [
+            {
+              "source": "MonoBehaviour\\SnitchAnimationConfig.asset",
+              "root": "UnityExport Assets 0.0.3063",
+              "sha256": "2ae582b6f2867ac702740d13a14e435c5f5409e4d89fd36388da37607092b33c",
+              "line": 1,
+              "build": "0.0.3063 ARMv7"
+            },
+            {
+              "source": "MonoBehaviour\\SnitchLobbyButtonAnimationConfig.asset",
+              "root": "UnityExport Assets 0.0.3063",
+              "sha256": "3b6b30a81911451c41baae59f760a17eac90cd91789339701154aced1954dbea",
+              "line": 1,
+              "build": "0.0.3063 ARMv7"
+            }
+          ],
+          "remaining": "15/11 — resolved_static_snapshot: Hai Snitch animation asset có numeric và curve inline đầy đủ; không phải chỉ có curve reference. Xuất toàn bộ keyframe/tangent/weight cùng giá trị duration. Còn lại: Kiểm chứng effective config/asset và nhánh runtime trên đúng build nếu cần."
+        },
+        {
+          "id": "MS-Snitch-G004",
+          "feature": "Snitch",
+          "source": "gdd/Snitch.json#/gaps/3",
+          "original": "SnitchSpawnInfo (dữ liệu đặt Snitch trong level) nằm trong định dạng level, chưa khảo sát ở tài liệu này",
+          "current_note": "15/11 — partial_actual_evidence: Đã survey4306board vàconverterId27→SnitchItemModel với ItemType/TargetCellIndices/TargetBottleIndices. Không thấyserializedSnitch27 hoặc top-levelexternalSnitchkey trong hai tậpboard này. Còn lại: Lấy đúngseedSL đã chọn khi featureactive và lưu rawmodel/mapping, không tạo dữ liệu thay thế.",
+          "status": "partial_actual_evidence",
+          "review_status": "preserved_partial_actual_evidence",
+          "dependency": "core_gameplay_and_levels_last",
+          "next_action": "Đã survey4306board vàconverterId27→SnitchItemModel với ItemType/TargetCellIndices/TargetBottleIndices. Không thấyserializedSnitch27 hoặc top-levelexternalSnitchkey trong hai tậpboard này. Lấy đúngseedSL đã chọn khi featureactive và lưu rawmodel/mapping, không tạo dữ liệu thay thế.",
+          "conclusion": "Đã survey4306board vàconverterId27→SnitchItemModel với ItemType/TargetCellIndices/TargetBottleIndices. Không thấyserializedSnitch27 hoặc top-levelexternalSnitchkey trong hai tậpboard này.",
+          "evidence": [
+            "facts/final_data_review_20261115/duck_snitch_board_survey.json",
+            "facts/final_data_review_20261115/serialized_item_mapping.json"
+          ],
+          "remaining": "15/11 — partial_actual_evidence: Đã survey4306board vàconverterId27→SnitchItemModel với ItemType/TargetCellIndices/TargetBottleIndices. Không thấyserializedSnitch27 hoặc top-levelexternalSnitchkey trong hai tậpboard này. Còn lại: Lấy đúngseedSL đã chọn khi featureactive và lưu rawmodel/mapping, không tạo dữ liệu thay thế.",
+          "source_records": [],
+          "reviewed": "2026-11-15",
+          "scope": "question-specific source/observed branch only; no full-UC or production claim",
+          "full_uc_pass": false
+        },
+        {
+          "id": "MS-Snitch-G005",
+          "feature": "Snitch",
+          "source": "gdd/Snitch.json#/gaps/4",
+          "original": "Không rõ Snitch hành động vào thời điểm nào trong lượt (đầu ván một lần hay theo số nước đi) — PerformSnitch được gọi từ hệ trạng thái level ngoài phạm vi các class Snitch",
+          "current_note": "15/11 — resolved_static_code_historical_build: OnLevelStart reset box state rồi state1. Box Update chờ new-blocker intro, entry animation, tutorial, rise/move red, rise/move normal theo states1..8. SnitchItem.OnBottleWatersUpdated chỉ complete khi belongingCell.WaterItem==topWaterItem; đánh dấu completed, lock bottle, tạo tween callback <Complete>b__18_0 dispatch normal/red manager effect. Không phải mỗi move bất kỳ đều tự kích Snitch. Còn lại: Đối chiếu nhánh này trên app0.0.3129 ARM64; chưa là runtime pass.",
+          "status": "resolved_static_code_historical_build",
+          "review_status": "preserved_resolved_static_code_historical_build",
+          "dependency": "core_gameplay_and_levels_last",
+          "next_action": "OnLevelStart reset box state rồi state1. Box Update chờ new-blocker intro, entry animation, tutorial, rise/move red, rise/move normal theo states1..8. SnitchItem.OnBottleWatersUpdated chỉ complete khi belongingCell.WaterItem==topWaterItem; đánh dấu completed, lock bottle, tạo tween callback <Complete>b__18_0 dispatch normal/red manager effect. Không phải mỗi move bất kỳ đều tự kích Snitch. Đối chiếu nhánh này trên app0.0.3129 ARM64; chưa là runtime pass.",
+          "conclusion": "OnLevelStart reset box state rồi state1. Box Update chờ new-blocker intro, entry animation, tutorial, rise/move red, rise/move normal theo states1..8. SnitchItem.OnBottleWatersUpdated chỉ complete khi belongingCell.WaterItem==topWaterItem; đánh dấu completed, lock bottle, tạo tween callback <Complete>b__18_0 dispatch normal/red manager effect. Không phải mỗi move bất kỳ đều tự kích Snitch.",
+          "evidence": [
+            "../com.grandgames.magicsort_Unity_20260909_112501/RecoveredNative/PseudoC/Assembly-CSharp/Modules/Contexts/GamePlay/Snitch/Scripts/SnitchBoxView.c:650",
+            "../com.grandgames.magicsort_Unity_20260909_112501/RecoveredNative/PseudoC/Assembly-CSharp/Modules/Contexts/GamePlay/Board/Items/Scripts/Snitch/SnitchItem.c:460",
+            "../com.grandgames.magicsort_Unity_20260909_112501/RecoveredNative/PseudoC/Assembly-CSharp/Modules/Contexts/GamePlay/Board/Items/Scripts/Snitch/SnitchItem.c:1311"
+          ],
+          "reviewed": "2026-11-15",
+          "mode": "file_only_recovered_native_0.0.3063",
+          "finding_id": "MS-CORE-BODY-14",
+          "remaining": "15/11 — resolved_static_code_historical_build: OnLevelStart reset box state rồi state1. Box Update chờ new-blocker intro, entry animation, tutorial, rise/move red, rise/move normal theo states1..8. SnitchItem.OnBottleWatersUpdated chỉ complete khi belongingCell.WaterItem==topWaterItem; đánh dấu completed, lock bottle, tạo tween callback <Complete>b__18_0 dispatch normal/red manager effect. Không phải mỗi move bất kỳ đều tự kích Snitch. Còn lại: Đối chiếu nhánh này trên app0.0.3129 ARM64; chưa là runtime pass."
+        },
+        {
+          "id": "MS-Snitch-G006",
+          "feature": "Snitch",
+          "source": "gdd/Snitch.json#/gaps/5",
+          "original": "[Runtime 2026-09-10] Config server LIVE đã đọc trực tiếp từ cache máy (không cần request); các hàng 'server live' là giá trị server ghi đè/thêm so với default.",
+          "current_note": "[Runtime 2026-09-10] Config server LIVE đã đọc trực tiếp từ cache máy (không cần request); các hàng 'server live' là giá trị server ghi đè/thêm so với default.",
+          "status": "historical_evidence_annotation_not_test_result",
+          "review_status": "historical_evidence_annotation_not_test_result",
+          "dependency": "historical_note_requires_qualified_use",
+          "next_action": "Ghi chú cache đã đọc tháng9, từ LIVE phải hiểu snapshot lịch sử. Đối chiếu config catalog/source, giữ default/cache/production hiện tại riêng; không coi là fresh fetch15/11.",
+          "remaining": "[Runtime 2026-09-10] Config server LIVE đã đọc trực tiếp từ cache máy (không cần request); các hàng 'server live' là giá trị server ghi đè/thêm so với default."
+        }
+      ],
+      "feature_specific_acceptance_questions": [
+        "Progress/activation/seed priority/normal-red count",
+        " blocker targeting/explosion/reward/reset và animation timing"
+      ],
+      "next_steps": [
+        "OnLevelStart lưu externalSnitches và levelSnitchInfo; GetRedSnitchMoveTargetByIndex/GetNormalSnitchMoveTargetForIndex lọc/duyệt nguồn external+level lists. Không có literal max2/max3 trong các body target/entrance đã đọc; count phụ thuộc input, filtering và số target hợp lệ. Max thiết kế/global cap chưa được chứng minh; cần external grant consumer/config và stress board, không đổi thành unlimited.",
+        "GetBlockerPriorityScore trả int.MinValue cho target khônghợp lệ; các nhánh có ưu tiên2/1 theo fillamount,15 khi waterpredicate và4 khi chaiempty; forceTarget bỏ một số gate. Khi đãchọn blocker type, score giảm1000×sốlần typeđãchọn. Nhiều nhánh typehierarchy/vtable chưa map đủ sang blocker names nên không phát một bảng heuristic hoànchỉnh. Map toàn bộ type-hierarchy branches và lambda predicates với ItemType; cần disassembly/board minimal xácminh từngnhánh.",
+        "Đã survey4306board vàconverterId27→SnitchItemModel với ItemType/TargetCellIndices/TargetBottleIndices. Không thấyserializedSnitch27 hoặc top-levelexternalSnitchkey trong hai tậpboard này. Lấy đúngseedSL đã chọn khi featureactive và lưu rawmodel/mapping, không tạo dữ liệu thay thế.",
+        "Ghi chú cache đã đọc tháng9, từ LIVE phải hiểu snapshot lịch sử. Đối chiếu config catalog/source, giữ default/cache/production hiện tại riêng; không coi là fresh fetch15/11."
+      ]
+    }
+  },
+  "use_cases": 18,
+  "configs": 27,
+  "new_review_case_count": 0,
+  "reviewed_uc_branch_count": 0,
+  "curated_new_image_count": 0,
+  "segment_ids": [],
+  "matching_basis": "explicit_gd_config_map_or_exact_model_token_in_gdd_configs_where_key_sources; rootfieldscoped",
+  "unmatched_segment_status": "not_identified_in_sources",
+  "local_document_repairs": [],
+  "sources": [
+    "GameDesign/facts/facts.json (SnitchService, SnitchDataService, SnitchInGameManager, SnitchTargetFinder, SnitchItem, SnitchAnimationConfig, các popup UI)",
+    "RecoveredNative/PseudoC/Assembly-CSharp/Modules/Contexts/Home/Snitch/Scripts/SnitchService.c",
+    "UnityExport/ExportedProject/Assets/Resources/defaultconfigs/SnitchConfigModel.json",
+    "UnityExport/ExportedProject/Assets/MonoBehaviour/SnitchAnimationConfig.asset, SnitchLobbyButtonAnimationConfig.asset",
+    "GameDesign/appendix/localization.tsv (Snitch*)"
+  ],
+  "source_hashes": {
+    "gdd_sha256": "e8155cfd61d1a26df57cf397af50cad4b188e2f2dd8ff6a5a298e478f9936b70",
+    "site_meta_sha256": "9d4adf91c11801e46c44be2cb11cf2c567ff0e69d3f2fe55e0b20368dc3be8d6"
+  }
+}

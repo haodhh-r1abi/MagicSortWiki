@@ -1,0 +1,1829 @@
+{
+  "id": "MagicStreakTournament",
+  "name": "Magic Streak Tournament",
+  "category": "Event",
+  "managers": [
+    "Modules.Contexts.Home.MagicStreakTournament.Scripts.MagicStreakService",
+    "Modules.Contexts.Home.MagicStreakTournament.Scripts.MagicStreakDataService",
+    "Modules.Contexts.Home.MagicStreakTournament.Scripts.MagicStreakStateService",
+    "Modules.Contexts.Home.MagicStreakTournament.Scripts.MagicStreakRemoteService",
+    "Modules.Contexts.Home.MagicStreakTournament.Scripts.MagicStreakTournamentConfigModel"
+  ],
+  "summary": "Magic Streak Tournament là biến thể giải đấu của cơ chế chuỗi thắng: thay vì chỉ tích điểm cho bản thân, điểm (nhân theo hệ số chuỗi 1/5/10/25/100) được đẩy lên một bảng xếp hạng có thời hạn (backend: 'magicstreak leaderboard', schema magicsort.schemas.v1.liveops.streak_leaderboard hoặc magic_streak_leaderboard). Người chơi vừa tranh hạng để lấy thưởng theo hạng (hạng 1 = 2000 Coin, hạng 2 = 1000, hạng 3 = 500, hạng 4-10 = 100 mỗi người) vừa leo một thanh tiến độ cá nhân 10 mốc (ProgressbarRewardSteps, từ 10 điểm/20 Coin tới 1000 điểm/1000 Coin). Popup có thể tự bật khi người chơi thăng hạng (ShouldOpenPopUpAutomaticallyOnRankUp, giãn cách ShowPopUpIntervalOnRankUp = 10 level). Đây là tách riêng khỏi MagicStreak (GAE) vì luồng, dữ liệu và endpoint hoàn toàn khác: GAE là tiến độ cá nhân, Tournament là bảng xếp hạng nhiều người.",
+  "unlock": "MagicStreakStateService.GetState(): Disable(0) nếu MagicStreakTournamentConfigModel.IsTournamentEnable == false; ProgressNotEnough(1) nếu level < FirstLevelToShow; NoCache(2); NotIntroduced(3); InProgress(4); LocalTimeIsUp(5); RemoteTimeIsUp(6); ClaimedLocally(7). Client default: IsTournamentEnable=false, IsProgressBarEnable=false, IsBannerEnable=true, FirstLevelToShow=25, EventType=1 (Resources/defaultconfigs/MagicStreakTournamentConfigModel.json). Cấu hình cũ StreakTournamentConfigModel.json còn giữ TournamentDurationInHours = 24.",
+  "entry_points": [
+    "Nút lobby Magic Streak Tournament (ShouldShowLobbyIcon)",
+    "Banner (ShouldShowBanner, IsBannerEnable = true) với MagicStreakTournamentBannerPlaceType: Win(0) hiện ở màn thắng, Lose(1) ở màn thua",
+    "Popup tự bật khi thăng hạng (ShouldOpenPopUpAutomaticallyOnRankUp, source RankUp)",
+    "Popup tự bật khi giải bắt đầu/kết thúc (source TournamentStart / TournamentEnd)",
+    "Popup xác nhận thoát level (ShouldShowAreYouSure)",
+    "Thanh tiến độ cá nhân trong popup (IsProgressBarEnable)"
+  ],
+  "flow": "Initialize() nạp _multipliers từ MagicStreakTournamentConfigModel.Multipliers = [1, 5, 10, 25, 100] và CreateProgressbarRewards() dựng danh sách mốc từ ProgressbarRewardSteps. InitializeData/IntervalUpdate → MagicStreakStateService.ShouldSendGetRequest() → TryFetchCurrentEvent() → CreateRequestModel() → FetchCurrentEvent() gọi MagicStreakRemoteService.SendGetRequest(MagicStreakTournamentRequestModel) tới magicStreakTournamentGetUrl (/v1/get-magicstreak-leaderboard). Response MagicStreakTournamentResponse{TournamentId, TournamentType, Players, startTime, finishTime, isClaimed, isFinished, userScore}. ChangeTournamentCache(response) ghi MagicStreakTournamentModel{TournamentId, FinishTime, StartTime, IsFinished, TournamentScore, Players}; UpdateLeaderboard() dựng _cachedLeaderboard; ChoosePlayerScore(isMe, isFinished, localScore, remoteScore) quyết định lấy điểm local hay remote cho từng dòng (giữ UI mượt khi điểm chưa sync). Gameplay: CacheMultiplierDataOnLevelStart() lưu hệ số đầu level; thắng level → IncreaseAllScores() gọi IncreaseTournamentScore(scoreIncrement) và IncreaseProgressbarRewardScore(scoreIncrement) với scoreIncrement = hệ số hiện tại, rồi IncreaseMultiplier() nâng bậc; thua level → ResetMultiplierOnLevelEnd() đưa hệ số về 1. SendSetScoreRequest() đẩy điểm tới magicStreakTournamentSetScoreUrl (/v1/set-magicstreak-tournament-points). Thanh tiến độ cá nhân: GetCurrentProgressbarRewardIndex(), GetCurrentProgressbarRewardStepScore(), GetCurrentProgressbarRewardStepMaxScore(), GetCurrentProgressbarRatio(), GetEarnedProgressbarRewards(); ShouldPlayProgressbarRewardAnimationLobbyReturn() và ResetProgressbarLobbyRewardAnimationCache() điều khiển animation. Kết thúc: GetRemainingSeconds()/GetEndDate() → LocalTimeIsUp(5)/RemoteTimeIsUp(6); AssignTournamentRewardsAndSetRanks(sortedLeaderboard) và AssignTournamentRewardToPlayer(player, rankIndex, rewardsConfig) gán thưởng theo TournamentRewards; GetTournamentReward()/GetFinalRankText() cho UI; ClaimTournamentReward() → SendClaimRequest() tới magicStreakTournamentClaimUrl (/v1/claim-magicstreak-tournament); IncreaseTournamentWinCount() tăng TournamentWinCount khi vô địch; state → ClaimedLocally(7); ScheduleLeaderboardFetchOnTimerEnd() tự fetch giải mới.",
+  "use_cases": [
+    {
+      "id": "UC-01",
+      "title": "Kiểm tra điều kiện và hiện icon/banner",
+      "actor": "System",
+      "trigger": "Vào lobby / IntervalUpdate",
+      "precondition": "RemoteConfigs sẵn sàng",
+      "steps": [
+        "MagicStreakStateService.GetConfig() lấy MagicStreakTournamentConfigModel",
+        "GetState() trả Disable(0)/ProgressNotEnough(1)/NoCache(2)/NotIntroduced(3)/InProgress(4)/LocalTimeIsUp(5)/RemoteTimeIsUp(6)/ClaimedLocally(7)",
+        "MagicStreakService.ShouldShowLobbyIcon() / ShouldShowBanner() (IsBannerEnable) / ShouldShowScrollBar()",
+        "GetLiveOpsStateForLevelEvent() cấp trạng thái cho analytics level"
+      ],
+      "result": "Icon + banner hiện/ẩn ở lobby và màn kết thúc level",
+      "rules": "Client default: IsTournamentEnable=false, IsBannerEnable=true, FirstLevelToShow=25",
+      "evidence": "MagicStreakStateService.GetState; MagicStreakStateService.ShouldShowLobbyIcon; MagicStreakService.ShouldShowBanner; MagicStreakService.ShouldShowScrollBar; MagicStreakService.GetLiveOpsStateForLevelEvent"
+    },
+    {
+      "id": "UC-02",
+      "title": "Lấy bảng xếp hạng giải",
+      "actor": "Server",
+      "trigger": "InitializeData / IntervalUpdate khi ShouldSendGetRequest()",
+      "precondition": "Sự kiện bật",
+      "steps": [
+        "MagicStreakService.TryFetchCurrentEvent() → CreateRequestModel() → FetchCurrentEvent()",
+        "MagicStreakRemoteService.SendGetRequest(MagicStreakTournamentRequestModel) tới magicStreakTournamentGetUrl (/v1/get-magicstreak-leaderboard)",
+        "Response MagicStreakTournamentResponse{TournamentId, TournamentType, Players, startTime, finishTime, isClaimed, isFinished, userScore}",
+        "ChangeTournamentCache(response) → MagicStreakDataService.SetTournamentCache(model)",
+        "UpdateLeaderboard() dựng _cachedLeaderboard; ProfileSpriteCacheService nạp avatar"
+      ],
+      "result": "Cache bảng xếp hạng và điểm của mình",
+      "rules": "MagicStreakStateService.IsFinishedBeforeIntroduction() xử lý trường hợp giải kết thúc trước khi người chơi kịp thấy",
+      "evidence": "MagicStreakService.TryFetchCurrentEvent; MagicStreakService.CreateRequestModel; MagicStreakService.FetchCurrentEvent; MagicStreakRemoteService.SendGetRequest; MagicStreakService.ChangeTournamentCache; MagicStreakService.UpdateLeaderboard; MagicStreakStateService.IsFinishedBeforeIntroduction"
+    },
+    {
+      "id": "UC-03",
+      "title": "Thắng level → cộng điểm giải và điểm thanh tiến độ theo hệ số",
+      "actor": "Player",
+      "trigger": "Hoàn thành level",
+      "precondition": "MagicStreakStateService.ShouldIncreaseScore() && CanEarnTournamentScore()",
+      "steps": [
+        "CacheMultiplierDataOnLevelStart() lưu hệ số đầu level cho animation",
+        "MagicStreakService.IncreaseAllScores() → IncreaseTournamentScore(scoreIncrement) và IncreaseProgressbarRewardScore(scoreIncrement)",
+        "scoreIncrement = GetCurrentMultiplier() (tra _multipliers = [1, 5, 10, 25, 100] theo GetCurrentMultiplierIndex())",
+        "IncreaseMultiplier() nâng MagicStreakModel.MultiplierIndex",
+        "GetStreakCountForAnimation() / GetAddedTournamentScoreForAnimation() cho hoạt ảnh",
+        "MagicStreakDataService.SetTournamentScore(newScore) / SetProgressbarRewardScore(rewardScore)"
+      ],
+      "result": "Điểm giải và điểm thanh tiến độ cùng tăng theo hệ số chuỗi",
+      "rules": "Cùng 5 bậc hệ số như bản GAE",
+      "evidence": "MagicStreakService.IncreaseAllScores; MagicStreakService.IncreaseTournamentScore; MagicStreakService.IncreaseProgressbarRewardScore; MagicStreakService.IncreaseMultiplier; MagicStreakService.GetCurrentMultiplier; MagicStreakDataService.SetTournamentScore"
+    },
+    {
+      "id": "UC-04",
+      "title": "Thua level → mất hệ số nhân",
+      "actor": "Player",
+      "trigger": "Kết thúc level không thắng",
+      "precondition": "-",
+      "steps": [
+        "MagicStreakService.ResetMultiplierOnLevelEnd() đưa MultiplierIndex về 0 (hệ số 1)",
+        "ResetStreakCountForAnimation() dọn dữ liệu hoạt ảnh",
+        "Điểm giải và điểm thanh tiến độ đã tích KHÔNG bị trừ"
+      ],
+      "result": "Tốc độ tích điểm giảm, người chơi phải xây lại chuỗi",
+      "rules": "-",
+      "evidence": "MagicStreakService.ResetMultiplierOnLevelEnd; MagicStreakService.ResetStreakCountForAnimation; MagicStreakService.GetCurrentMultiplierIndex"
+    },
+    {
+      "id": "UC-05",
+      "title": "Cảnh báo trước khi thoát level",
+      "actor": "Player",
+      "trigger": "Bấm thoát trong level",
+      "precondition": "Hệ số nhân đang cao",
+      "steps": [
+        "MagicStreakService.ShouldShowAreYouSure()",
+        "Hiển thị hệ số sắp mất và vị trí trên bảng"
+      ],
+      "result": "Thúc đẩy dùng booster/Play-On",
+      "rules": "-",
+      "evidence": "MagicStreakService.ShouldShowAreYouSure"
+    },
+    {
+      "id": "UC-06",
+      "title": "Đẩy điểm lên server",
+      "actor": "System",
+      "trigger": "Sau khi tăng điểm / theo nhịp",
+      "precondition": "MagicStreakStateService.ShouldSendStat() == true",
+      "steps": [
+        "MagicStreakService.SendSetScoreRequest()",
+        "MagicStreakRemoteService.SendSetScoreRequest(MagicStreakTournamentRequestModel) tới magicStreakTournamentSetScoreUrl (/v1/set-magicstreak-tournament-points)",
+        "ChoosePlayerScore(isMe, isFinished, localScore, remoteScore) đảm bảo UI hiển thị điểm cao hơn giữa local và remote"
+      ],
+      "result": "Điểm chính thức trên bảng; nếu lỗi, điểm local vẫn hiển thị",
+      "rules": "-",
+      "evidence": "MagicStreakService.SendSetScoreRequest; MagicStreakRemoteService.SendSetScoreRequest; MagicStreakService.ChoosePlayerScore; MagicStreakStateService.ShouldSendStat"
+    },
+    {
+      "id": "UC-07",
+      "title": "Thanh tiến độ cá nhân 10 mốc",
+      "actor": "Player",
+      "trigger": "Điểm tăng",
+      "precondition": "IsProgressBarEnable == true",
+      "steps": [
+        "MagicStreakService.CreateProgressbarRewards() dựng từ ProgressbarRewardSteps (Score + RewardModel)",
+        "GetCurrentProgressbarRewardIndex() / GetCurrentProgressbarRewardStepScore() / GetCurrentProgressbarRewardStepMaxScore() / GetNeededScoreForProgressbarCurrentStep()",
+        "GetCurrentProgressbarRatio() / GetLastProgressbarRatio() cho animation",
+        "GetProgressbarAllRewards() / GetProgressbarCurrentReward() / GetEarnedProgressbarRewards()",
+        "GetClaimedProgressbarStepRank() / GetProgressbarClaimedStepReward() cho popup nhận thưởng",
+        "CacheLastSeenProgressbarValues() và ResetProgressbarRewardScoreAndMultiplierIndex() khi sang giải mới"
+      ],
+      "result": "Nhận 20 Coin → 1000 Coin cùng Life vô hạn, Shuffle, Undo, ExtraBottle theo 10 mốc",
+      "rules": "Client default IsProgressBarEnable = false (phải bật bằng remote config)",
+      "evidence": "MagicStreakService.CreateProgressbarRewards; MagicStreakService.GetCurrentProgressbarRewardIndex; MagicStreakService.GetEarnedProgressbarRewards; MagicStreakService.GetProgressbarAllRewards; MagicStreakService.CacheLastSeenProgressbarValues"
+    },
+    {
+      "id": "UC-08",
+      "title": "Hoạt ảnh nhận thưởng thanh tiến độ khi về lobby",
+      "actor": "System",
+      "trigger": "Về lobby sau khi vượt mốc",
+      "precondition": "-",
+      "steps": [
+        "MagicStreakService.ShouldPlayProgressbarRewardAnimationLobbyReturn()",
+        "ResetProgressbarLobbyRewardAnimationCache() sau khi chạy xong",
+        "MagicStreakDataService.SetLastSeenProgressbarRewardIndex(index) / SetLastSeenProgressbarRewardScore(score)"
+      ],
+      "result": "Người chơi thấy thưởng bung ra đúng một lần",
+      "rules": "-",
+      "evidence": "MagicStreakService.ShouldPlayProgressbarRewardAnimationLobbyReturn; MagicStreakService.ResetProgressbarLobbyRewardAnimationCache; MagicStreakDataService.SetLastSeenProgressbarRewardIndex"
+    },
+    {
+      "id": "UC-09",
+      "title": "Xem bảng xếp hạng và thứ hạng",
+      "actor": "Player",
+      "trigger": "Mở popup giải",
+      "precondition": "Có cache bảng",
+      "steps": [
+        "MagicStreakService.GetLeaderboard() trả List<MagicStreakTournamentLeaderboardPlayerViewModel>",
+        "GetRank() / GetRankIndex() / GetLastSeenRank() / GetScore() / GetLastSeenScore()",
+        "MagicStreakDataService.SetLastSeenRank(rank) / SetLastSeenTournamentScore(score)",
+        "GetFinalRankText() trả text hạng cuối (fallback '-')",
+        "EventSender: streak_leaderboard_impression với current_rank, total_users, real_user_count, bot_count"
+      ],
+      "result": "Người chơi thấy vị trí và khoảng cách với đối thủ",
+      "rules": "Bảng có cả bot (real_user_count vs total_users trong analytics)",
+      "evidence": "MagicStreakService.GetLeaderboard; MagicStreakService.GetRank; MagicStreakService.GetRankIndex; MagicStreakService.GetFinalRankText; MagicStreakDataService.SetLastSeenRank"
+    },
+    {
+      "id": "UC-10",
+      "title": "Popup tự bật khi thăng hạng",
+      "actor": "System",
+      "trigger": "Thứ hạng tăng so với lần xem trước",
+      "precondition": "ShouldOpenPopUpAutomaticallyOnRankUp == true",
+      "steps": [
+        "MagicStreakService.IsElapsedNLevelsSinceLastSeen() so số level đã chơi với ShowPopUpIntervalOnRankUp",
+        "MagicStreakDataService.SetLastSeenLevel(level) / GetLastSeenLevel()",
+        "MagicStreakStateService.ShouldForceOpen() và GetPopupState() trả MagicStreakTournamentPopupStateType: Disable(0), NoInternetConnection(1), NotIntroduced(2), InProgress(3), TournamentResult(4)",
+        "Mở popup với MagicStreakTournamentPopupImpressionSource.RankUp(3)",
+        "CacheLastSeenData() / ResetLastSeenData() quản lý mốc so sánh"
+      ],
+      "result": "Người chơi được khoe thứ hạng mới nhưng không bị spam (giãn cách 10 level)",
+      "rules": "ShowPopUpIntervalOnRankUp = 10 (client default). Bản cấu hình cũ StreakTournamentConfigModel dùng giá trị 1.",
+      "evidence": "MagicStreakService.IsElapsedNLevelsSinceLastSeen; MagicStreakStateService.ShouldForceOpen; MagicStreakStateService.GetPopupState; MagicStreakService.CacheLastSeenData; MagicStreakDataService.SetLastSeenLevel"
+    },
+    {
+      "id": "UC-11",
+      "title": "Kết thúc giải và gán thưởng theo hạng",
+      "actor": "System",
+      "trigger": "Hết giờ hoặc isFinished = true",
+      "precondition": "-",
+      "steps": [
+        "MagicStreakService.GetRemainingSeconds() / GetEndDate() / GetStartTimeAsUnix()",
+        "State → LocalTimeIsUp(5) / RemoteTimeIsUp(6)",
+        "AssignTournamentRewardsAndSetRanks(sortedLeaderboard) sắp xếp và gán hạng",
+        "AssignTournamentRewardToPlayer(player, rankIndex, rewardsConfig) dùng TournamentRewards{FirstRankRewardModel, SecondRankRewardModel, ThirdRankRewardModel, OtherRanksRewardModel, OtherRanksLimit}",
+        "GetTournamentReward() trả phần thưởng của mình",
+        "Popup mở với source TournamentEnd(2), state TournamentResult(4)"
+      ],
+      "result": "Bảng kết quả với thưởng từng hạng",
+      "rules": "Thưởng mặc định: hạng 1 = 2000 Coin, hạng 2 = 1000, hạng 3 = 500, hạng 4 đến OtherRanksLimit (10) = 100 Coin",
+      "evidence": "MagicStreakService.AssignTournamentRewardsAndSetRanks; MagicStreakService.AssignTournamentRewardToPlayer; MagicStreakService.GetTournamentReward; MagicStreakService.GetRemainingSeconds"
+    },
+    {
+      "id": "UC-12",
+      "title": "Nhận thưởng giải",
+      "actor": "Player",
+      "trigger": "Bấm Claim ở bảng kết quả",
+      "precondition": "MagicStreakStateService.ShouldSendClaimRequest() == true",
+      "steps": [
+        "MagicStreakService.ClaimTournamentReward() → SendClaimRequest()",
+        "MagicStreakRemoteService.SendClaimRequest(MagicStreakTournamentRequestModel) tới magicStreakTournamentClaimUrl (/v1/claim-magicstreak-tournament)",
+        "IncreaseTournamentWinCount() → MagicStreakDataService.SetTournamentWinCount(currentWinCount) khi vô địch",
+        "MagicStreakDataService.SetIsClaimedLocally(true) → state ClaimedLocally(7)",
+        "GetTournamentWinCount() hiển thị số lần vô địch"
+      ],
+      "result": "Coin vào túi; số cúp tăng",
+      "rules": "-",
+      "evidence": "MagicStreakService.ClaimTournamentReward; MagicStreakService.SendClaimRequest; MagicStreakService.IncreaseTournamentWinCount; MagicStreakDataService.SetIsClaimedLocally; MagicStreakService.GetTournamentWinCount"
+    },
+    {
+      "id": "UC-13",
+      "title": "Nối tiếp giải mới",
+      "actor": "System",
+      "trigger": "Giải hiện tại kết thúc",
+      "precondition": "-",
+      "steps": [
+        "MagicStreakService.ScheduleLeaderboardFetchOnTimerEnd() dùng SecondTimer đặt lịch fetch",
+        "ResetProgressbarRewardScoreAndMultiplierIndex() reset điểm thanh tiến độ và hệ số",
+        "OnFeatureIntroduced() / MagicStreakDataService.SetIsIntroduced(true) đánh dấu đã giới thiệu",
+        "Thời lượng giải mới lấy từ startTime/finishTime của instance. Không áp TournamentDurationInHours24 của asset legacy StreakTournamentConfigModel cho active consumer MagicStreakTournamentConfigModel."
+      ],
+      "result": "Giải mới bắt đầu liền mạch",
+      "rules": "-",
+      "evidence": "MagicStreakService.ScheduleLeaderboardFetchOnTimerEnd; MagicStreakService.ResetProgressbarRewardScoreAndMultiplierIndex; MagicStreakService.OnFeatureIntroduced; MagicStreakDataService.SetIsIntroduced"
+    },
+    {
+      "id": "UC-14",
+      "title": "Banner ở màn thắng/thua level",
+      "actor": "System",
+      "trigger": "Kết thúc một level",
+      "precondition": "IsBannerEnable == true",
+      "steps": [
+        "MagicStreakService.ShouldShowBanner()",
+        "MagicStreakTournamentBannerPlaceType quyết định vị trí: Win(0) ở màn thắng, Lose(1) ở màn thua",
+        "Sprite theo MagicStreakTournamentSpriteConfig"
+      ],
+      "result": "Nhắc người chơi về thứ hạng ngay sau mỗi level",
+      "rules": "-",
+      "evidence": "MagicStreakService.ShouldShowBanner; MagicStreakTournamentBannerPlaceType; MagicStreakTournamentSpriteConfig"
+    },
+    {
+      "id": "UC-15",
+      "title": "Offline / lỗi request",
+      "actor": "System",
+      "trigger": "Get/Set/Claim thất bại",
+      "precondition": "-",
+      "steps": [
+        "MagicStreakTournamentPopupStateType.NoInternetConnection(1) hiển thị popup báo mất mạng",
+        "State giữ NoCache(2) nếu chưa từng fetch được",
+        "ChoosePlayerScore giữ điểm local trên UI cho tới khi sync được",
+        "IntervalUpdate thử lại"
+      ],
+      "result": "Không mất điểm; các thao tác server bị hoãn",
+      "rules": "-",
+      "evidence": "MagicStreakStateService.GetPopupState; MagicStreakService.ChoosePlayerScore; MagicStreakService.IntervalUpdate; MagicStreakStateService.ShouldSendGetRequest"
+    },
+    {
+      "id": "UC-16",
+      "title": "Đồng bộ dữ liệu",
+      "actor": "Server",
+      "trigger": "Sync / đổi thiết bị",
+      "precondition": "ISyncable",
+      "steps": [
+        "MagicStreakDataService.GetSyncName() = 'MagicStreakModel'",
+        "SerializeModelForSync() gửi MagicStreakModel{MagicStreakTournamentCache, IsClaimedLocally, IsIntroduced, ProgressbarRewardScore, ProgressbarRewardIndex, MultiplierIndex, TournamentWinCount}",
+        "OverwriteModelFromSync(data); DataSynced(); LateUpdate() lưu khi dirty; DeleteData() khi reset"
+      ],
+      "result": "Điểm, hệ số, số lần vô địch giữ nguyên khi đổi máy",
+      "rules": "-",
+      "evidence": "MagicStreakDataService.GetSyncName; MagicStreakDataService.SerializeModelForSync; MagicStreakDataService.OverwriteModelFromSync; MagicStreakDataService.DeleteData"
+    }
+  ],
+  "configs": [
+    {
+      "source": "json default",
+      "key": "IsTournamentEnable",
+      "type": "bool",
+      "value": "false",
+      "meaning": "Bật/tắt giải Magic Streak",
+      "where": "Resources/defaultconfigs/MagicStreakTournamentConfigModel.json"
+    },
+    {
+      "source": "json default",
+      "key": "IsProgressBarEnable",
+      "type": "bool",
+      "value": "false",
+      "meaning": "Bật thanh tiến độ cá nhân 10 mốc",
+      "where": "MagicStreakTournamentConfigModel.json"
+    },
+    {
+      "source": "json default",
+      "key": "IsBannerEnable",
+      "type": "bool",
+      "value": "true",
+      "meaning": "Bật banner ở màn thắng/thua level",
+      "where": "MagicStreakTournamentConfigModel.json"
+    },
+    {
+      "source": "json default",
+      "key": "FirstLevelToShow",
+      "type": "int",
+      "value": "25",
+      "meaning": "Level tối thiểu",
+      "where": "MagicStreakTournamentConfigModel.json"
+    },
+    {
+      "source": "json default",
+      "key": "EventType",
+      "type": "int",
+      "value": "1",
+      "meaning": "TournamentType gửi backend",
+      "where": "MagicStreakTournamentConfigModel.json"
+    },
+    {
+      "source": "json default",
+      "key": "ShouldOpenPopUpAutomaticallyOnRankUp",
+      "type": "bool",
+      "value": "true",
+      "meaning": "Tự mở popup khi thăng hạng",
+      "where": "MagicStreakTournamentConfigModel.json"
+    },
+    {
+      "source": "json default",
+      "key": "ShowPopUpIntervalOnRankUp",
+      "type": "int",
+      "value": "10",
+      "meaning": "Số level tối thiểu giữa hai lần tự mở popup",
+      "where": "MagicStreakTournamentConfigModel.json"
+    },
+    {
+      "source": "json default",
+      "key": "Multipliers",
+      "type": "int[]",
+      "value": "[1, 5, 10, 25, 100]",
+      "meaning": "5 bậc hệ số nhân điểm theo chuỗi thắng",
+      "where": "MagicStreakTournamentConfigModel.json"
+    },
+    {
+      "source": "json default",
+      "key": "TournamentRewards.FirstRankRewardModel",
+      "type": "reward",
+      "value": "2000 Coin(1)",
+      "meaning": "Thưởng hạng 1",
+      "where": "MagicStreakTournamentConfigModel.json"
+    },
+    {
+      "source": "json default",
+      "key": "TournamentRewards.SecondRankRewardModel",
+      "type": "reward",
+      "value": "1000 Coin(1)",
+      "meaning": "Thưởng hạng 2",
+      "where": "MagicStreakTournamentConfigModel.json"
+    },
+    {
+      "source": "json default",
+      "key": "TournamentRewards.ThirdRankRewardModel",
+      "type": "reward",
+      "value": "500 Coin(1)",
+      "meaning": "Thưởng hạng 3",
+      "where": "MagicStreakTournamentConfigModel.json"
+    },
+    {
+      "source": "json default",
+      "key": "TournamentRewards.OtherRanksRewardModel / OtherRanksLimit",
+      "type": "reward/int",
+      "value": "100 Coin(1) / 10",
+      "meaning": "Hạng 4 đến 10 nhận 100 Coin",
+      "where": "MagicStreakTournamentConfigModel.json"
+    },
+    {
+      "source": "json default",
+      "key": "ProgressbarRewardSteps[0] (10 điểm)",
+      "type": "reward",
+      "value": "20 Coin(1)",
+      "meaning": "Mốc 1 thanh tiến độ",
+      "where": "MagicStreakTournamentConfigModel.json"
+    },
+    {
+      "source": "json default",
+      "key": "ProgressbarRewardSteps[1] (50 điểm)",
+      "type": "reward",
+      "value": "Life(2) 00:15:00",
+      "meaning": "Mốc 2",
+      "where": "MagicStreakTournamentConfigModel.json"
+    },
+    {
+      "source": "json default",
+      "key": "ProgressbarRewardSteps[2] (100 điểm)",
+      "type": "reward",
+      "value": "100 Coin(1)",
+      "meaning": "Mốc 3",
+      "where": "MagicStreakTournamentConfigModel.json"
+    },
+    {
+      "source": "json default",
+      "key": "ProgressbarRewardSteps[3] (200 điểm)",
+      "type": "reward",
+      "value": "1 Shuffle(5)",
+      "meaning": "Mốc 4",
+      "where": "MagicStreakTournamentConfigModel.json"
+    },
+    {
+      "source": "json default",
+      "key": "ProgressbarRewardSteps[4] (200 điểm)",
+      "type": "reward",
+      "value": "1 Undo(4)",
+      "meaning": "Mốc 5",
+      "where": "MagicStreakTournamentConfigModel.json"
+    },
+    {
+      "source": "json default",
+      "key": "ProgressbarRewardSteps[5] (500 điểm)",
+      "type": "reward",
+      "value": "300 Coin(1)",
+      "meaning": "Mốc 6",
+      "where": "MagicStreakTournamentConfigModel.json"
+    },
+    {
+      "source": "json default",
+      "key": "ProgressbarRewardSteps[6] (300 điểm)",
+      "type": "reward",
+      "value": "Life(2) 00:30:00",
+      "meaning": "Mốc 7",
+      "where": "MagicStreakTournamentConfigModel.json"
+    },
+    {
+      "source": "json default",
+      "key": "ProgressbarRewardSteps[7] (800 điểm)",
+      "type": "reward",
+      "value": "500 Coin(1)",
+      "meaning": "Mốc 8",
+      "where": "MagicStreakTournamentConfigModel.json"
+    },
+    {
+      "source": "json default",
+      "key": "ProgressbarRewardSteps[8] (400 điểm)",
+      "type": "reward",
+      "value": "1 ExtraBottle(6)",
+      "meaning": "Mốc 9",
+      "where": "MagicStreakTournamentConfigModel.json"
+    },
+    {
+      "source": "json default",
+      "key": "ProgressbarRewardSteps[9] (1000 điểm)",
+      "type": "reward",
+      "value": "1000 Coin(1)",
+      "meaning": "Mốc 10 (cuối)",
+      "where": "MagicStreakTournamentConfigModel.json"
+    },
+    {
+      "source": "json default",
+      "key": "StreakTournamentConfigModel.TournamentDurationInHours",
+      "type": "int",
+      "value": "24",
+      "meaning": "Độ dài một giải (cấu hình bản cũ, vẫn có trong build)",
+      "where": "Resources/defaultconfigs/StreakTournamentConfigModel.json"
+    },
+    {
+      "source": "json default",
+      "key": "StreakTournamentConfigModel.ShowPopUpIntervalOnRankUp",
+      "type": "int",
+      "value": "1",
+      "meaning": "Giá trị bản cũ (khác bản mới = 10)",
+      "where": "StreakTournamentConfigModel.json"
+    },
+    {
+      "source": "code enum",
+      "key": "MagicStreakStateType",
+      "type": "enum",
+      "value": "Disable=0, ProgressNotEnough=1, NoCache=2, NotIntroduced=3, InProgress=4, LocalTimeIsUp=5, RemoteTimeIsUp=6, ClaimedLocally=7",
+      "meaning": "Trạng thái giải",
+      "where": "dump.cs TypeDefIndex 3424"
+    },
+    {
+      "source": "code enum",
+      "key": "MagicStreakTournamentPopupStateType",
+      "type": "enum",
+      "value": "Disable=0, NoInternetConnection=1, NotIntroduced=2, InProgress=3, TournamentResult=4",
+      "meaning": "Layout popup",
+      "where": "dump.cs TypeDefIndex 3425"
+    },
+    {
+      "source": "code enum",
+      "key": "MagicStreakTournamentPopupImpressionSource",
+      "type": "enum",
+      "value": "LobbyIcon=0, TournamentStart=1, TournamentEnd=2, RankUp=3, None=4",
+      "meaning": "Nguồn mở popup",
+      "where": "dump.cs TypeDefIndex 3456"
+    },
+    {
+      "source": "code enum",
+      "key": "MagicStreakTournamentBannerPlaceType",
+      "type": "enum",
+      "value": "Win=0, Lose=1",
+      "meaning": "Vị trí banner ở màn kết thúc level",
+      "where": "dump.cs TypeDefIndex 3503"
+    },
+    {
+      "source": "server info",
+      "key": "MagicStreakTournamentResponse",
+      "type": "object",
+      "value": "TournamentId, TournamentType, Players, startTime, finishTime, isClaimed, isFinished, userScore",
+      "meaning": "Trạng thái giải và bảng xếp hạng",
+      "where": "dump.cs TypeDefIndex 3410"
+    },
+    {
+      "source": "server info",
+      "key": "MagicStreakTournamentModel (cache)",
+      "type": "object",
+      "value": "TournamentId, FinishTime, StartTime, IsFinished, TournamentScore, Players",
+      "meaning": "Cache giải phía client",
+      "where": "dump.cs TypeDefIndex 3404"
+    },
+    {
+      "source": "server info",
+      "key": "FlatBuffer schema",
+      "type": "string",
+      "value": "magicsort.schemas.v1.liveops.streak_leaderboard và magicsort.schemas.v1.liveops.magic_streak_leaderboard",
+      "meaning": "Hai schema nhị phân liên quan tới bảng xếp hạng chuỗi",
+      "where": "PseudoC/Assembly-CSharp/MagicSort/schemas/v1/liveops/"
+    },
+    {
+      "source": "storage key",
+      "key": "MagicStreakModel",
+      "type": "string",
+      "value": "-",
+      "meaning": "Tên khối sync",
+      "where": "MagicStreakDataService.GetSyncName"
+    },
+    {
+      "source": "storage key",
+      "key": "MagicStreakModel.{MagicStreakTournamentCache, IsClaimedLocally, IsIntroduced, ProgressbarRewardScore, ProgressbarRewardIndex, MultiplierIndex, TournamentWinCount}",
+      "type": "object",
+      "value": "-",
+      "meaning": "Dữ liệu lưu và đồng bộ",
+      "where": "dump.cs TypeDefIndex 3403"
+    },
+    {
+      "source": "code field",
+      "key": "MagicStreakDataService cache lastSeen",
+      "type": "int",
+      "value": "_lastSeenProgressbarRewardScore, _lastSeenProgressbarRewardIndex, _lastSeenTournamentScore, _lastSeenMultiplierIndex, _lastSeenRank, _lastSeenLevel",
+      "meaning": "Mốc so sánh để chạy hoạt ảnh và quyết định mở popup",
+      "where": "MagicStreakDataService"
+    },
+    {
+      "source": "asset",
+      "key": "MagicStreakTournamentSpriteConfig",
+      "type": "ScriptableObject",
+      "value": "-",
+      "meaning": "Sprite của giải và banner",
+      "where": "GameDesign/features (MagicStreakTournament*)"
+    },
+    {
+      "source": "json default",
+      "key": "MagicStreakTournamentConfigModel.json: TournamentRewards.FirstRankRewardModel.CurrencyType",
+      "type": "",
+      "value": "1",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/MagicStreakTournamentConfigModel.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "MagicStreakTournamentConfigModel.json: TournamentRewards.FirstRankRewardModel.Amount",
+      "type": "",
+      "value": "2000",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/MagicStreakTournamentConfigModel.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "MagicStreakTournamentConfigModel.json: TournamentRewards.SecondRankRewardModel.CurrencyType",
+      "type": "",
+      "value": "1",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/MagicStreakTournamentConfigModel.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "MagicStreakTournamentConfigModel.json: TournamentRewards.SecondRankRewardModel.Amount",
+      "type": "",
+      "value": "1000",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/MagicStreakTournamentConfigModel.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "MagicStreakTournamentConfigModel.json: TournamentRewards.ThirdRankRewardModel.CurrencyType",
+      "type": "",
+      "value": "1",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/MagicStreakTournamentConfigModel.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "MagicStreakTournamentConfigModel.json: TournamentRewards.ThirdRankRewardModel.Amount",
+      "type": "",
+      "value": "500",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/MagicStreakTournamentConfigModel.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "MagicStreakTournamentConfigModel.json: TournamentRewards.OtherRanksRewardModel.CurrencyType",
+      "type": "",
+      "value": "1",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/MagicStreakTournamentConfigModel.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "MagicStreakTournamentConfigModel.json: TournamentRewards.OtherRanksRewardModel.Amount",
+      "type": "",
+      "value": "100",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/MagicStreakTournamentConfigModel.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "MagicStreakTournamentConfigModel.json: TournamentRewards.OtherRanksLimit",
+      "type": "",
+      "value": "10",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/MagicStreakTournamentConfigModel.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "MagicStreakTournamentConfigModel.json: ProgressbarRewardSteps[0].Score",
+      "type": "",
+      "value": "10",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/MagicStreakTournamentConfigModel.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "MagicStreakTournamentConfigModel.json: ProgressbarRewardSteps[0].RewardModel.CurrencyType",
+      "type": "",
+      "value": "1",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/MagicStreakTournamentConfigModel.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "MagicStreakTournamentConfigModel.json: ProgressbarRewardSteps[0].RewardModel.Amount",
+      "type": "",
+      "value": "20",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/MagicStreakTournamentConfigModel.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "MagicStreakTournamentConfigModel.json: ProgressbarRewardSteps[1].Score",
+      "type": "",
+      "value": "50",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/MagicStreakTournamentConfigModel.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "MagicStreakTournamentConfigModel.json: ProgressbarRewardSteps[1].RewardModel.CurrencyType",
+      "type": "",
+      "value": "2",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/MagicStreakTournamentConfigModel.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "MagicStreakTournamentConfigModel.json: ProgressbarRewardSteps[1].RewardModel.Amount",
+      "type": "",
+      "value": "0",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/MagicStreakTournamentConfigModel.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "MagicStreakTournamentConfigModel.json: ProgressbarRewardSteps[1].RewardModel.timeSpan",
+      "type": "",
+      "value": "00:15:00",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/MagicStreakTournamentConfigModel.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "MagicStreakTournamentConfigModel.json: ProgressbarRewardSteps[2].Score",
+      "type": "",
+      "value": "100",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/MagicStreakTournamentConfigModel.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "MagicStreakTournamentConfigModel.json: ProgressbarRewardSteps[2].RewardModel.CurrencyType",
+      "type": "",
+      "value": "1",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/MagicStreakTournamentConfigModel.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "MagicStreakTournamentConfigModel.json: ProgressbarRewardSteps[2].RewardModel.Amount",
+      "type": "",
+      "value": "100",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/MagicStreakTournamentConfigModel.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "MagicStreakTournamentConfigModel.json: ProgressbarRewardSteps[3].Score",
+      "type": "",
+      "value": "200",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/MagicStreakTournamentConfigModel.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "MagicStreakTournamentConfigModel.json: ProgressbarRewardSteps[3].RewardModel.CurrencyType",
+      "type": "",
+      "value": "5",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/MagicStreakTournamentConfigModel.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "MagicStreakTournamentConfigModel.json: ProgressbarRewardSteps[3].RewardModel.Amount",
+      "type": "",
+      "value": "1",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/MagicStreakTournamentConfigModel.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "MagicStreakTournamentConfigModel.json: ProgressbarRewardSteps[4].Score",
+      "type": "",
+      "value": "200",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/MagicStreakTournamentConfigModel.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "MagicStreakTournamentConfigModel.json: ProgressbarRewardSteps[4].RewardModel.CurrencyType",
+      "type": "",
+      "value": "4",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/MagicStreakTournamentConfigModel.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "MagicStreakTournamentConfigModel.json: ProgressbarRewardSteps[4].RewardModel.Amount",
+      "type": "",
+      "value": "1",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/MagicStreakTournamentConfigModel.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "MagicStreakTournamentConfigModel.json: ProgressbarRewardSteps[5].Score",
+      "type": "",
+      "value": "500",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/MagicStreakTournamentConfigModel.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "MagicStreakTournamentConfigModel.json: ProgressbarRewardSteps[5].RewardModel.CurrencyType",
+      "type": "",
+      "value": "1",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/MagicStreakTournamentConfigModel.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "MagicStreakTournamentConfigModel.json: ProgressbarRewardSteps[5].RewardModel.Amount",
+      "type": "",
+      "value": "300",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/MagicStreakTournamentConfigModel.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "MagicStreakTournamentConfigModel.json: ProgressbarRewardSteps[6].Score",
+      "type": "",
+      "value": "300",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/MagicStreakTournamentConfigModel.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "MagicStreakTournamentConfigModel.json: ProgressbarRewardSteps[6].RewardModel.CurrencyType",
+      "type": "",
+      "value": "2",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/MagicStreakTournamentConfigModel.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "MagicStreakTournamentConfigModel.json: ProgressbarRewardSteps[6].RewardModel.Amount",
+      "type": "",
+      "value": "0",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/MagicStreakTournamentConfigModel.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "MagicStreakTournamentConfigModel.json: ProgressbarRewardSteps[6].RewardModel.timeSpan",
+      "type": "",
+      "value": "00:30:00",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/MagicStreakTournamentConfigModel.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "MagicStreakTournamentConfigModel.json: ProgressbarRewardSteps[7].Score",
+      "type": "",
+      "value": "800",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/MagicStreakTournamentConfigModel.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "MagicStreakTournamentConfigModel.json: ProgressbarRewardSteps[7].RewardModel.CurrencyType",
+      "type": "",
+      "value": "1",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/MagicStreakTournamentConfigModel.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "MagicStreakTournamentConfigModel.json: ProgressbarRewardSteps[7].RewardModel.Amount",
+      "type": "",
+      "value": "500",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/MagicStreakTournamentConfigModel.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "MagicStreakTournamentConfigModel.json: ProgressbarRewardSteps[8].Score",
+      "type": "",
+      "value": "400",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/MagicStreakTournamentConfigModel.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "MagicStreakTournamentConfigModel.json: ProgressbarRewardSteps[8].RewardModel.CurrencyType",
+      "type": "",
+      "value": "6",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/MagicStreakTournamentConfigModel.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "MagicStreakTournamentConfigModel.json: ProgressbarRewardSteps[8].RewardModel.Amount",
+      "type": "",
+      "value": "1",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/MagicStreakTournamentConfigModel.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "MagicStreakTournamentConfigModel.json: ProgressbarRewardSteps[9].Score",
+      "type": "",
+      "value": "1000",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/MagicStreakTournamentConfigModel.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "MagicStreakTournamentConfigModel.json: ProgressbarRewardSteps[9].RewardModel.CurrencyType",
+      "type": "",
+      "value": "1",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/MagicStreakTournamentConfigModel.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "MagicStreakTournamentConfigModel.json: ProgressbarRewardSteps[9].RewardModel.Amount",
+      "type": "",
+      "value": "1000",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/MagicStreakTournamentConfigModel.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "StreakTournamentConfigModel.json: TournamentDurationInHours",
+      "type": "",
+      "value": "24",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/StreakTournamentConfigModel.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "StreakTournamentConfigModel.json: Rewards.FirstRankCoinRewardAmount",
+      "type": "",
+      "value": "2000",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/StreakTournamentConfigModel.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "StreakTournamentConfigModel.json: Rewards.SecondRankCoinRewardAmount",
+      "type": "",
+      "value": "1000",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/StreakTournamentConfigModel.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "StreakTournamentConfigModel.json: Rewards.ThirdRankCoinRewardAmount",
+      "type": "",
+      "value": "500",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/StreakTournamentConfigModel.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "StreakTournamentConfigModel.json: Rewards.OtherRanksCoinRewardAmount",
+      "type": "",
+      "value": "100",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/StreakTournamentConfigModel.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "StreakTournamentConfigModel.json: Rewards.OtherRanksLimit",
+      "type": "",
+      "value": "10",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/StreakTournamentConfigModel.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "StreakTournamentConfigModel.json: Multipliers.Multiplier1",
+      "type": "",
+      "value": "1",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/StreakTournamentConfigModel.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "StreakTournamentConfigModel.json: Multipliers.Multiplier2",
+      "type": "",
+      "value": "5",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/StreakTournamentConfigModel.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "StreakTournamentConfigModel.json: Multipliers.Multiplier3",
+      "type": "",
+      "value": "10",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/StreakTournamentConfigModel.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "StreakTournamentConfigModel.json: Multipliers.Multiplier4",
+      "type": "",
+      "value": "25",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/StreakTournamentConfigModel.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "StreakTournamentConfigModel.json: Multipliers.Multiplier5",
+      "type": "",
+      "value": "100",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/StreakTournamentConfigModel.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "server cache (historical)",
+      "key": "MagicStreakTournamentConfigModel (live) = default?",
+      "type": "",
+      "value": "48/89 key trùng default, 41 key khác/thêm",
+      "meaning": "Đối chiếu config server thật (CachedRemoteConfigs) với MagicStreakTournamentConfigModel.json",
+      "where": "Configs/CachedRemoteConfigs + Firebase RC template 3197 — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server cache (historical)",
+      "key": "MagicStreakTournamentConfigModel: eventType",
+      "type": "",
+      "value": "5",
+      "meaning": "server ghi đè (default = 1)",
+      "where": "Configs/CachedRemoteConfigs + Firebase RC template 3197 — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server cache (historical)",
+      "key": "MagicStreakTournamentConfigModel: tournamentRewards.firstRankRewardModel.timeSpan",
+      "type": "",
+      "value": "00:00:00",
+      "meaning": "server-only (không có trong default)",
+      "where": "Configs/CachedRemoteConfigs + Firebase RC template 3197 — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server cache (historical)",
+      "key": "MagicStreakTournamentConfigModel: tournamentRewards.firstRankRewardModel.chestType",
+      "type": "",
+      "value": "0",
+      "meaning": "server-only (không có trong default)",
+      "where": "Configs/CachedRemoteConfigs + Firebase RC template 3197 — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server cache (historical)",
+      "key": "MagicStreakTournamentConfigModel: tournamentRewards.firstRankRewardModel.collectionPackType",
+      "type": "",
+      "value": "0",
+      "meaning": "server-only (không có trong default)",
+      "where": "Configs/CachedRemoteConfigs + Firebase RC template 3197 — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server cache (historical)",
+      "key": "MagicStreakTournamentConfigModel: tournamentRewards.secondRankRewardModel.timeSpan",
+      "type": "",
+      "value": "00:00:00",
+      "meaning": "server-only (không có trong default)",
+      "where": "Configs/CachedRemoteConfigs + Firebase RC template 3197 — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server cache (historical)",
+      "key": "MagicStreakTournamentConfigModel: tournamentRewards.secondRankRewardModel.chestType",
+      "type": "",
+      "value": "0",
+      "meaning": "server-only (không có trong default)",
+      "where": "Configs/CachedRemoteConfigs + Firebase RC template 3197 — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server cache (historical)",
+      "key": "MagicStreakTournamentConfigModel: tournamentRewards.secondRankRewardModel.collectionPackType",
+      "type": "",
+      "value": "0",
+      "meaning": "server-only (không có trong default)",
+      "where": "Configs/CachedRemoteConfigs + Firebase RC template 3197 — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server cache (historical)",
+      "key": "MagicStreakTournamentConfigModel: tournamentRewards.thirdRankRewardModel.timeSpan",
+      "type": "",
+      "value": "00:00:00",
+      "meaning": "server-only (không có trong default)",
+      "where": "Configs/CachedRemoteConfigs + Firebase RC template 3197 — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server cache (historical)",
+      "key": "MagicStreakTournamentConfigModel: tournamentRewards.thirdRankRewardModel.chestType",
+      "type": "",
+      "value": "0",
+      "meaning": "server-only (không có trong default)",
+      "where": "Configs/CachedRemoteConfigs + Firebase RC template 3197 — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server cache (historical)",
+      "key": "MagicStreakTournamentConfigModel: tournamentRewards.thirdRankRewardModel.collectionPackType",
+      "type": "",
+      "value": "0",
+      "meaning": "server-only (không có trong default)",
+      "where": "Configs/CachedRemoteConfigs + Firebase RC template 3197 — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server cache (historical)",
+      "key": "MagicStreakTournamentConfigModel: tournamentRewards.otherRanksRewardModel.timeSpan",
+      "type": "",
+      "value": "00:00:00",
+      "meaning": "server-only (không có trong default)",
+      "where": "Configs/CachedRemoteConfigs + Firebase RC template 3197 — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server cache (historical)",
+      "key": "MagicStreakTournamentConfigModel: tournamentRewards.otherRanksRewardModel.chestType",
+      "type": "",
+      "value": "0",
+      "meaning": "server-only (không có trong default)",
+      "where": "Configs/CachedRemoteConfigs + Firebase RC template 3197 — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server cache (historical)",
+      "key": "MagicStreakTournamentConfigModel: tournamentRewards.otherRanksRewardModel.collectionPackType",
+      "type": "",
+      "value": "0",
+      "meaning": "server-only (không có trong default)",
+      "where": "Configs/CachedRemoteConfigs + Firebase RC template 3197 — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server cache (historical)",
+      "key": "MagicStreakTournamentConfigModel: progressbarRewardSteps[0].rewardModel.timeSpan",
+      "type": "",
+      "value": "00:00:00",
+      "meaning": "server-only (không có trong default)",
+      "where": "Configs/CachedRemoteConfigs + Firebase RC template 3197 — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server cache (historical)",
+      "key": "MagicStreakTournamentConfigModel: progressbarRewardSteps[0].rewardModel.chestType",
+      "type": "",
+      "value": "0",
+      "meaning": "server-only (không có trong default)",
+      "where": "Configs/CachedRemoteConfigs + Firebase RC template 3197 — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server cache (historical)",
+      "key": "MagicStreakTournamentConfigModel: progressbarRewardSteps[0].rewardModel.collectionPackType",
+      "type": "",
+      "value": "0",
+      "meaning": "server-only (không có trong default)",
+      "where": "Configs/CachedRemoteConfigs + Firebase RC template 3197 — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server cache (historical)",
+      "key": "MagicStreakTournamentConfigModel: progressbarRewardSteps[1].rewardModel.chestType",
+      "type": "",
+      "value": "0",
+      "meaning": "server-only (không có trong default)",
+      "where": "Configs/CachedRemoteConfigs + Firebase RC template 3197 — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server cache (historical)",
+      "key": "MagicStreakTournamentConfigModel: progressbarRewardSteps[1].rewardModel.collectionPackType",
+      "type": "",
+      "value": "0",
+      "meaning": "server-only (không có trong default)",
+      "where": "Configs/CachedRemoteConfigs + Firebase RC template 3197 — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server cache (historical)",
+      "key": "MagicStreakTournamentConfigModel: progressbarRewardSteps[2].rewardModel.timeSpan",
+      "type": "",
+      "value": "00:00:00",
+      "meaning": "server-only (không có trong default)",
+      "where": "Configs/CachedRemoteConfigs + Firebase RC template 3197 — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server cache (historical)",
+      "key": "MagicStreakTournamentConfigModel: progressbarRewardSteps[2].rewardModel.chestType",
+      "type": "",
+      "value": "0",
+      "meaning": "server-only (không có trong default)",
+      "where": "Configs/CachedRemoteConfigs + Firebase RC template 3197 — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server cache (historical)",
+      "key": "MagicStreakTournamentConfigModel: progressbarRewardSteps[2].rewardModel.collectionPackType",
+      "type": "",
+      "value": "0",
+      "meaning": "server-only (không có trong default)",
+      "where": "Configs/CachedRemoteConfigs + Firebase RC template 3197 — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server cache (historical)",
+      "key": "MagicStreakTournamentConfigModel: progressbarRewardSteps[3].rewardModel.timeSpan",
+      "type": "",
+      "value": "00:00:00",
+      "meaning": "server-only (không có trong default)",
+      "where": "Configs/CachedRemoteConfigs + Firebase RC template 3197 — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server cache (historical)",
+      "key": "MagicStreakTournamentConfigModel: progressbarRewardSteps[3].rewardModel.chestType",
+      "type": "",
+      "value": "0",
+      "meaning": "server-only (không có trong default)",
+      "where": "Configs/CachedRemoteConfigs + Firebase RC template 3197 — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server cache (historical)",
+      "key": "MagicStreakTournamentConfigModel: progressbarRewardSteps[3].rewardModel.collectionPackType",
+      "type": "",
+      "value": "0",
+      "meaning": "server-only (không có trong default)",
+      "where": "Configs/CachedRemoteConfigs + Firebase RC template 3197 — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server cache (historical)",
+      "key": "MagicStreakTournamentConfigModel: progressbarRewardSteps[4].rewardModel.timeSpan",
+      "type": "",
+      "value": "00:00:00",
+      "meaning": "server-only (không có trong default)",
+      "where": "Configs/CachedRemoteConfigs + Firebase RC template 3197 — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server cache (historical)",
+      "key": "MagicStreakTournamentConfigModel: progressbarRewardSteps[4].rewardModel.chestType",
+      "type": "",
+      "value": "0",
+      "meaning": "server-only (không có trong default)",
+      "where": "Configs/CachedRemoteConfigs + Firebase RC template 3197 — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server cache (historical)",
+      "key": "MagicStreakTournamentConfigModel: progressbarRewardSteps[4].rewardModel.collectionPackType",
+      "type": "",
+      "value": "0",
+      "meaning": "server-only (không có trong default)",
+      "where": "Configs/CachedRemoteConfigs + Firebase RC template 3197 — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server cache (historical)",
+      "key": "MagicStreakTournamentConfigModel: progressbarRewardSteps[5].rewardModel.timeSpan",
+      "type": "",
+      "value": "00:00:00",
+      "meaning": "server-only (không có trong default)",
+      "where": "Configs/CachedRemoteConfigs + Firebase RC template 3197 — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server cache (historical)",
+      "key": "MagicStreakTournamentConfigModel: progressbarRewardSteps[5].rewardModel.chestType",
+      "type": "",
+      "value": "0",
+      "meaning": "server-only (không có trong default)",
+      "where": "Configs/CachedRemoteConfigs + Firebase RC template 3197 — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server cache (historical)",
+      "key": "MagicStreakTournamentConfigModel: progressbarRewardSteps[5].rewardModel.collectionPackType",
+      "type": "",
+      "value": "0",
+      "meaning": "server-only (không có trong default)",
+      "where": "Configs/CachedRemoteConfigs + Firebase RC template 3197 — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server cache (historical)",
+      "key": "MagicStreakTournamentConfigModel: progressbarRewardSteps[6].rewardModel.chestType",
+      "type": "",
+      "value": "0",
+      "meaning": "server-only (không có trong default)",
+      "where": "Configs/CachedRemoteConfigs + Firebase RC template 3197 — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server cache (historical)",
+      "key": "MagicStreakTournamentConfigModel: progressbarRewardSteps[6].rewardModel.collectionPackType",
+      "type": "",
+      "value": "0",
+      "meaning": "server-only (không có trong default)",
+      "where": "Configs/CachedRemoteConfigs + Firebase RC template 3197 — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server cache (historical)",
+      "key": "MagicStreakTournamentConfigModel: progressbarRewardSteps[7].rewardModel.timeSpan",
+      "type": "",
+      "value": "00:00:00",
+      "meaning": "server-only (không có trong default)",
+      "where": "Configs/CachedRemoteConfigs + Firebase RC template 3197 — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server cache (historical)",
+      "key": "MagicStreakTournamentConfigModel: progressbarRewardSteps[7].rewardModel.chestType",
+      "type": "",
+      "value": "0",
+      "meaning": "server-only (không có trong default)",
+      "where": "Configs/CachedRemoteConfigs + Firebase RC template 3197 — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server cache (historical)",
+      "key": "MagicStreakTournamentConfigModel: progressbarRewardSteps[7].rewardModel.collectionPackType",
+      "type": "",
+      "value": "0",
+      "meaning": "server-only (không có trong default)",
+      "where": "Configs/CachedRemoteConfigs + Firebase RC template 3197 — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server cache (historical)",
+      "key": "MagicStreakTournamentConfigModel: progressbarRewardSteps[8].rewardModel.timeSpan",
+      "type": "",
+      "value": "00:00:00",
+      "meaning": "server-only (không có trong default)",
+      "where": "Configs/CachedRemoteConfigs + Firebase RC template 3197 — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server cache (historical)",
+      "key": "MagicStreakTournamentConfigModel: progressbarRewardSteps[8].rewardModel.chestType",
+      "type": "",
+      "value": "0",
+      "meaning": "server-only (không có trong default)",
+      "where": "Configs/CachedRemoteConfigs + Firebase RC template 3197 — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server cache (historical)",
+      "key": "MagicStreakTournamentConfigModel: progressbarRewardSteps[8].rewardModel.collectionPackType",
+      "type": "",
+      "value": "0",
+      "meaning": "server-only (không có trong default)",
+      "where": "Configs/CachedRemoteConfigs + Firebase RC template 3197 — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server cache (historical)",
+      "key": "MagicStreakTournamentConfigModel: progressbarRewardSteps[9].rewardModel.timeSpan",
+      "type": "",
+      "value": "00:00:00",
+      "meaning": "server-only (không có trong default)",
+      "where": "Configs/CachedRemoteConfigs + Firebase RC template 3197 — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server cache (historical)",
+      "key": "MagicStreakTournamentConfigModel: progressbarRewardSteps[9].rewardModel.chestType",
+      "type": "",
+      "value": "0",
+      "meaning": "server-only (không có trong default)",
+      "where": "Configs/CachedRemoteConfigs + Firebase RC template 3197 — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server cache (historical)",
+      "key": "MagicStreakTournamentConfigModel: progressbarRewardSteps[9].rewardModel.collectionPackType",
+      "type": "",
+      "value": "0",
+      "meaning": "server-only (không có trong default)",
+      "where": "Configs/CachedRemoteConfigs + Firebase RC template 3197 — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server cache (historical)",
+      "key": "StreakTournamentConfigModel (live) = default?",
+      "type": "",
+      "value": "14/16 key trùng default, 2 key khác/thêm",
+      "meaning": "Đối chiếu config server thật (Firebase RC) với StreakTournamentConfigModel.json",
+      "where": "Configs/CachedRemoteConfigs + Firebase RC template 3197 — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server cache (historical)",
+      "key": "StreakTournamentConfigModel: IsTournamentEnable",
+      "type": "",
+      "value": "true",
+      "meaning": "server ghi đè (default = false)",
+      "where": "Configs/CachedRemoteConfigs + Firebase RC template 3197 — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server cache (historical)",
+      "key": "StreakTournamentConfigModel: IsBannerEnable",
+      "type": "",
+      "value": "true",
+      "meaning": "server ghi đè (default = false)",
+      "where": "Configs/CachedRemoteConfigs + Firebase RC template 3197 — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    }
+  ],
+  "rewards": [
+    {
+      "context": "Hạng 1 giải",
+      "reward": "2000 Coin",
+      "evidence": "MagicStreakTournamentConfigModel.json TournamentRewards.FirstRankRewardModel"
+    },
+    {
+      "context": "Hạng 2",
+      "reward": "1000 Coin",
+      "evidence": "MagicStreakTournamentConfigModel.json TournamentRewards.SecondRankRewardModel"
+    },
+    {
+      "context": "Hạng 3",
+      "reward": "500 Coin",
+      "evidence": "MagicStreakTournamentConfigModel.json TournamentRewards.ThirdRankRewardModel"
+    },
+    {
+      "context": "Hạng 4-10",
+      "reward": "100 Coin mỗi người (OtherRanksLimit = 10)",
+      "evidence": "MagicStreakTournamentConfigModel.json TournamentRewards.OtherRanksRewardModel"
+    },
+    {
+      "context": "Thanh tiến độ cá nhân 10 mốc",
+      "reward": "20 Coin → Life 15' → 100 Coin → Shuffle → Undo → 300 Coin → Life 30' → 500 Coin → ExtraBottle → 1000 Coin",
+      "evidence": "MagicStreakTournamentConfigModel.json ProgressbarRewardSteps"
+    }
+  ],
+  "backend": [
+    {
+      "command": "magicStreakTournamentGetUrl = {base}/v1/get-magicstreak-leaderboard",
+      "direction": "client→server",
+      "purpose": "Lấy bảng xếp hạng giải (SendGetRequest)"
+    },
+    {
+      "command": "magicStreakTournamentSetScoreUrl = {base}/v1/set-magicstreak-tournament-points",
+      "direction": "client→server",
+      "purpose": "Đẩy điểm (SendSetScoreRequest)"
+    },
+    {
+      "command": "magicStreakTournamentClaimUrl = {base}/v1/claim-magicstreak-tournament",
+      "direction": "client→server",
+      "purpose": "Nhận thưởng hạng (SendClaimRequest)"
+    },
+    {
+      "command": "Sync block 'MagicStreakModel'",
+      "direction": "client↔server",
+      "purpose": "Đồng bộ điểm, hệ số, số lần vô địch"
+    }
+  ],
+  "ui": [
+    {
+      "element": "Popup giải",
+      "class": "Modules.Contexts.Home.MagicStreakTournament.Scripts.UI — popup chính (MagicStreakTournamentPopupStateType)",
+      "purpose": "Bảng xếp hạng + thanh tiến độ + thưởng"
+    },
+    {
+      "element": "ViewModel bảng",
+      "class": "MagicStreakTournamentLeaderboardPlayerViewModel",
+      "purpose": "Một dòng bảng xếp hạng"
+    },
+    {
+      "element": "ViewModel thanh tiến độ",
+      "class": "MagicStreakProgressbarRewardElementViewModel",
+      "purpose": "Một mốc thưởng cá nhân"
+    },
+    {
+      "element": "Banner",
+      "class": "MagicStreakTournament banner + MagicStreakTournamentBannerPlaceType (Win/Lose)",
+      "purpose": "Hiển thị ở màn kết thúc level"
+    },
+    {
+      "element": "Sprite config",
+      "class": "MagicStreakTournamentSpriteConfig",
+      "purpose": "Hình ảnh giải"
+    },
+    {
+      "element": "Commands",
+      "class": "Modules.Contexts.Home.MagicStreakTournament.Scripts.Commands",
+      "purpose": "Mở popup từ các điểm chạm"
+    }
+  ],
+  "analytics": [
+    {
+      "event": "streak_leaderboard_impression",
+      "params": "impression_source, current_rank, current_streak, current_multiplier, total_users, real_user_count, bot_count, tournament_id, tournament_start_time, tournament_end_time, remaining_duration",
+      "when": "Mở popup bảng xếp hạng"
+    },
+    {
+      "event": "streak_info_impression",
+      "params": "tournament_id, current_rank, current_streak, progress",
+      "when": "Mở popup thông tin giải"
+    }
+  ],
+  "storage_keys": [
+    "MagicStreakModel",
+    "MagicStreakModel.IsClaimedLocally",
+    "MagicStreakModel.IsIntroduced",
+    "MagicStreakModel.ProgressbarRewardScore",
+    "MagicStreakModel.ProgressbarRewardIndex",
+    "MagicStreakModel.MultiplierIndex",
+    "MagicStreakModel.TournamentWinCount",
+    "MagicStreakTournamentModel.TournamentId",
+    "MagicStreakTournamentModel.TournamentScore",
+    "MagicStreakTournamentModel.IsFinished"
+  ],
+  "related_features": [
+    "MagicStreak",
+    "WeeklyTournament",
+    "JetpackRace",
+    "WheelOfFortune",
+    "MagicLab",
+    "EventsFramework"
+  ],
+  "gaps": [
+    "Số người trong một bảng và tỉ lệ bot do server quyết định (analytics có total_users, real_user_count, bot_count nhưng client không có config).",
+    "15/11 — resolved_static_code_historical_build: GetCurrentProgressbarRewardStepMaxScore và các reward/eligibility body đọc FirebaseRemoteConfigs.MagicStreakTournamentConfigModel trực tiếp. StreakTournamentConfigModel asset có duration24 là nguồnlegacy riêng; không dùng giá trị đó ghi runtime eventduration. Điều kiện transport/newbuild vẫn phải đối chiếu. Còn lại: Cần đối chiếu ARM64/current runtime và các nhánh caller còn chưa đủ bằng chứng.",
+    "15/11 — partial_static_code_unresolved: ClaimTournamentReward body khởi SendClaimRequest và xử lý reward/state; không thấy named analytics claim trong body đó. IncreaseProgressbarRewardScore có SendStreakTournamentProgressClaimStat khi vượt mốc. Không được dùng progressclaim thay tournamentsettlement metric; generic UI/callback còn chưa chứng minh. Còn lại: Cần generic EventSender/UI claim and callback emission trace, phân biệt progressreward với tournamentreward; chưa khẳng định không có analytics toàn game.",
+    "15/11 — resolved_static_code_historical_build: IncreaseProgressbarRewardScore cộng scoreIncrement với ProgressbarRewardScore hiện tại; nếu chưa đạt max step thì lưu. Đạt mốc tăng ProgressbarRewardIndex, reset ProgressbarRewardScore=0 rồi lấy phần dư scoreIncrement=currentTotal−stepThreshold cho vòng tiếp. Vì vậy Score của step là nhu cầu riêng step, phải cộng để tính tổng điểm toàn đường; không đọc nó thành global cumulative target. Còn lại: Cần đối chiếu method/consumer trên app0.0.3129 ARM64; chưa là runtime pass.",
+    "[Runtime 2026-09-10] Config server LIVE đã đọc trực tiếp từ cache máy (không cần request); các hàng 'server live' là giá trị server ghi đè/thêm so với default."
+  ],
+  "sources": [
+    "GameDesign/features/MagicStreakService.md",
+    "GameDesign/features/MagicStreakStateService.md",
+    "GameDesign/features/MagicStreakDataService.md",
+    "GameDesign/features/MagicStreakTournamentConfigModel.md",
+    "GameDesign/features/MagicStreakTournamentModel.md",
+    "GameDesign/features/MagicStreakRewardStepModel.md",
+    "RecoveredNative/PseudoC/Assembly-CSharp/Modules/Contexts/Home/MagicStreakTournament/Scripts/*.c",
+    "RecoveredNative/Il2CppDumper/dump.cs (TypeDefIndex 3403-3503)",
+    "UnityExport/ExportedProject/Assets/Resources/defaultconfigs/MagicStreakTournamentConfigModel.json",
+    "UnityExport/ExportedProject/Assets/Resources/defaultconfigs/StreakTournamentConfigModel.json",
+    "UnityExport/ExportedProject/Assets/MonoBehaviour/BackendEnvironmentConfig.asset",
+    "RecoveredNative/strings-by-type.tsv"
+  ],
+  "related_feature_aliases": [
+    {
+      "original": "LobbyEventsService",
+      "feature": "EventsFramework"
+    }
+  ],
+  "audit_provenance": {
+    "review_date": "2026-11-15",
+    "mode": "offline_existing_files",
+    "code_build": "0.0.3063 ARMv7",
+    "runtime_build_observed_historically": "0.0.3129 ARM64 (audit 2026-10-18); not rechecked 2026-11-15",
+    "new_playtests": 0,
+    "uc_status": "See facts/audit_20261115/uc_registry.json; image reference is not pass",
+    "workbook_status": "Existing XLSX is historical; JSON and local web include 2026-11-15 corrections",
+    "static_review": "facts/local_code_gap_results_20261115.json; facts/local_asset_gap_results_20261115.json; facts/final_data_gap_decisions_20261115.json; facts/core_body_gap_decisions_20261115.json; facts/remaining_asset_gap_decisions_20261115.json"
+  },
+  "static_review_20261115": {
+    "date": "2026-11-15",
+    "scope": "Historical code/assets 0.0.3063, dated caches, device 0.0.3129 cached bundles and explicitly scoped runtime evidence. Not full runtime pass.",
+    "findings": [
+      {
+        "kind": "code",
+        "source_report": "facts/local_code_gap_results_20261115.json",
+        "id": "MS-CODE-21",
+        "gap_ids": [
+          "MS-MagicStreakTournament-G004"
+        ],
+        "title": "Streak tournament Score là nhu cầu từng step",
+        "status": "resolved_static_code",
+        "conclusion": "IncreaseProgressbarRewardScore cộng scoreIncrement với ProgressbarRewardScore hiện tại; nếu chưa đạt max step thì lưu. Đạt mốc tăng ProgressbarRewardIndex, reset ProgressbarRewardScore=0 rồi lấy phần dư scoreIncrement=currentTotal−stepThreshold cho vòng tiếp. Vì vậy Score của step là nhu cầu riêng step, phải cộng để tính tổng điểm toàn đường; không đọc nó thành global cumulative target.",
+        "evidence": [
+          {
+            "file": "../com.grandgames.magicsort_Unity_20260909_112501/RecoveredNative/PseudoC/Assembly-CSharp/Modules/Contexts/Home/MagicStreakTournament/Scripts/MagicStreakService.c",
+            "line": 4031,
+            "end_line": 4152,
+            "method": "// ===== MagicStreakService :: private void IncreaseProgressbarRewardScore(",
+            "sha256": "ec2385d6401e3cab30490482078704ef51b5fefd50d37eb61d1342d5b285aa2e",
+            "body_checked": true,
+            "build": "0.0.3063 ARMv7",
+            "required_body_tokens": [
+              "_ProgressbarRewardScore_k__BackingField + scoreIncrement",
+              "_ProgressbarRewardIndex_k__BackingField = index + 1",
+              "_ProgressbarRewardScore_k__BackingField = 0",
+              "scoreIncrement = iVar5 -"
+            ]
+          }
+        ],
+        "remaining": "Cần đối chiếu method/consumer trên app0.0.3129 ARM64; chưa là runtime pass.",
+        "scope": "recovered_native_0.0.3063_only",
+        "runtime_verified": false
+      },
+      {
+        "kind": "code",
+        "source_report": "facts/local_code_gap_results_20261115.json",
+        "id": "MS-CODE-54",
+        "gap_ids": [
+          "MS-MagicStreakTournament-G002"
+        ],
+        "title": "Tournament consumer đọc MagicStreakTournamentConfigModel",
+        "status": "resolved_static_code",
+        "conclusion": "GetCurrentProgressbarRewardStepMaxScore và các reward/eligibility body đọc FirebaseRemoteConfigs.MagicStreakTournamentConfigModel trực tiếp. StreakTournamentConfigModel asset có duration24 là nguồnlegacy riêng; không dùng giá trị đó ghi runtime eventduration. Điều kiện transport/newbuild vẫn phải đối chiếu.",
+        "evidence": [
+          {
+            "file": "../com.grandgames.magicsort_Unity_20260909_112501/RecoveredNative/PseudoC/Assembly-CSharp/Modules/Contexts/Home/MagicStreakTournament/Scripts/MagicStreakService.c",
+            "line": 5413,
+            "end_line": 5490,
+            "method": "// ===== MagicStreakService :: public int GetCurrentProgressbarRewardStepMaxScore()",
+            "sha256": "ec2385d6401e3cab30490482078704ef51b5fefd50d37eb61d1342d5b285aa2e",
+            "body_checked": true,
+            "build": "0.0.3063 ARMv7",
+            "required_body_tokens": [
+              "_MagicStreakTournamentConfigModel_k__BackingField"
+            ]
+          }
+        ],
+        "remaining": "Cần đối chiếu ARM64/current runtime và các nhánh caller còn chưa đủ bằng chứng.",
+        "scope": "recovered_native_0.0.3063_only",
+        "runtime_verified": false
+      },
+      {
+        "kind": "code",
+        "source_report": "facts/local_code_gap_results_20261115.json",
+        "id": "MS-CODE-55",
+        "gap_ids": [
+          "MS-MagicStreakTournament-G003"
+        ],
+        "title": "Tournament claim và progress-claim analytics khác nhau",
+        "status": "partial_static_code",
+        "conclusion": "ClaimTournamentReward body khởi SendClaimRequest và xử lý reward/state; không thấy named analytics claim trong body đó. IncreaseProgressbarRewardScore có SendStreakTournamentProgressClaimStat khi vượt mốc. Không được dùng progressclaim thay tournamentsettlement metric; generic UI/callback còn chưa chứng minh.",
+        "evidence": [
+          {
+            "file": "../com.grandgames.magicsort_Unity_20260909_112501/RecoveredNative/PseudoC/Assembly-CSharp/Modules/Contexts/Home/MagicStreakTournament/Scripts/MagicStreakService.c",
+            "line": 1728,
+            "end_line": 1951,
+            "method": "// ===== MagicStreakService :: public void ClaimTournamentReward()",
+            "sha256": "ec2385d6401e3cab30490482078704ef51b5fefd50d37eb61d1342d5b285aa2e",
+            "body_checked": true,
+            "build": "0.0.3063 ARMv7",
+            "required_body_tokens": [
+              "__SendClaimRequest"
+            ]
+          }
+        ],
+        "remaining": "Cần generic EventSender/UI claim and callback emission trace, phân biệt progressreward với tournamentreward; chưa khẳng định không có analytics toàn game.",
+        "scope": "recovered_native_0.0.3063_only",
+        "runtime_verified": false
+      }
+    ]
+  },
+  "acceptance_review_20261115": {
+    "source": "facts/feature_acceptance_20261115.json",
+    "feature_id": "MagicStreakTournament",
+    "scope": "All eleven dossier dimensions reviewed; full_feature_verified is not implied; read per-dimension gaps and actual runtime evidence."
+  },
+  "segment_ab_review_20261115": {
+    "status": "not_identified_in_sources",
+    "segment_ids": [],
+    "matching_basis": "explicit_gd_config_map_or_exact_model_token_in_gdd_configs_where_key_sources; rootfieldscoped",
+    "rows": [],
+    "classifications": {},
+    "assignment_verified": false,
+    "uplift_verified": false,
+    "note": "No matchingrow does not prove no segmentation/AB. Rewardbucketfalsepositives remain explicitly classified."
+  },
+  "continuation_review_20261116": {
+    "date": "2026-11-16",
+    "build": "0.0.3129 ARM64 host APK",
+    "build_scope": "Host APK version3129 matches LAST observed installed version15/11 only; installed bytes/live device16/11 not verified.",
+    "runtime_status": "device_unavailable",
+    "runtime_case_ids": [],
+    "current_apk_model_links": {
+      "feature": "MagicStreakTournament",
+      "models": [
+        {
+          "model": "MagicStreakTournamentConfigModel",
+          "current_default_file": "facts/review_20261116/public_current_config_3129/defaults/MagicStreakTournamentConfigModel.json",
+          "resource_path": "defaultconfigs/magicstreaktournamentconfigmodel",
+          "sha256": "3bb7561ef6eefe44a109e9290ad3024839bc2b36f0e3a0f56e87e688f36dd736",
+          "matching_basis": [
+            "gdd/MagicStreakTournament.json#/configs",
+            "gdd/MagicStreakTournament.json#/sources",
+            "gdd/MagicStreakTournament.json#/flow",
+            "gdd/MagicStreakTournament.json#/managers"
+          ],
+          "scope": "Packaged default3129, not effective server config.",
+          "site_data_path": "data/current_config_3129/defaults/MagicStreakTournamentConfigModel.json",
+          "original_source_sha256": "3bb7561ef6eefe44a109e9290ad3024839bc2b36f0e3a0f56e87e688f36dd736",
+          "public_artifact_sha256": "23dd0e25e9e2535029803f4a21e42bda8e2ab44b361e16c6f2d46b7b1c63ab2e",
+          "sha256_scope": "sha256 is original raw model; public_artifact_sha256 is the sanitized download"
+        },
+        {
+          "model": "StreakTournamentConfigModel",
+          "current_default_file": "facts/review_20261116/public_current_config_3129/defaults/StreakTournamentConfigModel.json",
+          "resource_path": "defaultconfigs/streaktournamentconfigmodel",
+          "sha256": "9c07d1874dfdcd14e365e9b9ee2780d01435769ca23d408f83722b62feed0732",
+          "matching_basis": [
+            "gdd/MagicStreakTournament.json#/configs",
+            "gdd/MagicStreakTournament.json#/sources"
+          ],
+          "scope": "Packaged default3129, not effective server config.",
+          "site_data_path": "data/current_config_3129/defaults/StreakTournamentConfigModel.json",
+          "original_source_sha256": "9c07d1874dfdcd14e365e9b9ee2780d01435769ca23d408f83722b62feed0732",
+          "public_artifact_sha256": "bec60506a9fbecff82b51d918152a90ca5280b7e75b2ebb515b3ded514deb7b6",
+          "sha256_scope": "sha256 is original raw model; public_artifact_sha256 is the sanitized download"
+        }
+      ],
+      "status": "exact_model_source_association",
+      "distribution": "sanitized_public",
+      "public_mapping_pending": false
+    },
+    "current_packaged_defaults": [
+      {
+        "model": "MagicStreakTournamentConfigModel",
+        "source": "facts/review_20261116/public_current_config_3129/defaults/MagicStreakTournamentConfigModel.json",
+        "site_data_path": "data/current_config_3129/defaults/MagicStreakTournamentConfigModel.json",
+        "public_artifact_sha256": "23dd0e25e9e2535029803f4a21e42bda8e2ab44b361e16c6f2d46b7b1c63ab2e",
+        "original_source_sha256": "3bb7561ef6eefe44a109e9290ad3024839bc2b36f0e3a0f56e87e688f36dd736",
+        "source_class": "static_asset",
+        "build": "0.0.3129 host APK",
+        "scope": "Sanitized packaged default fullvalues only; not effective remote/selected config or runtime.",
+        "values": {
+          "IsTournamentEnable": false,
+          "IsProgressBarEnable": false,
+          "FirstLevelToShow": 25,
+          "EventType": 1,
+          "IsBannerEnable": true,
+          "ShouldOpenPopUpAutomaticallyOnRankUp": true,
+          "ShowPopUpIntervalOnRankUp": 10,
+          "Multipliers": [
+            1,
+            5,
+            10,
+            25,
+            100
+          ],
+          "TournamentRewards": {
+            "FirstRankRewardModel": {
+              "CurrencyType": 1,
+              "Amount": 2000
+            },
+            "SecondRankRewardModel": {
+              "CurrencyType": 1,
+              "Amount": 1000
+            },
+            "ThirdRankRewardModel": {
+              "CurrencyType": 1,
+              "Amount": 500
+            },
+            "OtherRanksRewardModel": {
+              "CurrencyType": 1,
+              "Amount": 100
+            },
+            "OtherRanksLimit": 10
+          },
+          "ProgressbarRewardSteps": [
+            {
+              "Score": 10,
+              "RewardModel": {
+                "CurrencyType": 1,
+                "Amount": 20
+              }
+            },
+            {
+              "Score": 50,
+              "RewardModel": {
+                "CurrencyType": 2,
+                "Amount": 0,
+                "timeSpan": "00:15:00"
+              }
+            },
+            {
+              "Score": 100,
+              "RewardModel": {
+                "CurrencyType": 1,
+                "Amount": 100
+              }
+            },
+            {
+              "Score": 200,
+              "RewardModel": {
+                "CurrencyType": 5,
+                "Amount": 1
+              }
+            },
+            {
+              "Score": 200,
+              "RewardModel": {
+                "CurrencyType": 4,
+                "Amount": 1
+              }
+            },
+            {
+              "Score": 500,
+              "RewardModel": {
+                "CurrencyType": 1,
+                "Amount": 300
+              }
+            },
+            {
+              "Score": 300,
+              "RewardModel": {
+                "CurrencyType": 2,
+                "Amount": 0,
+                "timeSpan": "00:30:00"
+              }
+            },
+            {
+              "Score": 800,
+              "RewardModel": {
+                "CurrencyType": 1,
+                "Amount": 500
+              }
+            },
+            {
+              "Score": 400,
+              "RewardModel": {
+                "CurrencyType": 6,
+                "Amount": 1
+              }
+            },
+            {
+              "Score": 1000,
+              "RewardModel": {
+                "CurrencyType": 1,
+                "Amount": 1000
+              }
+            }
+          ]
+        }
+      },
+      {
+        "model": "StreakTournamentConfigModel",
+        "source": "facts/review_20261116/public_current_config_3129/defaults/StreakTournamentConfigModel.json",
+        "site_data_path": "data/current_config_3129/defaults/StreakTournamentConfigModel.json",
+        "public_artifact_sha256": "bec60506a9fbecff82b51d918152a90ca5280b7e75b2ebb515b3ded514deb7b6",
+        "original_source_sha256": "9c07d1874dfdcd14e365e9b9ee2780d01435769ca23d408f83722b62feed0732",
+        "source_class": "static_asset",
+        "build": "0.0.3129 host APK",
+        "scope": "Sanitized packaged default fullvalues only; not effective remote/selected config or runtime.",
+        "values": {
+          "IsTournamentEnable": false,
+          "IsBannerEnable": false,
+          "FirstLevelToShow": 25,
+          "TournamentDurationInHours": 24,
+          "ShouldOpenPopUpAutomaticallyOnRankUp": true,
+          "ShowPopUpIntervalOnRankUp": 1,
+          "Rewards": {
+            "FirstRankCoinRewardAmount": 2000,
+            "SecondRankCoinRewardAmount": 1000,
+            "ThirdRankCoinRewardAmount": 500,
+            "OtherRanksCoinRewardAmount": 100,
+            "OtherRanksLimit": 10
+          },
+          "Multipliers": {
+            "Multiplier1": 1,
+            "Multiplier2": 5,
+            "Multiplier3": 10,
+            "Multiplier4": 25,
+            "Multiplier5": 100
+          }
+        }
+      }
+    ],
+    "native_finding_ids": [],
+    "documentation_source_coverage": {
+      "dossier_present": true,
+      "use_case_catalog_count": 16,
+      "config_catalog_rows": 132,
+      "current_apk_default_model_links": 2,
+      "current_native_findings": 0,
+      "scope": "Documentation/source coverage only; not complete runtime verification."
+    },
+    "runtime_completion": {
+      "date": "2026-11-16",
+      "status": "device_unavailable",
+      "executed_case_count": 0,
+      "full_feature_runtime_verified": false
+    },
+    "planned_branch": "Tìm bảng giải từ icon, xem personal progress10mốc và tab leaderboard; chụp error/retry nếu offline.",
+    "target_uc_ids": [
+      "UC-07",
+      "UC-09",
+      "UC-15"
+    ],
+    "execution_phase": "noncore_first",
+    "core_or_levels_last": false,
+    "actionability_full_json": "facts/continuation_20261116/current/feature_actionability.json",
+    "actionability_site_data_path": "data/continuation_20261116/feature_actionability.json",
+    "source_classes": [
+      "static_asset"
+    ],
+    "full_feature_verified": false
+  }
+}

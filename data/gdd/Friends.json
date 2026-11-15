@@ -1,0 +1,1061 @@
+{
+  "id": "Friends",
+  "name": "Bạn bè (Friends)",
+  "category": "Social",
+  "managers": [
+    "Modules.Contexts.Home.Friends.Scripts.FriendsService",
+    "Modules.Contexts.Home.Friends.Scripts.FriendsRemoteService",
+    "Modules.Contexts.Home.Friends.Scripts.FriendsDataService"
+  ],
+  "summary": "Friends là danh sách bạn bè 1-1 tách biệt với Teams: người chơi tìm bạn bằng User ID công khai (public id), nhận gợi ý từ backend, đồng bộ bạn Facebook, gửi/nhận/huỷ lời mời kết bạn và xoá bạn. Mỗi người bạn hiển thị avatar, khung (frame), name style, tiến độ level và tên đội; danh sách được sắp xếp và dùng làm nguồn cho bảng xếp hạng bạn bè (FriendsLeaderboardController). Khi liên kết Facebook lần đầu, người chơi được tự động thêm bạn Facebook đang chơi game và nhận một phần thưởng đồng bộ (FbConnectReward) chỉ một lần. Toàn bộ quan hệ bạn bè nằm trên backend; client chỉ lưu FriendsModel (danh sách id lời mời đến, cờ chưa xem, cờ đã nhận thưởng Facebook) và đồng bộ qua khối 'FriendsSyncModel'.",
+  "unlock": "Bật/tắt bằng Firebase Remote Config key 'FriendsConfigModel': FriendsService.IsEnabled() đọc FriendsConfigModel.IsEnabled; nhánh bạn Facebook bật riêng bằng FriendsConfigModel.IsFacebookFriendsEnabled (FriendsService.GetFacebookFriendsEnabled). Không thấy điều kiện level trong client (suy luận: mở theo cờ server, không theo level).",
+  "entry_points": [
+    "Tab Friends trong SwipeMenu ở Home (FriendsNavBarNotificationController.OnPageSelected(PageType))",
+    "Popup tìm bạn theo User ID (FindFriendPopup)",
+    "Nút Add Friend trong hồ sơ người chơi khác (FriendProfileController)",
+    "Popup mời bạn (FriendsInvitePopup, FriendsInviteInfoPopup) – dẫn sang Referral",
+    "Deeplink mời bạn (FriendsService.TryAddFriendsFromDeeplink, tham số adj_label)",
+    "Kết nối Facebook (FacebookSignInRewardView)"
+  ],
+  "flow": "Sau khi có dữ liệu người chơi, FriendsService.InitializeData() đặt Status = Initializing (enum FriendsServiceStatus: None=0, Initializing=1, Synced=2, SyncFailed=3), bắn FriendsInitializationStartedSignal rồi RefreshAll(): RefreshFriends() (GetMyFriendList → FriendListResponse), RefreshIncomingRequests() (GetMyFriendRequests), RefreshOutgoingRequests() (GetMySentFriendRequests) và RefreshFriendSuggestions() (GetFriendSuggestions). Mỗi bản ghi được map sang view model qua MapFriend/MapRequest/MapUser, sau đó RequestProfileImages() nạp avatar qua ProfileSpriteCacheService; SortFriends() sắp xếp danh sách; kết thúc Status = Synced (hoặc SyncFailed) và bắn FriendsInitializationCompletedSignal. Danh sách hiển thị trong FriendsScrollViewAdapter với các nhóm tiêu đề (RequestTitleElementViewModel, SuggestTitleElementViewModel, DividerElementViewModel). Người chơi gửi lời mời qua SendFriendRequest(user, directory) — tham số directory ghi nguồn ('friends_tab', 'profile', 'suggest', 'deeplink', 'fb', 'auto') để phân tích. Người nhận thấy lời mời trong nhóm Friend Requests và AnswerFriendRequest(userPublicId, isAccepted): nếu chấp nhận thì AddFriendFromRequest() chuyển sang danh sách bạn và bắn FriendAddedSignal. Xoá bạn: DeleteFriend(publicId) → RemoveFromFriends + FriendRemovedSignal. Gợi ý có thể bị bỏ qua bằng DismissFriendSuggestion(publicId, notifyBackend) (SendDismissSuggestion). Nhánh Facebook: khi FacebookLoginService báo OnFacebookFriendsFetched, SanitizeFacebookIds(facebookIds) lọc rồi AutoAddFacebookFriends(facebookIds) tự kết bạn hàng loạt; nếu CanClaimSyncReward() thì trao GetSyncReward() (FriendsConfigModel.FbConnectReward) qua RewardService và SetDidClaimSyncReward(true). Cờ ShouldShowNavBarNotif/HasUnseenRequests điều khiển chấm đỏ trên tab, ResetNavBarNotif() xoá khi mở tab. IntervalUpdate() cùng cờ _shouldSyncRemote (bật khi OnLevelWin) làm mới dữ liệu theo chu kỳ.",
+  "use_cases": [
+    {
+      "id": "UC-01",
+      "title": "Khởi tạo và đồng bộ danh sách bạn",
+      "actor": "System",
+      "trigger": "Vào Home sau khi có dữ liệu người chơi",
+      "precondition": "FriendsConfigModel.IsEnabled = true",
+      "steps": [
+        "FriendsService.InitializeData() → Status = Initializing, FriendsInitializationStartedSignal",
+        "RefreshAll() gọi song song RefreshFriends / RefreshIncomingRequests / RefreshOutgoingRequests / RefreshFriendSuggestions",
+        "UpdateFriends(FriendListResponse), UpdateRequests(FriendRequestListResponse, isIncoming)",
+        "RequestProfileImages() nạp avatar qua ProfileSpriteCacheService",
+        "Status = Synced, FriendsInitializationCompletedSignal"
+      ],
+      "result": "Danh sách bạn, lời mời đến/đi và gợi ý sẵn sàng hiển thị",
+      "rules": "Lỗi mạng → Status = SyncFailed (FriendsServiceStatus)",
+      "evidence": "FriendsService.InitializeData; FriendsService.RefreshAll; FriendsService.UpdateFriends; FriendsService.UpdateRequests; FriendsService.RequestProfileImages; FriendsServiceStatus"
+    },
+    {
+      "id": "UC-02",
+      "title": "Tìm bạn bằng User ID",
+      "actor": "Player",
+      "trigger": "Mở FindFriendPopup và nhập ID",
+      "precondition": "Đã bật Friends",
+      "steps": [
+        "FindFriendPopup.OnInputChanged/OnInputSubmitted giới hạn _maxSearchTermLength = 11 ký tự",
+        "OnSearchButtonSelected → FriendsService.FindFriend(publicId)",
+        "FriendsRemoteService.FindFriend(publicId) → FriendProfileData",
+        "Hiện UserProfileView + ProfileImageView + ProfileFrameView và nút Add"
+      ],
+      "result": "Thấy hồ sơ rút gọn của người chơi tìm được",
+      "rules": "Không tìm thấy → 'FriendsUserNotFound'. Trạng thái nút đổi theo quan hệ: 'FriendsAdd' / 'FriendsPending' / 'FriendsAdded'",
+      "evidence": "FindFriendPopup.OnSearchButtonSelected; FriendsService.FindFriend; FriendsRemoteService.FindFriend; FindFriendRequestModel"
+    },
+    {
+      "id": "UC-03",
+      "title": "Sao chép User ID của mình để chia sẻ",
+      "actor": "Player",
+      "trigger": "Bấm nút copy trong FindFriendPopup",
+      "precondition": "-",
+      "steps": [
+        "FindFriendPopup.OnCopyButtonSelected() ghi public id vào clipboard",
+        "Hiện thông báo 'FriendsUserIdCopied'"
+      ],
+      "result": "ID (hiển thị kèm nhãn 'FriendsUserID' = \"My User ID:\") nằm trong clipboard để gửi cho bạn",
+      "rules": "-",
+      "evidence": "FindFriendPopup.OnCopyButtonSelected; FindFriendPopup._publicId"
+    },
+    {
+      "id": "UC-04",
+      "title": "Gửi lời mời kết bạn",
+      "actor": "Player",
+      "trigger": "Bấm Add ở kết quả tìm kiếm, gợi ý hoặc hồ sơ người chơi",
+      "precondition": "Chưa là bạn, chưa có lời mời đang chờ, danh sách chưa đầy",
+      "steps": [
+        "FriendsService.SendFriendRequest(user, directory) với directory là nguồn ('friends_tab' / 'profile' / 'suggest' / 'deeplink' / 'fb' / 'auto')",
+        "FriendsRemoteService.SendFriendRequest(SendFriendRequestModel{to_user_public_id}) → SendFriendRequestResponse",
+        "Thêm vào _sentRequests, bắn FriendRequestSentSignal",
+        "Analytics 'friend_interaction' với action 'send'"
+      ],
+      "result": "Nút chuyển sang 'FriendsRequested'/'FriendsPending', thông báo 'FriendsRequestSent'",
+      "rules": "Danh sách đầy (GetFriendsCount >= FriendsConfigModel.MaxFriendCount) → IsFriendListFull() = true và hiện 'FriendListFullErrorMessage'. Đã gửi rồi → 'FriendsAlreadySentRequest'; đã là bạn → 'FriendsAlreadyAdded'",
+      "evidence": "FriendsService.SendFriendRequest; FriendsRemoteService.SendFriendRequest; FriendsService.IsFriendListFull; FriendsService.HasPendingRequest; FriendRequestSentSignal"
+    },
+    {
+      "id": "UC-05",
+      "title": "Chấp nhận lời mời kết bạn",
+      "actor": "Player",
+      "trigger": "Bấm Accept trong nhóm 'FriendsFriendRequests'",
+      "precondition": "Có lời mời đến (HasIncomingRequest = true)",
+      "steps": [
+        "FriendsService.AnswerFriendRequest(userPublicId, isAccepted = true)",
+        "FriendsRemoteService.AnswerFriendRequest(AnswerFriendRequestModel{from_user_public_id, is_accepted}) → FriendsWebResponse",
+        "RemoveIncomingFriendRequest(publicId) rồi AddFriendFromRequest(vm)",
+        "SortFriends(); bắn FriendAddedSignal",
+        "Analytics 'friend_interaction' action 'accept'"
+      ],
+      "result": "Người gửi vào danh sách bạn của cả hai bên",
+      "rules": "Danh sách đầy → 'FriendListFullErrorMessage' và không nhận được",
+      "evidence": "FriendsService.AnswerFriendRequest; FriendsService.AddFriendFromRequest; FriendsService.RemoveIncomingFriendRequest; FriendAddedSignal"
+    },
+    {
+      "id": "UC-06",
+      "title": "Từ chối lời mời kết bạn",
+      "actor": "Player",
+      "trigger": "Bấm Reject/X trên lời mời",
+      "precondition": "Có lời mời đến",
+      "steps": [
+        "FriendsService.AnswerFriendRequest(userPublicId, isAccepted = false)",
+        "RemoveIncomingFriendRequest(publicId) và bắn FriendRequestRemovedSignal",
+        "Analytics 'friend_interaction' action 'reject'"
+      ],
+      "result": "Lời mời biến mất khỏi danh sách",
+      "rules": "-",
+      "evidence": "FriendsService.AnswerFriendRequest; FriendsService.RemoveIncomingFriendRequest; FriendRequestRemovedSignal"
+    },
+    {
+      "id": "UC-07",
+      "title": "Huỷ lời mời đã gửi",
+      "actor": "Player",
+      "trigger": "Bấm vào lời mời đang chờ (FindFriendPopup.OnPendingButtonSelected)",
+      "precondition": "Có lời mời trong _sentRequests",
+      "steps": [
+        "FriendsRemoteService.CancelFriendRequest(CancelFriendRequestModel{to_user_public_id})",
+        "Xoá khỏi _sentRequests và làm mới danh sách"
+      ],
+      "result": "Lời mời bị thu hồi, có thể gửi lại",
+      "rules": "-",
+      "evidence": "FriendsRemoteService.CancelFriendRequest; CancelFriendRequestModel; FindFriendPopup.OnPendingButtonSelected"
+    },
+    {
+      "id": "UC-08",
+      "title": "Xoá bạn",
+      "actor": "Player",
+      "trigger": "Bấm Remove trong DeleteFriendPopup hoặc hồ sơ bạn",
+      "precondition": "Đang là bạn (IsMyFriend = true)",
+      "steps": [
+        "DeleteFriendPopup xác nhận ('FriendRemoveFriendTitle', 'FriendsAreYouSureToRemoveFriend')",
+        "DeleteFriendCommand → FriendsService.DeleteFriend(publicId)",
+        "FriendsRemoteService.DeleteFriend(DeleteFriendRequestModel{friend_user_public_id})",
+        "RemoveFromFriends(publicId), bắn FriendRemovedSignal",
+        "Analytics 'friend_interaction' action 'delete'"
+      ],
+      "result": "Người đó biến mất khỏi danh sách bạn và bảng xếp hạng bạn bè",
+      "rules": "-",
+      "evidence": "FriendsService.DeleteFriend; FriendsRemoteService.DeleteFriend; DeleteFriendCommand; DeleteFriendPopup; FriendRemovedSignal"
+    },
+    {
+      "id": "UC-09",
+      "title": "Xem và bỏ qua gợi ý kết bạn",
+      "actor": "Player",
+      "trigger": "Cuộn tới nhóm 'FriendsSuggested'",
+      "precondition": "HasAnySuggestions() = true",
+      "steps": [
+        "FriendsService.RefreshFriendSuggestions() → FriendsRemoteService.GetFriendSuggestions() → FriendSuggestionsResponse",
+        "GetFriendSuggestions() trả List<IFriendScrollElementViewModel> theo trang SuggestionPageSize = 5",
+        "FriendSuggestionViewModel.SuggestionReason cho biết lý do gợi ý",
+        "Bấm Ignore ('FriendsDismiss') → DismissFriendSuggestion(publicId, notifyBackend = true) → SendDismissSuggestion → FriendsRemoteService.DismissFriendSuggestion(DismissFriendSuggestionRequestModel{user_public_id})",
+        "Bắn FriendSuggestionDismissedSignal; analytics 'friend_interaction' action 'dismiss'"
+      ],
+      "result": "Gợi ý bị bỏ không hiện lại; danh sách nạp thêm trang tiếp theo",
+      "rules": "SuggestionPageSize = 5 (const trong FriendsService)",
+      "evidence": "FriendsService.GetFriendSuggestions; FriendsService.DismissFriendSuggestion; FriendsService.SendDismissSuggestion; FriendsRemoteService.DismissFriendSuggestion; FriendSuggestionDismissedSignal"
+    },
+    {
+      "id": "UC-10",
+      "title": "Liên kết Facebook và tự thêm bạn Facebook",
+      "actor": "Player",
+      "trigger": "Bấm 'FriendsConnectWithFb'",
+      "precondition": "FriendsConfigModel.IsFacebookFriendsEnabled = true",
+      "steps": [
+        "FacebookLoginService đăng nhập; FriendsService.OnFacebookStateChanged() theo dõi",
+        "OnFacebookFriendsFetched() nhận danh sách id bạn Facebook",
+        "SanitizeFacebookIds(facebookIds) lọc id không hợp lệ",
+        "AutoAddFacebookFriends(facebookIds) → FriendsRemoteService.AutoAddFacebookFriends(AutoAddFacebookFriendsRequestModel{facebook_ids}) → AutoAddFacebookFriendsResponse",
+        "MapAutoAddedFriend(AutoAddedFriendData) thêm thẳng vào danh sách bạn (directory 'fb'/'auto')"
+      ],
+      "result": "Bạn Facebook đang chơi game được thêm ngay không cần lời mời",
+      "rules": "Chỉ chạy khi cờ IsFacebookFriendsEnabled bật; vẫn chịu giới hạn MaxFriendCount",
+      "evidence": "FriendsService.OnFacebookFriendsFetched; FriendsService.SanitizeFacebookIds; FriendsService.AutoAddFacebookFriends; FriendsRemoteService.AutoAddFacebookFriends; FriendsService.MapAutoAddedFriend"
+    },
+    {
+      "id": "UC-11",
+      "title": "Nhận thưởng liên kết Facebook một lần",
+      "actor": "Player",
+      "trigger": "Sau khi liên kết Facebook thành công",
+      "precondition": "FriendsDataService.GetDidClaimSyncReward() = false",
+      "steps": [
+        "FriendsService.InitializeFacebookSyncRewardClaimStatus() kiểm tra trạng thái",
+        "CanClaimSyncReward() = true → GetSyncReward() trả RewardModel = FriendsConfigModel.FbConnectReward",
+        "RewardService trao thưởng, FacebookSignInRewardView chạy animation",
+        "FriendsDataService.SetDidClaimSyncReward(true) lưu vào FriendsSyncModel.DidClaimSyncReward"
+      ],
+      "result": "Người chơi nhận thưởng một lần duy nhất cho việc liên kết Facebook",
+      "rules": "Cờ DidClaimSyncReward đồng bộ theo tài khoản qua SyncService nên đổi máy vẫn không nhận lại được",
+      "evidence": "FriendsService.CanClaimSyncReward; FriendsService.GetSyncReward; FriendsService.InitializeFacebookSyncRewardClaimStatus; FriendsDataService.SetDidClaimSyncReward; FriendsSyncModel"
+    },
+    {
+      "id": "UC-12",
+      "title": "Kết bạn qua deeplink mời",
+      "actor": "Player",
+      "trigger": "Mở game từ link mời của bạn",
+      "precondition": "Deeplink chứa nhãn adj_label",
+      "steps": [
+        "FriendsService.TryAddFriendsFromDeeplink() đọc deeplink, tách id bằng biểu thức 'adj_label=([^\\s]+)'",
+        "FriendsRemoteService.AutoAddFriend(AutoAddFriendRequestModel{target_user_public_id}) → AutoAddFriendResponse",
+        "Bạn được thêm với directory 'deeplink'"
+      ],
+      "result": "Hai người thành bạn ngay khi cài đặt qua link mời",
+      "rules": "Liên quan trực tiếp tới Referral (FriendsInvitePopup + ReferralService)",
+      "evidence": "FriendsService.TryAddFriendsFromDeeplink; FriendsRemoteService.AutoAddFriend; AutoAddFriendRequestModel"
+    },
+    {
+      "id": "UC-13",
+      "title": "Kết bạn từ hồ sơ người chơi khác",
+      "actor": "Player",
+      "trigger": "Mở hồ sơ của một người chơi (từ chat đội, leaderboard)",
+      "precondition": "Không phải chính mình",
+      "steps": [
+        "FriendProfileController.Initialize(UserProfileModel, popupSource) và UpdateView() chọn hiện _addFriendContainer / _removeFriendContainer / _acceptFriendRequestContainer",
+        "OnAddFriendButtonSelected → MapToFriendUser(model) → FriendsService.SendFriendRequest(user, 'profile')",
+        "OnFriendRequestAccepted / OnRemoveFriendSelected cho hai trạng thái còn lại"
+      ],
+      "result": "Thao tác kết bạn/xoá bạn ngay trong popup hồ sơ",
+      "rules": "popupSource được ghi lại để phân tích nguồn (chuỗi 'profile_{0}')",
+      "evidence": "FriendProfileController.Initialize; FriendProfileController.UpdateView; FriendProfileController.OnAddFriendButtonSelected; FriendProfileController.MapToFriendUser"
+    },
+    {
+      "id": "UC-14",
+      "title": "Chấm đỏ thông báo lời mời mới",
+      "actor": "System",
+      "trigger": "Có lời mời đến chưa xem",
+      "precondition": "HasUnseenRequests() = true",
+      "steps": [
+        "FriendsDataService.UpdateIncomingRequests(incomingRequests) so sánh với FriendsModel.IncomingRequestIds",
+        "Đặt FriendsModel.HasUnseenRequests và FriendsService.ShouldShowNavBarNotif = true",
+        "FriendsNavBarNotificationController.UpdateView() bật _notifContainer",
+        "Mở tab Friends → OnPageSelected(PageType) → FriendsService.ResetNavBarNotif()"
+      ],
+      "result": "Người chơi thấy chấm đỏ cho tới khi mở tab Friends",
+      "rules": "Danh sách id lưu cục bộ để phân biệt lời mời cũ/mới",
+      "evidence": "FriendsDataService.UpdateIncomingRequests; FriendsService.HasUnseenRequests; FriendsService.ResetNavBarNotif; FriendsNavBarNotificationController.UpdateView"
+    },
+    {
+      "id": "UC-15",
+      "title": "Làm mới dữ liệu sau khi thắng level",
+      "actor": "System",
+      "trigger": "Thắng một level",
+      "precondition": "Friends đã khởi tạo",
+      "steps": [
+        "FriendsService.OnLevelWin() đặt _shouldSyncRemote = true",
+        "IntervalUpdate() thấy cờ và gọi Refresh() → RefreshAll()"
+      ],
+      "result": "Tiến độ level của bạn bè và bảng xếp hạng bạn bè được cập nhật",
+      "rules": "Dùng cờ + IIntervalUpdate để gộp request",
+      "evidence": "FriendsService.OnLevelWin; FriendsService.IntervalUpdate; FriendsService.Refresh"
+    },
+    {
+      "id": "UC-16",
+      "title": "Danh sách bạn đầy",
+      "actor": "System",
+      "trigger": "Thêm bạn khi đã đạt giới hạn",
+      "precondition": "GetFriendsCount() >= FriendsConfigModel.MaxFriendCount",
+      "steps": [
+        "FriendsService.IsFriendListFull() trả true",
+        "FriendsRequestElementView / FriendSuggestionElementView / FriendProfileController hiển thị 'FriendListFullErrorMessage'"
+      ],
+      "result": "Chặn thêm bạn mới cho tới khi xoá bớt",
+      "rules": "MaxFriendCount lấy từ remote config",
+      "evidence": "FriendsService.IsFriendListFull; FriendsRequestElementView; FriendSuggestionElementView; FriendProfileController"
+    },
+    {
+      "id": "UC-17",
+      "title": "Đồng bộ dữ liệu Friends theo tài khoản",
+      "actor": "System",
+      "trigger": "SyncService chạy hoặc dữ liệu đổi",
+      "precondition": "-",
+      "steps": [
+        "FriendsDataService.MarkForLateUpdate(shouldSyncWithBackend) khi có thay đổi",
+        "LateUpdate() lưu qua ISaveLoad<FriendsModel>",
+        "SerializeModelForSync() với GetSyncName() = \"FriendsSyncModel\"",
+        "OverwriteModelFromSync(data) khi server trả bản mới",
+        "DeleteData() (IDeletable) xoá sạch khi xoá tài khoản"
+      ],
+      "result": "Cờ DidClaimSyncReward và trạng thái lời mời chưa xem theo tài khoản",
+      "rules": "IsDataChangedSinceLastSave/DataSynced quản lý cờ bẩn",
+      "evidence": "FriendsDataService.SerializeModelForSync; FriendsDataService.GetSyncName; FriendsDataService.OverwriteModelFromSync; FriendsDataService.DeleteData"
+    },
+    {
+      "id": "UC-18",
+      "title": "Lỗi mạng khi đồng bộ bạn bè",
+      "actor": "System",
+      "trigger": "API trả lỗi hoặc timeout",
+      "precondition": "-",
+      "steps": [
+        "FriendsWebResponse trả chuỗi 'unknown_error'",
+        "Status = SyncFailed",
+        "FriendsRemoteService.CancelRequests() huỷ các request đang treo khi đóng màn"
+      ],
+      "result": "UI hiển thị trạng thái lỗi thay vì danh sách rỗng gây hiểu nhầm",
+      "rules": "CancellationTokenSource _cts được reset trong Initialize/Dispose",
+      "evidence": "FriendsRemoteService.CancelRequests; FriendsWebResponse; FriendsServiceStatus.SyncFailed"
+    }
+  ],
+  "configs": [
+    {
+      "source": "Default/code0.0.3063 and historical caches20260910/20261010; per-snapshot source/hash in snapshot_values; not effective-runtime proof",
+      "key": "FriendsConfigModel.IsEnabled",
+      "type": "bool",
+      "value": "default_0.0.3063: false; cache_20260910: true; cache_20261010: true; firebase_20260910: true",
+      "meaning": "Bật/tắt tính năng Friends [15/11: giá trị theo snapshot cụ thể; thiếu field khác với false/0. Không xác nhận assignment hoặc effective runtime.]",
+      "where": "Firebase Remote Config key 'FriendsConfigModel' → FriendsService.IsEnabled",
+      "previous_unresolved_value": "server",
+      "snapshot_values": [
+        {
+          "snapshot": "default_0.0.3063",
+          "model": "FriendsConfigModel",
+          "key": "IsEnabled",
+          "value": false,
+          "type": "bool",
+          "source": "../com.grandgames.magicsort_Unity_20260909_112501/UnityExport/ExportedProject/Assets/Resources/defaultconfigs/FriendsConfigModel.json",
+          "value_type": "bool",
+          "source_sha256": "c83a3cacf5217b85193fe648a100a0c685bbbc53c3677500972d997f54287ecd",
+          "field_present": true
+        },
+        {
+          "snapshot": "cache_20260910",
+          "model": "friendsConfigModel",
+          "key": "isEnabled",
+          "value": true,
+          "type": "bool",
+          "source": "facts/runtime/server_configs/friendsConfigModel.json",
+          "value_type": "bool",
+          "source_sha256": "6bec09886b767bcbaa7ffc1a61db41285d32cf1f41d4bc967d91d85f39f7f226",
+          "field_present": true
+        },
+        {
+          "snapshot": "cache_20261010",
+          "model": "friendsConfigModel",
+          "key": "isEnabled",
+          "value": true,
+          "type": "bool",
+          "source": "facts/runtime/test_20261010/before/CachedRemoteConfigs",
+          "value_type": "bool",
+          "source_sha256": "433164d4877b2dee55d2bbd79ef2fe83d3fe9519492fe15e3cb0926daf216050",
+          "field_present": true
+        },
+        {
+          "snapshot": "firebase_20260910",
+          "model": "FriendsConfigModel",
+          "key": "IsEnabled",
+          "value": true,
+          "type": "bool",
+          "source": "facts/runtime/decoded/firebase_rc.json",
+          "value_type": "bool",
+          "source_sha256": "e49f73c0e3854a98c0c27ffae86e6abc7897c767b5f3e82991004c48c4eb45d5",
+          "field_present": true
+        }
+      ],
+      "snapshot_review_id": "MS-CFG-Friends-0000"
+    },
+    {
+      "source": "Default/code0.0.3063 and historical caches20260910/20261010; per-snapshot source/hash in snapshot_values; not effective-runtime proof",
+      "key": "FriendsConfigModel.MaxFriendCount",
+      "type": "int",
+      "value": "default_0.0.3063: 100; cache_20260910: 100; cache_20261010: 100; firebase_20260910: 100",
+      "meaning": "Số bạn tối đa [15/11: giá trị theo snapshot cụ thể; thiếu field khác với false/0. Không xác nhận assignment hoặc effective runtime.]",
+      "where": "FriendsService.IsFriendListFull",
+      "previous_unresolved_value": "server",
+      "snapshot_values": [
+        {
+          "snapshot": "default_0.0.3063",
+          "model": "FriendsConfigModel",
+          "key": "MaxFriendCount",
+          "value": 100,
+          "type": "int",
+          "source": "../com.grandgames.magicsort_Unity_20260909_112501/UnityExport/ExportedProject/Assets/Resources/defaultconfigs/FriendsConfigModel.json",
+          "value_type": "int",
+          "source_sha256": "c83a3cacf5217b85193fe648a100a0c685bbbc53c3677500972d997f54287ecd",
+          "field_present": true
+        },
+        {
+          "snapshot": "cache_20260910",
+          "model": "friendsConfigModel",
+          "key": "maxFriendCount",
+          "value": 100,
+          "type": "int",
+          "source": "facts/runtime/server_configs/friendsConfigModel.json",
+          "value_type": "int",
+          "source_sha256": "6bec09886b767bcbaa7ffc1a61db41285d32cf1f41d4bc967d91d85f39f7f226",
+          "field_present": true
+        },
+        {
+          "snapshot": "cache_20261010",
+          "model": "friendsConfigModel",
+          "key": "maxFriendCount",
+          "value": 100,
+          "type": "int",
+          "source": "facts/runtime/test_20261010/before/CachedRemoteConfigs",
+          "value_type": "int",
+          "source_sha256": "433164d4877b2dee55d2bbd79ef2fe83d3fe9519492fe15e3cb0926daf216050",
+          "field_present": true
+        },
+        {
+          "snapshot": "firebase_20260910",
+          "model": "FriendsConfigModel",
+          "key": "MaxFriendCount",
+          "value": 100,
+          "type": "int",
+          "source": "facts/runtime/decoded/firebase_rc.json",
+          "value_type": "int",
+          "source_sha256": "e49f73c0e3854a98c0c27ffae86e6abc7897c767b5f3e82991004c48c4eb45d5",
+          "field_present": true
+        }
+      ],
+      "snapshot_review_id": "MS-CFG-Friends-0001"
+    },
+    {
+      "source": "remote config",
+      "key": "FriendsConfigModel.FbConnectReward",
+      "type": "RewardModel",
+      "value": "server",
+      "meaning": "Thưởng một lần khi liên kết Facebook",
+      "where": "FriendsService.GetSyncReward"
+    },
+    {
+      "source": "Default/code0.0.3063 and historical caches20260910/20261010; per-snapshot source/hash in snapshot_values; not effective-runtime proof",
+      "key": "FriendsConfigModel.IsFacebookFriendsEnabled",
+      "type": "bool",
+      "value": "default_0.0.3063: false; cache_20260910: true; cache_20261010: true; firebase_20260910: true",
+      "meaning": "Bật nhánh tự thêm bạn Facebook [15/11: giá trị theo snapshot cụ thể; thiếu field khác với false/0. Không xác nhận assignment hoặc effective runtime.]",
+      "where": "FriendsService.GetFacebookFriendsEnabled",
+      "previous_unresolved_value": "server",
+      "snapshot_values": [
+        {
+          "snapshot": "default_0.0.3063",
+          "model": "FriendsConfigModel",
+          "key": "IsFacebookFriendsEnabled",
+          "value": false,
+          "type": "bool",
+          "source": "../com.grandgames.magicsort_Unity_20260909_112501/UnityExport/ExportedProject/Assets/Resources/defaultconfigs/FriendsConfigModel.json",
+          "value_type": "bool",
+          "source_sha256": "c83a3cacf5217b85193fe648a100a0c685bbbc53c3677500972d997f54287ecd",
+          "field_present": true
+        },
+        {
+          "snapshot": "cache_20260910",
+          "model": "friendsConfigModel",
+          "key": "isFacebookFriendsEnabled",
+          "value": true,
+          "type": "bool",
+          "source": "facts/runtime/server_configs/friendsConfigModel.json",
+          "value_type": "bool",
+          "source_sha256": "6bec09886b767bcbaa7ffc1a61db41285d32cf1f41d4bc967d91d85f39f7f226",
+          "field_present": true
+        },
+        {
+          "snapshot": "cache_20261010",
+          "model": "friendsConfigModel",
+          "key": "isFacebookFriendsEnabled",
+          "value": true,
+          "type": "bool",
+          "source": "facts/runtime/test_20261010/before/CachedRemoteConfigs",
+          "value_type": "bool",
+          "source_sha256": "433164d4877b2dee55d2bbd79ef2fe83d3fe9519492fe15e3cb0926daf216050",
+          "field_present": true
+        },
+        {
+          "snapshot": "firebase_20260910",
+          "model": "FriendsConfigModel",
+          "key": "IsFacebookFriendsEnabled",
+          "value": true,
+          "type": "bool",
+          "source": "facts/runtime/decoded/firebase_rc.json",
+          "value_type": "bool",
+          "source_sha256": "e49f73c0e3854a98c0c27ffae86e6abc7897c767b5f3e82991004c48c4eb45d5",
+          "field_present": true
+        }
+      ],
+      "snapshot_review_id": "MS-CFG-Friends-0003"
+    },
+    {
+      "source": "code const",
+      "key": "FriendsService.SuggestionPageSize",
+      "type": "int",
+      "value": "5",
+      "meaning": "Số gợi ý kết bạn nạp mỗi trang",
+      "where": "FriendsService (const, client default)"
+    },
+    {
+      "source": "code const",
+      "key": "FindFriendPopup._maxSearchTermLength",
+      "type": "int",
+      "value": "11",
+      "meaning": "Độ dài tối đa của User ID nhập khi tìm bạn",
+      "where": "FindFriendPopup (const)"
+    },
+    {
+      "source": "code enum",
+      "key": "FriendsServiceStatus",
+      "type": "enum int",
+      "value": "None=0, Initializing=1, Synced=2, SyncFailed=3",
+      "meaning": "Trạng thái đồng bộ dữ liệu bạn bè",
+      "where": "FriendsServiceStatus"
+    },
+    {
+      "source": "code const",
+      "key": "directory (nguồn gửi lời mời)",
+      "type": "string",
+      "value": "\"friends_tab\", \"profile\", \"suggest\", \"deeplink\", \"fb\", \"auto\"",
+      "meaning": "Nhãn nguồn khi gửi lời mời, dùng cho analytics",
+      "where": "FriendsService (chuỗi trong strings-by-type.tsv)"
+    },
+    {
+      "source": "code const",
+      "key": "hành động friend_interaction",
+      "type": "string",
+      "value": "\"send\", \"accept\", \"reject\", \"delete\", \"dismiss\"",
+      "meaning": "Loại tương tác gửi lên analytics",
+      "where": "FriendsService"
+    },
+    {
+      "source": "code const",
+      "key": "regex deeplink",
+      "type": "string",
+      "value": "\"adj_label=([^\\\\s]+)\"",
+      "meaning": "Mẫu tách id người mời từ deeplink Adjust",
+      "where": "FriendsService.TryAddFriendsFromDeeplink"
+    },
+    {
+      "source": "code field",
+      "key": "FriendsModel",
+      "type": "class",
+      "value": "IncomingRequestIds, HasUnseenRequests, SyncModel",
+      "meaning": "Dữ liệu Friends lưu cục bộ",
+      "where": "FriendsModel / ISaveLoad<FriendsModel>"
+    },
+    {
+      "source": "code field",
+      "key": "FriendsSyncModel.DidClaimSyncReward",
+      "type": "bool",
+      "value": "false (mặc định)",
+      "meaning": "Đã nhận thưởng liên kết Facebook chưa",
+      "where": "FriendsSyncModel"
+    },
+    {
+      "source": "code field",
+      "key": "FriendUserViewModel",
+      "type": "class",
+      "value": "IsMe, PublicId, UserName, AvatarUrl, AvatarId, Progress, FrameId, NameStyleId, TeamName, TokenId",
+      "meaning": "Thông tin hiển thị của một người chơi trong hệ Friends",
+      "where": "FriendUserViewModel"
+    },
+    {
+      "source": "code field",
+      "key": "FriendUserData (server)",
+      "type": "class",
+      "value": "FriendPublicId, FriendNickName, FriendImageUrl, FriendImageId, FriendProgress, FriendFrameId, FriendNameStyle, FriendTokenId, FriendTeamId, FriendTeamName",
+      "meaning": "Bản ghi bạn bè trả về từ backend",
+      "where": "FriendUserData / FriendListResponse"
+    },
+    {
+      "source": "storage key",
+      "key": "FriendsSyncModel",
+      "type": "sync name",
+      "value": "\"FriendsSyncModel\"",
+      "meaning": "Tên khối dữ liệu Friends trong SyncService",
+      "where": "FriendsDataService.GetSyncName"
+    },
+    {
+      "source": "asset",
+      "key": "FriendsScrollViewFactory.asset, FriendsCurrencyView.asset",
+      "type": "ScriptableObject",
+      "value": "-",
+      "meaning": "Factory prefab cho danh sách bạn và hiển thị tiền thưởng",
+      "where": "Assets/MonoBehaviour/"
+    },
+    {
+      "source": "asset",
+      "key": "BackendEnvironmentConfig – endpoint Friends (chỉ path)",
+      "type": "string",
+      "value": "/v1/send-friend-request, /v1/get-my-friend-requests, /v1/get-my-sent-friend-requests, /v1/answer-friend-request, /v1/cancel-friend-request, /v1/get-my-friend-list, /v1/delete-friend, /v1/auto-add-fb-friends, /v1/get-friend-suggestions, /v1/dismiss-friend-suggestion, /v1/auto-add-friend; tra cứu hồ sơ: /v2/get-profile",
+      "meaning": "Đường dẫn API của Friends",
+      "where": "Assets/MonoBehaviour/BackendEnvironmentConfig.asset"
+    },
+    {
+      "source": "json default",
+      "key": "FriendsConfigModel.json: IsEnabled",
+      "type": "",
+      "value": "false",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/FriendsConfigModel.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "FriendsConfigModel.json: MaxFriendCount",
+      "type": "",
+      "value": "100",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/FriendsConfigModel.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "FriendsConfigModel.json: FbConnectReward.CurrencyType",
+      "type": "",
+      "value": "1",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/FriendsConfigModel.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "FriendsConfigModel.json: FbConnectReward.Amount",
+      "type": "",
+      "value": "300",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/FriendsConfigModel.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "FriendsConfigModel.json: IsFacebookFriendsEnabled",
+      "type": "",
+      "value": "false",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/FriendsConfigModel.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "server cache (historical)",
+      "key": "FriendsConfigModel (live) = default?",
+      "type": "",
+      "value": "1/8 key trùng default, 7 key khác/thêm",
+      "meaning": "Đối chiếu config server thật (CachedRemoteConfigs) với FriendsConfigModel.json",
+      "where": "Configs/CachedRemoteConfigs + Firebase RC template 3197 — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server cache (historical)",
+      "key": "FriendsConfigModel: isEnabled",
+      "type": "",
+      "value": "true",
+      "meaning": "server ghi đè (default = false)",
+      "where": "Configs/CachedRemoteConfigs + Firebase RC template 3197 — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server cache (historical)",
+      "key": "FriendsConfigModel: fbConnectReward.currencyType",
+      "type": "",
+      "value": "2",
+      "meaning": "server ghi đè (default = 1)",
+      "where": "Configs/CachedRemoteConfigs + Firebase RC template 3197 — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server cache (historical)",
+      "key": "FriendsConfigModel: fbConnectReward.amount",
+      "type": "",
+      "value": "1",
+      "meaning": "server ghi đè (default = 300)",
+      "where": "Configs/CachedRemoteConfigs + Firebase RC template 3197 — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server cache (historical)",
+      "key": "FriendsConfigModel: fbConnectReward.timeSpan",
+      "type": "",
+      "value": "01:00:00",
+      "meaning": "server-only (không có trong default)",
+      "where": "Configs/CachedRemoteConfigs + Firebase RC template 3197 — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server cache (historical)",
+      "key": "FriendsConfigModel: fbConnectReward.chestType",
+      "type": "",
+      "value": "0",
+      "meaning": "server-only (không có trong default)",
+      "where": "Configs/CachedRemoteConfigs + Firebase RC template 3197 — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server cache (historical)",
+      "key": "FriendsConfigModel: fbConnectReward.collectionPackType",
+      "type": "",
+      "value": "0",
+      "meaning": "server-only (không có trong default)",
+      "where": "Configs/CachedRemoteConfigs + Firebase RC template 3197 — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server cache (historical)",
+      "key": "FriendsConfigModel: isFacebookFriendsEnabled",
+      "type": "",
+      "value": "true",
+      "meaning": "server ghi đè (default = false)",
+      "where": "Configs/CachedRemoteConfigs + Firebase RC template 3197 — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    }
+  ],
+  "rewards": [
+    {
+      "context": "Liên kết Facebook lần đầu",
+      "reward": "FriendsConfigModel.FbConnectReward (RewardModel do server cấu hình)",
+      "evidence": "FriendsService.GetSyncReward; FacebookSignInRewardView"
+    },
+    {
+      "context": "Mời bạn mới đạt mốc level",
+      "reward": "Do ReferralService quản lý (xem feature Referral)",
+      "evidence": "FriendsInvitePopup; localize 'FriendsInviteRewardDescription'"
+    }
+  ],
+  "backend": [
+    {
+      "command": "SendFriendRequest(SendFriendRequestModel{to_user_public_id}) → SendFriendRequestResponse",
+      "direction": "client→server",
+      "purpose": "gửi lời mời kết bạn"
+    },
+    {
+      "command": "GetMyFriendRequests → FriendRequestListResponse",
+      "direction": "client→server",
+      "purpose": "lấy lời mời đến"
+    },
+    {
+      "command": "GetMySentFriendRequests → FriendRequestListResponse",
+      "direction": "client→server",
+      "purpose": "lấy lời mời đã gửi"
+    },
+    {
+      "command": "AnswerFriendRequest(AnswerFriendRequestModel{from_user_public_id, is_accepted}) → FriendsWebResponse",
+      "direction": "client→server",
+      "purpose": "chấp nhận/từ chối"
+    },
+    {
+      "command": "CancelFriendRequest(CancelFriendRequestModel{to_user_public_id})",
+      "direction": "client→server",
+      "purpose": "huỷ lời mời đã gửi"
+    },
+    {
+      "command": "GetMyFriendList → FriendListResponse",
+      "direction": "client→server",
+      "purpose": "danh sách bạn"
+    },
+    {
+      "command": "GetFriendSuggestions → FriendSuggestionsResponse",
+      "direction": "client→server",
+      "purpose": "gợi ý kết bạn"
+    },
+    {
+      "command": "DismissFriendSuggestion(DismissFriendSuggestionRequestModel{user_public_id})",
+      "direction": "client→server",
+      "purpose": "bỏ qua gợi ý"
+    },
+    {
+      "command": "DeleteFriend(DeleteFriendRequestModel{friend_user_public_id})",
+      "direction": "client→server",
+      "purpose": "xoá bạn"
+    },
+    {
+      "command": "AutoAddFacebookFriends(AutoAddFacebookFriendsRequestModel{facebook_ids}) → AutoAddFacebookFriendsResponse",
+      "direction": "client→server",
+      "purpose": "tự kết bạn với bạn Facebook"
+    },
+    {
+      "command": "AutoAddFriend(AutoAddFriendRequestModel{target_user_public_id}) → AutoAddFriendResponse",
+      "direction": "client→server",
+      "purpose": "kết bạn tự động qua deeplink"
+    },
+    {
+      "command": "FindFriend(publicId) → FriendProfileData (FindFriendRequestModel{user_public_id})",
+      "direction": "client→server",
+      "purpose": "tra cứu người chơi theo ID"
+    }
+  ],
+  "ui": [
+    {
+      "element": "Tab Friends",
+      "class": "Modules.Contexts.Home.Friends.Scripts.UI.FriendsScrollViewAdapter",
+      "purpose": "danh sách gộp bạn / lời mời / gợi ý"
+    },
+    {
+      "element": "Dòng bạn / lời mời / gợi ý",
+      "class": "FriendsFriendElementView, FriendsRequestElementView, FriendSuggestionElementView, FriendsElementViewBase",
+      "purpose": "hiển thị và thao tác từng dòng"
+    },
+    {
+      "element": "Tiêu đề nhóm và phân cách",
+      "class": "FriendsRequestsTitleElementView, FriendsSuggestTitleElementView, FriendsDividerElementView",
+      "purpose": "chia nhóm 'FriendsFriendRequests' / 'FriendsSuggested'"
+    },
+    {
+      "element": "Popup tìm bạn",
+      "class": "FindFriendPopup",
+      "purpose": "tìm theo User ID, copy ID, mời"
+    },
+    {
+      "element": "Popup mời bạn",
+      "class": "FriendsInvitePopup, FriendsInviteInfoPopup",
+      "purpose": "chia sẻ link mời qua Android Intent ACTION_SEND"
+    },
+    {
+      "element": "Popup xoá bạn",
+      "class": "DeleteFriendPopup, DeleteFriendPopupArgs",
+      "purpose": "xác nhận xoá"
+    },
+    {
+      "element": "Chấm đỏ tab Friends",
+      "class": "FriendsNavBarNotificationController",
+      "purpose": "báo có lời mời mới"
+    },
+    {
+      "element": "Thưởng liên kết Facebook",
+      "class": "FacebookSignInRewardView",
+      "purpose": "hiển thị và nhận FbConnectReward"
+    },
+    {
+      "element": "Khối kết bạn trong hồ sơ",
+      "class": "Modules.Contexts.Home.Profile.Scripts.FriendProfileController",
+      "purpose": "Add/Accept/Remove ngay trong popup hồ sơ"
+    }
+  ],
+  "analytics": [
+    {
+      "event": "friend_interaction",
+      "params": "action (send/accept/reject/delete/dismiss), directory (friends_tab/profile/suggest/deeplink/fb/auto)",
+      "when": "mọi thao tác bạn bè"
+    },
+    {
+      "event": "friends_count",
+      "params": "số bạn hiện có",
+      "when": "đồng bộ danh sách"
+    },
+    {
+      "event": "friends_tab_impression",
+      "params": "-",
+      "when": "mở tab Friends"
+    },
+    {
+      "event": "invite_popup_impression",
+      "params": "-",
+      "when": "mở FriendsInvitePopup"
+    },
+    {
+      "event": "invite_send",
+      "params": "-",
+      "when": "gửi link mời"
+    }
+  ],
+  "storage_keys": [
+    "FriendsSyncModel (SyncService)",
+    "FriendsModel (ISaveLoad: IncomingRequestIds, HasUnseenRequests)"
+  ],
+  "related_features": [
+    "Referral",
+    "Profile",
+    "Leaderboards",
+    "Account",
+    "Teams"
+  ],
+  "gaps": [
+    "15/11 — resolved_historical_snapshot: Đã trích toàn bộ field/value của FriendsConfigModel từ default0.0.3063 và cache lịch sử hiện có. Nhận định không có giá trị trong client đã được đối chiếu bằng file thật; không xác nhận effective runtime. Còn lại: Kiểm chứng effective config/asset và nhánh runtime trên đúng build nếu cần.",
+    "Endpoint HTTP cụ thể nằm trong BackendEnvironmentConfig.asset, không chép vào tài liệu.",
+    "Cách backend sinh gợi ý (SuggestionReason) không nhìn thấy từ client.",
+    "[Runtime 2026-09-10] Config server LIVE đã đọc trực tiếp từ cache máy (không cần request); các hàng 'server live' là giá trị server ghi đè/thêm so với default."
+  ],
+  "sources": [
+    "Il2CppDumper/dump.cs: FriendsService, FriendsRemoteService, FriendsDataService, FriendsConfigModel, FriendsModel, FriendsSyncModel, FriendsServiceStatus, FindFriendPopup, FriendsInvitePopup, FriendProfileController, các *RequestModel",
+    "RecoveredNative/PseudoC/Assembly-CSharp/Modules/Contexts/Home/Friends/Scripts/**",
+    "RecoveredNative/strings-by-type.tsv (FriendsService, FriendsInvitePopup, EventSender friend_*/invite_*)",
+    "GameDesign/appendix/localization.tsv (Friends*)"
+  ],
+  "audit_provenance": {
+    "review_date": "2026-11-15",
+    "mode": "offline_existing_files",
+    "code_build": "0.0.3063 ARMv7",
+    "runtime_build_observed_historically": "0.0.3129 ARM64 (audit 2026-10-18); not rechecked 2026-11-15",
+    "new_playtests": 0,
+    "uc_status": "See facts/audit_20261115/uc_registry.json; image reference is not pass",
+    "workbook_status": "Existing XLSX is historical; JSON and local web include 2026-11-15 corrections",
+    "static_review": "facts/local_code_gap_results_20261115.json; facts/local_asset_gap_results_20261115.json; facts/final_data_gap_decisions_20261115.json; facts/core_body_gap_decisions_20261115.json; facts/remaining_asset_gap_decisions_20261115.json"
+  },
+  "static_review_20261115": {
+    "date": "2026-11-15",
+    "scope": "Historical code/assets 0.0.3063, dated caches, device 0.0.3129 cached bundles and explicitly scoped runtime evidence. Not full runtime pass.",
+    "findings": [
+      {
+        "kind": "final_data",
+        "source_report": "facts/final_data_gap_decisions_20261115.json",
+        "id": "MS-FDG-006",
+        "gap_ids": [
+          "MS-Friends-G001"
+        ],
+        "title": "Giá trị MaxFriendCount và nội dung FbConnectReward do Firebase Remote Config quyết định, không có trong build.",
+        "status": "resolved_historical_snapshot",
+        "conclusion": "Đã trích toàn bộ field/value của FriendsConfigModel từ default0.0.3063 và cache lịch sử hiện có. Nhận định không có giá trị trong client đã được đối chiếu bằng file thật; không xác nhận effective runtime.",
+        "evidence": [
+          "facts/local_asset_review_20261115/config_catalog.json"
+        ],
+        "remaining": "Full historical data answered; current effective selection and full runtime remain unverified.",
+        "next_action": "Kiểm chứng effective config/asset và nhánh runtime trên đúng build nếu cần.",
+        "scope": "question-specific source/observed branch only; no full-UC or production claim",
+        "source_records": [
+          {
+            "snapshot": "default0.0.3063",
+            "model": "FriendsConfigModel",
+            "source": "Resources\\defaultconfigs\\FriendsConfigModel.json",
+            "root": "UnityExport Assets 0.0.3063",
+            "sha256": "c83a3cacf5217b85193fe648a100a0c685bbbc53c3677500972d997f54287ecd",
+            "line": 1,
+            "build": "0.0.3063 ARMv7"
+          },
+          {
+            "snapshot": "cache20260910",
+            "model": "FriendsConfigModel",
+            "source": "facts\\runtime\\server_configs\\friendsConfigModel.json",
+            "root": "GameDesign",
+            "sha256": "6bec09886b767bcbaa7ffc1a61db41285d32cf1f41d4bc967d91d85f39f7f226",
+            "line": 1,
+            "build": "snapshot provenance at path"
+          },
+          {
+            "snapshot": "cache20261010",
+            "model": "FriendsConfigModel",
+            "source": "facts\\runtime\\test_20261010\\before\\CachedRemoteConfigs",
+            "root": "GameDesign",
+            "sha256": "433164d4877b2dee55d2bbd79ef2fe83d3fe9519492fe15e3cb0926daf216050",
+            "line": 1,
+            "build": "snapshot provenance at path"
+          }
+        ]
+      },
+      {
+        "kind": "asset",
+        "source_report": "facts/local_asset_gap_results_20261115.json",
+        "id": "MS-Friends-G001",
+        "status": "resolved_static_snapshot",
+        "conclusion": "Đã trích toàn bộ field/value của FriendsConfigModel từ default0.0.3063 và cache lịch sử hiện có. Nhận định không có giá trị trong client đã được đối chiếu bằng file thật; không xác nhận effective runtime.",
+        "evidence": [
+          {
+            "snapshot": "default0.0.3063",
+            "model": "FriendsConfigModel",
+            "source": "Resources\\defaultconfigs\\FriendsConfigModel.json",
+            "root": "UnityExport Assets 0.0.3063",
+            "sha256": "c83a3cacf5217b85193fe648a100a0c685bbbc53c3677500972d997f54287ecd",
+            "line": 1,
+            "build": "0.0.3063 ARMv7"
+          },
+          {
+            "snapshot": "cache20260910",
+            "model": "FriendsConfigModel",
+            "source": "facts\\runtime\\server_configs\\friendsConfigModel.json",
+            "root": "GameDesign",
+            "sha256": "6bec09886b767bcbaa7ffc1a61db41285d32cf1f41d4bc967d91d85f39f7f226",
+            "line": 1,
+            "build": "snapshot provenance at path"
+          },
+          {
+            "snapshot": "cache20261010",
+            "model": "FriendsConfigModel",
+            "source": "facts\\runtime\\test_20261010\\before\\CachedRemoteConfigs",
+            "root": "GameDesign",
+            "sha256": "433164d4877b2dee55d2bbd79ef2fe83d3fe9519492fe15e3cb0926daf216050",
+            "line": 1,
+            "build": "snapshot provenance at path"
+          }
+        ],
+        "data": "config_catalog.json",
+        "scope": "static_export0.0.3063_or_historical_cache_not_runtime_pass",
+        "reviewed": "2026-11-15",
+        "next_action": "Kiểm chứng effective config/asset và nhánh runtime trên đúng build nếu cần.",
+        "superseded_or_refined_by": "MS-FDG-006"
+      }
+    ]
+  },
+  "acceptance_review_20261115": {
+    "source": "facts/feature_acceptance_20261115.json",
+    "feature_id": "Friends",
+    "scope": "All eleven dossier dimensions reviewed; full_feature_verified is not implied; read per-dimension gaps and actual runtime evidence."
+  },
+  "segment_ab_review_20261115": {
+    "status": "not_identified_in_sources",
+    "segment_ids": [],
+    "matching_basis": "explicit_gd_config_map_or_exact_model_token_in_gdd_configs_where_key_sources; rootfieldscoped",
+    "rows": [],
+    "classifications": {},
+    "assignment_verified": false,
+    "uplift_verified": false,
+    "note": "No matchingrow does not prove no segmentation/AB. Rewardbucketfalsepositives remain explicitly classified."
+  },
+  "continuation_review_20261116": {
+    "date": "2026-11-16",
+    "build": "0.0.3129 ARM64 host APK",
+    "build_scope": "Host APK version3129 matches LAST observed installed version15/11 only; installed bytes/live device16/11 not verified.",
+    "runtime_status": "device_unavailable",
+    "runtime_case_ids": [],
+    "current_apk_model_links": {
+      "feature": "Friends",
+      "models": [
+        {
+          "model": "FriendsConfigModel",
+          "current_default_file": "facts/review_20261116/public_current_config_3129/defaults/FriendsConfigModel.json",
+          "resource_path": "defaultconfigs/friendsconfigmodel",
+          "sha256": "c83a3cacf5217b85193fe648a100a0c685bbbc53c3677500972d997f54287ecd",
+          "matching_basis": [
+            "gdd/Friends.json#/configs",
+            "gdd/Friends.json#/sources",
+            "gdd/Friends.json#/flow"
+          ],
+          "scope": "Packaged default3129, not effective server config.",
+          "site_data_path": "data/current_config_3129/defaults/FriendsConfigModel.json",
+          "original_source_sha256": "c83a3cacf5217b85193fe648a100a0c685bbbc53c3677500972d997f54287ecd",
+          "public_artifact_sha256": "ea37dbf29453226392b3acb81a697d74702e92814c0c4a4c138e54c8bade8bd4",
+          "sha256_scope": "sha256 is original raw model; public_artifact_sha256 is the sanitized download"
+        }
+      ],
+      "status": "exact_model_source_association",
+      "distribution": "sanitized_public",
+      "public_mapping_pending": false
+    },
+    "current_packaged_defaults": [
+      {
+        "model": "FriendsConfigModel",
+        "source": "facts/review_20261116/public_current_config_3129/defaults/FriendsConfigModel.json",
+        "site_data_path": "data/current_config_3129/defaults/FriendsConfigModel.json",
+        "public_artifact_sha256": "ea37dbf29453226392b3acb81a697d74702e92814c0c4a4c138e54c8bade8bd4",
+        "original_source_sha256": "c83a3cacf5217b85193fe648a100a0c685bbbc53c3677500972d997f54287ecd",
+        "source_class": "static_asset",
+        "build": "0.0.3129 host APK",
+        "scope": "Sanitized packaged default fullvalues only; not effective remote/selected config or runtime.",
+        "values": {
+          "IsEnabled": false,
+          "MaxFriendCount": 100,
+          "FbConnectReward": {
+            "CurrencyType": 1,
+            "Amount": 300
+          },
+          "IsFacebookFriendsEnabled": false
+        }
+      }
+    ],
+    "native_finding_ids": [],
+    "documentation_source_coverage": {
+      "dossier_present": true,
+      "use_case_catalog_count": 18,
+      "config_catalog_rows": 30,
+      "current_apk_default_model_links": 1,
+      "current_native_findings": 0,
+      "scope": "Documentation/source coverage only; not complete runtime verification."
+    },
+    "runtime_completion": {
+      "date": "2026-11-16",
+      "status": "device_unavailable",
+      "executed_case_count": 0,
+      "full_feature_runtime_verified": false
+    },
+    "planned_branch": "Mở Find Friend nếu tab cho phép, thử ô trống/ID sai định dạng rồi cancel; Copy ID và xác nhận toast không lưu công khai ID.",
+    "target_uc_ids": [
+      "UC-02",
+      "UC-03",
+      "UC-18"
+    ],
+    "execution_phase": "noncore_first",
+    "core_or_levels_last": false,
+    "actionability_full_json": "facts/continuation_20261116/current/feature_actionability.json",
+    "actionability_site_data_path": "data/continuation_20261116/feature_actionability.json",
+    "source_classes": [
+      "static_asset"
+    ],
+    "full_feature_verified": false
+  }
+}

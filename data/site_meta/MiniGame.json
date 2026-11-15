@@ -1,0 +1,880 @@
+{
+  "id": "MiniGame",
+  "title": "Underwater Treasures (Mini Game)",
+  "tagline": "Mini-game đánh chìm tàu dưới đáy biển: dùng Trident đập ô để tìm báu vật qua 10 chặng.",
+  "infobox": [
+    [
+      "Loại",
+      "Sự kiện solo"
+    ],
+    [
+      "Mở khóa",
+      "Level 140 (MiniGameConfigModel.FirstLevelToShow, mặc định client)"
+    ],
+    [
+      "Thời lượng",
+      "Theo StartTime → FinishTime của mùa do server gửi"
+    ],
+    [
+      "Chu kỳ / lịch",
+      "Từng mùa, EventType = 1 (mặc định client)"
+    ],
+    [
+      "Tham gia",
+      "Người chơi đơn"
+    ],
+    [
+      "Vật phẩm thu thập",
+      "Trident (đinh ba) — CurrencyType.MiniGameTrident = 17"
+    ],
+    [
+      "Tiền tệ",
+      "Trident, coin, Undo, Shuffle, Extra Bottle, gói thẻ Collection"
+    ],
+    [
+      "Thưởng chính",
+      "10 chặng thưởng, kết thúc bằng rương ChestType 25 (800 coin, 1 Extra Bottle, 1 Undo)"
+    ],
+    [
+      "Điều kiện / phụ thuộc",
+      "IsEnabled = true và đã tải xong bundle 'minigame_bundle'"
+    ],
+    [
+      "Manager",
+      "MiniGameService (kèm MiniGameDataService, MiniGameStateService, MiniGameRemoteService, MiniGameController)"
+    ]
+  ],
+  "description": [
+    "Underwater Treasures là mini-game kiểu 'đánh chìm tàu' dưới đáy biển: mỗi Trident đập được một ô trên lưới.",
+    "Dưới lưới có các báu vật hình chữ nhật — vỏ sò, ống nhòm, chai, ngọc trai, la bàn, mỏ neo, cần câu — cùng các vật cản san hô.",
+    "Tìm đủ báu vật của một chặng thì hoàn thành chặng và nhận thưởng, sau đó sang chặng kế với bàn lớn hơn.",
+    "Sự kiện có 10 chặng, mỗi chặng có 10 bố cục dựng sẵn trong MiniGameLevelsConfig.asset, chọn qua CurrentStageSeedIndex.",
+    "Kích thước lưới tăng dần: chặng 1 là 4×4, chặng 2 là 5×5, chặng 3–5 là 6×6, chặng 6–8 là 7×7, chặng 9–10 là 8×8.",
+    "Trident kiếm từ level chính: 1 với Regular, 2 với Hard, 3 với Super Hard, nhân 2 khi thắng ngay lần đầu.",
+    "TryActivateBoosterDynamically gate: chưa activated stage, hitCell destroyed, boosterItems.Count>0,collectedBoosterCount==0. Đọc P=GetCurrentStageBoosterHitPercentage, draw=RandomUtil.GetRandomFromTo(1,100). P<draw→IncreaseCurrentStageBoosterHitPercentage và false; ngược lại lấy boosterItems[0],SetBoosterCell(hitCell),add collectedItems,MarkAsCurrentStageDynamicBoosterActivated. RandomUtil dùng System.Random.Next(from,to), upper exclusive nên draw1..99. Không phải chờ thanh100%; P>=99 đảm bảo vượt draw khi mọi gate khác đúng. (Mã0.0.3063; chưa xác nhận runtime0.0.3129.)",
+    "Có gói IAP 'Trident Deal' bán thêm đinh ba, tự bật khi người chơi sắp hết Trident, với giá theo phân khúc.",
+    "Trident là một loại tiền tệ trong InventoryService nên có thể nhận từ Wheel Of Fortune và các hệ thống khác.",
+    "Hoàn thành chặng còn đóng góp tiến độ cho nhiệm vụ MinigameStageComplete của Magic Lab."
+  ],
+  "notes": [
+    "Lưu ý: mặc định client IsEnabled = false, EventType = 1, FirstLevelToShow = 140 — server ghi đè.",
+    "Lưu ý: AutoOpenEnabledOnFinish mặc định = false, tức người chơi phải tự vào nhận thưởng trước khi hết giờ.",
+    "Lưu ý: bàn chơi nằm hoàn toàn trong Resources (MiniGameLevelsConfig) nên chơi offline được, chỉ cần cache sự kiện.",
+    "Lưu ý: chưa tải xong bundle 'minigame_bundle' thì trạng thái là AssetsNotReady (8) và icon lobby ẩn.",
+    "TryActivateBoosterDynamically gate: chưa activated stage, hitCell destroyed, boosterItems.Count>0,collectedBoosterCount==0. Đọc P=GetCurrentStageBoosterHitPercentage, draw=RandomUtil.GetRandomFromTo(1,100). P<draw→IncreaseCurrentStageBoosterHitPercentage và false; ngược lại lấy boosterItems[0],SetBoosterCell(hitCell),add collectedItems,MarkAsCurrentStageDynamicBoosterActivated. RandomUtil dùng System.Random.Next(from,to), upper exclusive nên draw1..99. Không phải chờ thanh100%; P>=99 đảm bảo vượt draw khi mọi gate khác đúng. (Mã0.0.3063; chưa xác nhận runtime0.0.3129.)",
+    "Lưu ý: mã0.0.3063 cho thấy MiniGameController chọn RandomUtil.GetRandom<MiniGameLevelData> khi cần seed mới, lưu IndexOf vào CurrentStageSeedIndex và dùng lại seed đã cache. Chưa xác minh nhánh này trên0.0.3129.",
+    "Lưu ý: cảnh báo khi thoát — 'You will lose your tridents if you quit!'.",
+    "Lưu ý: ProductId và giá gói Trident Deal đến từ MiniGameIAPConfigModel (server), không có trong IAPProductCatalog.json."
+  ],
+  "how_it_works": [
+    "Initialize() đặt bundle id 'minigame_bundle'; IsEligible() kiểm tra IsEnabled và level ≥ FirstLevelToShow (140).",
+    "NeedToDownloadAssets() và CheckAndResolveAssetDependency() tải bundle; chưa xong thì trạng thái AssetsNotReady (8).",
+    "Khi ShouldStartNewEvent() (và popup 'MiniGamePopUp' không đang mở), GetEventInfo(eventType) trả MiniGameEventInfoResponse.",
+    "StartNewEvent() dựng cache mới với TridentCount = InitialTridentCount (3), CurrentStage = 0, ClaimedStages rỗng, rồi bắn underwater_treasures_started.",
+    "Thắng level: TryIncreaseTridentCount(difficulty, isFirstTry) cộng 1/2/3 Trident theo độ khó, nhân 2 nếu thắng lần đầu.",
+    "Về Home, ShouldShowCollectibleEarnAnimationOnLobbyReturn() cho MiniGameLobbyButtonParticleController bay Trident vào icon.",
+    "Mở popup: lấy StageLevelsData; dùng CurrentStageSeedIndex đã cache hoặc chọn RandomUtil.GetRandom<MiniGameLevelData> rồi lưu IndexOf khi cần seed mới (mã0.0.3063). GetBoardPrefabBySize chọn prefab lưới và tỉ lệ vật phẩm.",
+    "MiniGameItemDataConfig.GetItemData(itemType) cấp Width/Height/Sprite cho từng báu vật; GetCurrentStageHitCells() khôi phục các ô đã đập lần trước.",
+    "Bấm một ô: SpendTrident() trừ 1 Trident và tăng CurrentStageUsedTridentCount, AddCurrentStageHitCell(cellId) ghi lại.",
+    "MiniGameCellHitResult báo trúng phần nào của báu vật; MiniGameBoardItemHider hé lộ dần vật phẩm bên dưới.",
+    "TryActivateBoosterDynamically gate: chưa activated stage, hitCell destroyed, boosterItems.Count>0,collectedBoosterCount==0. Đọc P=GetCurrentStageBoosterHitPercentage, draw=RandomUtil.GetRandomFromTo(1,100). P<draw→IncreaseCurrentStageBoosterHitPercentage và false; ngược lại lấy boosterItems[0],SetBoosterCell(hitCell),add collectedItems,MarkAsCurrentStageDynamicBoosterActivated. RandomUtil dùng System.Random.Next(from,to), upper exclusive nên draw1..99. Không phải chờ thanh100%; P>=99 đảm bảo vượt draw khi mọi gate khác đúng. (Mã0.0.3063; chưa xác nhận runtime0.0.3129.)",
+    "Tìm hết báu vật: CompleteCurrentStage() → ClaimStage(stageIndex) trao thưởng với CurrencyEarnReason.MiniGameUnderwaterTreasures (49) và bắn underwater_treasures_step_completed kèm used_trident_count.",
+    "IncreaseCurrentStage() rồi reset ô đã đập, thanh booster, số Trident đã dùng và chọn seed mới cho chặng kế.",
+    "Hoàn thành cả 10 chặng: AllStagesCompleted() và AllStageRewardsClaimed() → ClaimEvent() đặt IsClaimed = true, bắn underwater_treasures_finished.",
+    "Sắp hết Trident: MiniGameOfferPopup mở gói 'Trident Deal' theo segment; mua thành công thì TridentOfferPurchased() cộng Trident và thưởng kèm với CurrencyEarnReason.MiniGameOffer (53), tăng OfferPurchasedCount tới OfferPurchaseLimit."
+  ],
+  "reward_tables": [
+    {
+      "title": "PHẦN THƯỞNG 10 CHẶNG (MiniGameConfigModel.Rewards)",
+      "columns": [
+        "Chặng",
+        "Kích thước bàn",
+        "Phần thưởng"
+      ],
+      "rows": [
+        [
+          "Chặng 1",
+          "4×4",
+          "1 Undo"
+        ],
+        [
+          "Chặng 2",
+          "5×5",
+          "10 Trident"
+        ],
+        [
+          "Chặng 3",
+          "6×6",
+          "Rương (ChestType 21): 1 Undo, 1 Shuffle"
+        ],
+        [
+          "Chặng 4",
+          "6×6",
+          "200 coin"
+        ],
+        [
+          "Chặng 5",
+          "6×6",
+          "Rương (ChestType 22): 1 Shuffle, 1 Undo, 100 coin"
+        ],
+        [
+          "Chặng 6",
+          "7×7",
+          "400 coin"
+        ],
+        [
+          "Chặng 7",
+          "7×7",
+          "10 Trident"
+        ],
+        [
+          "Chặng 8",
+          "7×7",
+          "Rương (ChestType 23): 400 coin, 1 Shuffle"
+        ],
+        [
+          "Chặng 9",
+          "8×8",
+          "Rương (ChestType 24): 200 coin, 1 Extra Bottle"
+        ],
+        [
+          "Chặng 10",
+          "8×8",
+          "Rương (ChestType 25): 800 coin, 1 Extra Bottle, 1 Undo"
+        ]
+      ]
+    },
+    {
+      "title": "PHẦN THƯỞNG BẢN COLLECTION (RewardsWithCollection)",
+      "columns": [
+        "Chặng",
+        "Phần thưởng",
+        "Khác gì bản thường"
+      ],
+      "rows": [
+        [
+          "Chặng 1",
+          "1 Undo",
+          "Giữ nguyên"
+        ],
+        [
+          "Chặng 2",
+          "10 Trident",
+          "Giữ nguyên"
+        ],
+        [
+          "Chặng 3",
+          "Rương (ChestType 21): 1 Undo, 1 gói thẻ Collection loại 1",
+          "Shuffle đổi thành gói thẻ"
+        ],
+        [
+          "Chặng 4",
+          "200 coin",
+          "Giữ nguyên"
+        ],
+        [
+          "Chặng 5",
+          "Rương (ChestType 22): 1 Shuffle, 1 Undo, 1 gói thẻ Collection loại 2",
+          "100 coin đổi thành gói thẻ"
+        ],
+        [
+          "Chặng 6",
+          "400 coin",
+          "Giữ nguyên"
+        ],
+        [
+          "Chặng 7",
+          "10 Trident",
+          "Giữ nguyên"
+        ],
+        [
+          "Chặng 8",
+          "Rương (ChestType 24): 300 coin, 1 Shuffle, 1 gói thẻ Collection loại 3",
+          "Đổi cả ChestType và nội dung"
+        ],
+        [
+          "Chặng 9",
+          "1 gói thẻ Collection loại 4",
+          "Thay hẳn rương bằng gói thẻ"
+        ],
+        [
+          "Chặng 10",
+          "Rương (ChestType 25): 800 coin, 1 Extra Bottle, 1 gói thẻ Collection loại 5",
+          "Undo đổi thành gói thẻ"
+        ]
+      ]
+    },
+    {
+      "title": "TRIDENT NHẬN THEO ĐỘ KHÓ LEVEL",
+      "columns": [
+        "Độ khó",
+        "Khoá cấu hình",
+        "Trident"
+      ],
+      "rows": [
+        [
+          "Regular",
+          "NormalLevelTridentCount",
+          "1 Trident"
+        ],
+        [
+          "Hard",
+          "HardLevelTridentCount",
+          "2 Trident"
+        ],
+        [
+          "Super Hard",
+          "SuperHardLevelTridentCount",
+          "3 Trident"
+        ],
+        [
+          "Thắng ngay lần đầu",
+          "FirstTryMultiplier",
+          "×2 (text 'First try win gives x{0} rewards!')"
+        ],
+        [
+          "Khởi điểm mùa",
+          "InitialTridentCount",
+          "3 Trident"
+        ]
+      ]
+    },
+    {
+      "title": "KÍCH THƯỚC BÀN VÀ TỈ LỆ VẬT PHẨM (MiniGameBoardConfig)",
+      "columns": [
+        "Kích thước bàn",
+        "Chặng áp dụng",
+        "BoardItemScale"
+      ],
+      "rows": [
+        [
+          "4×4",
+          "Chặng 1",
+          "1.3"
+        ],
+        [
+          "5×5",
+          "Chặng 2",
+          "1.25"
+        ],
+        [
+          "6×6",
+          "Chặng 3, 4, 5",
+          "1.2"
+        ],
+        [
+          "7×7",
+          "Chặng 6, 7, 8",
+          "1.1"
+        ],
+        [
+          "8×8",
+          "Chặng 9, 10",
+          "1.0"
+        ]
+      ]
+    },
+    {
+      "title": "18 LOẠI VẬT PHẨM VÀ KÍCH THƯỚC (MiniGameItemType)",
+      "columns": [
+        "Giá trị",
+        "Tên",
+        "Kích thước"
+      ],
+      "rows": [
+        [
+          "0",
+          "Shell_2x1",
+          "2×1"
+        ],
+        [
+          "1",
+          "Spyglass_1x3",
+          "1×3"
+        ],
+        [
+          "2",
+          "Bottle_1x4",
+          "1×4"
+        ],
+        [
+          "3",
+          "Pearl_2x2",
+          "2×2"
+        ],
+        [
+          "4",
+          "Pillar_1x4",
+          "1×4"
+        ],
+        [
+          "5",
+          "Shell_1x4",
+          "1×4"
+        ],
+        [
+          "6",
+          "Shell_3x2",
+          "3×2"
+        ],
+        [
+          "7",
+          "Shell_4x2",
+          "4×2"
+        ],
+        [
+          "8",
+          "ShellPearl_3x3",
+          "3×3"
+        ],
+        [
+          "9",
+          "Star_3x3",
+          "3×3"
+        ],
+        [
+          "10",
+          "Compass_2x5",
+          "2×5"
+        ],
+        [
+          "11",
+          "Anchor_3x3",
+          "3×3"
+        ],
+        [
+          "12",
+          "FishingRod_2x7",
+          "2×7"
+        ],
+        [
+          "13",
+          "Shell_4x4",
+          "4×4"
+        ],
+        [
+          "14",
+          "JellyFish (booster)",
+          "1×1"
+        ],
+        [
+          "15",
+          "CoralPink",
+          "1×1"
+        ],
+        [
+          "16",
+          "CoralPurple",
+          "1×1"
+        ],
+        [
+          "17",
+          "CoralBlue",
+          "1×1"
+        ]
+      ]
+    },
+    {
+      "title": "VẬT PHẨM XUẤT HIỆN THEO CHẶNG (MiniGameLevelsConfig)",
+      "columns": [
+        "Chặng",
+        "ItemType xuất hiện",
+        "Số placement"
+      ],
+      "rows": [
+        [
+          "Chặng 1",
+          "0, 1, 2",
+          "30"
+        ],
+        [
+          "Chặng 2",
+          "0, 3, 6, 15",
+          "40"
+        ],
+        [
+          "Chặng 3",
+          "1, 2, 6, 14, 15",
+          "80"
+        ],
+        [
+          "Chặng 4",
+          "1, 3, 5, 7, 14, 15",
+          "90"
+        ],
+        [
+          "Chặng 5",
+          "3, 6, 10, 14",
+          "40"
+        ],
+        [
+          "Chặng 6",
+          "3, 8, 13, 14, 16",
+          "290"
+        ],
+        [
+          "Chặng 7",
+          "3, 14, 16",
+          "110"
+        ],
+        [
+          "Chặng 8",
+          "6, 11, 12, 14, 16",
+          "300"
+        ],
+        [
+          "Chặng 9",
+          "0, 2, 6, 9, 13, 14, 16",
+          "120"
+        ],
+        [
+          "Chặng 10",
+          "3, 4, 7, 12, 13, 14, 17",
+          "340"
+        ]
+      ]
+    },
+    {
+      "title": "CẤU HÌNH MẶC ĐỊNH (MiniGameConfigModel.json)",
+      "columns": [
+        "Khoá",
+        "Giá trị mặc định",
+        "Ý nghĩa"
+      ],
+      "rows": [
+        [
+          "IsEnabled",
+          "false",
+          "Bật/tắt mini-game"
+        ],
+        [
+          "EventType",
+          "1",
+          "Loại sự kiện gửi lên GetEventInfo"
+        ],
+        [
+          "FirstLevelToShow",
+          "140",
+          "Level tối thiểu để mở"
+        ],
+        [
+          "InitialTridentCount",
+          "3",
+          "Trident tặng khi sự kiện bắt đầu"
+        ],
+        [
+          "NormalLevelTridentCount",
+          "1",
+          "Trident khi thắng level Regular"
+        ],
+        [
+          "HardLevelTridentCount",
+          "2",
+          "Trident khi thắng level Hard"
+        ],
+        [
+          "SuperHardLevelTridentCount",
+          "3",
+          "Trident khi thắng level Super Hard"
+        ],
+        [
+          "FirstTryMultiplier",
+          "2",
+          "Hệ số nhân khi thắng ngay lần đầu"
+        ],
+        [
+          "JellyFishHitPercentagePerMove",
+          "5",
+          "% booster cộng thêm mỗi nước đi"
+        ],
+        [
+          "AutoOpenEnabledOnFinish",
+          "false",
+          "Tự nhận thưởng khi hết giờ"
+        ]
+      ]
+    },
+    {
+      "title": "MÁY TRẠNG THÁI (MiniGameStateType)",
+      "columns": [
+        "Giá trị",
+        "Trạng thái",
+        "Ý nghĩa"
+      ],
+      "rows": [
+        [
+          "0",
+          "NoCachedEvent",
+          "Chưa có cache sự kiện"
+        ],
+        [
+          "1",
+          "NotIntroduced",
+          "Chưa xem giới thiệu"
+        ],
+        [
+          "2",
+          "InProgress",
+          "Đang chạy"
+        ],
+        [
+          "3",
+          "TimeIsUp",
+          "Hết giờ"
+        ],
+        [
+          "4",
+          "Claimed",
+          "Đã nhận thưởng"
+        ],
+        [
+          "5",
+          "ClaimedAndTimeIsUp",
+          "Đã nhận và đã hết giờ"
+        ],
+        [
+          "6",
+          "InsufficientLevel",
+          "Level dưới FirstLevelToShow"
+        ],
+        [
+          "7",
+          "Disable",
+          "Server tắt tính năng"
+        ],
+        [
+          "8",
+          "AssetsNotReady",
+          "Chưa tải xong bundle"
+        ]
+      ]
+    },
+    {
+      "title": "GÓI TRIDENT DEAL (IAP)",
+      "columns": [
+        "Tham số",
+        "Giá trị",
+        "Ý nghĩa"
+      ],
+      "rows": [
+        [
+          "IAPOrigin.MiniGameOffer",
+          "10",
+          "Phân loại nguồn giao dịch"
+        ],
+        [
+          "IAPReason.MiniGameOffer",
+          "12",
+          "Lý do giao dịch"
+        ],
+        [
+          "IAPContext.MiniGame",
+          "8",
+          "Ngữ cảnh giao dịch"
+        ],
+        [
+          "CurrencyEarnReason.MiniGameOffer",
+          "53",
+          "Lý do nhận thưởng từ offer"
+        ],
+        [
+          "DefaultIAPConfigModel / SegmentedIAPConfigModels",
+          "(server)",
+          "Sản phẩm và giá theo phân khúc"
+        ],
+        [
+          "IAPProductDiscountAmount",
+          "(server)",
+          "Mức giảm giá hiển thị"
+        ],
+        [
+          "OfferRewards / OfferRewardsWithCollection",
+          "(server)",
+          "Nội dung gói, có biến thể Collection"
+        ],
+        [
+          "OfferPurchaseLimit",
+          "(server)",
+          "Số lần mua tối đa"
+        ],
+        [
+          "ShouldShowOfferOnLastHit",
+          "(server)",
+          "Tự bật popup khi còn Trident cuối"
+        ]
+      ]
+    }
+  ],
+  "key_numbers": [
+    {
+      "label": "Số chặng",
+      "value": "10",
+      "source": "MiniGameLevelsConfig.StageLevels / MiniGameService.GetTotalStageCount"
+    },
+    {
+      "label": "Số bố cục mỗi chặng",
+      "value": "10",
+      "source": "MiniGameLevelsConfig.GetStageLevelsData"
+    },
+    {
+      "label": "Kích thước bàn theo chặng",
+      "value": "4×4 → 5×5 → 6×6 → 7×7 → 8×8",
+      "source": "MiniGameLevelsConfig.asset"
+    },
+    {
+      "label": "Số loại vật phẩm",
+      "value": "18 (0–17)",
+      "source": "MiniGameItemType"
+    },
+    {
+      "label": "Vật phẩm lớn nhất",
+      "value": "FishingRod_2x7 (2×7) và Shell_4x4 (4×4)",
+      "source": "MiniGameItemDataConfig.Items"
+    },
+    {
+      "label": "Level mở khoá",
+      "value": "140",
+      "source": "MiniGameConfigModel.json: FirstLevelToShow"
+    },
+    {
+      "label": "Bật/tắt mặc định",
+      "value": "IsEnabled = false",
+      "source": "MiniGameConfigModel.json"
+    },
+    {
+      "label": "Trident khởi điểm",
+      "value": "3",
+      "source": "MiniGameConfigModel.json: InitialTridentCount"
+    },
+    {
+      "label": "Trident theo độ khó",
+      "value": "1 / 2 / 3 (Regular / Hard / Super Hard)",
+      "source": "MiniGameConfigModel.json"
+    },
+    {
+      "label": "Hệ số first-try",
+      "value": "×2",
+      "source": "MiniGameConfigModel.json: FirstTryMultiplier"
+    },
+    {
+      "label": "Booster JellyFish mỗi nước đi",
+      "value": "5%",
+      "source": "MiniGameConfigModel.json: JellyFishHitPercentagePerMove"
+    },
+    {
+      "label": "JellyFish: số nước đến lần kích hoạt",
+      "value": "Không có số nước cố định20; draw1..99 và P tăng khi roll thất bại, kèm điều kiện board/stage (mã0.0.3063).",
+      "source": "JellyFishHitPercentagePerMove"
+    },
+    {
+      "label": "Tự nhận thưởng khi hết giờ",
+      "value": "false (mặc định client)",
+      "source": "AutoOpenEnabledOnFinish"
+    },
+    {
+      "label": "Thưởng chặng 10",
+      "value": "Rương ChestType 25: 800 coin, 1 Extra Bottle, 1 Undo",
+      "source": "MiniGameConfigModel.json: Rewards[9]"
+    },
+    {
+      "label": "Tổng coin từ các chặng (bản thường)",
+      "value": "200 + 400 + 100 + 400 + 200 + 800 = 2100 coin (suy luận)",
+      "source": "MiniGameConfigModel.json: Rewards"
+    },
+    {
+      "label": "Tổng Trident thưởng",
+      "value": "20 (10 ở chặng 2 và 10 ở chặng 7)",
+      "source": "MiniGameConfigModel.json: Rewards[1] / Rewards[6]"
+    },
+    {
+      "label": "ChestType các rương",
+      "value": "21, 22, 23, 24, 25",
+      "source": "MiniGameConfigModel.json: Rewards[i].ChestType"
+    },
+    {
+      "label": "Loại tiền tệ Trident",
+      "value": "CurrencyType.MiniGameTrident = 17",
+      "source": "Modules.Contexts.Application.Inventory.Scripts.CurrencyType"
+    },
+    {
+      "label": "Lý do nhận thưởng",
+      "value": "MiniGameUnderwaterTreasures = 49, MiniGameOffer = 53",
+      "source": "CurrencyEarnReason"
+    },
+    {
+      "label": "Phân loại giao dịch Trident Deal",
+      "value": "IAPOrigin 10, IAPReason 12, IAPContext 8",
+      "source": "Modules.Contexts.Application.IAP.Scripts"
+    },
+    {
+      "label": "Asset bundle",
+      "value": "\"minigame_bundle\"",
+      "source": "MiniGameService.Initialize"
+    },
+    {
+      "label": "Số field cấu hình hoạt ảnh",
+      "value": "MiniGameAnimationConfig 68 field, MiniGameLobbyButtonAnimationConfig 7 field",
+      "source": "Assets/MonoBehaviour"
+    },
+    {
+      "label": "Số trạng thái sự kiện",
+      "value": "9 (0–8)",
+      "source": "MiniGameStateType"
+    }
+  ],
+  "config_highlights": [
+    {
+      "key": "MiniGameConfigModel.json: IsEnabled",
+      "value": "false",
+      "meaning": "Bật/tắt mini-game (client default, remote config ghi đè)"
+    },
+    {
+      "key": "MiniGameConfigModel.json: EventType",
+      "value": "1",
+      "meaning": "Loại sự kiện gửi lên GetEventInfo"
+    },
+    {
+      "key": "MiniGameConfigModel.json: FirstLevelToShow",
+      "value": "140",
+      "meaning": "Level tối thiểu để mở"
+    },
+    {
+      "key": "MiniGameConfigModel.json: InitialTridentCount",
+      "value": "3",
+      "meaning": "Trident tặng khi sự kiện bắt đầu"
+    },
+    {
+      "key": "MiniGameConfigModel.json: NormalLevelTridentCount / HardLevelTridentCount / SuperHardLevelTridentCount",
+      "value": "1 / 2 / 3",
+      "meaning": "Trident nhận theo độ khó level"
+    },
+    {
+      "key": "MiniGameConfigModel.json: FirstTryMultiplier",
+      "value": "2",
+      "meaning": "Hệ số nhân Trident khi thắng ngay lần đầu"
+    },
+    {
+      "key": "MiniGameConfigModel.json: JellyFishHitPercentagePerMove",
+      "value": "5",
+      "meaning": "% booster JellyFish cộng thêm mỗi nước đi"
+    },
+    {
+      "key": "MiniGameConfigModel.json: AutoOpenEnabledOnFinish",
+      "value": "false",
+      "meaning": "Tự nhận thưởng khi sự kiện kết thúc"
+    },
+    {
+      "key": "MiniGameConfigModel.Rewards",
+      "value": "10 phần tử, một cho mỗi chặng",
+      "meaning": "Thưởng từng chặng"
+    },
+    {
+      "key": "MiniGameConfigModel.RewardsWithCollection",
+      "value": "10 phần tử, thay một số món bằng gói thẻ Collection loại 1–5",
+      "meaning": "Biến thể thưởng khi Collection đang chạy"
+    },
+    {
+      "key": "MiniGameLevelsConfig.StageLevels",
+      "value": "10 chặng × 10 bố cục",
+      "meaning": "Toàn bộ bàn chơi dựng sẵn trong Resources"
+    },
+    {
+      "key": "MiniGameLevelItemPlacementData",
+      "value": "ItemType, CellIndex, SlotPosition (Vector3), SlotMoveScale (ví dụ 0.38 / 0.36)",
+      "meaning": "Vị trí đặt từng báu vật trên lưới"
+    },
+    {
+      "key": "MiniGameBoardConfig.Boards",
+      "value": "4×4 → 1.3; 5×5 → 1.25; 6×6 → 1.2; 7×7 → 1.1; 8×8 → 1.0",
+      "meaning": "Prefab lưới và tỉ lệ vật phẩm theo kích thước bàn"
+    },
+    {
+      "key": "MiniGameItemDataConfig.Items",
+      "value": "18 mục với Width × Height, Sprite, SlotSprite, ItemPrefab, ItemSlotPrefab",
+      "meaning": "Kích thước thật của từng vật phẩm trên lưới"
+    },
+    {
+      "key": "MiniGameItemType",
+      "value": "Shell_2x1=0 … Shell_4x4=13, JellyFish=14, CoralPink=15, CoralPurple=16, CoralBlue=17",
+      "meaning": "18 loại vật phẩm trên bàn"
+    },
+    {
+      "key": "MiniGameStateType",
+      "value": "NoCachedEvent=0, NotIntroduced=1, InProgress=2, TimeIsUp=3, Claimed=4, ClaimedAndTimeIsUp=5, InsufficientLevel=6, Disable=7, AssetsNotReady=8",
+      "meaning": "Máy trạng thái sự kiện"
+    },
+    {
+      "key": "MiniGamePopUpImpressionSource / MiniGameInfoPopUpImpressionSource",
+      "value": "LobbyButton=0, Force=1 / InfoButton=0, Force=1",
+      "meaning": "Nguồn mở popup cho analytics"
+    },
+    {
+      "key": "minigame_bundle",
+      "value": "\"minigame_bundle\"",
+      "meaning": "Cache minigame_bundle_v1 đã được giải mã thành 32 sprite, 2 texture và 32 liên kết tham chiếu; không còn chỉ là GUID."
+    },
+    {
+      "key": "MiniGameInfoPopUp.first_try_localization_term",
+      "value": "\"MiniGameTridentInfoStep4\"",
+      "meaning": "Text hệ số thưởng first-try"
+    },
+    {
+      "key": "CurrencyType.MiniGameTrident",
+      "value": "17",
+      "meaning": "Trident là một loại tiền tệ, có thể nhận từ hệ thống khác"
+    },
+    {
+      "key": "CurrencyEarnReason",
+      "value": "MiniGameUnderwaterTreasures=49, MiniGameOffer=53",
+      "meaning": "Lý do nhận thưởng"
+    },
+    {
+      "key": "IAPOrigin.MiniGameOffer / IAPReason.MiniGameOffer / IAPContext.MiniGame",
+      "value": "10 / 12 / 8",
+      "meaning": "Phân loại giao dịch Trident Deal"
+    },
+    {
+      "key": "MiniGameOfferConfigModel",
+      "value": "IsEnabled, ShouldShowOfferOnLastHit, IsOfferInitiallyVisible (server)",
+      "meaning": "Cấu hình gói Trident Deal"
+    },
+    {
+      "key": "MiniGameOfferConfigModel.DefaultIAPConfigModel / SegmentedIAPConfigModels",
+      "value": "MiniGameIAPConfigModel { IAPProductDiscountAmount, IAPConfigModel } (server)",
+      "meaning": "Sản phẩm IAP và mức giảm giá theo segment"
+    },
+    {
+      "key": "MiniGameCacheModel",
+      "value": "TridentCount, LastTridentIncreaseCount, CurrentStage, CurrentStageSeedIndex, CurrentStageHitCells, CurrentStageBoosterHitPercentage, CurrentStageUsedTridentCount, ClaimedStages, IsClaimed",
+      "meaning": "Toàn bộ tiến độ mini-game"
+    },
+    {
+      "key": "MiniGameCacheModel (offer)",
+      "value": "OfferPurchasedCount, OfferPurchaseLimit, IsOfferIntroduced, IsOfferEnabled, IsOfferOpened",
+      "meaning": "Trạng thái gói Trident Deal"
+    },
+    {
+      "key": "Localization",
+      "value": "UnderwaterTreasures, MiniGameGetTridents, MiniGameTridentInfoStep1..4, MiniGameTutorialInfo, MiniGameComplete, MiniGameTridentAreYouSure, TridentDeal",
+      "meaning": "Text UI của mini-game"
+    },
+    {
+      "key": "MagicLabTaskType.MinigameStageComplete",
+      "value": "7",
+      "meaning": "Hoàn thành chặng đóng góp tiến độ cho Magic Lab"
+    }
+  ],
+  "tips": [
+    "Bàn chơi dựng sẵn trong Resources thay vì server giúp mini-game chạy hoàn toàn offline sau khi có cache sự kiện.",
+    "Kích thước lưới tăng dần cùng số lượng vật cản tạo đường cong khó lên rõ rệt qua 10 chặng.",
+    "Booster JellyFish tích theo nước đi là van an toàn chống cảm giác xui khi liên tục đập trượt.",
+    "Gói Trident Deal tự bật đúng lúc còn đinh ba cuối — điểm bán hàng có cảm xúc mạnh nhất.",
+    "Thưởng chặng có tới 20 Trident quay lại chính mini-game, giữ người chơi trong vòng lặp lâu hơn."
+  ],
+  "categories": [
+    "Sự kiện",
+    "Live-ops",
+    "Offer/IAP",
+    "Meta"
+  ]
+}

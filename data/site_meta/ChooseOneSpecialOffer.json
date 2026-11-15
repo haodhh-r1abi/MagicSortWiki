@@ -1,0 +1,546 @@
+{
+  "id": "ChooseOneSpecialOffer",
+  "title": "Choose One Offer (Chọn một gói)",
+  "tagline": "Bày ba gói cạnh nhau kèm nút mua trọn bộ giảm giá, đổi câu hỏi từ 'mua không' sang 'mua cái nào'.",
+  "infobox": [
+    [
+      "Loại",
+      "Offer"
+    ],
+    [
+      "Mở khóa",
+      "Level 65 (FirstLevelToShow, mặc định client)"
+    ],
+    [
+      "Thời lượng",
+      "StartTime → FinishTime (server)"
+    ],
+    [
+      "Chu kỳ / lịch",
+      "EventType = 1 (mặc định client); tần suất popup theo ShowFrequency và MaxShowCount"
+    ],
+    [
+      "Tham gia",
+      "Cá nhân, mua một lần duy nhất"
+    ],
+    [
+      "Tiền tệ",
+      "Tiền thật (IAP), gói từ 2,99 tới 34,99 USD"
+    ],
+    [
+      "Thưởng chính",
+      "Coin, Life, Undo, Shuffle, Extra Bottle, Collection Pack, Merge Energy"
+    ],
+    [
+      "Điều kiện / phụ thuộc",
+      "ChooseOneSpecialOfferConfigModel.IsEnable; dữ liệu offer phải hợp lệ; cạnh tranh vị trí trước Store với SpecialOffer và NoAdsOffer"
+    ],
+    [
+      "Manager",
+      "ChooseOneSpecialOfferService, ChooseOneSpecialOfferDataService, ChooseOneSpecialOfferStateService, ChooseOneSpecialOfferRemoteService"
+    ]
+  ],
+  "description": [
+    "Choose One Offer bày ba gói ưu đãi cạnh nhau (Package1, Package2, Package3) và mời người chơi chọn một.",
+    "Lựa chọn thứ tư là mua trọn bộ (AllPackages) với mức giảm giá hiển thị 'Buy All {0}% OFF'.",
+    "Server gửi ba gói theo phân khúc người chơi (SegmentedChooseOneOfferPackages) cùng một gói combo riêng.",
+    "Kỹ thuật tâm lý cốt lõi là chuyển câu hỏi từ 'mua hay không' sang 'mua cái nào', cộng thêm mồi nhử combo giảm giá.",
+    "Offer có thời hạn và chỉ mua được một lần; trạng thái IsPurchased đồng bộ giữa các thiết bị.",
+    "Tần suất hiện popup kiểm soát bằng bộ đếm ShowFrequency và trần MaxShowCount.",
+    "Popup mở được từ icon lobby, lần hiện đầu, banner ở Booster, Play On, Teams, hoặc chèn trước khi mở Store.",
+    "Khi không tra được thưởng cho productId đã mua, hệ thống dùng bảng ánh xạ FallbackRewardMappings để trao bù.",
+    "Dữ liệu offer không hợp lệ sẽ đưa trạng thái về WrongData và ẩn offer, kèm sự kiện wrong_choose_one_special_offer_data.",
+    "Cấu hình mặc định có 8 sản phẩm IAP từ sort.chooseone3 (2,99 USD) tới sort.chooseone35 (34,99 USD)."
+  ],
+  "notes": [
+    "Lưu ý: khác SpecialOffer (một danh sách thưởng dự phòng chung), ở đây là bảng ánh xạ theo nhóm productId.",
+    "Lưu ý: tham số offer_type trong analytics chính là packageId (1, 2, 3 hoặc 4 cho trọn bộ).",
+    "Lưu ý: hai trạng thái hết giờ tách riêng — LocalTimeIsUp (4) theo đồng hồ client và RemoteTimeIsUp (5) theo cờ IsFinished của server.",
+    "Lưu ý: client không fetch hay claim khi popup 'ChooseOneSpecialOfferPopup' đang mở.",
+    "Lưu ý: chỉ trường IsPurchased được đồng bộ; cache response, PopupTriggerCount và IsPopupShown là dữ liệu cục bộ.",
+    "Lưu ý: mua thất bại giữ nguyên offer; giao dịch treo được xử lý ở lần vào game sau qua TryGetFallbackRewards.",
+    "Lưu ý: nhiều offer cùng tranh vị trí trước Store; thứ tự do OpenStorePopupCommand quyết định.",
+    "Lưu ý: nội dung ba gói, gói combo, giá và phần trăm giảm giá đều do server gửi theo phân khúc (gap).",
+    "Lưu ý: StateService giữ tham chiếu AdService nhưng không thấy lời gọi cụ thể trong dossier (gap)."
+  ],
+  "how_it_works": [
+    "ChooseOneSpecialOfferStateService.GetState() xét lần lượt Disable (0), ProgressNotEnough (1), NoCache (2), Enable (3), LocalTimeIsUp (4), RemoteTimeIsUp (5), Purchased (6), WrongData (7).",
+    "CanShowChooseOneSpecialOffer() tổng hợp: IsEnable, level >= 65, có cache, chưa mua, còn hạn và dữ liệu hợp lệ.",
+    "ShouldSendGetRequest() (khi popup không mở) kích TryFetchCurrentEvent() dựng ChooseOneSpecialOfferRequestModel{EventId, EventType}.",
+    "HandleChooseOneSpecialOfferResponse() gọi UpdateAndCacheBackendOfferResponse() kiểm tra hợp lệ; sai thì bắn wrong_choose_one_special_offer_data.",
+    "CacheBackendResponse() lưu ChooseOneSpecialOfferResponse gồm EventId, StartTime, FinishTime, IsFinished, IsClaimed, ba gói, gói combo và Segment.",
+    "ScheduleChooseOneSpecialOfferFetch() đặt SecondTimer để lấy lại đợt mới khi hết hạn.",
+    "UI dựng 3 thẻ gói dưới tiêu đề 'Choose One!' cộng nút mua trọn bộ; GetDiscountAmount() cấp phần trăm cho text 'Buy All {0}% OFF'.",
+    "Popup tự bật theo tần suất: IncrementPopupTrigger() so bộ đếm với ShowFrequency (mặc định 1), giới hạn bởi MaxShowCount (mặc định 50), rồi ClearPopupTriggerCount().",
+    "Mua: GetIAPConfigModel(iapProductId) lấy sản phẩm từ IAPConfigModels; IAPService mua với IAPOrigin.ChooseOneSpecialOffer (7) và IAPReason.ChooseOneSpecialOffer (9).",
+    "GetPackageIdByProductId(productId) xác định người chơi chọn Package1 (1), Package2 (2), Package3 (3) hay AllPackages (4).",
+    "ClaimPurchasedChooseOneSpecialOfferRewards() gọi GetRewardsForProductId(productId) lấy bộ thưởng tương ứng.",
+    "Không tra được thì TryGetFallbackRewards(productId) duyệt FallbackRewardMappings tìm nhóm productId khớp.",
+    "RewardService trao thưởng với CurrencyEarnReason.ChooseOneSpecialOffer (29); SetIsPurchased(true) khóa offer lại.",
+    "ShouldSendClaimRequest() gửi claim lên server; analytics bắn choose_one_purchased kèm offer_type, price, currency, dollar_equivalent.",
+    "Hết hạn: ClearChooseOneSpecialOfferData() dọn cache và ScheduleChooseOneSpecialOfferFetch() lấy đợt tiếp theo."
+  ],
+  "reward_tables": [
+    {
+      "title": "SẢN PHẨM IAP TRONG CẤU HÌNH MẶC ĐỊNH (IAPConfigModels)",
+      "columns": [
+        "Mốc",
+        "Điều kiện",
+        "Phần thưởng"
+      ],
+      "rows": [
+        [
+          "sort.chooseone3",
+          "ProductType 0",
+          "2,99 USD"
+        ],
+        [
+          "sort.chooseone6",
+          "ProductType 0",
+          "5,99 USD"
+        ],
+        [
+          "sort.chooseone6.99",
+          "ProductType 0",
+          "6,99 USD"
+        ],
+        [
+          "sort.chooseone10",
+          "ProductType 0",
+          "9,99 USD"
+        ],
+        [
+          "sort.chooseone14",
+          "ProductType 0",
+          "13,99 USD"
+        ],
+        [
+          "sort.chooseone15",
+          "ProductType 0",
+          "14,99 USD"
+        ],
+        [
+          "sort.chooseone21",
+          "ProductType 0",
+          "20,99 USD"
+        ],
+        [
+          "sort.chooseone35",
+          "ProductType 0",
+          "34,99 USD"
+        ]
+      ]
+    },
+    {
+      "title": "BẢNG THƯỞNG DỰ PHÒNG (FallbackRewardMappings)",
+      "columns": [
+        "Mốc",
+        "Điều kiện",
+        "Phần thưởng"
+      ],
+      "rows": [
+        [
+          "Nhóm 1",
+          "sort.chooseone6.99 hoặc sort.chooseone3",
+          "1200 coin, 1 Undo"
+        ],
+        [
+          "Nhóm 2",
+          "sort.chooseone15 hoặc sort.chooseone6",
+          "3000 coin, 2 Undo, 2 Shuffle"
+        ],
+        [
+          "Nhóm 3",
+          "sort.chooseone21 hoặc sort.chooseone10",
+          "8000 coin, 4 Undo, 4 Shuffle, 4 Extra Bottle"
+        ],
+        [
+          "Nhóm 4",
+          "sort.chooseone35 hoặc sort.chooseone14",
+          "12200 coin, 7 Undo, 6 Shuffle, 4 Extra Bottle"
+        ],
+        [
+          "Không khớp nhóm nào",
+          "Mọi productId khác",
+          "Không trao thưởng, bắn wrong_choose_one_special_offer_data"
+        ]
+      ]
+    },
+    {
+      "title": "GÓI VÀ NỘI DUNG THƯỞNG (cấu trúc, giá trị từ server)",
+      "columns": [
+        "Mốc",
+        "Điều kiện",
+        "Phần thưởng"
+      ],
+      "rows": [
+        [
+          "Package1 = 1",
+          "Chọn gói thứ nhất",
+          "SegmentedChooseOneOfferPackages[0].RewardModels (server)"
+        ],
+        [
+          "Package2 = 2",
+          "Chọn gói thứ hai",
+          "SegmentedChooseOneOfferPackages[1].RewardModels (server)"
+        ],
+        [
+          "Package3 = 3",
+          "Chọn gói thứ ba",
+          "SegmentedChooseOneOfferPackages[2].RewardModels (server)"
+        ],
+        [
+          "AllPackages = 4",
+          "Mua trọn bộ",
+          "Gộp thưởng cả ba gói, giảm giá GetDiscountAmount()% (server)"
+        ],
+        [
+          "Loại thưởng có thể xuất hiện",
+          "Mọi gói",
+          "coin, life, life_in_seconds, additional_life_inventory, undo, shuffle, extra_bottle, duck_x2_in_seconds, merge_energy, collection_pack_1..5"
+        ]
+      ]
+    },
+    {
+      "title": "TRẠNG THÁI VÀ NGUỒN HIỂN THỊ",
+      "columns": [
+        "Mốc",
+        "Điều kiện",
+        "Phần thưởng"
+      ],
+      "rows": [
+        [
+          "Disable = 0",
+          "IsEnable = false",
+          "Không hiện offer"
+        ],
+        [
+          "ProgressNotEnough = 1",
+          "Level < 65",
+          "Chưa mở khóa"
+        ],
+        [
+          "NoCache = 2",
+          "Chưa có response từ server",
+          "Chờ fetch"
+        ],
+        [
+          "Enable = 3",
+          "Đủ mọi điều kiện",
+          "Hiện icon và popup"
+        ],
+        [
+          "LocalTimeIsUp = 4",
+          "Hết giờ theo đồng hồ client",
+          "Ẩn offer"
+        ],
+        [
+          "RemoteTimeIsUp = 5",
+          "Server báo IsFinished",
+          "Ẩn offer"
+        ],
+        [
+          "Purchased = 6",
+          "IsPurchased = true",
+          "Kết thúc, không hiện lại"
+        ],
+        [
+          "WrongData = 7",
+          "IsDataWrong() = true",
+          "Ẩn offer, ghi log lỗi"
+        ],
+        [
+          "Nguồn mở popup",
+          "ChooseOneSpecialOfferPopupImpressionSource",
+          "None=0, LobbyIcon=1, FirstShow=2, Booster=3, PlayOn=4, Teams=5"
+        ]
+      ]
+    }
+  ],
+  "key_numbers": [
+    {
+      "label": "Level mở khóa offer",
+      "value": "65 (mặc định client)",
+      "source": "ChooseOneSpecialOfferConfigModel.json FirstLevelToShow"
+    },
+    {
+      "label": "Bật/tắt offer",
+      "value": "false (mặc định client)",
+      "source": "ChooseOneSpecialOfferConfigModel.json IsEnable"
+    },
+    {
+      "label": "EventType mặc định",
+      "value": "1",
+      "source": "ChooseOneSpecialOfferConfigModel.json EventType"
+    },
+    {
+      "label": "Tần suất bật popup",
+      "value": "1 (mỗi lần đủ điều kiện)",
+      "source": "ChooseOneSpecialOfferConfigModel.json ShowFrequency"
+    },
+    {
+      "label": "Trần số lần hiện popup",
+      "value": "50",
+      "source": "ChooseOneSpecialOfferConfigModel.json MaxShowCount"
+    },
+    {
+      "label": "Số gói lựa chọn",
+      "value": "3 gói cộng 1 tùy chọn mua trọn bộ",
+      "source": "ChooseOneSpecialOfferPackageType"
+    },
+    {
+      "label": "Số sản phẩm IAP trong cấu hình mặc định",
+      "value": "8",
+      "source": "ChooseOneSpecialOfferConfigModel.json IAPConfigModels"
+    },
+    {
+      "label": "Giá thấp nhất",
+      "value": "2,99 USD (sort.chooseone3)",
+      "source": "IAPConfigModels[4].DollarEquivalent"
+    },
+    {
+      "label": "Giá cao nhất",
+      "value": "34,99 USD (sort.chooseone35)",
+      "source": "IAPConfigModels[5].DollarEquivalent"
+    },
+    {
+      "label": "Số nhóm thưởng dự phòng",
+      "value": "4",
+      "source": "ChooseOneSpecialOfferConfigModel.json FallbackRewardMappings"
+    },
+    {
+      "label": "Thưởng dự phòng nhóm 1",
+      "value": "1200 coin, 1 Undo",
+      "source": "FallbackRewardMappings[0].RewardModels"
+    },
+    {
+      "label": "Thưởng dự phòng nhóm 2",
+      "value": "3000 coin, 2 Undo, 2 Shuffle",
+      "source": "FallbackRewardMappings[1].RewardModels"
+    },
+    {
+      "label": "Thưởng dự phòng nhóm 3",
+      "value": "8000 coin, 4 Undo, 4 Shuffle, 4 Extra Bottle",
+      "source": "FallbackRewardMappings[2].RewardModels"
+    },
+    {
+      "label": "Thưởng dự phòng nhóm 4",
+      "value": "12200 coin, 7 Undo, 6 Shuffle, 4 Extra Bottle",
+      "source": "FallbackRewardMappings[3].RewardModels"
+    },
+    {
+      "label": "Số trạng thái offer",
+      "value": "8 (Disable=0 … WrongData=7)",
+      "source": "ChooseOneSpecialOfferState"
+    },
+    {
+      "label": "Số nguồn mở popup",
+      "value": "6 (None=0 … Teams=5)",
+      "source": "ChooseOneSpecialOfferPopupImpressionSource"
+    },
+    {
+      "label": "IAPOrigin của offer",
+      "value": "7",
+      "source": "IAPOrigin.ChooseOneSpecialOffer"
+    },
+    {
+      "label": "IAPReason của offer",
+      "value": "9",
+      "source": "IAPReason.ChooseOneSpecialOffer"
+    },
+    {
+      "label": "Lý do nhận thưởng",
+      "value": "CurrencyEarnReason.ChooseOneSpecialOffer = 29",
+      "source": "CurrencyEarnReason"
+    },
+    {
+      "label": "Tên popup",
+      "value": "ChooseOneSpecialOfferPopup",
+      "source": "ChooseOneSpecialOfferStateService.ShouldSendGetRequest"
+    },
+    {
+      "label": "Tên khối đồng bộ",
+      "value": "ChooseOneSpecialOfferSyncableDataModel",
+      "source": "ChooseOneSpecialOfferDataService.GetSyncName"
+    },
+    {
+      "label": "Số lần mua tối đa",
+      "value": "1 (IsPurchased khóa vĩnh viễn)",
+      "source": "ChooseOneSpecialOfferDataService.SetIsPurchased"
+    },
+    {
+      "label": "Phần trăm giảm giá gói combo",
+      "value": "GetDiscountAmount() (server)",
+      "source": "ChooseOneSpecialOfferService.GetDiscountAmount"
+    }
+  ],
+  "config_highlights": [
+    {
+      "key": "ChooseOneSpecialOfferConfigModel.IsEnable",
+      "value": "false (mặc định client)",
+      "meaning": "Bật/tắt offer"
+    },
+    {
+      "key": "ChooseOneSpecialOfferConfigModel.FirstLevelToShow",
+      "value": "65",
+      "meaning": "Level tối thiểu để thấy offer"
+    },
+    {
+      "key": "ChooseOneSpecialOfferConfigModel.EventType",
+      "value": "1",
+      "meaning": "Loại sự kiện gửi trong request"
+    },
+    {
+      "key": "ChooseOneSpecialOfferConfigModel.ShowFrequency",
+      "value": "1",
+      "meaning": "Số lần kích hoạt cần trước khi tự mở popup"
+    },
+    {
+      "key": "ChooseOneSpecialOfferConfigModel.MaxShowCount",
+      "value": "50",
+      "meaning": "Trần tổng số lần hiện popup"
+    },
+    {
+      "key": "ChooseOneSpecialOfferConfigModel.IAPConfigModels",
+      "value": "8 sản phẩm sort.chooseone3 / 6 / 6.99 / 10 / 14 / 15 / 21 / 35",
+      "meaning": "Danh sách sản phẩm IAP dùng cho các gói"
+    },
+    {
+      "key": "IAPConfigModels[*].DollarEquivalent",
+      "value": "2,99 / 5,99 / 6,99 / 9,99 / 13,99 / 14,99 / 20,99 / 34,99 USD",
+      "meaning": "Giá quy đổi USD của từng sản phẩm"
+    },
+    {
+      "key": "ChooseOneSpecialOfferConfigModel.FallbackRewardMappings",
+      "value": "4 nhóm, mỗi nhóm gồm ProductIds và RewardModels",
+      "meaning": "Bảng ánh xạ productId sang bộ thưởng dự phòng"
+    },
+    {
+      "key": "ChooseOneSpecialOfferResponse",
+      "value": "EventId, StartTime, FinishTime, IsFinished, IsClaimed, SegmentedChooseOneOfferPackages, SegmentedChooseOneCombinedPackage, Segment",
+      "meaning": "Toàn bộ phiên offer từ server"
+    },
+    {
+      "key": "SegmentedChooseOneOfferPackages",
+      "value": "3 gói (server)",
+      "meaning": "Ba lựa chọn theo phân khúc người chơi"
+    },
+    {
+      "key": "SegmentedChooseOneCombinedPackage",
+      "value": "1 gói (server)",
+      "meaning": "Gói trọn bộ Buy All theo phân khúc"
+    },
+    {
+      "key": "ChooseOneSpecialOfferRequestModel",
+      "value": "EventId, EventType",
+      "meaning": "Payload lấy offer hiện tại"
+    },
+    {
+      "key": "ChooseOneSpecialOfferState",
+      "value": "Disable=0, ProgressNotEnough=1, NoCache=2, Enable=3, LocalTimeIsUp=4, RemoteTimeIsUp=5, Purchased=6, WrongData=7",
+      "meaning": "Máy trạng thái của offer"
+    },
+    {
+      "key": "ChooseOneSpecialOfferPackageType",
+      "value": "None=0, Package1=1, Package2=2, Package3=3, AllPackages=4",
+      "meaning": "Gói người chơi chọn, gửi làm offer_type trong analytics"
+    },
+    {
+      "key": "ChooseOneSpecialOfferPopupImpressionSource",
+      "value": "None=0, LobbyIcon=1, FirstShow=2, Booster=3, PlayOn=4, Teams=5",
+      "meaning": "Nguồn mở popup cho analytics"
+    },
+    {
+      "key": "IAPOrigin.ChooseOneSpecialOffer / IAPReason.ChooseOneSpecialOffer",
+      "value": "7 / 9",
+      "meaning": "Phân loại giao dịch mua"
+    },
+    {
+      "key": "CurrencyEarnReason.ChooseOneSpecialOffer",
+      "value": "29",
+      "meaning": "Lý do nhận thưởng ghi vào analytics 'earned'"
+    },
+    {
+      "key": "Popup key",
+      "value": "ChooseOneSpecialOfferPopup",
+      "meaning": "Tên popup kiểm tra trước khi fetch hoặc claim"
+    },
+    {
+      "key": "ChooseOneSpecialOfferSyncableDataModel.IsPurchased",
+      "value": "bool (client + server)",
+      "meaning": "Đã mua offer chưa, đồng bộ giữa thiết bị"
+    },
+    {
+      "key": "ChooseOneSpecialOfferDataModel.ChooseOneSpecialOfferResponse",
+      "value": "cache (không đồng bộ)",
+      "meaning": "Bản sao response gần nhất từ server"
+    },
+    {
+      "key": "ChooseOneSpecialOfferDataModel.PopupTriggerCount / IsPopupShown",
+      "value": "client (không đồng bộ)",
+      "meaning": "Bộ đếm tần suất và cờ đã mở popup"
+    },
+    {
+      "key": "Localization ChooseOneHeader",
+      "value": "'Choose One!'",
+      "meaning": "Tiêu đề popup"
+    },
+    {
+      "key": "Localization ChooseOneSpecialOfferDiscount",
+      "value": "'Buy All <color=#f6e480>{0}% OFF</color>'",
+      "meaning": "Nhãn giảm giá của nút mua trọn bộ"
+    },
+    {
+      "key": "CurrencyType trong bảng dự phòng",
+      "value": "1 = Coin, 4 = Undo, 5 = Shuffle, 6 = Extra Bottle",
+      "meaning": "Mã tài nguyên xuất hiện trong FallbackRewardMappings"
+    },
+    {
+      "key": "Backend – get offer",
+      "value": "ChooseOneSpecialOfferRemoteService (endpoint trong BackendEnvironmentConfig)",
+      "meaning": "Lấy ChooseOneSpecialOfferResponse"
+    },
+    {
+      "key": "Backend – claim",
+      "value": "ChooseOneSpecialOfferRemoteService (ShouldSendClaimRequest)",
+      "meaning": "Báo server đã mua offer"
+    },
+    {
+      "key": "Analytics choose_one_popup_impression",
+      "value": "impression_source, event_id, segment",
+      "meaning": "Ghi nhận mỗi lần mở popup"
+    },
+    {
+      "key": "Analytics choose_one_purchased",
+      "value": "offer_type, price, currency, dollar_equivalent, event_id, segment",
+      "meaning": "Ghi nhận mua gói nào và giá bao nhiêu"
+    },
+    {
+      "key": "Analytics wrong_choose_one_special_offer_data",
+      "value": "-",
+      "meaning": "Cảnh báo dữ liệu offer không hợp lệ"
+    },
+    {
+      "key": "CanShowBeforeStore / ShouldDisplayBeforeStore",
+      "value": "runtime",
+      "meaning": "Cho phép chèn offer trước khi mở cửa hàng"
+    },
+    {
+      "key": "Lớp UI và prefab đã đối chiếu (0.0.3063)",
+      "value": "ChooseOneSpecialOfferPopup (MonoBehaviour,IPopUp), GUID script cb07592347ab0228249854ddd10376d6; khớp ChooseOneSpecialOfferPopup.prefab",
+      "meaning": "Class, type, GUID và component thực đã được đối chiếu; không suy từ tên ViewModel hoặc thư mục. Bằng chứng đầy đủ nằm trong facts/remaining_asset_review_20261115/ui_class_prefab_proof.json"
+    }
+  ],
+  "tips": [
+    "Ba lựa chọn cạnh nhau chuyển quyết định của người chơi từ 'có mua không' sang 'chọn cái nào' — bỏ qua nút từ chối.",
+    "Gói trọn bộ giảm giá đóng vai trò mồi neo giá, làm ba gói lẻ trông hợp lý hơn.",
+    "Phân khúc hóa nội dung gói cho phép cùng một khung UI phục vụ cả người chơi mới lẫn người chi tiêu mạnh.",
+    "Bảng thưởng dự phòng theo nhóm productId đảm bảo người đã trả tiền luôn nhận được hàng dù dữ liệu server lỗi.",
+    "Giới hạn mua một lần giữ tính khan hiếm và tránh biến offer thành cửa hàng thường trực."
+  ],
+  "categories": [
+    "Offer/IAP",
+    "Kinh tế",
+    "Live-ops"
+  ]
+}

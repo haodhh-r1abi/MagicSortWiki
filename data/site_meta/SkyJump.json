@@ -1,0 +1,157 @@
+{
+  "id": "SkyJump",
+  "title": "Sky Jump — đua leo thang (lava tournament)",
+  "tagline": "Giải loại trực tiếp 10 bậc: thắng level thì leo lên, thua một lần là rơi khỏi giải vĩnh viễn.",
+  "infobox": [
+    ["Loại", "Sự kiện solo"],
+    ["Mở khóa", "Level 120 (SkyJumpConfigModel.FirstLevelToShow, client default)"],
+    ["Thời lượng", "Theo start_time / finish_time do server đặt"],
+    ["Chu kỳ / lịch", "Từng giải nối tiếp; client hỏi giải kế qua /v1/get-lava-starttime"],
+    ["Tham gia", "Cá nhân, ghép nhóm sau khi Join"],
+    ["Vật phẩm thu thập", "Bậc thang (Score), tối đa 10 bậc"],
+    ["Tiền tệ", "Coin (CurrencyType 1)"],
+    ["Thưởng chính", "10.000 coin chia đều cho số người thắng (RewardsAsCoin mặc định)"],
+    ["Điều kiện / phụ thuộc", "IsEnabled bật, level >= 120; liên quan SkyJumpWithStage, JetpackRace"],
+    ["Manager", "SkyJumpService, SkyJumpDataService, SkyJumpStateService, SkyJumpRemoteService, SkyJumpConfigModel"]
+  ],
+  "description": [
+    "Sky Jump (backend gọi là 'lava tournament', endpoint /v1/*-lava-*) là giải đấu loại trực tiếp theo bậc thang.",
+    "Người chơi Join vào một nhóm cùng lúc; mỗi lần thắng level thì leo lên 1 bậc (Score + 1).",
+    "Mỗi lần THUA thì rơi khỏi giải: TryFall đặt Score = -1 và người chơi bị loại vĩnh viễn trong giải đó.",
+    "Bậc tối đa là 10 (GetMaxReachableScore trả 10); ai leo tới bậc 10 trước khi hết giờ là người thắng.",
+    "Toàn bộ giải thưởng RewardsAsCoin (mặc định 10.000 coin) được CHIA ĐỀU cho số người thắng.",
+    "Số người thắng tối thiểu tính là 1, nên người thắng duy nhất ôm trọn 10.000 coin.",
+    "UI hiển thị từng bậc thang với avatar người đang đứng ở bậc đó và người đã rơi, tạo cảm giác đua trực tiếp.",
+    "Sau khi giải kết thúc, client hỏi thời gian giải kế tiếp để hiển thị đồng hồ chờ.",
+    "Trạng thái sự kiện có 8 giá trị từ Disable(0) tới ClaimedLocally(8) — lưu ý không có giá trị 7."
+  ],
+  "notes": [
+    "Lưu ý: Thua một level là bị loại khỏi giải, không có cơ chế hồi phục — SkyJumpAreYouSureView cảnh báo trước khi thoát level.",
+    "Lưu ý: Điều kiện thắng chính xác là Score >= 10 VÀ state thuộc {FinishedByLocal(5), FinishedByRemote(6)}.",
+    "Lưu ý: Không đạt bậc 10 hoặc bị loại thì không có thưởng.",
+    "Lưu ý: Score = -1 là ký hiệu 'đã rơi', không phải điểm âm thực sự.",
+    "Lưu ý: Enum SkyJumpStateType bỏ trống giá trị 7.",
+    "Lưu ý: Endpoint skyJumpSetUrl khai báo trong BackendEnvironmentConfig nhưng để trống ('/v1/'); điểm được đẩy kèm request Get và Claim.",
+    "Lưu ý: Client default IsEnabled = false — sự kiện phải được remote config bật."
+  ],
+  "how_it_works": [
+    "InitializeData() nạp cache và CacheProfileImages() để chuẩn bị avatar người chơi.",
+    "IntervalUpdate/SendGetRequest → ShouldSendGetRequest() → GetRequest() gọi SkyJumpRemoteService.Get(eventType, tournamentId, score) tới /v1/get-lava-leaderboard.",
+    "Payload SkyJumpGetRequestModel{tournament_id, tournament_type, score} vừa lấy trạng thái vừa đẩy điểm hiện tại lên server.",
+    "Response SkyJumpResponseModel trả tournament_id, start_time, finish_time, is_finished, is_claimed, user_score, user_max_score, user_details_by_steps và players_images.",
+    "ChangeTournamentCache(response) ghi SkyJumpCacheModel và gọi CacheProfileImages() để tải avatar.",
+    "SkyJumpStateService.GetEventState() phân trạng thái: Disable(0) khi IsEnabled = false, ProgressNotEnough(1) khi level < 120, NoCache(2) khi chưa fetch được, Join(3) khi có giải chưa tham gia.",
+    "Người chơi bấm Join: CanJoinTournament() → SkyJumpService.Join() gọi /v1/join-lava-tournament với SkyJumpJoinRequestModel{tournament_type}; analytics bắn sky_jump_joined.",
+    "SkyJumpSearchPopUp chạy hoạt ảnh 'đang tìm đối thủ' bằng GetViewModelsForSearchAnimation(); state chuyển sang InProgress(4).",
+    "Thắng một level: TryIncreaseScore() (nếu CanIncreaseScore()) → SkyJumpDataService.IncreaseScore() tăng Score thêm 1 và cập nhật MaxScoreReached.",
+    "Thua một level: TryFall() (nếu CanFall()) → SkyJumpDataService.Fall() đặt Score = -1; analytics bắn sky_jump_lost kèm lost_step.",
+    "UI thang đua dùng GetViewModelsInCurrentScore() / GetViewModelsInMaxScore() / GetViewModelsInPreviousScore() để tách hai danh sách: người còn đứng (all_user_ids) và người đã rơi (loser_user_ids).",
+    "GetUserCountInStep(step) đếm số người ở mỗi bậc, hiển thị mật độ cạnh tranh trên thang.",
+    "Kết thúc khi hết giờ (GetRemainingSeconds/GetEndDate) hoặc server báo is_finished → state FinishedByLocal(5) hoặc FinishedByRemote(6).",
+    "DidPlayerWin() đúng khi Score >= 10 và state thuộc {5, 6}; ngược lại DidPlayerLost().",
+    "Nhận thưởng: ShouldSendClaimRequest() → SendClaimRequest() gọi /v1/claim-lava-tournament; GetPlayerReward() tạo RewardModel{CurrencyType = 1 (Coin), Amount = RewardsAsCoin / GetWinnerCount()}.",
+    "ClaimLocally(didWin) đặt IsClaimedLocally và IncreaseWinRecord() nếu thắng; state chuyển sang ClaimedLocally(8).",
+    "Cuối cùng SendGetNextTournamentStartTimeRequest() gọi /v1/get-lava-starttime lấy {tournament_type, tournament_start_time, tournament_end_time} cho đồng hồ chờ; ScheduleLeaderboardFetchOnTimerEnd() tự fetch lại khi đồng hồ về 0."
+  ],
+  "reward_tables": [
+    {
+      "title": "PHẦN THƯỞNG SKY JUMP (SkyJumpConfigModel.json, client default)",
+      "columns": ["Mốc", "Điều kiện", "Phần thưởng"],
+      "rows": [
+        ["Thắng (1 người)", "Đạt bậc 10 và là người thắng duy nhất", "10.000 coin"],
+        ["Thắng (2 người)", "Đạt bậc 10, có 2 người thắng", "5.000 coin mỗi người"],
+        ["Thắng (4 người)", "Đạt bậc 10, có 4 người thắng", "2.500 coin mỗi người"],
+        ["Thắng (10 người)", "Đạt bậc 10, có 10 người thắng", "1.000 coin mỗi người"],
+        ["Thắng (N người)", "Đạt bậc 10 trước khi hết giờ", "10.000 / N coin (RewardsAsCoin / GetWinnerCount, tối thiểu chia cho 1)"],
+        ["Thua / bị loại", "Score = -1 hoặc chưa đạt bậc 10 khi hết giờ", "Không có thưởng"]
+      ]
+    },
+    {
+      "title": "THANG BẬC VÀ ĐIỂM",
+      "columns": ["Mốc", "Điều kiện", "Kết quả"],
+      "rows": [
+        ["Bậc 0", "Vừa Join giải", "Score = 0"],
+        ["Mỗi bậc", "Thắng 1 level", "Score + 1 (TryIncreaseScore)"],
+        ["Bậc 10", "Thắng 10 level liên tiếp không thua", "Đạt GetMaxReachableScore() = 10, đủ điều kiện thắng"],
+        ["Rơi", "Thua 1 level bất kỳ", "Score = -1, bị loại vĩnh viễn trong giải đó"]
+      ]
+    },
+    {
+      "title": "TRẠNG THÁI SỰ KIỆN (enum SkyJumpStateType)",
+      "columns": ["Mã", "Trạng thái", "Ý nghĩa"],
+      "rows": [
+        ["0", "Disable", "SkyJumpConfigModel.IsEnabled = false"],
+        ["1", "ProgressNotEnough", "Level người chơi < FirstLevelToShow (120)"],
+        ["2", "NoCache", "Chưa fetch được dữ liệu giải"],
+        ["3", "Join", "Có giải nhưng chưa tham gia"],
+        ["4", "InProgress", "Đang đua"],
+        ["5", "FinishedByLocal", "Client xác định giải đã kết thúc"],
+        ["6", "FinishedByRemote", "Server báo is_finished"],
+        ["8", "ClaimedLocally", "Đã nhận thưởng (không có giá trị 7)"]
+      ]
+    },
+    {
+      "title": "TRẠNG THÁI POPUP VÀ NGUỒN MỞ",
+      "columns": ["Enum", "Giá trị", "Ý nghĩa"],
+      "rows": [
+        ["SkyJumpPopUpState", "Disabled=0, Join=1, FirstShowEver=2, FirstShow=3, InProgress=4, Result=5, JoinIntroduced=6", "Layout popup theo giai đoạn"],
+        ["SkyJumpImpressionSource", "None=0, LobbyIcon=1, EventJoin=2, EventEnd=3, ScoreIncreased=4", "Nguồn mở popup, gửi kèm analytics"]
+      ]
+    }
+  ],
+  "key_numbers": [
+    {"label": "Bật mặc định (client)", "value": "false", "source": "SkyJumpConfigModel.json: IsEnabled"},
+    {"label": "EventType (tournament_type)", "value": "1", "source": "SkyJumpConfigModel.json: EventType"},
+    {"label": "Level tối thiểu", "value": "120", "source": "SkyJumpConfigModel.json: FirstLevelToShow"},
+    {"label": "Tổng giải thưởng", "value": "10.000 coin", "source": "SkyJumpConfigModel.json: RewardsAsCoin"},
+    {"label": "Số bậc tối đa", "value": "10", "source": "SkyJumpService.GetMaxReachableScore"},
+    {"label": "Điểm khi rơi", "value": "-1", "source": "SkyJumpService.TryFall"},
+    {"label": "Điều kiện thắng", "value": "Score >= 10 và state thuộc {5, 6}", "source": "SkyJumpService.DidPlayerWin"},
+    {"label": "Loại tiền thưởng", "value": "CurrencyType 1 (Coin)", "source": "SkyJumpService.GetPlayerReward"},
+    {"label": "Số người thắng tối thiểu khi chia thưởng", "value": "1", "source": "SkyJumpService.GetWinnerCount"},
+    {"label": "Số trạng thái sự kiện", "value": "8 giá trị (0–6 và 8)", "source": "SkyJumpStateType"},
+    {"label": "Số trạng thái popup", "value": "7 (Disabled=0 … JoinIntroduced=6)", "source": "SkyJumpPopUpState"},
+    {"label": "Số nguồn mở popup", "value": "5 (None=0 … ScoreIncreased=4)", "source": "SkyJumpImpressionSource"},
+    {"label": "Endpoint lấy bảng xếp hạng", "value": "/v1/get-lava-leaderboard", "source": "skyJumpGetUrl"},
+    {"label": "Endpoint tham gia", "value": "/v1/join-lava-tournament", "source": "skyJumpJoinUrl"},
+    {"label": "Endpoint nhận thưởng", "value": "/v1/claim-lava-tournament", "source": "skyJumpClaimUrl"},
+    {"label": "Endpoint lịch giải kế", "value": "/v1/get-lava-starttime", "source": "skyJumpGetNextTournamentStartTimeUrl"},
+    {"label": "Schema FlatBuffer", "value": "magicsort.schemas.v1.liveops.lava_leaderboard", "source": "SkyJumpRemoteService"},
+    {"label": "Số điểm vào tính năng", "value": "7", "source": "SkyJump.entry_points"},
+    {"label": "Số sự kiện analytics", "value": "6", "source": "SkyJump.analytics"},
+    {"label": "Tên khối đồng bộ", "value": "SkyJumpSyncModel", "source": "SkyJumpDataService.GetSyncName"}
+  ],
+  "config_highlights": [
+    {"key": "SkyJumpConfigModel.json: IsEnabled", "value": "false", "meaning": "Bật/tắt Sky Jump (client default, remote config ghi đè)"},
+    {"key": "SkyJumpConfigModel.json: EventType", "value": "1", "meaning": "tournament_type gửi lên backend"},
+    {"key": "SkyJumpConfigModel.json: FirstLevelToShow", "value": "120", "meaning": "Level tối thiểu để thấy sự kiện"},
+    {"key": "SkyJumpConfigModel.json: RewardsAsCoin", "value": "10000", "meaning": "Tổng giải thưởng coin, chia đều cho người thắng"},
+    {"key": "SkyJumpService.GetMaxReachableScore()", "value": "10", "meaning": "Số bậc tối đa của thang (hard-code)"},
+    {"key": "SkyJumpService.TryFall — điểm khi rơi", "value": "-1", "meaning": "Score = -1 nghĩa là đã bị loại"},
+    {"key": "SkyJumpService.DidPlayerWin — điều kiện thắng", "value": "Score >= 10 && state thuộc {FinishedByLocal(5), FinishedByRemote(6)}", "meaning": "Xác định người thắng"},
+    {"key": "SkyJumpService.GetPlayerReward — CurrencyType", "value": "1 (Coin)", "meaning": "Sky Jump chỉ trả coin"},
+    {"key": "SkyJumpStateType", "value": "Disable=0, ProgressNotEnough=1, NoCache=2, Join=3, InProgress=4, FinishedByLocal=5, FinishedByRemote=6, ClaimedLocally=8", "meaning": "Trạng thái sự kiện (không có giá trị 7)"},
+    {"key": "SkyJumpPopUpState", "value": "Disabled=0, Join=1, FirstShowEver=2, FirstShow=3, InProgress=4, Result=5, JoinIntroduced=6", "meaning": "Layout popup"},
+    {"key": "SkyJumpImpressionSource", "value": "None=0, LobbyIcon=1, EventJoin=2, EventEnd=3, ScoreIncreased=4", "meaning": "Nguồn mở popup"},
+    {"key": "SkyJumpResponseModel", "value": "tournament_id, tournament_type, start_time, finish_time, is_finished, is_claimed, user_score, user_max_score, user_details_by_steps, players_images", "meaning": "Toàn bộ trạng thái giải"},
+    {"key": "SkyJumpUserDetailsByStepsResponseModel", "value": "all_user_ids, loser_user_ids, total_user_count", "meaning": "Người chơi ở một bậc (còn trụ / đã rơi)"},
+    {"key": "SkyJumpGetRequestModel", "value": "tournament_id, tournament_type, score", "meaning": "Payload Get (đẩy kèm điểm)"},
+    {"key": "SkyJumpClaimRequestModel", "value": "tournament_id, tournament_type, score", "meaning": "Payload Claim"},
+    {"key": "SkyJumpJoinRequestModel", "value": "tournament_type", "meaning": "Payload Join"},
+    {"key": "SkyJumpGetNextTournamentStartTimeResponseModel", "value": "tournament_type, tournament_start_time, tournament_end_time", "meaning": "Lịch giải kế tiếp"},
+    {"key": "FlatBuffer schema", "value": "magicsort.schemas.v1.liveops.lava_leaderboard", "meaning": "Biến thể nhị phân của các request Get/Join/Claim/GetNextTournamentStartTime"},
+    {"key": "skyJumpSetUrl", "value": "'/v1/' (để trống)", "meaning": "Khai báo trong BackendEnvironmentConfig nhưng không dùng; điểm đẩy kèm Get/Claim"},
+    {"key": "SkyJumpSyncModel", "value": "IsEventIntroducedEverInLifeTime, WinRecord", "meaning": "Dữ liệu đồng bộ xuyên thiết bị"},
+    {"key": "SkyJumpCacheModel", "value": "TournamentId, TournamentType, StartTime, FinishTime, IsFinished, IsClaimed, IsClaimedLocally, Score, MaxScoreReached, LastSeenScore, IsIntroduced, SkyJumpUserDetailsBySteps, PlayerImages", "meaning": "Cache giải hiện tại (local)"},
+    {"key": "SkyJumpModel.IsJoinPopupIntroduced", "value": "bool", "meaning": "Đã giới thiệu popup Join hay chưa"},
+    {"key": "SkyJumpService.NotActiveStatusCode", "value": "(gán trong .ctor)", "meaning": "Mã HTTP báo sự kiện không hoạt động"},
+    {"key": "SkyJumpAnimationConfig / SkyJumpAreYouSureAnimationConfig", "value": "ScriptableObject", "meaning": "Tham số hoạt ảnh nhảy bậc và popup xác nhận"}
+  ],
+  "tips": [
+    "Cơ chế thua-là-loại tạo áp lực cực cao mỗi level, khuyến khích mua booster và Play On để không rơi.",
+    "Chia thưởng đều cho người thắng giữ chi phí kinh tế cố định ở 10.000 coin mỗi giải bất kể quy mô.",
+    "Hiển thị avatar người đã rơi ngay trên thang tăng cảm giác sống sót và khác biệt so với bảng xếp hạng thường.",
+    "Popup Are You Sure trước khi thoát level là điểm chặn quan trọng để người chơi không mất suất do nhầm."
+  ],
+  "categories": ["Sự kiện", "Có bảng xếp hạng", "Live-ops", "Kinh tế"]
+}

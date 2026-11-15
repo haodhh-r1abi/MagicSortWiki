@@ -1,0 +1,571 @@
+{
+  "id": "DailyLevel",
+  "title": "Thử thách hằng ngày (Daily Challenge)",
+  "tagline": "Mỗi ngày một bàn riêng với chai cao 12 ô và đồng hồ đếm ngược thay cho luật kẹt bàn.",
+  "infobox": [
+    [
+      "Loại",
+      "Tiến trình"
+    ],
+    [
+      "Mở khóa",
+      "Level 30 (DailyConfigModel.FirstLevelToShow)"
+    ],
+    [
+      "Thời lượng",
+      "105, 120 hoặc 130 giây mỗi bàn (tutorial 180 giây)"
+    ],
+    [
+      "Chu kỳ / lịch",
+      "Mỗi ngày một bàn; lịch tháng hiện tại 31 ngày và tháng trước 28 ngày"
+    ],
+    [
+      "Tham gia",
+      "Cá nhân"
+    ],
+    [
+      "Vật phẩm thu thập",
+      "Ngày đã thắng (ClaimedDays) cộng vào thanh tiến độ tháng"
+    ],
+    [
+      "Tiền tệ",
+      "Coin, Limitless Life"
+    ],
+    [
+      "Thưởng chính",
+      "10 coin mỗi ngày thắng; bốn mốc tháng trả 100 coin, 30 phút Limitless Life, 500 coin, 2500 coin"
+    ],
+    [
+      "Điều kiện / phụ thuộc",
+      "DailyConfigModel.IsEnable; dùng lại bộ máy trạng thái của LevelFlow trong namespace Daily"
+    ],
+    [
+      "Manager",
+      "DailyService, DailyDataService, DailyLevelManager, DailyStateManager, LevelTimer"
+    ]
+  ],
+  "description": [
+    "Daily Challenge là chế độ phụ chạy song song với lộ trình level chính: mỗi ngày trong tháng có một bàn riêng.",
+    "Bàn Daily dùng chai cao 12 ô thay vì 4, và khoảng cách giữa các hàng cũng là 12 unit.",
+    "Luật thua khác hẳn level thường: người chơi bị giới hạn thời gian chứ không phải bị kẹt bàn.",
+    "Người chơi mở lịch tháng, chọn ngày rồi bấm Play; thắng thì ngày đó được đánh dấu và cộng vào thanh tiến độ tháng.",
+    "Đủ mốc trên thanh tiến độ thì nhận thưởng lớn, cao nhất là 2500 coin.",
+    "Ngày trong quá khứ có thể mở khóa lại để chơi bù, dùng cấu hình từ lịch tháng trước.",
+    "Dữ liệu lưu rất gọn: mỗi tháng chỉ là hai bitmask ClaimedDays và UnlockedDays trong DailyMonthModel.",
+    "Hai bitmask tách biệt nên một ngày có thể đã mở khóa mà chưa thắng.",
+    "Hết giờ mở DailyStuckPopUp hiển thị 'Out Of Time' và mời Play On cộng thêm 60 giây.",
+    "Lần đầu vào Daily sẽ chơi một bàn tutorial riêng dài 180 giây với 3 chai trống và 4 chai đầy."
+  ],
+  "notes": [
+    "Lưu ý: bàn Daily vẫn có thể kẹt vì hết nước đi (StuckType.NoMove), khi đó popup hiện 'No Available Moves'.",
+    "Lưu ý: LevelTimer tạm dừng khi mở popup, mất focus hoặc chạy quảng cáo, rồi tiếp tục đúng chỗ.",
+    "Lưu ý: mỗi ngày trong lịch đều có đúng 5 seed để chọn bàn.",
+    "Lưu ý: thoát giữa chừng bị coi là thất bại — popup cảnh báo 'Challenge will be failed!'.",
+    "Lưu ý: chỉ giữ lại một số tháng gần nhất; RemoveOutdatedMonthsUpTo() dọn các tháng quá cũ.",
+    "Lưu ý: UnClaimDay(dateTime) tồn tại để rollback khi server từ chối kết quả.",
+    "Lưu ý: cách mở khóa một ngày đã qua (miễn phí, trả coin hay xem quảng cáo) chưa đọc được từ code (gap).",
+    "Lưu ý: MaxProgress của thanh tiến độ tháng là property tính động, chưa xác định giá trị thực (gap).",
+    "Lưu ý: chưa xác nhận được Daily có trừ mạng hay không (gap).",
+    "Lưu ý: khác biệt giữa DailyStuckPopUpVariantA và VariantC chưa đọc được (gap)."
+  ],
+  "how_it_works": [
+    "IsEligibleForDaily() so tiến độ người chơi với FirstLevelToShow = 30; chưa đủ thì nút hiện 'Unlocks at Level {0}'.",
+    "InitializeData() nạp DailyModel, gọi AddMissingMonthModel(now) tạo DailyMonthModel cho tháng hiện tại và RemoveOutdatedMonthsUpTo() dọn tháng cũ.",
+    "GetActiveDailyViewModel() dựng mảng DailyDateModel cho từng ngày, kèm cờ IsNextMonthExist, IsPreviousMonthExist, IsTodayClaimed và CurrentProgress/MaxProgress.",
+    "GetDailyDateState(day) trả Claimed (0), Today (1), Locked (2), Upcoming (3) hoặc Unlocked (4); DailySpriteConfig cấp 5 sprite tương ứng.",
+    "SetDailyPlayButtonViewForState() đổi nút Play theo ActiveDay (0), Locked (1) hoặc Cooldown (2).",
+    "Bấm Play: SetSelectedDate() rồi GetSelectedDailyLevelInfo() trả DailyLevelInfo với ngày định dạng 'MM/dd/yyyy'.",
+    "HomeSceneToDailySceneCommand dựng context Daily (GameStateType.Daily = 3); GetDailyLevelAndLevelConfigModel() tìm cấu hình theo dayIndex trong currentMonthDailyLevels, rơi về previousMonthDailyLevels khi chơi bù.",
+    "GetDailySeedIdFromConfig() chọn 1 trong 5 seed; GenerateBottleCollections(isDaily: true) dựng bàn với chai cao 12 ô theo ConfigsBottleCollectionPlacementConfigDaily.",
+    "EmptyBottleCount và FilledBottleCount trong cấu hình quyết định số chai trống và chai đầy ban đầu.",
+    "LevelTimer.Start(LevelDuration) bắt đầu đếm ngược; DailyInLevelTimer hiển thị theo định dạng 'mm:ss'.",
+    "Hết giờ: CheckAndApplyTimeIsUp() gọi StuckLevel(StuckType.TimeIsUp), mở DailyStuckPopUp với chữ 'Out Of Time'.",
+    "Chấp nhận Play On thì PlayOnManager.TryUse() trừ coin hoặc xem quảng cáo, LevelTimer cộng thêm 60 giây; từ chối thì sang LoseState và mở DailyTryAgainPopUp.",
+    "Thắng: WinState.DelayedWin() mở LevelCongratsPopUp, ClaimSelectedDayAndProgressBarReward() đặt bit ngày trong ClaimedDays.",
+    "GiveDailyCoinRewardsCommand trao 10 coin với CurrencyEarnReason.DailyLevelWin (15); chạm mốc thanh tiến độ thì GiveDailyProgressBarStepRewards trao với reason DailyProgressBarStep (16).",
+    "ScheduleDateCheckAtEndOfTheDay() hẹn kiểm tra đổi ngày; sang ngày mới thì nút Play chuyển từ Cooldown về ActiveDay và ScheduleDailyNotification() đặt lịch nhắc."
+  ],
+  "reward_tables": [
+    {
+      "title": "PHẦN THƯỞNG DAILY CHALLENGE",
+      "columns": [
+        "Mốc",
+        "Điều kiện",
+        "Phần thưởng"
+      ],
+      "rows": [
+        [
+          "Thắng một ngày",
+          "Hoàn thành bàn Daily trong thời gian cho phép",
+          "10 coin"
+        ],
+        [
+          "Mốc 1 thanh tiến độ tháng",
+          "ProgressBarRewards[0]",
+          "100 coin"
+        ],
+        [
+          "Mốc 2 thanh tiến độ tháng",
+          "ProgressBarRewards[1]",
+          "30 phút Limitless Life"
+        ],
+        [
+          "Mốc 3 thanh tiến độ tháng",
+          "ProgressBarRewards[2]",
+          "500 coin"
+        ],
+        [
+          "Mốc 4 thanh tiến độ tháng",
+          "ProgressBarRewards[3]",
+          "2500 coin"
+        ]
+      ]
+    },
+    {
+      "title": "CẤU HÌNH BÀN DAILY (GrandRemoteDailyLevelsConfig)",
+      "columns": [
+        "Mốc",
+        "Điều kiện",
+        "Phần thưởng"
+      ],
+      "rows": [
+        [
+          "Bàn tutorial",
+          "Lần đầu vào Daily",
+          "180 giây, 1 seed daily_daily16_difficulty1-10, 3 chai trống, 4 chai đầy"
+        ],
+        [
+          "Thời lượng bàn thường",
+          "levelDuration",
+          "105, 120 hoặc 130 giây"
+        ],
+        [
+          "Chai trống – 10 ngày",
+          "emptyBottleCount = 1",
+          "1 chai trống"
+        ],
+        [
+          "Chai trống – 18 ngày",
+          "emptyBottleCount = 2",
+          "2 chai trống"
+        ],
+        [
+          "Chai trống – 3 ngày",
+          "emptyBottleCount = 3",
+          "3 chai trống"
+        ],
+        [
+          "Chai đầy – 6 ngày",
+          "filledBottleCount = 3",
+          "3 chai có nước"
+        ],
+        [
+          "Chai đầy – 14 ngày",
+          "filledBottleCount = 4",
+          "4 chai có nước"
+        ],
+        [
+          "Chai đầy – 11 ngày",
+          "filledBottleCount = 5",
+          "5 chai có nước"
+        ],
+        [
+          "Số seed mỗi ngày",
+          "Mọi ngày",
+          "5 seed"
+        ],
+        [
+          "Lịch tháng hiện tại",
+          "currentMonthDailyLevels",
+          "31 mục (dayIndex 1–31)"
+        ],
+        [
+          "Lịch tháng trước",
+          "previousMonthDailyLevels",
+          "28 mục để chơi bù"
+        ],
+        [
+          "Play On",
+          "Hết giờ, chấp nhận chơi tiếp",
+          "Cộng thêm 60 giây"
+        ]
+      ]
+    },
+    {
+      "title": "TRẠNG THÁI Ô NGÀY VÀ NÚT PLAY",
+      "columns": [
+        "Mốc",
+        "Điều kiện",
+        "Phần thưởng"
+      ],
+      "rows": [
+        [
+          "DailyDateState.Claimed = 0",
+          "Đã thắng ngày đó",
+          "Sprite DailyClaimedSprite, dấu tích xanh"
+        ],
+        [
+          "DailyDateState.Today = 1",
+          "Ngày hôm nay",
+          "Sprite DailyUnclaimedSprite, chơi được"
+        ],
+        [
+          "DailyDateState.Locked = 2",
+          "Ngày quá khứ chưa mở khóa",
+          "Sprite DailyLockedSelectedSprite, nút Play ở trạng thái Locked"
+        ],
+        [
+          "DailyDateState.Upcoming = 3",
+          "Ngày tương lai",
+          "Sprite DailyUpcomingSprite, chưa chơi được"
+        ],
+        [
+          "DailyDateState.Unlocked = 4",
+          "Ngày quá khứ đã mở khóa",
+          "Sprite DailyUnlockedSelectedSprite, chơi bù được"
+        ],
+        [
+          "DailyPlayButtonState.ActiveDay = 0",
+          "Ngày khả dụng",
+          "Nút Play bật"
+        ],
+        [
+          "DailyPlayButtonState.Locked = 1",
+          "Ngày quá khứ chưa mở",
+          "Nút chuyển sang mở khóa"
+        ],
+        [
+          "DailyPlayButtonState.Cooldown = 2",
+          "Đã chơi xong hôm nay",
+          "Đếm ngược tới ngày mới"
+        ]
+      ]
+    },
+    {
+      "title": "NGUỒN MỞ MÀN HÌNH DAILY (DailyScreenViewSource)",
+      "columns": [
+        "Mốc",
+        "Điều kiện",
+        "Phần thưởng"
+      ],
+      "rows": [
+        [
+          "None = 0",
+          "Không xác định",
+          "Không ghi nhận nguồn"
+        ],
+        [
+          "NavigationBar = 1",
+          "Mở từ thanh điều hướng",
+          "Ghi impression"
+        ],
+        [
+          "FirstImpression = 2",
+          "Vừa mở khóa Daily",
+          "Popup giới thiệu lần đầu"
+        ],
+        [
+          "DailyWin = 3",
+          "Ngay sau khi thắng Daily",
+          "Quay lại trang lịch"
+        ],
+        [
+          "LobbyButton = 4",
+          "Mở từ nút Daily ở Home",
+          "Ghi impression"
+        ]
+      ]
+    }
+  ],
+  "key_numbers": [
+    {
+      "label": "Level mở khóa Daily",
+      "value": "30",
+      "source": "DailyConfigModel.json FirstLevelToShow"
+    },
+    {
+      "label": "Bật tính năng Daily",
+      "value": "true (mặc định client)",
+      "source": "DailyConfigModel.json IsEnable"
+    },
+    {
+      "label": "Bật thông báo nhắc chơi",
+      "value": "true",
+      "source": "DailyConfigModel.json IsNotificationEnabled"
+    },
+    {
+      "label": "Thưởng thắng một ngày",
+      "value": "10 coin",
+      "source": "DailyConfigModel.json DailyLevelRewardModel"
+    },
+    {
+      "label": "Số mốc thanh tiến độ tháng",
+      "value": "4",
+      "source": "DailyConfigModel.json ProgressBarRewards"
+    },
+    {
+      "label": "Tổng coin từ các mốc tháng",
+      "value": "3100 coin (100 + 500 + 2500)",
+      "source": "ProgressBarRewards[0], [2], [3]"
+    },
+    {
+      "label": "Thời lượng bàn Daily",
+      "value": "105, 120 hoặc 130 giây",
+      "source": "DailyLevelConfigModel.levelDuration"
+    },
+    {
+      "label": "Thời lượng bàn tutorial",
+      "value": "180 giây",
+      "source": "GrandRemoteDailyLevelsConfig.json tutorial_level.levelDuration"
+    },
+    {
+      "label": "Thời gian cộng thêm khi Play On",
+      "value": "60 giây",
+      "source": "GrandRemoteDailyLevelsConfig.json playOnDurationInSeconds"
+    },
+    {
+      "label": "Chiều cao chai Daily",
+      "value": "12 ô (gấp 3 lần level thường)",
+      "source": "ConfigsBottleCollectionPlacementConfigDaily.DefaultBottleHeight"
+    },
+    {
+      "label": "Khoảng cách giữa các hàng chai",
+      "value": "12 unit",
+      "source": "ConfigsBottleCollectionPlacementConfigDaily.DistanceBetweenRowsAsUnit"
+    },
+    {
+      "label": "Số ngày trong lịch tháng hiện tại",
+      "value": "31",
+      "source": "GrandRemoteDailyLevelsConfig.currentMonthDailyLevels"
+    },
+    {
+      "label": "Số ngày trong lịch tháng trước",
+      "value": "28",
+      "source": "GrandRemoteDailyLevelsConfig.previousMonthDailyLevels"
+    },
+    {
+      "label": "Số seed mỗi ngày",
+      "value": "5",
+      "source": "GrandRemoteDailyLevelsConfig.json"
+    },
+    {
+      "label": "Seed bàn tutorial",
+      "value": "daily_daily16_difficulty1-10",
+      "source": "tutorial_level.seeds"
+    },
+    {
+      "label": "Chai trống/đầy bàn tutorial",
+      "value": "3 chai trống, 4 chai đầy",
+      "source": "tutorial_level.emptyBottleCount / filledBottleCount"
+    },
+    {
+      "label": "Tên bộ lịch Daily yêu cầu backend",
+      "value": "18-10-24",
+      "source": "BEDailyLevelConfig.json ConfigName"
+    },
+    {
+      "label": "Số trạng thái ô ngày",
+      "value": "5 (Claimed=0 … Unlocked=4)",
+      "source": "DailyDateState.cs"
+    },
+    {
+      "label": "Số trạng thái nút Play",
+      "value": "3 (ActiveDay=0, Locked=1, Cooldown=2)",
+      "source": "DailyPlayButtonState.cs"
+    },
+    {
+      "label": "Số nguồn mở màn hình Daily",
+      "value": "5 (None=0 … LobbyButton=4)",
+      "source": "DailyScreenViewSource.cs"
+    },
+    {
+      "label": "Mã ngữ cảnh scene Daily",
+      "value": "GameStateType.Daily = 3",
+      "source": "GameStateType.cs"
+    },
+    {
+      "label": "Lý do nhận coin từ Daily",
+      "value": "DailyLevelWin = 15, DailyProgressBarStep = 16",
+      "source": "CurrencyEarnReason.cs"
+    },
+    {
+      "label": "Định dạng khóa tra cấu hình ngày",
+      "value": "MM/dd/yyyy",
+      "source": "DailyLevelInfo.GetFormattedDate"
+    },
+    {
+      "label": "Định dạng đồng hồ trong bàn",
+      "value": "mm:ss",
+      "source": "DailyInLevelTimer"
+    },
+    {
+      "label": "Số sprite trạng thái ô ngày",
+      "value": "5, cộng 2 sprite dải phân cách",
+      "source": "DailySpriteConfig"
+    }
+  ],
+  "config_highlights": [
+    {
+      "key": "DailyConfigModel.IsEnable",
+      "value": "true",
+      "meaning": "Bật tính năng Daily Challenge"
+    },
+    {
+      "key": "DailyConfigModel.FirstLevelToShow",
+      "value": "30",
+      "meaning": "Level mở khóa Daily"
+    },
+    {
+      "key": "DailyConfigModel.IsNotificationEnabled",
+      "value": "true",
+      "meaning": "Bật thông báo nhắc chơi Daily"
+    },
+    {
+      "key": "DailyConfigModel.DailyLevelRewardModel",
+      "value": "CurrencyType 1 (Coin), Amount 10",
+      "meaning": "Thưởng mỗi lần thắng một ngày"
+    },
+    {
+      "key": "DailyConfigModel.ProgressBarRewards",
+      "value": "100 coin → 30 phút Limitless Life → 500 coin → 2500 coin",
+      "meaning": "Bốn mốc phần thưởng của thanh tiến độ tháng"
+    },
+    {
+      "key": "GrandRemoteDailyLevelsConfig.playOnDurationInSeconds",
+      "value": "60",
+      "meaning": "Số giây cộng thêm mỗi lần Play On trong Daily"
+    },
+    {
+      "key": "GrandRemoteDailyLevelsConfig.tutorial_level",
+      "value": "levelDuration 180, 1 seed, 3 chai trống, 4 chai đầy",
+      "meaning": "Bàn Daily tutorial dài hơn hẳn bàn thường"
+    },
+    {
+      "key": "GrandRemoteDailyLevelsConfig.currentMonthDailyLevels",
+      "value": "31 mục, mỗi mục 5 seed",
+      "meaning": "Lịch bàn Daily tháng hiện tại"
+    },
+    {
+      "key": "GrandRemoteDailyLevelsConfig.previousMonthDailyLevels",
+      "value": "28 mục, mỗi mục 5 seed",
+      "meaning": "Lịch tháng trước để chơi bù"
+    },
+    {
+      "key": "DailyLevelConfigModel.levelDuration",
+      "value": "105 / 120 / 130 giây",
+      "meaning": "Giới hạn thời gian mỗi bàn Daily"
+    },
+    {
+      "key": "DailyLevelConfigModel.emptyBottleCount",
+      "value": "1 (10 ngày), 2 (18 ngày), 3 (3 ngày)",
+      "meaning": "Số chai trống ban đầu, phân bố trong tháng hiện tại"
+    },
+    {
+      "key": "DailyLevelConfigModel.filledBottleCount",
+      "value": "3 (6 ngày), 4 (14 ngày), 5 (11 ngày)",
+      "meaning": "Số chai có nước ban đầu"
+    },
+    {
+      "key": "BEDailyLevelConfig.ConfigName",
+      "value": "18-10-24",
+      "meaning": "Bộ lịch Daily yêu cầu từ backend"
+    },
+    {
+      "key": "ConfigsBottleCollectionPlacementConfigDaily",
+      "value": "DefaultBottleHeight 12, DistanceBetweenRowsAsUnit 12",
+      "meaning": "Chai Daily cao 12 ô, hàng cách nhau 12 unit"
+    },
+    {
+      "key": "GameplayConfigsDaily / ConfigsByBottleHeightDaily",
+      "value": "asset riêng cho chế độ Daily",
+      "meaning": "Bộ cấu hình camera và hoạt ảnh riêng cho bàn Daily"
+    },
+    {
+      "key": "DailyDateState",
+      "value": "Claimed=0, Today=1, Locked=2, Upcoming=3, Unlocked=4",
+      "meaning": "Trạng thái một ô ngày trên lịch"
+    },
+    {
+      "key": "DailyPlayButtonState",
+      "value": "ActiveDay=0, Locked=1, Cooldown=2",
+      "meaning": "Trạng thái nút Play của Daily"
+    },
+    {
+      "key": "DailyScreenViewSource",
+      "value": "None=0, NavigationBar=1, FirstImpression=2, DailyWin=3, LobbyButton=4",
+      "meaning": "Nguồn mở màn hình Daily, dùng để đo hiệu quả điểm vào"
+    },
+    {
+      "key": "GameStateType.Daily",
+      "value": "3",
+      "meaning": "Ngữ cảnh scene Daily"
+    },
+    {
+      "key": "CurrencyEarnReason.DailyLevelWin / DailyProgressBarStep",
+      "value": "15 / 16",
+      "meaning": "Hai lý do nhận thưởng từ Daily"
+    },
+    {
+      "key": "DailyModel",
+      "value": "DailyMonthModels, DailyIntroduced, DidTutorialLevelPlay",
+      "meaning": "Toàn bộ dữ liệu lưu của Daily, đồng bộ theo tài khoản"
+    },
+    {
+      "key": "DailyMonthModel",
+      "value": "Date, ClaimedDays (bitmask), UnlockedDays (bitmask)",
+      "meaning": "Trạng thái từng ngày trong một tháng, nén bằng bitmask"
+    },
+    {
+      "key": "DailyViewModel",
+      "value": "IsNextMonthExist, IsPreviousMonthExist, IsTodayClaimed, SelectedDate, DailyDateModels[], CurrentProgress, MaxProgress",
+      "meaning": "Dữ liệu dựng giao diện lịch"
+    },
+    {
+      "key": "DailySpriteConfig",
+      "value": "DailyClaimedSprite, DailyUnlockedSelectedSprite, DailyUnclaimedSprite, DailyUpcomingSprite, DailyLockedSelectedSprite, DailyPurpleSeparator, DailyGreenSeperator",
+      "meaning": "Sprite cho từng trạng thái ô ngày"
+    },
+    {
+      "key": "DailyAnimationConfig",
+      "value": "ProgressBarMoveCurve/Duration, GreenTick scale, ProgressStepParticleHitTime, DailyDateCompleteConsecutiveDelay, PunchScaleTarget/Duration, Vibrato, Elasticity",
+      "meaning": "Tham số hoạt ảnh lịch và thanh tiến độ"
+    },
+    {
+      "key": "Localization StuckPopupInfoNoTime",
+      "value": "'Out Of Time'",
+      "meaning": "Chữ trên popup kẹt khi hết giờ"
+    },
+    {
+      "key": "Localization StuckPopupInfoNoMove",
+      "value": "'No Available Moves'",
+      "meaning": "Chữ trên popup kẹt khi hết nước đi"
+    },
+    {
+      "key": "Localization DailyChallengeSectionInfo",
+      "value": "'Unlocks at Level {0}'",
+      "meaning": "Thông báo khi chưa mở khóa Daily"
+    },
+    {
+      "key": "Localization DailyChallengeQuitPopupWarning / TAPopupWarning",
+      "value": "'Challenge will be failed!' / 'Challenge Failed!'",
+      "meaning": "Cảnh báo khi thoát và khi thất bại"
+    },
+    {
+      "key": "Định dạng ngày và giờ",
+      "value": "DailyLevelInfo.GetFormattedDate 'MM/dd/yyyy'; DailyInLevelTimer 'mm:ss'",
+      "meaning": "Khóa tra cấu hình ngày và hiển thị đồng hồ"
+    }
+  ],
+  "tips": [
+    "Đổi điều kiện thua từ 'kẹt bàn' sang 'hết giờ' biến cùng một cơ chế thành trải nghiệm hoàn toàn khác về nhịp độ.",
+    "Chai cao 12 ô tạo bàn dày nhìn ấn tượng và cần tư duy khác hẳn bàn 4 ô của lộ trình chính.",
+    "Nén trạng thái cả tháng thành hai bitmask giữ dữ liệu đồng bộ cực nhẹ dù có 31 ngày mỗi tháng.",
+    "Cho phép chơi bù ngày đã qua giảm áp lực 'bỏ lỡ một ngày là mất cả tháng'.",
+    "Bàn tutorial 180 giây rộng rãi hơn hẳn giúp người chơi làm quen luật đồng hồ mà không thấy nản."
+  ],
+  "categories": [
+    "Tiến trình",
+    "Cơ chế lõi",
+    "Live-ops"
+  ]
+}

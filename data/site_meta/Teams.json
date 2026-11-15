@@ -1,0 +1,169 @@
+{
+  "id": "Teams",
+  "title": "Đội (Teams)",
+  "tagline": "Tính năng xã hội lõi: vào đội, chat realtime, xin/tặng mạng và thẻ, cùng dự sự kiện đồng đội.",
+  "infobox": [
+    ["Loại", "Xã hội"],
+    ["Mở khóa", "Level 40 (TeamsConfigModel.UnlockLevel, client default; remote config ghi đè)"],
+    ["Thời lượng", "Thường trực, không giới hạn thời gian"],
+    ["Chu kỳ / lịch", "Luôn bật khi IsEnable = true (mặc định client false)"],
+    ["Tham gia", "Tối đa 50 thành viên mỗi đội (TeamCapacity)"],
+    ["Vật phẩm thu thập", "Mạng miễn phí, thẻ Collection, vé Magic Pass từ đồng đội"],
+    ["Tiền tệ", "Coin (tạo đội tốn 100 coin)"],
+    ["Thưởng chính", "HelpSupportReward 5 khi giúp đồng đội, 1 mạng mỗi lượt nhận"],
+    ["Điều kiện / phụ thuộc", "Backend Teams (HTTP + FlatBuffers) và WebSocket chat"],
+    ["Manager", "TeamsService"]
+  ],
+  "description": [
+    "Người chơi tạo hoặc gia nhập một đội tối đa 50 thành viên, có tên, mô tả, huy hiệu, quốc gia và yêu cầu level tối thiểu.",
+    "Đội có hai kiểu: Mở (vào ngay) hoặc Đóng (phải gửi đơn, Leader/Co-Leader duyệt).",
+    "Ba cấp vai trò Leader, Co-Leader, Member quyết định quyền sửa đội, duyệt đơn, kick và thăng/giáng chức.",
+    "Chat đội chạy realtime qua WebSocket, hiển thị tên, avatar, khung và name style của người gửi.",
+    "Xin mạng miễn phí trong chat với cooldown 14400 giây (4 giờ) mặc định; mỗi tin nhắn nhận tối đa 5 lượt giúp.",
+    "Người bấm giúp đồng đội nhận HelpSupportReward (mặc định 5), tạo vòng lặp giúp đỡ ↔ được thưởng.",
+    "Xin và tặng thẻ Collection: cooldown 24 giờ giữa hai lần xin, mỗi người tặng tối đa 3 thẻ/ngày.",
+    "Bảng xếp hạng đội theo quốc gia và toàn cầu, xếp theo TeamScore.",
+    "Teams là nền cho Team Arena, Team Quest và quà Magic Pass chia sẻ cho cả đội.",
+    "Dữ liệu đội nằm hoàn toàn trên backend; client chỉ cache nhỏ trong TeamsDataModel và sync qua khối 'TeamsSyncModel'."
+  ],
+  "notes": [
+    "Lưu ý: chưa đủ level thì hiện _lockedView với thông điệp 'Teams unlocks at level {0}!'; khi IsEnable = false thì hiện _disabledView.",
+    "Lưu ý: tên đội không được rỗng và không ngắn hơn 3 ký tự.",
+    "Lưu ý: người bị kick khỏi một đội sẽ bị chặn quay lại chính đội đó (TeamsUserBannedFromThisTeamErrorMessage).",
+    "Lưu ý: thẻ vàng (Golden Card) không xin được từ đồng đội.",
+    "Lưu ý: mỗi người chỉ có một tin nhắn xin mạng đang mở; tin cũ bị gỡ (RemoveHelpRequestFromSameUser).",
+    "Lưu ý: rời đội giữa sự kiện đồng đội sẽ mất phần thưởng đội (cảnh báo TeamArenaWontAbleToJoinEvent).",
+    "Lưu ý: tin nhắn không nhận ACK trong 5 giây bị coi là lỗi và được gửi lại khi kết nối lại.",
+    "Lưu ý: tin nhắn chứa từ ngữ không phù hợp bị chặn (TeamsInappropriateChat).",
+    "Lưu ý: mọi giá trị TeamsConfigModel đều có thể bị Firebase Remote Config ghi đè — số ở đây là client default."
+  ],
+  "how_it_works": [
+    "Sau khi đăng nhập, TeamsService nạp trạng thái đội qua GetUserTeamSummary, chuyển State từ Initializing(1) sang Initialized(2).",
+    "Nếu chưa có đội và đã đạt level mở khóa (mặc định 40), màn onboarding hiện một lần rồi dẫn vào JoinView (SetTeamsIntroduced).",
+    "Danh sách đội gợi ý được nạp qua GetTeamSuggestions; MinLevelDeltaStep nới dần khoảng level khi thiếu gợi ý.",
+    "Người chơi có thể tìm đội theo từ khoá (SearchTeams) hoặc tự tạo đội, tốn 100 coin (CreateCost).",
+    "Khi tạo đội, người chơi chọn tên, mô tả, huy hiệu, kiểu Mở/Đóng và mức level yêu cầu, rồi trở thành Leader.",
+    "Vào đội Mở thì JoinTeam áp dụng ngay; đội Đóng thì gửi đơn và chờ Leader/Co-Leader bấm Accept/Reject.",
+    "Sau khi vào đội, TeamChatService mở WebSocket tới kênh chat của đội và nạp lịch sử (FetchChatHistory).",
+    "Trong chat, người chơi gửi text, yêu cầu trợ giúp mạng, xin thẻ và tặng thẻ; server phát tin nhắn hệ thống khi có người vào/rời/bị kick/đổi vai trò.",
+    "Xin mạng: RequestHelp gửi tin lên socket rồi khoá nút trong 14400 giây (DefaultHelpCooldown).",
+    "Đồng đội bấm Help → HelpCount tăng, đủ 5 lượt (MaxHelpCount) thì tin nhắn được gỡ; người giúp nhận HelpSupportReward 5.",
+    "Người xin mở FreeLivesPopup, nhận từng mạng (ClaimFreeLive) rồi client gửi ClaimHelps xác nhận và dọn danh sách.",
+    "Xin thẻ: SendCardRequest đăng tin lên chat rồi khoá 86400 giây; đồng đội tặng thẻ với hạn mức 3 thẻ mỗi ngày.",
+    "Leader quản trị đội: sửa thông tin (EditTeam), thăng/giáng chức tối đa 3 Co-Leader, kick thành viên.",
+    "Mỗi lần thắng level, TeamsService đặt cờ làm mới dữ liệu đội và bảng xếp hạng ở nhịp IntervalUpdate kế tiếp.",
+    "Mất kết nối: WebSocketManager thử lại sau 5 giây, giãn dần tới trần 120 giây, rồi nạp lại lịch sử chat khi mở lại."
+  ],
+  "reward_tables": [
+    {
+      "title": "GIÁ TRỊ MẶC ĐỊNH TeamsConfigModel (Resources/defaultconfigs)",
+      "columns": ["Khoá", "Giá trị mặc định", "Ý nghĩa"],
+      "rows": [
+        ["IsEnable", "false", "Bật/tắt toàn bộ tính năng Teams"],
+        ["UnlockLevel", "40", "Level mở khoá Teams"],
+        ["TeamCapacity", "50", "Số thành viên tối đa của một đội"],
+        ["CreateCost", "100", "Chi phí coin để tạo đội"],
+        ["MaxHelpCount", "5", "Số lượt giúp tối đa cho một tin nhắn xin mạng"],
+        ["DefaultHelpCooldown", "14400", "Cooldown giữa hai lần xin mạng (giây, 4 giờ)"],
+        ["HelpSupportReward", "5", "Phần thưởng cho người bấm giúp đồng đội"],
+        ["MaxColeaderCount", "3", "Số Co-Leader tối đa mỗi đội"]
+      ]
+    },
+    {
+      "title": "PHẦN THƯỞNG TỪ ĐỘI",
+      "columns": ["Nguồn", "Điều kiện", "Phần thưởng"],
+      "rows": [
+        ["Giúp đồng đội xin mạng", "Bấm Help trên tin nhắn chưa maxed", "HelpSupportReward = 5"],
+        ["Nhận mạng miễn phí", "Có TeamFreeLifeModel chưa claim", "1 mạng mỗi lượt claim"],
+        ["Nhận thẻ sưu tập", "Đồng đội tặng thẻ (không phải Golden Card)", "1 thẻ Collection"],
+        ["Magic Pass chia sẻ", "Thành viên kích hoạt Magic Pass", "Vé Magic Pass (số lượng do MagicPass quyết định)"]
+      ]
+    },
+    {
+      "title": "GIỚI HẠN VÀ COOLDOWN",
+      "columns": ["Hành động", "Giới hạn", "Nguồn"],
+      "rows": [
+        ["Xin mạng", "1 lần mỗi 14400 giây (4 giờ)", "TeamsConfigModel.DefaultHelpCooldown"],
+        ["Số lượt giúp mỗi tin xin mạng", "5 lượt", "TeamsConfigModel.MaxHelpCount"],
+        ["Xin thẻ Collection", "1 lần mỗi 86400 giây (24 giờ)", "TeamsService.GetCardMaxCooldown"],
+        ["Tặng thẻ", "3 thẻ mỗi ngày", "TeamsService.GetCardNumberUserCansSendPerDay"],
+        ["Co-Leader mỗi đội", "3 người", "TeamsConfigModel.MaxColeaderCount"],
+        ["Thành viên mỗi đội", "50 người", "TeamsConfigModel.TeamCapacity"],
+        ["Chờ ACK tin nhắn socket", "5 giây", "TeamChatService.MessageAckTimeout"],
+        ["Thử kết nối lại socket", "mỗi 5 giây, trần 120 giây", "WebSocketManager.ReconnectAttemptDelay / MaxReconnectDelay"]
+      ]
+    },
+    {
+      "title": "MÃ TIN NHẮN HỆ THỐNG (TeamsSystemMessageType)",
+      "columns": ["Mã", "Sự kiện", "Localize"],
+      "rows": [
+        ["\"1\"", "Rời đội", "TeamSystemMessageLeft"],
+        ["\"2\"", "Đơn xin vào được duyệt", "TeamSystemMessageAccepted"],
+        ["\"3\"", "Vào đội", "TeamSystemMessageJoined"],
+        ["\"4\"", "Bị kick", "TeamSystemMessageKicked"],
+        ["\"5\"", "Thăng chức", "TeamSystemMessagePromoted"],
+        ["\"6\"", "Giáng chức", "TeamSystemMessageDemoted"]
+      ]
+    }
+  ],
+  "key_numbers": [
+    {"label": "Level mở khoá Teams", "value": "40 (client default)", "source": "TeamsConfigModel.json: UnlockLevel"},
+    {"label": "Sức chứa một đội", "value": "50 thành viên", "source": "TeamsConfigModel.json: TeamCapacity"},
+    {"label": "Chi phí tạo đội", "value": "100 coin", "source": "TeamsConfigModel.json: CreateCost"},
+    {"label": "Số lượt giúp tối đa mỗi tin xin mạng", "value": "5", "source": "TeamsConfigModel.json: MaxHelpCount"},
+    {"label": "Cooldown xin mạng", "value": "14400 giây (4 giờ)", "source": "TeamsConfigModel.json: DefaultHelpCooldown"},
+    {"label": "Thưởng khi giúp đồng đội", "value": "5", "source": "TeamsConfigModel.json: HelpSupportReward"},
+    {"label": "Số Co-Leader tối đa", "value": "3", "source": "TeamsConfigModel.json: MaxColeaderCount"},
+    {"label": "Trạng thái bật/tắt mặc định", "value": "false", "source": "TeamsConfigModel.json: IsEnable"},
+    {"label": "Cooldown xin thẻ", "value": "86400 giây (24 giờ)", "source": "TeamsService.GetCardMaxCooldown"},
+    {"label": "Số thẻ tặng tối đa mỗi ngày", "value": "3", "source": "TeamsService.GetCardNumberUserCansSendPerDay"},
+    {"label": "Độ dài tên đội tối thiểu", "value": "3 ký tự", "source": "localize TeamNameCantBeShorterThan3"},
+    {"label": "Timeout ACK tin nhắn", "value": "5 giây", "source": "TeamChatService.MessageAckTimeout"},
+    {"label": "Khoảng chờ kết nối lại", "value": "5 giây", "source": "WebSocketManager.ReconnectAttemptDelay"},
+    {"label": "Trần thời gian chờ kết nối lại", "value": "120 giây", "source": "WebSocketManager.MaxReconnectDelay"},
+    {"label": "Vai trò thành viên", "value": "None=0, Leader=1, CoLeader=2, Member=3", "source": "MemberRole"},
+    {"label": "Trạng thái nạp dữ liệu đội", "value": "Unkown=0, Initializing=1, Initialized=2", "source": "TeamServiceState"},
+    {"label": "Số mã tin nhắn hệ thống", "value": "6 (\"1\"–\"6\")", "source": "TeamsSystemMessageType"},
+    {"label": "Tên khối sync", "value": "TeamsSyncModel", "source": "TeamsDataService.GetSyncName"},
+    {"label": "Schema dữ liệu đội", "value": "FlatBuffers magicsort.schemas.v1.team", "source": "backend"},
+    {"label": "Số huy hiệu đội", "value": "Theo mảng _configs trong TeamBadgeConfig.asset (chưa xác định)", "source": "TeamsBadgeConfig.GetBadgeCount"}
+  ],
+  "config_highlights": [
+    {"key": "TeamsConfigModel.IsEnable", "value": "false (client default), remote config ghi đè", "meaning": "Bật/tắt toàn bộ tính năng Teams"},
+    {"key": "TeamsConfigModel.UnlockLevel", "value": "40 (client default)", "meaning": "Level mở khoá Teams"},
+    {"key": "TeamsConfigModel.TeamCapacity", "value": "50 (client default)", "meaning": "Số thành viên tối đa của một đội"},
+    {"key": "TeamsConfigModel.CreateCost", "value": "100 (client default)", "meaning": "Chi phí coin để tạo đội"},
+    {"key": "TeamsConfigModel.MaxHelpCount", "value": "5 (client default)", "meaning": "Số lượt giúp tối đa cho một tin nhắn xin mạng"},
+    {"key": "TeamsConfigModel.DefaultHelpCooldown", "value": "14400 giây (client default)", "meaning": "Cooldown giữa hai lần xin mạng"},
+    {"key": "TeamsConfigModel.HelpSupportReward", "value": "5 (client default)", "meaning": "Phần thưởng cho người bấm giúp đồng đội"},
+    {"key": "TeamsConfigModel.MaxColeaderCount", "value": "3 (client default)", "meaning": "Số Co-Leader tối đa mỗi đội"},
+    {"key": "TeamsService.GetCardMaxCooldown", "value": "86400 (0x15180) giây", "meaning": "Cooldown 24 giờ giữa hai lần xin thẻ (hằng số cứng)"},
+    {"key": "TeamsService.GetCardNumberUserCansSendPerDay", "value": "3", "meaning": "Số thẻ tối đa một người tặng mỗi ngày"},
+    {"key": "TeamChatService.MessageAckTimeout", "value": "5 giây", "meaning": "Chờ ACK tin nhắn socket trước khi coi là lỗi"},
+    {"key": "WebSocketManager.ReconnectAttemptDelay", "value": "5 giây", "meaning": "Khoảng chờ giữa các lần thử kết nối lại"},
+    {"key": "WebSocketManager.MaxReconnectDelay", "value": "120 giây", "meaning": "Trần thời gian chờ kết nối lại"},
+    {"key": "TeamsSystemMessageType", "value": "Left=\"1\", Accepted=\"2\", Joined=\"3\", Kicked=\"4\", Promoted=\"5\", Demoted=\"6\"", "meaning": "Mã tin nhắn hệ thống trong chat đội"},
+    {"key": "MemberRole", "value": "None=0, Leader=1, CoLeader=2, Member=3", "meaning": "Vai trò thành viên, quyết định quyền thao tác"},
+    {"key": "TeamServiceState", "value": "Unkown=0, Initializing=1, Initialized=2", "meaning": "Trạng thái nạp dữ liệu đội"},
+    {"key": "TeamViewModel", "value": "Name, Badge, Description, CountryCode, Id, MemberCount, Activity, IsOpen, HasPendingRequest", "meaning": "Model hiển thị một đội trong search/gợi ý"},
+    {"key": "LeaderboardTeam", "value": "Id, Name, MemberCount, TeamScore, BadgeId", "meaning": "Một dòng bảng xếp hạng đội"},
+    {"key": "TeamFreeLifeModel", "value": "Claimed, MessageId, SenderId, UserName, AvatarId, FrameId, NameStyleId", "meaning": "Một mạng miễn phí chờ nhận"},
+    {"key": "TeamsDataModel", "value": "SyncModel, CountryLeaderboard, GlobalLeaderboard, CountryCode, IsUserBelongsToTeam, HelpedMessages, MessageCache", "meaning": "Dữ liệu Teams lưu cục bộ"},
+    {"key": "TeamsSyncModel", "value": "IsIntroduced, UserJoined, FreeLives, UserTeamInfoSent", "meaning": "Khối dữ liệu Teams trong SyncService"},
+    {"key": "TeamBadgeConfig.asset", "value": "_configs: BadgeConfig[], _sprite: Sprite[]", "meaning": "Bộ huy hiệu chọn khi tạo/sửa đội"},
+    {"key": "TeamChatMessage", "value": "user_id, message_type, message_text, user_name, general_badge_id, image_url, frame_id, name_style", "meaning": "Payload tin nhắn qua WebSocket"},
+    {"key": "Endpoint đội (path)", "value": "/v2/get-my-team, /v2/create-team, /v2/join-team, /v1/join-with-request, /v2/search-teams, /v2/get-suggested-teams", "meaning": "API vào/tìm/tạo đội"},
+    {"key": "Endpoint quản trị (path)", "value": "/v2/get-team-requests, /v1/answer-request, /v1/edit-team, /v1/kick-member, /v1/leave-team, /v1/change-user-role, /v2/change-team", "meaning": "API quản lý thành viên và thông tin đội"},
+    {"key": "Endpoint trợ giúp (path)", "value": "/v2/get-helps, /v1/claim-help-list, /v2/get-card-helps", "meaning": "API mạng miễn phí và thẻ"},
+    {"key": "Endpoint chat", "value": "WebSocket .../ws, /v2/get-chat-history", "meaning": "Chat realtime và lịch sử"},
+    {"key": "BackendEnvironmentConfig", "value": "testEnvironmentSettings / productionEnvironmentSettings", "meaning": "Chọn môi trường backend cho HTTP và WebSocket"}
+  ],
+  "tips": [
+    "Mạng miễn phí là lý do chính để vào đội — nó cắt trực tiếp áp lực chờ hồi mạng và nâng retention.",
+    "Thưởng cho người GIÚP (chứ không chỉ người xin) biến hành vi hỗ trợ thành nguồn thu nhập nhỏ đều đặn.",
+    "Cooldown 4 giờ xin mạng và 24 giờ xin thẻ giữ chat khỏi ngập spam yêu cầu.",
+    "Ban vĩnh viễn với người bị kick trao cho Leader quyền lực thật, giúp đội tự quản.",
+    "Teams được đặt làm nền cho Team Arena, Team Quest và quà Magic Pass — mọi sự kiện đồng đội đều phụ thuộc mốc level 40 này."
+  ],
+  "categories": ["Xã hội", "Meta", "Có bảng xếp hạng", "Cơ chế lõi"]
+}

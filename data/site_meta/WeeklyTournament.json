@@ -1,0 +1,153 @@
+{
+  "id": "WeeklyTournament",
+  "title": "Giải đấu tuần (Weekly Tournament)",
+  "tagline": "Mỗi level thắng cộng 1 điểm vào bảng xếp hạng tuần; top 3 nhận coin và cúp hồ sơ.",
+  "infobox": [
+    ["Loại", "Sự kiện solo"],
+    ["Mở khóa", "Level 40 (FirstLevelToShow, client default)"],
+    ["Thời lượng", "Theo startTime/finishTime do server gửi (server)"],
+    ["Chu kỳ / lịch", "Chạy liên tục, tự lặp lại ngay sau khi nhận thưởng"],
+    ["Tham gia", "Cá nhân, bảng gồm cả người thật lẫn bot"],
+    ["Vật phẩm thu thập", "Điểm (score) — 1 điểm mỗi level thắng"],
+    ["Tiền tệ", "Coin"],
+    ["Thưởng chính", "Hạng 1: 1000 coin và 1 cúp; hạng 2: 500 coin; hạng 3: 250 coin"],
+    ["Điều kiện / phụ thuộc", "Bật mặc định (IsTournamentEnable = true)"],
+    ["Manager", "WeeklyTournamentService"]
+  ],
+  "description": [
+    "Weekly Tournament là bảng xếp hạng thi đua theo tuần, chạy liên tục và tự động lặp lại.",
+    "Mỗi level thắng cộng 1 điểm vào bảng xếp hạng tuần của người chơi; thua không bị trừ điểm.",
+    "Bảng gồm cả người chơi thật lẫn bot, phân biệt bằng cờ IsBot trong dữ liệu người chơi.",
+    "Khi tuần kết thúc, top 3 nhận coin: 1000 cho hạng 1, 500 cho hạng 2, 250 cho hạng 3; từ hạng 4 không có thưởng.",
+    "Chỉ nhà vô địch (hạng 1) mới được cộng WinCount — số cúp hiển thị trên hồ sơ.",
+    "Nhận thưởng đồng thời là hành động claim: backend trả luôn bảng của giải tuần mới trong cùng một request.",
+    "Điểm được cộng ngay ở client (optimistic) và sắp xếp lại bảng cache để UI không nhảy số.",
+    "Top 3 được gắn huy chương vàng, bạc, đồng; các hạng còn lại không có huy chương.",
+    "Bảng kết quả tự mở khi về lobby hoặc khi mở app để người chơi không bỏ lỡ thưởng.",
+    "Có thông báo cục bộ nhắc 'Weekly Tournament Ended!' đúng thời điểm giải kết thúc."
+  ],
+  "notes": [
+    "Lưu ý: điểm chỉ tăng khi trạng thái là InProgress(0); ngoài khoảng đó thắng level không được tính.",
+    "Lưu ý: hạng 4 trở đi không nhận được gì (GetRewardAmountByRank trả 0).",
+    "Lưu ý: giải tuần chỉ trả coin, không có thưởng vật phẩm nào khác trong build này.",
+    "Lưu ý: hai trạng thái lệch 5 và 6 tồn tại để xử lý chênh giờ giữa client và server.",
+    "Lưu ý: nếu điểm chưa kịp đồng bộ, client trộn điểm local vào bảng server trước khi hiển thị.",
+    "Lưu ý: khi mất mạng, điểm vẫn tích local và được gửi ở lần request thành công kế tiếp.",
+    "Lưu ý: giải mới bắt đầu với Score = 0 và LastSeenRank = -1, kèm lịch thông báo mới.",
+    "Lưu ý: độ dài chu kỳ giải không có hằng số trong client — hoàn toàn do server quyết định."
+  ],
+  "how_it_works": [
+    "Kiểm tra mở khoá: cần IsTournamentEnable = true và level ≥ 40; thiếu level thì trạng thái InsufficientLevel(3).",
+    "Lần đầu mở khoá, WeeklyNewFeatureAlertView highlight tính năng cho tới khi người chơi xem.",
+    "Lấy bảng: gọi /v1/get-weekly-leaderboard, nhận về tournamentID, danh sách người chơi, startTime, finishTime, isClaimed, isFinished.",
+    "Cache bảng rồi trộn điểm local chưa đồng bộ vào để hiển thị nhất quán (ManipulateLeaderboardResponse).",
+    "Thắng level: điểm tăng 1 và bảng cache được sắp xếp lại ngay tại client, thứ hạng có thể nhảy lên tức thì.",
+    "Đẩy điểm: gửi /v1/set-weekly-tournament-points với payload {progress, points, tournament_id}.",
+    "Đồng hồ đếm ngược tới finishTime chạy mỗi giây khi mở bảng; ở trạng thái Result thì đồng hồ bị ẩn.",
+    "Chấm đỏ bật khi hạng vừa fetch khác hạng lần xem trước (so LastSeenRank với LastFetchedRank).",
+    "Kết thúc: hết giờ hoặc server báo isFinished → trạng thái Result(1); analytics weekly_tournament_finished.",
+    "Bảng kết quả tự mở khi về lobby hoặc mở app, chỉ đúng một lần (IsResultStateNotIntroduced).",
+    "Nhận thưởng: tra coin theo hạng (1000/500/250) và tạo RewardModel với CurrencyType = 1 (Coin).",
+    "Claim: gọi /v1/claim-weekly-tournament; response chứa luôn bảng của giải tuần MỚI.",
+    "Nếu hạng bằng 1, WinCount tăng 1 và số cúp trên hồ sơ tăng theo.",
+    "Giải mới bắt đầu: Score về 0, LastSeenRank = -1, huỷ thông báo cũ và đặt lịch thông báo mới (Id 1124).",
+    "Trạng thái cuối chuyển ResultIntroduced(7) sau khi kết quả đã được hiển thị cho người chơi."
+  ],
+  "reward_tables": [
+    {
+      "title": "PHẦN THƯỞNG THEO HẠNG (WeeklyTournamentConfigModel.json)",
+      "columns": ["Mốc", "Điều kiện", "Phần thưởng"],
+      "rows": [
+        ["Hạng 1", "Đứng đầu bảng khi giải kết thúc", "1000 coin, 1 cúp (WinCount +1)"],
+        ["Hạng 2", "Đứng thứ hai", "500 coin"],
+        ["Hạng 3", "Đứng thứ ba", "250 coin"],
+        ["Hạng 4 trở đi", "Ngoài top 3", "Không có phần thưởng"]
+      ]
+    },
+    {
+      "title": "HUY CHƯƠNG (LeaderboardMedalType)",
+      "columns": ["Mã", "Huy chương", "Áp dụng cho"],
+      "rows": [
+        ["0", "None", "Hạng 4 trở đi"],
+        ["1", "Golden", "Hạng 1"],
+        ["2", "Silver", "Hạng 2"],
+        ["3", "Bronze", "Hạng 3"]
+      ]
+    },
+    {
+      "title": "TRẠNG THÁI GIẢI (WeeklyTournamentStateType)",
+      "columns": ["Mã", "Trạng thái", "Ý nghĩa"],
+      "rows": [
+        ["0", "InProgress", "Giải đang chạy, điểm được cộng"],
+        ["1", "Result", "Giải kết thúc, chờ nhận thưởng"],
+        ["2", "Disable", "IsTournamentEnable = false"],
+        ["3", "InsufficientLevel", "Level dưới FirstLevelToShow"],
+        ["4", "NoCachedTournament", "Chưa có bảng trong cache"],
+        ["5", "NotFinishedAtBackendResponseButTimeIsUp", "Client hết giờ nhưng server chưa báo kết thúc"],
+        ["6", "FinishedAtBackendResponseButTimeIsNotUp", "Server báo kết thúc nhưng client chưa hết giờ"],
+        ["7", "ResultIntroduced", "Kết quả đã được hiển thị"]
+      ]
+    }
+  ],
+  "key_numbers": [
+    {"label": "Level mở khoá", "value": "40", "source": "WeeklyTournamentConfigModel.FirstLevelToShow"},
+    {"label": "Trạng thái bật/tắt mặc định", "value": "true (bật)", "source": "WeeklyTournamentConfigModel.IsTournamentEnable"},
+    {"label": "Điểm mỗi level thắng", "value": "1", "source": "WeeklyTournamentService.IncreaseScoreAndManipulateCachedLeaderboard"},
+    {"label": "Coin hạng 1", "value": "1000", "source": "Rewards.FirstRankCoinRewardAmount"},
+    {"label": "Coin hạng 2", "value": "500", "source": "Rewards.SecondRankCoinRewardAmount"},
+    {"label": "Coin hạng 3", "value": "250", "source": "Rewards.ThirdRankCoinRewardAmount"},
+    {"label": "Coin hạng 4 trở đi", "value": "0", "source": "WeeklyTournamentService.GetRewardAmountByRank"},
+    {"label": "Loại tiền tệ thưởng", "value": "CurrencyType 1 (Coin)", "source": "WeeklyTournamentService.TryGetTournamentReward"},
+    {"label": "Điều kiện tăng WinCount", "value": "rank == 1", "source": "WeeklyTournamentService.TryIncreaseWinCount"},
+    {"label": "Tự mở bảng kết quả khi về lobby", "value": "true", "source": "ShouldOpenAutomaticallyOnLobbyReturnOnResult"},
+    {"label": "Tự mở bảng kết quả khi mở app", "value": "true", "source": "ShouldOpenAutomaticallyOnSessionStartOnResult"},
+    {"label": "Số trạng thái giải", "value": "8 (InProgress=0 … ResultIntroduced=7)", "source": "WeeklyTournamentStateType"},
+    {"label": "Số loại huy chương", "value": "4 (None=0, Golden=1, Silver=2, Bronze=3)", "source": "LeaderboardMedalType"},
+    {"label": "Id thông báo kết thúc giải", "value": "1124", "source": "WeeklyTournamentEndNotificationSo.Id"},
+    {"label": "Tiêu đề thông báo", "value": "\"Weekly Tournament Ended!\"", "source": "WeeklyTournamentEndNotificationSo.Title"},
+    {"label": "Nội dung thông báo", "value": "\"Check your final ranking and rewards now!\"", "source": "WeeklyTournamentEndNotificationSo.Message"},
+    {"label": "Placeholder xuống dòng trong thông báo", "value": "' NEWLINE '", "source": "WeeklyTournamentService.OnNewTournamentStarted"},
+    {"label": "Điểm khi bắt đầu giải mới", "value": "Score = 0, LastSeenRank = -1", "source": "WeeklyTournamentService.ResetScore / OnNewTournamentStarted"},
+    {"label": "Tên khối sync", "value": "WeeklyTournamentSyncModel", "source": "WeeklyTournamentDataService.GetSyncName"},
+    {"label": "Số prefab dòng bảng xếp hạng", "value": "1 (Id 0, InitialSize 0)", "source": "WeeklyTournamentLeaderboardViewFactory._factoryPrefabs"},
+    {"label": "Số người chơi mỗi bảng và tỉ lệ bot", "value": "Do server quyết định (server)", "source": "WeeklyGetLeaderboardResponse.Players"},
+    {"label": "Độ dài chu kỳ giải", "value": "Theo startTime/finishTime từ server (server)", "source": "WeeklyGetLeaderboardResponse"}
+  ],
+  "config_highlights": [
+    {"key": "IsTournamentEnable", "value": "true", "meaning": "Bật giải tuần (json default)"},
+    {"key": "FirstLevelToShow", "value": "40", "meaning": "Level tối thiểu để thấy bảng xếp hạng tuần"},
+    {"key": "ShouldOpenAutomaticallyOnLobbyReturnOnResult", "value": "true", "meaning": "Tự mở bảng kết quả khi về lobby"},
+    {"key": "ShouldOpenAutomaticallyOnSessionStartOnResult", "value": "true", "meaning": "Tự mở bảng kết quả khi mở app"},
+    {"key": "Rewards.FirstRankCoinRewardAmount", "value": "1000", "meaning": "Coin cho hạng 1"},
+    {"key": "Rewards.SecondRankCoinRewardAmount", "value": "500", "meaning": "Coin cho hạng 2"},
+    {"key": "Rewards.ThirdRankCoinRewardAmount", "value": "250", "meaning": "Coin cho hạng 3"},
+    {"key": "Reward CurrencyType", "value": "1 (Coin)", "meaning": "Giải tuần chỉ trả coin"},
+    {"key": "Điều kiện tăng WinCount", "value": "rank == 1", "meaning": "Chỉ nhà vô địch mới được +1 cúp"},
+    {"key": "WeeklyTournamentStateType", "value": "InProgress=0, Result=1, Disable=2, InsufficientLevel=3, NoCachedTournament=4, NotFinishedAtBackendResponseButTimeIsUp=5, FinishedAtBackendResponseButTimeIsNotUp=6, ResultIntroduced=7", "meaning": "Trạng thái giải"},
+    {"key": "LeaderboardMedalType", "value": "None=0, Golden=1, Silver=2, Bronze=3", "meaning": "Huy chương top 3"},
+    {"key": "WeeklyGetLeaderboardResponse", "value": "tournamentID, Players[], startTime, finishTime, isClaimed, isFinished", "meaning": "Bảng xếp hạng hiện tại (server)"},
+    {"key": "WeeklyLeaderBoardPlayer", "value": "Nickname, Score, PublicID, Rank, IsMe, IsBot, ImageUrl, ImageID, TokenID, FrameID, NameStyle, TeamName", "meaning": "Một dòng trong bảng"},
+    {"key": "SetWeeklyRequest", "value": "progress, points, tournament_id", "meaning": "Payload đẩy điểm lên server"},
+    {"key": "WeeklyLeaderboardClaimRequest / Response", "value": "Progress → tournamentID, Players[], startTime, finishTime, isClaimed, isFinished", "meaning": "Claim thưởng và nhận giải mới trong một request"},
+    {"key": "FlatBuffer schema", "value": "magicsort.schemas.v1.liveops.weekly_leaderboard", "meaning": "Biến thể nhị phân của cùng response"},
+    {"key": "WeeklyTournamentEndNotificationSo", "value": "Id 1124, 'Weekly Tournament Ended!', 'Check your final ranking and rewards now!'", "meaning": "Thông báo cục bộ khi giải kết thúc"},
+    {"key": "Notification body placeholder", "value": "' NEWLINE '", "meaning": "Được thay bằng Environment.NewLine khi tạo thông báo"},
+    {"key": "WeeklyTournamentSyncModel", "value": "-", "meaning": "Tên khối sync giữa client và server"},
+    {"key": "WeeklyTournamentModel", "value": "WinCount, Score, LastSeenRank, LastFetchedRank, WeeklyIntroduced, IsResultIntroduced, CachedLeaderboardResponse", "meaning": "Dữ liệu lưu cục bộ"},
+    {"key": "WeeklyTournamentLeaderboardViewFactory._factoryPrefabs", "value": "1 mục: Id 0, InitialSize 0", "meaning": "Prefab dòng bảng xếp hạng"},
+    {"key": "getWeeklyLeaderboardUrl", "value": "{base}/v1/get-weekly-leaderboard", "meaning": "Lấy bảng xếp hạng tuần"},
+    {"key": "setWeeklyScoreUrl", "value": "{base}/v1/set-weekly-tournament-points", "meaning": "Đẩy điểm lên server"},
+    {"key": "claimWeeklyLeaderboardUrl", "value": "{base}/v1/claim-weekly-tournament", "meaning": "Nhận thưởng và nhận luôn giải mới"},
+    {"key": "WeeklyTournamentInProgressView / WeeklyTournamentInResultView", "value": "hai view trạng thái", "meaning": "Đang diễn ra và kết quả + claim"},
+    {"key": "WeeklyTournamentLeaderboardDegreeElementView", "value": "UI vạch phân hạng", "meaning": "Đánh dấu mốc thưởng top 1/2/3"},
+    {"key": "Signals", "value": "WeeklyTournamentLeaderboardStateChangedSignal, WeeklyTournamentLeaderboardDataFetchedSignal, WeeklyTournamentSeenByUserSignal", "meaning": "Đồng bộ UI khi trạng thái, dữ liệu hoặc lượt xem thay đổi"}
+  ],
+  "tips": [
+    "Bật mặc định và mở sớm ở level 40 cho thấy đây là feature retention nền, không phải live-ops theo mùa.",
+    "Trộn bot vào bảng đảm bảo người chơi luôn có đối thủ và luôn thấy thứ hạng biến động.",
+    "Cộng điểm ngay ở client rồi mới đồng bộ giúp thứ hạng phản hồi tức thì sau mỗi level thắng.",
+    "Gộp claim và cấp giải mới vào một request loại bỏ khoảng trống giữa hai chu kỳ thi đua.",
+    "Cúp trên hồ sơ chỉ dành cho hạng 1 biến vị trí đầu bảng thành phần thưởng danh tiếng lâu dài."
+  ],
+  "categories": ["Sự kiện", "Có bảng xếp hạng", "Live-ops", "Xã hội"]
+}

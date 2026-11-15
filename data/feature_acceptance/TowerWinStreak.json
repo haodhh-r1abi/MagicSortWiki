@@ -1,0 +1,786 @@
+{
+  "id": "TowerWinStreak",
+  "feature": "TowerWinStreak",
+  "name": "Tháp chuỗi thắng (Tower)",
+  "category": "Event",
+  "category_label": "Sự kiện",
+  "core_levels_last": false,
+  "acceptance_status": "documented_with_explicit_remaining_scope",
+  "full_feature_verified": false,
+  "checks": {
+    "purpose": {
+      "status": "documented_static_scope",
+      "source": "gdd/TowerWinStreak.json#/summary",
+      "claim_excerpt": "Tower Win Streak (trong analytics gọi là 'broom streak' bản v1) là sự kiện chuỗi thắng: mỗi level thắng liên tiếp đưa con mèo/chổi leo lên một bậc của tòa tháp; thua hoặc bỏ level sẽ rơi xuống (TowerActionState.Fall) và chuỗi bị reset về 0. Các mốc chính (main step) 3/6/11/16/22/30/40 trả thưởng dạng rương (CurrencyType.Chest) chứa coin, booster, life vô hạn theo thời gian. Người chơi giữ hai kỷ l"
+    },
+    "unlock": {
+      "status": "described_historical_conditions_runtime_boundary_unverified",
+      "source": "gdd/TowerWinStreak.json#/unlock",
+      "content": "TowerWinStreakStateService.GetEventState(): trả Disable(7) nếu TowerWinStreakConfigModel.IsEnabled == false; InsufficientLevel(6) nếu level < FirstLevelToShow; NoCachedEvent(0) nếu chưa fetch được sự kiện. Client default: IsEnabled = false, FirstLevelToShow = 50, EventType = 1 (Resources/defaultconfigs/TowerWinStreakConfigModel.json). Ngoài ra IsBroomStreakEnabled() được dùng để tránh chạy song song với sự kiện BroomStreak (bản v2) — nếu BroomStreak bật thì Tower nhường chỗ."
+    },
+    "entry_flow": {
+      "status": "documented_paths_not_all_executed",
+      "entry_points": [
+        "TowerWinStreakLobbyButton ở lobby (IsLobbyIconVisible)",
+        "TowerWinStreakBannerView — banner tháp hiển thị trên lobby (ShouldShowTowerWinStreakBanner)",
+        "Icon trong màn chơi khi ShouldShowInLevelIcon = true (ShouldShowInLevelStreakView)",
+        "TowerWinStreakPopUp mở tự động khi về lobby / mở app (ShouldOpenAutomaticallyOnLobbyReturn / ShouldOpenAutomaticallyOnSessionStart, trả kèm TowerWinStreakSource)",
+        "TowerWinStreakHomeWelcomingCommand — chèn vào chuỗi welcome ở Home (ShouldShowForceHomeWelcoming)",
+        "TowerWinStreakAreYouSureContainer — hiện tháp trên popup 'bạn có chắc muốn thoát?' (ShouldShowOnAreYouSure)",
+        "TowerWinStreakTryAgainCommand — nút chơi lại sau khi thua (source TryAgain)",
+        "TowerWinStreakInfoPopup — nút info"
+      ],
+      "flow_source": "gdd/TowerWinStreak.json#/flow",
+      "acceptance_scope": "Priority with Broom, tower/streak/checkpoint/reward/fall; join/state/claim/expiry/persistence"
+    },
+    "config": {
+      "status": "source_bound_catalog_present",
+      "gdd_rows": 154,
+      "full_leaf_rows_associated": 356,
+      "snapshots": {
+        "default_0.0.3063": 54,
+        "cache_20260910": 122,
+        "cache_20261010": 122,
+        "firebase_20260910": 58
+      },
+      "models": [
+        {
+          "model": "towerWinStreakConfigModel",
+          "matching_basis": [
+            {
+              "kind": "explicit_gd_config_model_map",
+              "source": "gd_config.json#/defaultconfigs/map/TowerWinStreak"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/TowerWinStreak.json#/sources/3"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/TowerWinStreak.json#/sources/7"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/TowerWinStreak.json#/configs/0/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/TowerWinStreak.json#/configs/1/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/TowerWinStreak.json#/configs/2/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/TowerWinStreak.json#/configs/3/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/TowerWinStreak.json#/configs/4/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/TowerWinStreak.json#/configs/5/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/TowerWinStreak.json#/configs/6/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/TowerWinStreak.json#/configs/7/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/TowerWinStreak.json#/configs/8/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/TowerWinStreak.json#/configs/9/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/TowerWinStreak.json#/configs/10/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/TowerWinStreak.json#/configs/11/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/TowerWinStreak.json#/configs/22/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/TowerWinStreak.json#/configs/31/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/TowerWinStreak.json#/configs/32/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/TowerWinStreak.json#/configs/33/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/TowerWinStreak.json#/configs/34/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/TowerWinStreak.json#/configs/35/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/TowerWinStreak.json#/configs/36/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/TowerWinStreak.json#/configs/37/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/TowerWinStreak.json#/configs/38/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/TowerWinStreak.json#/configs/39/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/TowerWinStreak.json#/configs/40/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/TowerWinStreak.json#/configs/41/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/TowerWinStreak.json#/configs/42/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/TowerWinStreak.json#/configs/43/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/TowerWinStreak.json#/configs/44/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/TowerWinStreak.json#/configs/45/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/TowerWinStreak.json#/configs/46/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/TowerWinStreak.json#/configs/47/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/TowerWinStreak.json#/configs/48/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/TowerWinStreak.json#/configs/49/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/TowerWinStreak.json#/configs/50/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/TowerWinStreak.json#/configs/51/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/TowerWinStreak.json#/configs/52/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/TowerWinStreak.json#/configs/53/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/TowerWinStreak.json#/configs/54/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/TowerWinStreak.json#/configs/55/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/TowerWinStreak.json#/configs/56/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/TowerWinStreak.json#/configs/57/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/TowerWinStreak.json#/configs/58/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/TowerWinStreak.json#/configs/59/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/TowerWinStreak.json#/configs/60/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/TowerWinStreak.json#/configs/61/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/TowerWinStreak.json#/configs/62/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/TowerWinStreak.json#/configs/63/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/TowerWinStreak.json#/configs/64/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/TowerWinStreak.json#/configs/65/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/TowerWinStreak.json#/configs/66/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/TowerWinStreak.json#/configs/67/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/TowerWinStreak.json#/configs/68/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/TowerWinStreak.json#/configs/69/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/TowerWinStreak.json#/configs/70/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/TowerWinStreak.json#/configs/71/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/TowerWinStreak.json#/configs/72/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/TowerWinStreak.json#/configs/73/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/TowerWinStreak.json#/configs/74/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/TowerWinStreak.json#/configs/75/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/TowerWinStreak.json#/configs/76/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/TowerWinStreak.json#/configs/77/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/TowerWinStreak.json#/configs/78/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/TowerWinStreak.json#/configs/79/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/TowerWinStreak.json#/configs/80/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/TowerWinStreak.json#/configs/81/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/TowerWinStreak.json#/configs/82/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/TowerWinStreak.json#/configs/83/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/TowerWinStreak.json#/configs/84/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/TowerWinStreak.json#/configs/85/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/TowerWinStreak.json#/configs/86/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/TowerWinStreak.json#/configs/87/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/TowerWinStreak.json#/configs/88/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/TowerWinStreak.json#/configs/89/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/TowerWinStreak.json#/configs/90/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/TowerWinStreak.json#/configs/91/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/TowerWinStreak.json#/configs/92/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/TowerWinStreak.json#/configs/93/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/TowerWinStreak.json#/configs/94/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/TowerWinStreak.json#/configs/95/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/TowerWinStreak.json#/configs/96/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/TowerWinStreak.json#/configs/97/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/TowerWinStreak.json#/configs/98/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/TowerWinStreak.json#/configs/99/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/TowerWinStreak.json#/configs/100/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/TowerWinStreak.json#/configs/101/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/TowerWinStreak.json#/configs/102/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/TowerWinStreak.json#/configs/103/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/TowerWinStreak.json#/configs/104/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/TowerWinStreak.json#/configs/105/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/TowerWinStreak.json#/configs/106/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/TowerWinStreak.json#/configs/107/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/TowerWinStreak.json#/configs/108/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/TowerWinStreak.json#/configs/109/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/TowerWinStreak.json#/configs/110/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/TowerWinStreak.json#/configs/111/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/TowerWinStreak.json#/configs/112/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/TowerWinStreak.json#/configs/113/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/TowerWinStreak.json#/configs/114/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/TowerWinStreak.json#/configs/115/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/TowerWinStreak.json#/configs/116/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/TowerWinStreak.json#/configs/117/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/TowerWinStreak.json#/configs/118/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/TowerWinStreak.json#/configs/119/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/TowerWinStreak.json#/configs/120/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/TowerWinStreak.json#/configs/121/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/TowerWinStreak.json#/configs/122/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/TowerWinStreak.json#/configs/123/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/TowerWinStreak.json#/configs/124/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/TowerWinStreak.json#/configs/125/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/TowerWinStreak.json#/configs/126/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/TowerWinStreak.json#/configs/127/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/TowerWinStreak.json#/configs/128/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/TowerWinStreak.json#/configs/129/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/TowerWinStreak.json#/configs/130/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/TowerWinStreak.json#/configs/131/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/TowerWinStreak.json#/configs/132/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/TowerWinStreak.json#/configs/133/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/TowerWinStreak.json#/configs/134/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/TowerWinStreak.json#/configs/135/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/TowerWinStreak.json#/configs/136/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/TowerWinStreak.json#/configs/137/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/TowerWinStreak.json#/configs/138/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/TowerWinStreak.json#/configs/139/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/TowerWinStreak.json#/configs/140/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/TowerWinStreak.json#/configs/141/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/TowerWinStreak.json#/configs/142/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/TowerWinStreak.json#/configs/143/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/TowerWinStreak.json#/configs/144/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/TowerWinStreak.json#/configs/145/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/TowerWinStreak.json#/configs/146/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/TowerWinStreak.json#/configs/147/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/TowerWinStreak.json#/configs/148/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/TowerWinStreak.json#/configs/149/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/TowerWinStreak.json#/configs/150/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/TowerWinStreak.json#/configs/151/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/TowerWinStreak.json#/configs/152/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/TowerWinStreak.json#/configs/153/key_where"
+            }
+          ]
+        }
+      ],
+      "declared_models_without_catalog_data": [],
+      "placeholder_rows_requiring_source_review": [],
+      "exact_placeholder_snapshot_values": [],
+      "dossier_abbreviated_values": [],
+      "note": "Model association uses explicitmap or exacttoken citations; fieldpresence does not prove allproductiondata. GDDsummaryrows and fullcatalogrows have separate counts. Abbreviated source summaries are not full arrays; catalog/source links remain authoritative."
+    },
+    "reward": {
+      "status": "documented_static_rewards_runtime_grant_not_fully_verified",
+      "entries": 7,
+      "tables_in_site_meta": 3,
+      "source": "gdd/TowerWinStreak.json#/rewards"
+    },
+    "use_cases": {
+      "status": "specified_not_executed_in15nov_ledger",
+      "specified": 15,
+      "reviewed_uc_branch_count": 0,
+      "reviewed_uc_ids": [],
+      "not_reviewed_in_new_ledger": [
+        "UC-01",
+        "UC-02",
+        "UC-03",
+        "UC-04",
+        "UC-05",
+        "UC-06",
+        "UC-07",
+        "UC-08",
+        "UC-09",
+        "UC-10",
+        "UC-11",
+        "UC-12",
+        "UC-13",
+        "UC-14",
+        "UC-15"
+      ],
+      "full_uc_pass_claimed": false
+    },
+    "screenshots": {
+      "historical_gallery_entries": 1,
+      "historical_uc_with_image_reference": 0,
+      "curated_new_images": [],
+      "curated_new_image_count": 0,
+      "status": "historical_references_only",
+      "source": "screens/web/screens.json#/TowerWinStreak",
+      "note": "Image presence does not prove execution result or completeness."
+    },
+    "runtime_actual": {
+      "status": "not_observed_in15nov_ledger",
+      "case_count": 0,
+      "cases": [],
+      "mode": "offline_existing_fixture",
+      "build": "0.0.3129 ARM64"
+    },
+    "segment_ab": {
+      "status": "not_identified_in_sources",
+      "segment_ids": [],
+      "matching_basis": "explicit_gd_config_map_or_exact_model_token_in_gdd_configs_where_key_sources; rootfieldscoped",
+      "rows": [],
+      "classifications": {},
+      "assignment_verified": false,
+      "uplift_verified": false,
+      "note": "No matchingrow does not prove no segmentation/AB. Rewardbucketfalsepositives remain explicitly classified."
+    },
+    "storage_backend_analytics": {
+      "storage_keys": {
+        "entries": 10,
+        "status": "documented_static_contract_runtime_not_verified",
+        "source": "gdd/TowerWinStreak.json#/storage_keys"
+      },
+      "backend": {
+        "entries": 3,
+        "status": "documented_static_contract_runtime_not_verified",
+        "source": "gdd/TowerWinStreak.json#/backend"
+      },
+      "analytics": {
+        "entries": 5,
+        "status": "documented_static_contract_runtime_not_verified",
+        "source": "gdd/TowerWinStreak.json#/analytics"
+      }
+    },
+    "remaining_next_step": {
+      "gap_count": 4,
+      "static_scoped_resolutions": 1,
+      "remaining_count": 3,
+      "all_gap_dispositions": [
+        {
+          "id": "MS-TowerWinStreak-G001",
+          "feature": "TowerWinStreak",
+          "source": "gdd/TowerWinStreak.json#/gaps/0",
+          "original": "Không có hằng số về độ dài sự kiện — startTime/finishTime hoàn toàn do server.",
+          "current_note": "Không có hằng số về độ dài sự kiện — startTime/finishTime hoàn toàn do server.",
+          "status": "open_review_plan",
+          "review_status": "open_review_plan",
+          "dependency": "event_rotation_or_fresh_instance",
+          "next_action": "Trích start/finish snapshot và state expiry; cần newevent để chứng minh duration/reset production.",
+          "remaining": "Không có hằng số về độ dài sự kiện — startTime/finishTime hoàn toàn do server."
+        },
+        {
+          "id": "MS-TowerWinStreak-G002",
+          "feature": "TowerWinStreak",
+          "source": "gdd/TowerWinStreak.json#/gaps/1",
+          "original": "Quan hệ loại trừ với BroomStreak chỉ thấy qua IsBroomStreakEnabled(), không đọc được logic ưu tiên chính xác từ pseudo-C.",
+          "current_note": "15/11 — resolved_static_code_historical_build: TowerWinStreakStateService.GetEventState bắt đầu iVar9=7; chỉ vào nhánh eligibility tiếp khi Tower.IsEnabled=true VÀ Broom.IsEnabled=false. Vì vậy khi cả hai bật, Tower không đi tiếp nhánh active của method này. Đây là ưu tiên/config suppression của Tower; chưa khẳng định Broom tự active bất kể unlock/instance của nó. Còn lại: Cần đối chiếu method/consumer trên app0.0.3129 ARM64; chưa là runtime pass.",
+          "status": "resolved_static_code_historical_build",
+          "review_status": "preserved_resolved_static_code_historical_build",
+          "dependency": "local_code_review",
+          "next_action": "TowerWinStreakStateService.GetEventState bắt đầu iVar9=7; chỉ vào nhánh eligibility tiếp khi Tower.IsEnabled=true VÀ Broom.IsEnabled=false. Vì vậy khi cả hai bật, Tower không đi tiếp nhánh active của method này. Đây là ưu tiên/config suppression của Tower; chưa khẳng định Broom tự active bất kể unlock/instance của nó. Cần đối chiếu method/consumer trên app0.0.3129 ARM64; chưa là runtime pass.",
+          "conclusion": "TowerWinStreakStateService.GetEventState bắt đầu iVar9=7; chỉ vào nhánh eligibility tiếp khi Tower.IsEnabled=true VÀ Broom.IsEnabled=false. Vì vậy khi cả hai bật, Tower không đi tiếp nhánh active của method này. Đây là ưu tiên/config suppression của Tower; chưa khẳng định Broom tự active bất kể unlock/instance của nó.",
+          "evidence": [
+            "../com.grandgames.magicsort_Unity_20260909_112501/RecoveredNative/PseudoC/Assembly-CSharp/Modules/Contexts/Home/TowerWinStreak/Scripts/TowerWinStreakStateService.c:171"
+          ],
+          "reviewed": "2026-11-15",
+          "mode": "file_only_recovered_native_0.0.3063",
+          "remaining": "15/11 — resolved_static_code_historical_build: TowerWinStreakStateService.GetEventState bắt đầu iVar9=7; chỉ vào nhánh eligibility tiếp khi Tower.IsEnabled=true VÀ Broom.IsEnabled=false. Vì vậy khi cả hai bật, Tower không đi tiếp nhánh active của method này. Đây là ưu tiên/config suppression của Tower; chưa khẳng định Broom tự active bất kể unlock/instance của nó. Còn lại: Cần đối chiếu method/consumer trên app0.0.3129 ARM64; chưa là runtime pass."
+        },
+        {
+          "id": "MS-TowerWinStreak-G003",
+          "feature": "TowerWinStreak",
+          "source": "gdd/TowerWinStreak.json#/gaps/2",
+          "original": "Analytics dùng tên 'broom_streak_*' cho Tower (v1) trong khi BroomStreak dùng hậu tố '_v2' — dễ nhầm khi phân tích dữ liệu.",
+          "current_note": "Analytics dùng tên 'broom_streak_*' cho Tower (v1) trong khi BroomStreak dùng hậu tố '_v2' — dễ nhầm khi phân tích dữ liệu.",
+          "status": "qualified_note_not_runtime_verification",
+          "review_status": "qualified_note_not_runtime_verification",
+          "dependency": "historical_note_requires_qualified_use",
+          "next_action": "Giữ analytics broom_streak_v1/v2 naming caveat; gắn source feature/build để không gộp KPI.",
+          "remaining": "Analytics dùng tên 'broom_streak_*' cho Tower (v1) trong khi BroomStreak dùng hậu tố '_v2' — dễ nhầm khi phân tích dữ liệu."
+        },
+        {
+          "id": "MS-TowerWinStreak-G004",
+          "feature": "TowerWinStreak",
+          "source": "gdd/TowerWinStreak.json#/gaps/3",
+          "original": "[Runtime 2026-09-10] Config server LIVE đã đọc trực tiếp từ cache máy (không cần request); các hàng 'server live' là giá trị server ghi đè/thêm so với default.",
+          "current_note": "[Runtime 2026-09-10] Config server LIVE đã đọc trực tiếp từ cache máy (không cần request); các hàng 'server live' là giá trị server ghi đè/thêm so với default.",
+          "status": "historical_evidence_annotation_not_test_result",
+          "review_status": "historical_evidence_annotation_not_test_result",
+          "dependency": "historical_note_requires_qualified_use",
+          "next_action": "Ghi chú cache đã đọc tháng9, từ LIVE phải hiểu snapshot lịch sử. Đối chiếu config catalog/source, giữ default/cache/production hiện tại riêng; không coi là fresh fetch15/11.",
+          "remaining": "[Runtime 2026-09-10] Config server LIVE đã đọc trực tiếp từ cache máy (không cần request); các hàng 'server live' là giá trị server ghi đè/thêm so với default."
+        }
+      ],
+      "feature_specific_acceptance_questions": [
+        "Priority with Broom, tower/streak/checkpoint/reward/fall",
+        " join/state/claim/expiry/persistence"
+      ],
+      "next_steps": [
+        "Trích start/finish snapshot và state expiry; cần newevent để chứng minh duration/reset production.",
+        "Giữ analytics broom_streak_v1/v2 naming caveat; gắn source feature/build để không gộp KPI.",
+        "Ghi chú cache đã đọc tháng9, từ LIVE phải hiểu snapshot lịch sử. Đối chiếu config catalog/source, giữ default/cache/production hiện tại riêng; không coi là fresh fetch15/11."
+      ]
+    }
+  },
+  "use_cases": 15,
+  "configs": 154,
+  "new_review_case_count": 0,
+  "reviewed_uc_branch_count": 0,
+  "curated_new_image_count": 0,
+  "segment_ids": [],
+  "matching_basis": "explicit_gd_config_map_or_exact_model_token_in_gdd_configs_where_key_sources; rootfieldscoped",
+  "unmatched_segment_status": "not_identified_in_sources",
+  "local_document_repairs": [],
+  "sources": [
+    "GameDesign/features/TowerWinStreakService.md",
+    "GameDesign/features/TowerWinStreakStateService.md",
+    "GameDesign/features/TowerWinStreakDataService.md",
+    "GameDesign/features/TowerWinStreakConfigModel.md",
+    "GameDesign/features/TowerWinStreakStepConfigModel.md",
+    "RecoveredNative/PseudoC/Assembly-CSharp/Modules/Contexts/Home/TowerWinStreak/Scripts/*.c",
+    "RecoveredNative/Il2CppDumper/dump.cs (TypeDefIndex 1846-1905)",
+    "UnityExport/ExportedProject/Assets/Resources/defaultconfigs/TowerWinStreakConfigModel.json",
+    "UnityExport/ExportedProject/Assets/MonoBehaviour/TowerWinStreakBannerConfig.asset",
+    "UnityExport/ExportedProject/Assets/MonoBehaviour/TowerWinStreakLobbyButtonAnimationConfig.asset",
+    "UnityExport/ExportedProject/Assets/MonoBehaviour/BackendEnvironmentConfig.asset",
+    "RecoveredNative/strings-by-type.tsv (EventSender.SendTowerWinStreak*)"
+  ],
+  "source_hashes": {
+    "gdd_sha256": "bb1aed9b5b26304144fd21c1a314b6ae8b57bc965dadeaa12a68e77f580eb9fd",
+    "site_meta_sha256": "0e3a5738d9d56f33d0f53d3bde54e215dc7ae7d543498fa058bb003f19135a40"
+  }
+}

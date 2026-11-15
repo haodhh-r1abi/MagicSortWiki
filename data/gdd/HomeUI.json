@@ -1,0 +1,885 @@
+{
+  "id": "HomeUI",
+  "name": "Màn hình chính (Home UI)",
+  "category": "Meta",
+  "managers": [
+    "Modules.Contexts.Home.UI.Common.Scripts.HomeController",
+    "Modules.Contexts.Home.UI.SwipeMenu.Scripts.SwipePageManager",
+    "Modules.Contexts.Home.UI.Toolbar.Scripts.ToolbarService",
+    "Modules.Contexts.Home.UI.Common.Scripts.LobbyEventsPositionManager",
+    "Modules.Contexts.Home.Common.Scripts.HomeIdleDetectionManager"
+  ],
+  "summary": "Home là trung tâm điều hướng. Code0.0.3063 có SwipePageManager/PageType và các route Shop, Leaderboard, Home, Teams, Settings, Journey, Collection tùy cấu hình. Quan sát15/11 trên0.0.3129: thanh dưới là Shop, Leaderboard, Home, Teams, Collection; Settings mở bằng bánh răng. Swipe chưa được chứng minh chuyển trang trong lượt này. Trang Home ở giữa có nút Play lớn, vạc phép (Cauldron) hiển thị số level và độ khó, thanh tiền tệ trên cùng, cùng hai cột biểu tượng sự kiện trái/phải được sắp xếp động theo sự kiện đang bật. Toolbar là bong bóng tooltip đa dụng bật lên từ bất kỳ biểu tượng nào để mô tả phần thưởng hoặc thông tin sự kiện, có 10 ngữ cảnh (ToolbarContext) và 7 màu (ToolbarAssetColor). Home còn chứa cơ chế phát hiện người chơi rảnh tay (HomeIdleDetectionManager) để các popup và việc khởi động lại chỉ chen vào lúc không làm phiền, và bộ scaler riêng cho màn hình nhỏ (HomeScaleConfig).",
+  "unlock": "Home có ngay sau màn loading. Bố cục thay đổi theo remote config: 'IsNewLobbyIconsEnabled' (LobbyIconVariantController.InitializeInternal(isNewLobbyIconEnabled)), 'IsBackgroundAndShelvesEnabled' và 'IsSmallBackgroundEnable' (HomeController.UpdateHomeBackground), 'ColorVariant'. Số trang trong SwipeMenu đổi theo Journey bật/tắt (_swipePageControllersJourneyOn / _swipePageControllersJourneyOff).",
+  "entry_points": [
+    "Sau màn loading (LoadingCircleManager, LoadingCat)",
+    "Quay về từ level (ReturnToHomeSequenceService)",
+    "Vuốt ngang giữa các trang (SwipePageManager.OnDrag)",
+    "Nút điều hướng dưới cùng (SwipeMenuManager, NavigationManagerAnimationConfig)",
+    "Chạm vào biểu tượng sự kiện để mở toolbar (ToolbarService.SetToolbarModel)"
+  ],
+  "flow": "HomeController.Initialize() lưu vị trí gốc của _topUi, _iconsLeft, _iconsRight, _playButtonRoot, _magicStreakGae rồi UpdateHomeBackground() chọn nền theo cấu hình. PrepareHomeUi(level) đặt số level lên vạc (CauldronController.Prepare(level, levelDifficultyType)); sau khi thắng level, PlayLevelTextChangeAnimations() chạy hiệu ứng đổi số với độ trễ OnRegularLevelWinsLevelTextChangeDelay = 1.25 s (level thường) hoặc OnHardLevelWinsLevelTextChangeDelay = 0.1 s (level khó), kèm khói (IntervalBeforeSmokeParticles = 1.3 s, AfterSuperHardSmokeDelay = 1.4 s). HideUI()/ShowUI() trượt toàn bộ UI ra ngoài màn hình theo UIOutsideOffset = 7 với UIHideDuration = 0.4 s / UIShowDuration và các AnimationCurve trong HomeAnimationsConfig. SwipePageManager là UITouchableElement: OnTouchDown/OnDrag đo dịch chuyển, GetResistedDragAmount() giảm tốc khi kéo quá biên (ScrollResistance = 5), OnTouchUp so quãng vuốt với SwipeThreshold = 0.2 để MoveToLeftPage/MoveToRightPage hoặc MoveToNearestPage; GetIndexByPageType(PageType)/GetPageTypeByIndex(index) ánh xạ trang; TryUpdatePeekPages() nạp trước trang kế bên (_peekedPageIndexes). Mỗi lần đổi trang, các controller nhận OnPageSelected(PageType) (TeamChatController, LeaderboardController, FriendsNavBarNotificationController...). LobbyEventsPositionManager.OnEventStateChanged() gọi RepositionButtons() xếp lại biểu tượng vào các ô _leftEventButtonPositions/_rightEventButtonPositions theo LobbyIconPositionType (Left=0, Right=1) và dịch cả cột khi có thanh tiến độ Magic Streak. Toolbar: một hệ thống bấm biểu tượng → SetToolbarModel(ToolbarModel{Requester, SpawnPositionTransform, Text, RewardModel, Parent, DownwardsToolbar, HorizontalToolbar, RightmostToolbar, ToolbarContext, ToolbarAssetColor}) → ShowToolbar() chọn hàm dựng theo ngữ cảnh (ConstructPlainTextToolbarBody, ConstructJetpackToolbarBody, ConstructDailyToolbarBody, ConstructSkyJumpToolbarBody, ConstructTowerToolbarBody, ConstructMagicPassToolbarBody, ConstructTeamQuestToolbarBody, ConstructBoatRushToolbarBody), tính kích thước thân theo số phần thưởng (XSizeFor1..4Content, YSizeFor1Row/YSizeFor2Row), xếp phần thưởng thành 1–2 hàng (GetRowCounts) và đặt mũi tên (SetArrowPositionAndRotation) hướng lên/xuống; CheckForInput() trong LateUpdate đóng toolbar khi chạm ra ngoài.",
+  "use_cases": [
+    {
+      "id": "UC-01",
+      "title": "Chuẩn bị Home sau loading",
+      "actor": "System",
+      "trigger": "Vào Home lần đầu trong phiên",
+      "precondition": "Dữ liệu người chơi đã nạp",
+      "steps": [
+        "HomeController.Initialize() lưu vị trí gốc các nhóm UI",
+        "UpdateHomeBackground() chọn nền theo remote config ('IsBackgroundAndShelvesEnabled', 'IsSmallBackgroundEnable')",
+        "PrepareHomeUi(level) đặt số level lên Cauldron",
+        "LobbyIconVariantController.Initialize() áp biến thể biểu tượng theo 'IsNewLobbyIconsEnabled'"
+      ],
+      "result": "Home hiển thị đúng biến thể A/B của bố cục",
+      "rules": "LobbyIconVariantController có 4 loại biến thể: SpriteRendererVariant, SizeVariant, PositionVariant, DisableGameObjectsVariant",
+      "evidence": "HomeController.Initialize; HomeController.UpdateHomeBackground; HomeController.PrepareHomeUi; LobbyIconVariantController.InitializeInternal"
+    },
+    {
+      "id": "UC-02",
+      "title": "Vuốt chuyển trang",
+      "actor": "Player",
+      "trigger": "Kéo ngang trên màn hình Home",
+      "precondition": "Không có popup chặn",
+      "steps": [
+        "SwipePageManager.OnTouchDown(position) → OnDragStart → StartDragging()",
+        "OnDrag(position) tính dịch chuyển, đẩy vào _displacementQueue",
+        "Kéo quá biên → GetResistedDragAmount(dragAmount, distanceFromLimit) làm chậm lại (ScrollResistance = 5)",
+        "OnTouchUp → EndTouch(): nếu quãng vuốt vượt SwipeThreshold = 0.2 thì MoveToLeftPage()/MoveToRightPage(), ngược lại MoveToNearestPage()",
+        "StartMove(position) chạy tween tới GetMovePositionByIndex(index)",
+        "Các controller nhận OnPageSelected(PageType)"
+      ],
+      "result": "Chuyển mượt giữa Shop / Leaderboard / Home / Teams / Settings (và Journey, Collection)",
+      "rules": "PageType: None=0, Shop=1, Leaderboard=2, Home=3, Teams=4, Settings=5, Journey=6, Collection=7",
+      "evidence": "SwipePageManager.OnDrag; SwipePageManager.EndTouch; SwipePageManager.MoveToNearestPage; SwipePageManager.SwipeThreshold; SwipePageManager.ScrollResistance; PageType"
+    },
+    {
+      "id": "UC-03",
+      "title": "Nhảy thẳng tới một trang",
+      "actor": "System",
+      "trigger": "Deeplink, popup hoặc nút điều hướng",
+      "precondition": "-",
+      "steps": [
+        "GetIndexByPageType(pageType) đổi PageType sang chỉ số",
+        "MoveToPage(index) có animation hoặc MoveToPageImmediately(index) không animation"
+      ],
+      "result": "Mở đúng trang mà không cần vuốt",
+      "rules": "Danh sách trang khác nhau khi Journey bật/tắt (_swipePageControllersJourneyOn / Off) nên phải tra chỉ số qua PageType",
+      "evidence": "SwipePageManager.GetIndexByPageType; SwipePageManager.MoveToPage; SwipePageManager.MoveToPageImmediately"
+    },
+    {
+      "id": "UC-04",
+      "title": "Nạp trước trang kế bên khi kéo",
+      "actor": "System",
+      "trigger": "Đang kéo tới gần trang bên cạnh",
+      "precondition": "-",
+      "steps": [
+        "TryUpdatePeekPages() phát hiện trang sắp lộ ra",
+        "Ghi vào _peekedPageIndexes để chỉ khởi tạo một lần",
+        "TryGetSecondNearestPageIndexByWorldDistanceInSwipeThreshold(out secondNearestIndex) xác định trang thứ hai gần nhất"
+      ],
+      "result": "Không giật khi trang mới xuất hiện",
+      "rules": "GetLimit()/_limitCache cache biên trái–phải để không tính lại mỗi khung hình",
+      "evidence": "SwipePageManager.TryUpdatePeekPages; SwipePageManager.TryGetSecondNearestPageIndexByWorldDistanceInSwipeThreshold; SwipePageManager.GetLimit"
+    },
+    {
+      "id": "UC-05",
+      "title": "Hiển thị số level trên vạc (Cauldron)",
+      "actor": "System",
+      "trigger": "Vào Home hoặc thắng level",
+      "precondition": "-",
+      "steps": [
+        "CauldronController.Prepare(level, levelDifficultyType) đặt số và màu theo độ khó",
+        "Sau khi thắng: HomeController.PlayLevelTextChangeAnimations() → CauldronController.PlayLevelTextChangeAnimations(level, levelDifficulty)",
+        "Độ trễ: OnRegularLevelWinsLevelTextChangeDelay = 1.25 s hoặc OnHardLevelWinsLevelTextChangeDelay = 0.1 s",
+        "Khói cho level siêu khó: IntervalBeforeSmokeParticles = 1.3 s, AfterSuperHardSmokeDelay = 1.4 s"
+      ],
+      "result": "Người chơi thấy số level tăng với hiệu ứng ăn khớp độ khó",
+      "rules": "Giá trị lấy từ HomeAnimationsConfig.asset",
+      "evidence": "CauldronController.Prepare; CauldronController.PlayLevelTextChangeAnimations; HomeController.PlayLevelTextChangeAnimations; HomeAnimationsConfig"
+    },
+    {
+      "id": "UC-06",
+      "title": "Ẩn/hiện toàn bộ UI Home",
+      "actor": "System",
+      "trigger": "Mở popup toàn màn hình hoặc bắt đầu vào level",
+      "precondition": "-",
+      "steps": [
+        "HomeController.HideUI() trả về Sequence trượt _topUi, _iconsLeft, _iconsRight, _playButtonRoot, _magicStreakGae ra ngoài theo UIOutsideOffset = 7",
+        "Thời lượng UIHideDuration = 0.4 s với UIHideCurve",
+        "ShowUI() đưa về vị trí gốc theo UIShowDuration/UIShowCurve"
+      ],
+      "result": "Chuyển cảnh gọn gàng, không chồng lấn UI",
+      "rules": "Vị trí gốc được lưu từ Initialize() nên luôn trả đúng chỗ",
+      "evidence": "HomeController.HideUI; HomeController.ShowUI; HomeAnimationsConfig.UIOutsideOffset; HomeAnimationsConfig.UIHideDuration"
+    },
+    {
+      "id": "UC-07",
+      "title": "Sắp xếp lại biểu tượng sự kiện ở lobby",
+      "actor": "System",
+      "trigger": "Sự kiện bật/tắt (OnEventStateChanged)",
+      "precondition": "-",
+      "steps": [
+        "LobbyEventsPositionManager.OnEventStateChanged()",
+        "RepositionButtons(_leftButtons, _leftEventButtonPositions) và tương tự cho cột phải",
+        "RepositionButton(button, buttonPosition) đặt từng biểu tượng vào ô trống",
+        "Khi có thanh Magic Streak GAE, cột dùng _iconsLeftPositionWithMagicStreakGae / _iconsRightPositionWithMagicStreakGae",
+        "_rightFixedButton luôn giữ _rightFixedPosition"
+      ],
+      "result": "Biểu tượng sự kiện luôn xếp sát nhau, không để lỗ trống khi một sự kiện kết thúc",
+      "rules": "LobbyIconPositionType: Left=0, Right=1",
+      "evidence": "LobbyEventsPositionManager.OnEventStateChanged; LobbyEventsPositionManager.RepositionButtons; LobbyEventsPositionManager.RepositionButton; LobbyIconPositionType"
+    },
+    {
+      "id": "UC-08",
+      "title": "Mở toolbar mô tả phần thưởng",
+      "actor": "Player",
+      "trigger": "Chạm vào một biểu tượng sự kiện",
+      "precondition": "-",
+      "steps": [
+        "Biểu tượng gọi ToolbarService.SetToolbarModel(ToolbarModel) với Requester, SpawnPositionTransform, RewardModel, ToolbarContext, ToolbarAssetColor",
+        "ShowToolbar() → ConstructToolbarBody() chọn hàm dựng theo ToolbarContext",
+        "GetCurrencyModelViews(rewardModel) lấy CurrencyView từ CurrencyViewFactory",
+        "SetBodySizeForRewards(contentCount) chọn XSizeFor1Content = 1.75 / XSizeFor2Content = 3.1 / XSizeFor3Content = 4.5 / XSizeFor4Content = 6.15 và YSizeFor1Row = 1.6 / YSizeFor2Row = 2.65",
+        "GetRowCounts(contentCount, out topRowCount, out bottomRowCount) chia 1–2 hàng, SetRewardModelPositions() đặt vị trí (khoảng cách X = 1.5, Y = 1.2)",
+        "SetArrowPositionAndRotation() đặt mũi tên (ConstantArrowHeightDownwards / ConstantArrowHeightUpwards)",
+        "ToolbarOpenAnimation() phóng từ StartScale = 0.4 trong ToolbarWithTextScaleDuration = 0.125 s theo ToolbarWithTextScaleEase"
+      ],
+      "result": "Bong bóng hiện phần thưởng của sự kiện ngay cạnh biểu tượng",
+      "rules": "GetXOffsetForScreenCenter(requestedPosition) và OutOfScreenOffsetFactor = 0.2 kéo toolbar vào trong màn hình khi biểu tượng ở sát mép",
+      "evidence": "ToolbarService.SetToolbarModel; ToolbarService.ConstructToolbarBody; ToolbarService.SetBodySizeForRewards; ToolbarService.GetRowCounts; ToolbarService.SetArrowPositionAndRotation; ToolbarService.ToolbarOpenAnimation; ToolbarConfig"
+    },
+    {
+      "id": "UC-09",
+      "title": "Toolbar dạng chữ theo ngữ cảnh sự kiện",
+      "actor": "System",
+      "trigger": "Sự kiện cần dòng mô tả thay vì phần thưởng",
+      "precondition": "-",
+      "steps": [
+        "ConstructPlainTextToolbarBody() và các bản riêng cho Jetpack/Daily/SkyJump/MagicPass/BoatRush chọn ToolbarTextModel khớp ToolbarContext",
+        "SetTextModel(textModel) áp TextMinMaxSize, TextColor, TextFontSize, TextOffsetFromCenter, Padding",
+        "SetToolbarText(text) đổ nội dung (ToolbarModel.Text)",
+        "SetBodySize(ToolbarConstantSize = (6, 2) hoặc ToolbarConstantSizeDoubleRow = (6, 3.2))"
+      ],
+      "result": "Cùng một khung toolbar phục vụ mọi sự kiện với kiểu chữ riêng",
+      "rules": "Ví dụ giá trị thật trong asset: ToolbarContext 0 (SkyJump) TextMinMaxSize (5.5, 1.7), TextFontSize 3.7, offset (0, 2); ToolbarContext 2 (JetpackRace) TextMinMaxSize (5.5, 0.5), TextFontSize 3, offset (0, 0.65)",
+      "evidence": "ToolbarService.ConstructPlainTextToolbarBody; ToolbarService.SetTextModel; ToolbarService.SetToolbarText; ToolbarTextModel; ToolbarConfig.ToolbarTextModels"
+    },
+    {
+      "id": "UC-10",
+      "title": "Đổi màu toolbar theo sự kiện",
+      "actor": "System",
+      "trigger": "Sự kiện yêu cầu màu riêng",
+      "precondition": "-",
+      "steps": [
+        "ToolbarModel.ToolbarAssetColor đặt màu mong muốn",
+        "ToolbarService.SetToolbarAssetForColor() → ToolbarConfig.GetToolbarAssetTypeOfColor(color) trả ToolbarAssetType{ToolbarBodySprite, ToolbarArrowSprite}",
+        "Gán vào _bodySprite và _arrowSprite"
+      ],
+      "result": "Toolbar hoà hợp với màu sắc của từng sự kiện",
+      "rules": "ToolbarAssetColor: Purple=0, Green=1, Pink=2, Gold=3, Orange=4, DarkGreen=5, Brown=6",
+      "evidence": "ToolbarService.SetToolbarAssetForColor; ToolbarConfig.GetToolbarAssetTypeOfColor; ToolbarAssetColor; ToolbarAssetType"
+    },
+    {
+      "id": "UC-11",
+      "title": "Đóng toolbar khi chạm ra ngoài",
+      "actor": "Player",
+      "trigger": "Chạm vào chỗ khác trên màn hình",
+      "precondition": "IsToolBarOpen = true",
+      "steps": [
+        "ToolbarService.LateUpdate() → CheckForInput() qua InputService",
+        "OnUIElementTouchDown() đặt _tryCloseToolBar = true",
+        "CloseToolBar() dừng _toolbarOpeningTween, ReturnViews() trả CurrencyView về pool, DisablePlusSigns()"
+      ],
+      "result": "Chỉ một toolbar mở tại một thời điểm, không rác đối tượng",
+      "rules": "Thuộc tính Requester lưu ai đang mở để biểu tượng đó bấm lần nữa thì đóng",
+      "evidence": "ToolbarService.CheckForInput; ToolbarService.OnUIElementTouchDown; ToolbarService.CloseToolBar; ToolbarService.ReturnViews; ToolbarService.get_Requester"
+    },
+    {
+      "id": "UC-12",
+      "title": "Hiển thị và cập nhật số dư tiền tệ",
+      "actor": "System",
+      "trigger": "Tiền tệ thay đổi hoặc đếm ngược chạy",
+      "precondition": "-",
+      "steps": [
+        "CurrencyDisplayerController đăng ký sự kiện InventoryService: OnCurrencyAmountIsChanged(currencyType, amount) và OnCurrencyDateIsChanged(currencyType, endDate)",
+        "PlayAmount(amount) chạy tween số từ _oldAmount tới giá trị mới",
+        "HasTime(currencyType) quyết định hiện _durationImageGameObject và SetRemainingDurationText()",
+        "SecondUpdate() cập nhật đồng hồ mỗi giây",
+        "OnCurrencyArrive() phát hiệu ứng khi tiền bay vào"
+      ],
+      "result": "Thanh trên cùng luôn phản ánh số coin/mạng/booster và thời gian còn lại",
+      "rules": "Một controller cho mỗi CurrencyType; dùng ISecondUpdate thay vì Update để tiết kiệm",
+      "evidence": "CurrencyDisplayerController.OnCurrencyAmountIsChanged; CurrencyDisplayerController.PlayAmount; CurrencyDisplayerController.SecondUpdate; CurrencyDisplayerController.OnCurrencyArrive"
+    },
+    {
+      "id": "UC-13",
+      "title": "Chờ người chơi rảnh tay rồi mới chen popup",
+      "actor": "System",
+      "trigger": "Cần mở popup hoặc khởi động lại game",
+      "precondition": "-",
+      "steps": [
+        "HomeIdleDetectionManager.InitializeInternal() thu thập _playerInterrupts (IHomeIdleInterrupter, ví dụ SwipePageManager.IsInterrupting())",
+        "SetSwipePageManager / SetReturnToHomeSequenceService gắn phụ thuộc; CheckInitializationComplete() chờ đủ",
+        "GetPlayerIdleState() tổng hợp trạng thái",
+        "WaitForPlayerToBeIdle() trả Task, người gọi await trước khi mở popup"
+      ],
+      "result": "Popup không bật giữa lúc người chơi đang vuốt hoặc đang xem animation",
+      "rules": "LoginService cũng dùng manager này trước khi RestartGame()",
+      "evidence": "HomeIdleDetectionManager.WaitForPlayerToBeIdle; HomeIdleDetectionManager.GetPlayerIdleState; SwipePageManager.IsInterrupting; LoginService.SetPlayerIdleDetectionService"
+    },
+    {
+      "id": "UC-14",
+      "title": "Chuỗi lệnh khi quay về Home",
+      "actor": "System",
+      "trigger": "Kết thúc một level và trở lại Home",
+      "precondition": "-",
+      "steps": [
+        "ReturnToHomeSequenceService chạy lần lượt các IReturnToHomeSequenceCommand (TryShowTeamsCommand, TryShowForceNameChangeCommand, TryShowAccountDeletionInProgressCommand, TryShowBannedCommand...)",
+        "Mỗi lệnh khai IsSkippable() và ShouldTerminateTheFlow()",
+        "HomeIdleDetectionManager đảm bảo chạy khi người chơi rảnh"
+      ],
+      "result": "Các popup xếp hàng có thứ tự thay vì đè lên nhau",
+      "rules": "Giới hạn số popup mỗi phiên qua remote config 'HomeReturnPopupShowLimit' + 'IsHomeReturnPopupShowLimitEnabled' và 'SessionStartPopUpShowLimit' + 'IsSessionStartPopupShowLimitEnabled'",
+      "evidence": "ReturnToHomeSequenceService; TryShowForceNameChangeCommand.IsSkippable; TryShowForceNameChangeCommand.ShouldTerminateTheFlow; FirebaseRemoteConfigResolver (HomeReturnPopupShowLimit)"
+    },
+    {
+      "id": "UC-15",
+      "title": "Màn hình loading",
+      "actor": "System",
+      "trigger": "Khởi động app hoặc chuyển cảnh",
+      "precondition": "-",
+      "steps": [
+        "LoadingCircleManager.Awake() → StartAnimation() chạy rotationTween theo LoadingAnimationConfig (asset LoadingCircgleAnimationConfig)",
+        "Khi tải xong StopAnimation() và ẩn loadingCircleSprite"
+      ],
+      "result": "Người chơi có phản hồi trong lúc chờ tải",
+      "rules": "Splash được giữ tối thiểu _splashShowDurationMs (LoginService)",
+      "evidence": "LoadingCircleManager.StartAnimation; LoadingCircleManager.StopAnimation; LoginService._splashShowDurationMs"
+    },
+    {
+      "id": "UC-16",
+      "title": "Co giãn UI cho màn hình nhỏ",
+      "actor": "System",
+      "trigger": "Khởi tạo trên thiết bị tỉ lệ khác thường",
+      "precondition": "-",
+      "steps": [
+        "HomeScaleConfig cung cấp SmallScreenScaleLimit, MinimumScaleRatio, CameraSizeForSmallScreen",
+        "Scaler áp tỉ lệ và kích thước camera tương ứng",
+        "SwipeMenuScaleHandler và SwipePageManager.Scale(scaleRatio) co giãn dải trang"
+      ],
+      "result": "Bố cục Home không tràn viền trên máy màn hình hẹp/rộng",
+      "rules": "-",
+      "evidence": "HomeScaleConfig; SwipePageManager.Scale; SwipeMenuScaleHandler"
+    },
+    {
+      "id": "UC-17",
+      "title": "Poster sự kiện lớn trên Home",
+      "actor": "System",
+      "trigger": "Journey hoặc Champions League đang chạy",
+      "precondition": "-",
+      "steps": [
+        "HomeController._journeyHomePosterHandler và _championsLeaguePosterHandler bật poster tương ứng",
+        "ChampionsLeaguePosterSelectionUpdated(isSelected) đổi trạng thái khi người chơi chọn"
+      ],
+      "result": "Sự kiện lớn có vị trí nổi bật hơn biểu tượng thường",
+      "rules": "-",
+      "evidence": "HomeController.ChampionsLeaguePosterSelectionUpdated; HomeController._journeyHomePosterHandler"
+    },
+    {
+      "id": "UC-18",
+      "title": "Nút Play và vào level",
+      "actor": "Player",
+      "trigger": "Bấm nút Play",
+      "precondition": "Có mạng/mạng chơi theo Inventory",
+      "steps": [
+        "HomeController.PlayButton (PlayButtonContainer) nhận sự kiện",
+        "HideUI() chạy trước khi chuyển cảnh",
+        "PlayButtonAnimationConfig.asset điều khiển animation nhấn"
+      ],
+      "result": "Vào level với chuyển cảnh mượt",
+      "rules": "-",
+      "evidence": "HomeController.get_PlayButton; HomeController.HideUI; Assets/MonoBehaviour/PlayButtonAnimationConfig.asset"
+    }
+  ],
+  "configs": [
+    {
+      "source": "code const",
+      "key": "SwipePageManager.SwipeThreshold",
+      "type": "float",
+      "value": "0.2",
+      "meaning": "Ngưỡng quãng vuốt để nhảy sang trang kế",
+      "where": "SwipePageManager (const)"
+    },
+    {
+      "source": "code const",
+      "key": "SwipePageManager.ScrollResistance",
+      "type": "float",
+      "value": "5",
+      "meaning": "Hệ số hãm khi kéo quá biên trái/phải",
+      "where": "SwipePageManager (const)"
+    },
+    {
+      "source": "code enum",
+      "key": "PageType",
+      "type": "enum int",
+      "value": "None=0, Shop=1, Leaderboard=2, Home=3, Teams=4, Settings=5, Journey=6, Collection=7",
+      "meaning": "Các trang trong SwipeMenu",
+      "where": "Modules.Contexts.Home.UI.SwipeMenu.Scripts.PageType"
+    },
+    {
+      "source": "code enum",
+      "key": "ToolbarContext",
+      "type": "enum int",
+      "value": "SkyJump=0, Tower=1, JetpackRace=2, Daily=3, EndlessPortal=4, PlainText=5, Null=6, MagicPass=7, TeamQuest=8, BoatRush=9",
+      "meaning": "Ngữ cảnh quyết định cách dựng thân toolbar",
+      "where": "ToolbarContext"
+    },
+    {
+      "source": "code enum",
+      "key": "ToolbarDirection",
+      "type": "enum int",
+      "value": "Default=0, Up=1, Down=2",
+      "meaning": "Hướng mũi tên toolbar",
+      "where": "ToolbarDirection"
+    },
+    {
+      "source": "code enum",
+      "key": "ToolbarAssetColor",
+      "type": "enum int",
+      "value": "Purple=0, Green=1, Pink=2, Gold=3, Orange=4, DarkGreen=5, Brown=6",
+      "meaning": "Bộ màu thân/mũi tên toolbar",
+      "where": "ToolbarAssetColor"
+    },
+    {
+      "source": "code enum",
+      "key": "LobbyIconPositionType",
+      "type": "enum int",
+      "value": "Left=0, Right=1",
+      "meaning": "Cột đặt biểu tượng sự kiện",
+      "where": "Modules.Contexts.Home.UI.Common.Scripts.LobbyEventController.LobbyIconPositionType"
+    },
+    {
+      "source": "asset",
+      "key": "ToolbarConfig.XDistanceBetweenContents / YDistanceBetweenContents",
+      "type": "float",
+      "value": "1.5 / 1.2",
+      "meaning": "Khoảng cách giữa các phần thưởng trong toolbar",
+      "where": "Assets/MonoBehaviour/ToolbarConfig.asset"
+    },
+    {
+      "source": "asset",
+      "key": "ToolbarConfig.XSizeFor1..4Content",
+      "type": "float",
+      "value": "1.75 / 3.1 / 4.5 / 6.15",
+      "meaning": "Bề ngang thân toolbar theo số phần thưởng",
+      "where": "ToolbarConfig.asset"
+    },
+    {
+      "source": "asset",
+      "key": "ToolbarConfig.YSizeFor1Row / YSizeFor2Row",
+      "type": "float",
+      "value": "1.6 / 2.65",
+      "meaning": "Chiều cao thân theo số hàng",
+      "where": "ToolbarConfig.asset"
+    },
+    {
+      "source": "asset",
+      "key": "ToolbarConfig.ToolbarConstantSize / ToolbarConstantSizeDoubleRow",
+      "type": "Vector2",
+      "value": "(6, 2) / (6, 3.2)",
+      "meaning": "Kích thước cố định cho toolbar dạng chữ",
+      "where": "ToolbarConfig.asset"
+    },
+    {
+      "source": "asset",
+      "key": "ToolbarConfig.StartScale / ToolbarWithTextScaleDuration / OutOfScreenOffsetFactor",
+      "type": "float",
+      "value": "0.4 / 0.125 / 0.2",
+      "meaning": "Tỉ lệ bắt đầu, thời lượng animation mở và hệ số kéo vào trong màn hình",
+      "where": "ToolbarConfig.asset"
+    },
+    {
+      "source": "asset",
+      "key": "ToolbarConfig.ToolbarTextModels",
+      "type": "List<ToolbarTextModel>",
+      "value": "ví dụ ToolbarContext 0 (SkyJump): TextMinMaxSize (5.5, 1.7), TextFontSize 3.7, TextOffsetFromCenter (0, 2), Padding (0.3, 0.2); ToolbarContext 2 (JetpackRace): TextMinMaxSize (5.5, 0.5), TextFontSize 3, offset (0, 0.65), Padding (0, 0)",
+      "meaning": "Kiểu chữ riêng cho từng ngữ cảnh toolbar",
+      "where": "ToolbarConfig.asset"
+    },
+    {
+      "source": "asset",
+      "key": "ToolbarConfig.PostToolBarElementsOffset / PlusSignScale / ContentEndScale",
+      "type": "Vector3",
+      "value": "(0, 0.1, 0) / (1, 1, 1) / (1, 1, 1)",
+      "meaning": "Bù vị trí và tỉ lệ phần tử trong toolbar",
+      "where": "ToolbarConfig.asset"
+    },
+    {
+      "source": "asset",
+      "key": "HomeAnimationsConfig.AfterSuperHardSmokeDelay",
+      "type": "float (giây)",
+      "value": "1.4",
+      "meaning": "Độ trễ sau hiệu ứng khói của level siêu khó",
+      "where": "Assets/MonoBehaviour/HomeAnimationsConfig.asset"
+    },
+    {
+      "source": "asset",
+      "key": "HomeAnimationsConfig.IntervalBeforeSmokeParticles",
+      "type": "float (giây)",
+      "value": "1.3",
+      "meaning": "Chờ trước khi phát khói",
+      "where": "HomeAnimationsConfig.asset"
+    },
+    {
+      "source": "asset",
+      "key": "HomeAnimationsConfig.OnRegularLevelWinsLevelTextChangeDelay",
+      "type": "float (giây)",
+      "value": "1.25",
+      "meaning": "Độ trễ đổi số level sau khi thắng level thường",
+      "where": "HomeAnimationsConfig.asset"
+    },
+    {
+      "source": "asset",
+      "key": "HomeAnimationsConfig.OnHardLevelWinsLevelTextChangeDelay",
+      "type": "float (giây)",
+      "value": "0.1",
+      "meaning": "Độ trễ đổi số level sau khi thắng level khó",
+      "where": "HomeAnimationsConfig.asset"
+    },
+    {
+      "source": "asset",
+      "key": "HomeAnimationsConfig.UIOutsideOffset / UIHideDuration",
+      "type": "float",
+      "value": "7 / 0.4",
+      "meaning": "Khoảng trượt ra ngoài màn hình và thời lượng ẩn UI",
+      "where": "HomeAnimationsConfig.asset"
+    },
+    {
+      "source": "native constructor 0.0.3063 (qualified static values)",
+      "key": "HomeScaleConfig",
+      "type": "ScriptableObject",
+      "value": "Constructor native 0.0.3063: SmallScreenScaleLimit=0.9; MinimumScaleRatio=0.95; CameraSizeForSmallScreen=10.8. Chưa đo scaler thực tế trên mọi thiết bị dùng app 0.0.3129.",
+      "meaning": "Co giãn Home cho màn hình nhỏ",
+      "where": "Modules.Infrastructure.UI.Common.Scripts.Scaler.HomeScaleConfig"
+    },
+    {
+      "source": "asset",
+      "key": "NavigationManagerAnimationConfig.asset, PlayButtonAnimationConfig.asset, LoadingCircgleAnimationConfig.asset, LobbyIconCollectibleAnimationConfig.asset, ToolbarCurrencyViewFactory.asset",
+      "type": "ScriptableObject",
+      "value": "-",
+      "meaning": "Animation và factory cho điều hướng, nút Play, vòng loading, biểu tượng lobby và tiền tệ trong toolbar",
+      "where": "Assets/MonoBehaviour/"
+    },
+    {
+      "source": "remote config",
+      "key": "IsNewLobbyIconsEnabled",
+      "type": "bool",
+      "value": "server",
+      "meaning": "Bật bộ biểu tượng lobby mới (A/B)",
+      "where": "FirebaseRemoteConfigResolver → LobbyIconVariantController"
+    },
+    {
+      "source": "remote config",
+      "key": "IsBackgroundAndShelvesEnabled / IsSmallBackgroundEnable",
+      "type": "bool",
+      "value": "server",
+      "meaning": "Biến thể nền Home",
+      "where": "FirebaseRemoteConfigResolver → HomeController.UpdateHomeBackground"
+    },
+    {
+      "source": "remote config",
+      "key": "ColorVariant",
+      "type": "string/int",
+      "value": "server",
+      "meaning": "Biến thể màu giao diện",
+      "where": "FirebaseRemoteConfigResolver"
+    },
+    {
+      "source": "remote config",
+      "key": "HomeReturnPopupShowLimit / IsHomeReturnPopupShowLimitEnabled",
+      "type": "int / bool",
+      "value": "server",
+      "meaning": "Giới hạn số popup khi quay về Home",
+      "where": "FirebaseRemoteConfigResolver"
+    },
+    {
+      "source": "remote config",
+      "key": "SessionStartPopUpShowLimit / IsSessionStartPopupShowLimitEnabled",
+      "type": "int / bool",
+      "value": "server",
+      "meaning": "Giới hạn số popup đầu phiên",
+      "where": "FirebaseRemoteConfigResolver"
+    },
+    {
+      "source": "remote config",
+      "key": "IsNoInternetPopupEnable",
+      "type": "bool",
+      "value": "server",
+      "meaning": "Bật popup báo mất mạng",
+      "where": "FirebaseRemoteConfigResolver; localize 'NoInternetConnection!'"
+    },
+    {
+      "source": "code field",
+      "key": "ToolbarModel",
+      "type": "class",
+      "value": "Requester, SpawnPositionTransform, Text, RewardModel, Parent, DownwardsToolbar, HorizontalToolbar, RightmostToolbar, ToolbarContext, ToolbarAssetColor",
+      "meaning": "Yêu cầu mở toolbar",
+      "where": "ToolbarModel"
+    },
+    {
+      "source": "AB test",
+      "key": "Firebase RC: HomeReturnPopupShowLimit",
+      "type": "",
+      "value": "2",
+      "meaning": "cờ AB/tinh chỉnh server-only (giá trị nhánh máy này)",
+      "where": "Configs/CachedRemoteConfigs + Firebase RC template 3197 — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "AB test",
+      "key": "Firebase RC: IsHomeReturnPopupShowLimitEnabled",
+      "type": "",
+      "value": "true",
+      "meaning": "cờ AB/tinh chỉnh server-only (giá trị nhánh máy này)",
+      "where": "Configs/CachedRemoteConfigs + Firebase RC template 3197 — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "AB test",
+      "key": "Firebase RC: IsNewLobbyIconsEnabled",
+      "type": "",
+      "value": "false",
+      "meaning": "cờ AB/tinh chỉnh server-only (giá trị nhánh máy này)",
+      "where": "Configs/CachedRemoteConfigs + Firebase RC template 3197 — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "AB test",
+      "key": "Firebase RC: IsNoInternetPopupEnable",
+      "type": "",
+      "value": "true",
+      "meaning": "cờ AB/tinh chỉnh server-only (giá trị nhánh máy này)",
+      "where": "Configs/CachedRemoteConfigs + Firebase RC template 3197 — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "AB test",
+      "key": "Firebase RC: IsSessionStartPopupShowLimitEnabled",
+      "type": "",
+      "value": "true",
+      "meaning": "cờ AB/tinh chỉnh server-only (giá trị nhánh máy này)",
+      "where": "Configs/CachedRemoteConfigs + Firebase RC template 3197 — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "AB test",
+      "key": "Firebase RC: SessionStartPopUpShowLimit",
+      "type": "",
+      "value": "0",
+      "meaning": "cờ AB/tinh chỉnh server-only (giá trị nhánh máy này)",
+      "where": "Configs/CachedRemoteConfigs + Firebase RC template 3197 — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    }
+  ],
+  "rewards": [
+    {
+      "context": "Toolbar hiển thị phần thưởng sự kiện",
+      "reward": "RewardModel truyền vào ToolbarModel (không tự phát thưởng)",
+      "evidence": "ToolbarService.GetCurrencyModelViews"
+    }
+  ],
+  "backend": [],
+  "ui": [
+    {
+      "element": "Màn hình Home",
+      "class": "Modules.Contexts.Home.UI.Common.Scripts.HomeController",
+      "purpose": "bố cục nút Play, vạc, cột biểu tượng, thanh trên"
+    },
+    {
+      "element": "Dải trang vuốt",
+      "class": "Modules.Contexts.Home.UI.SwipeMenu.Scripts.SwipePageManager, SwipeMenuManager, SwipePageController, SwipeMenuScaleHandler",
+      "purpose": "chuyển giữa Shop/Leaderboard/Home/Teams/Settings/Journey/Collection"
+    },
+    {
+      "element": "Toolbar tooltip",
+      "class": "Modules.Contexts.Home.UI.Toolbar.Scripts.ToolbarService + ToolbarConfig + ToolbarModel + ToolbarTextModel",
+      "purpose": "bong bóng mô tả phần thưởng/thông tin sự kiện"
+    },
+    {
+      "element": "Vạc phép hiển thị level",
+      "class": "Modules.Contexts.Home.UI.Common.Scripts.Cauldron.CauldronController, CauldronLevelText",
+      "purpose": "số level và độ khó"
+    },
+    {
+      "element": "Quản lý vị trí biểu tượng sự kiện",
+      "class": "LobbyEventsPositionManager, LobbyIconVariantController",
+      "purpose": "sắp xếp và biến thể biểu tượng"
+    },
+    {
+      "element": "Thanh tiền tệ",
+      "class": "Modules.Contexts.Application.Inventory.Scripts.UI.CurrencyDisplayerController",
+      "purpose": "hiển thị số dư và đếm ngược"
+    },
+    {
+      "element": "Phát hiện người chơi rảnh",
+      "class": "Modules.Contexts.Home.Common.Scripts.HomeIdleDetectionManager",
+      "purpose": "chờ thời điểm phù hợp để mở popup/restart"
+    },
+    {
+      "element": "Loading",
+      "class": "Modules.Contexts.Application.Loading.Scripts.LoadingCircleManager",
+      "purpose": "vòng xoay chờ tải"
+    }
+  ],
+  "analytics": [
+    {
+      "event": "friends_tab_impression",
+      "params": "-",
+      "when": "vuốt tới trang Friends/Teams (ví dụ về analytics theo trang)"
+    },
+    {
+      "event": "Các *_popup_impression theo sự kiện",
+      "params": "-",
+      "when": "biểu tượng lobby mở popup tương ứng"
+    }
+  ],
+  "storage_keys": [],
+  "related_features": [
+    "Teams",
+    "Leaderboards",
+    "Settings",
+    "Inventory",
+    "Account",
+    "Notifications"
+  ],
+  "gaps": [
+    "15/11 — resolved_static_snapshot: Đã trích đủ 4 ToolbarTextModels gồm context, kích thước, màu, font, offset và padding. Còn lại: Kiểm chứng effective config/asset và nhánh runtime trên đúng build nếu cần.",
+    "15/11 — resolved_historical_snapshot: Constructor của HomeScaleConfig trong native 0.0.3063 gán SmallScreenScaleLimit=0.9, MinimumScaleRatio=0.95 và CameraSizeForSmallScreen=10.8. Việc không có file .asset cùng tên không đồng nghĩa các giá trị này chưa biết. Còn lại: Giữ rõ build và phiên bản cache của nguồn; kiểm nhánh runtime riêng khi cần.",
+    "15/11 — resolved_static_code_historical_build: ReturnToHomeSequenceService.Initialize gán từng field _regularLoseSequenceCommands/_regularWinSequenceCommands/_dailyLoseSequenceCommands/_dailyWinSequenceCommands và dựng command bằng allocationTypeInfo theo thứ tự Add. Bảng full order trong supporting_tables của JSON/report lấy trực tiếp từng đoạn field. Execution có thể skip/terminate theo từng command và context, không đồng nghĩa mọi popup luôn hiện. Còn lại: Cần đối chiếu ARM64/current runtime và các nhánh caller còn chưa đủ bằng chứng.",
+    "Chest và LobbyEventController được nhắc trong yêu cầu nhưng trong build này biểu hiện qua ChestSpriteConfig (Inventory) và namespace ...Common.Scripts.LobbyEventController (chỉ còn enum LobbyIconPositionType).",
+    "[Runtime 2026-09-10] Cờ AB/tinh chỉnh server-only đọc từ Firebase Remote Config (template 3197)."
+  ],
+  "sources": [
+    "Il2CppDumper/dump.cs: HomeController, SwipePageManager, PageType, ToolbarService, ToolbarConfig, ToolbarModel, ToolbarTextModel, ToolbarContext, ToolbarDirection, ToolbarAssetColor, ToolbarAssetType, LobbyEventsPositionManager, LobbyIconPositionType, LobbyIconVariantController, HomeIdleDetectionManager, HomeScaleConfig, HomeAnimationsConfig, CauldronController, LoadingCircleManager, CurrencyDisplayerController",
+    "Assets/MonoBehaviour/ToolbarConfig.asset, HomeAnimationsConfig.asset (giá trị thật)",
+    "RecoveredNative/PseudoC/Assembly-CSharp/Modules/Contexts/Home/UI/**",
+    "RecoveredNative/strings-by-type.tsv (FirebaseRemoteConfigResolver)",
+    "GameDesign/appendix/localization.tsv"
+  ],
+  "audit_provenance": {
+    "review_date": "2026-11-15",
+    "mode": "offline_existing_files",
+    "code_build": "0.0.3063 ARMv7",
+    "runtime_build_observed_historically": "0.0.3129 ARM64 (audit 2026-10-18); not rechecked 2026-11-15",
+    "new_playtests": 1,
+    "uc_status": "See facts/audit_20261115/uc_registry.json; image reference is not pass",
+    "workbook_status": "Existing XLSX is historical; JSON and local web include 2026-11-15 corrections",
+    "static_review": "facts/local_code_gap_results_20261115.json; facts/local_asset_gap_results_20261115.json; facts/final_data_gap_decisions_20261115.json; facts/core_body_gap_decisions_20261115.json; facts/remaining_asset_gap_decisions_20261115.json"
+  },
+  "static_review_20261115": {
+    "date": "2026-11-15",
+    "scope": "Historical code/assets 0.0.3063, dated caches, device 0.0.3129 cached bundles and explicitly scoped runtime evidence. Not full runtime pass.",
+    "findings": [
+      {
+        "kind": "remaining_asset",
+        "source_report": "facts/remaining_asset_gap_decisions_20261115.json",
+        "id": "MS-RA-008",
+        "gap_ids": [
+          "MS-HomeUI-G002"
+        ],
+        "title": "Giá trị SmallScreenScaleLimit / MinimumScaleRatio / CameraSizeForSmallScreen nằm trong asset HomeScaleConfig chưa được trích (không có file .asset riêng trong Resources/MonoBehaviour đã export).",
+        "status": "resolved_historical_snapshot",
+        "conclusion": "Constructor của HomeScaleConfig trong native 0.0.3063 gán SmallScreenScaleLimit=0.9, MinimumScaleRatio=0.95 và CameraSizeForSmallScreen=10.8. Việc không có file .asset cùng tên không đồng nghĩa các giá trị này chưa biết.",
+        "evidence": [
+          "facts/remaining_asset_review_20261115/home_scale_values.json",
+          "facts/remaining_asset_review_20261115/native_body_evidence.json"
+        ],
+        "remaining": "",
+        "next_action": "Giữ rõ build và phiên bản cache của nguồn; kiểm nhánh runtime riêng khi cần.",
+        "scope": "Asset/native export 0.0.3063 và cache UnityFS đọc ngày 15/11 từ app 0.0.3129 được giữ riêng; ảnh render asset không phải ảnh chụp playtest.",
+        "reviewed": "2026-11-15",
+        "full_uc_pass": false
+      },
+      {
+        "kind": "code",
+        "source_report": "facts/local_code_gap_results_20261115.json",
+        "id": "MS-CODE-36",
+        "gap_ids": [
+          "MS-EventsFramework-G003",
+          "MS-HomeUI-G003"
+        ],
+        "title": "Bốn return-home lists đã tách theo field",
+        "status": "resolved_static_code",
+        "conclusion": "ReturnToHomeSequenceService.Initialize gán từng field _regularLoseSequenceCommands/_regularWinSequenceCommands/_dailyLoseSequenceCommands/_dailyWinSequenceCommands và dựng command bằng allocationTypeInfo theo thứ tự Add. Bảng full order trong supporting_tables của JSON/report lấy trực tiếp từng đoạn field. Execution có thể skip/terminate theo từng command và context, không đồng nghĩa mọi popup luôn hiện.",
+        "evidence": [
+          {
+            "file": "../com.grandgames.magicsort_Unity_20260909_112501/RecoveredNative/PseudoC/Assembly-CSharp/Modules/Contexts/GamePlay/Loop/Scripts/ReturnToHomeSequenceService.c",
+            "line": 1049,
+            "end_line": 3707,
+            "method": "// ===== ReturnToHomeSequenceService :: public void Initialize()",
+            "sha256": "7950940e30fbffce0b9d6a07d8f020bacb799f6cb7b8fb0bee4079aae370bd06",
+            "body_checked": true,
+            "build": "0.0.3063 ARMv7",
+            "required_body_tokens": [
+              "_regularLoseSequenceCommands",
+              "_regularWinSequenceCommands",
+              "_dailyLoseSequenceCommands",
+              "_dailyWinSequenceCommands"
+            ]
+          }
+        ],
+        "remaining": "Cần đối chiếu ARM64/current runtime và các nhánh caller còn chưa đủ bằng chứng.",
+        "scope": "recovered_native_0.0.3063_only",
+        "runtime_verified": false
+      },
+      {
+        "kind": "asset",
+        "source_report": "facts/local_asset_gap_results_20261115.json",
+        "id": "MS-HomeUI-G001",
+        "status": "resolved_static_snapshot",
+        "conclusion": "Đã trích đủ 4 ToolbarTextModels gồm context, kích thước, màu, font, offset và padding.",
+        "evidence": [
+          {
+            "source": "MonoBehaviour\\ToolbarConfig.asset",
+            "root": "UnityExport Assets 0.0.3063",
+            "sha256": "75d750ec702110f0ee9becc7fb4804acbd5258db3a34ebd910079fb423cbc085",
+            "line": 1,
+            "build": "0.0.3063 ARMv7"
+          }
+        ],
+        "data": "toolbar_text_models.json",
+        "scope": "static_export0.0.3063_or_historical_cache_not_runtime_pass",
+        "reviewed": "2026-11-15",
+        "next_action": "Kiểm chứng effective config/asset và nhánh runtime trên đúng build nếu cần."
+      }
+    ]
+  },
+  "runtime_review_20261115": [
+    {
+      "id": "MS-R15-META08",
+      "feature": "HomeUI",
+      "uc": [
+        "UC-03",
+        "UC-05",
+        "UC-12"
+      ],
+      "title": "Home navigation và số dư level352",
+      "precondition": "0.0.3129 ARM64; level352, UID MagicSort offline, save fixture có sẵn. Code/asset0.0.3063 là nguồn lịch sử riêng.",
+      "steps": [
+        "Quan sát Home/nav",
+        "Chọn Leaderboards rồi về Home",
+        "Thử swipe ngang ở vùng giữa"
+      ],
+      "expected": "Ghi navigation/số dư đã thấy; swipe không chuyển không được gọi pass.",
+      "actual": "Nav gồm Shop/Leaderboards/Home/Teams/Collection, cog Settings. Home hiện level352 và coin999995889. Swipe850→240 tại y1050 không chuyển màn.",
+      "limitations": "UC-03 chỉ tab navigation; chưa đo preload hay mọi trang/locale/resolution. UC-02 swipe chưa chứng minh hoạt động, không gắn executed link.",
+      "status": "observed_partial",
+      "before": "MORE03_ready",
+      "after": "MORE22_home_before_core",
+      "images": [
+        "MORE03_ready",
+        "MORE17_home_swipe",
+        "MORE22_home_before_core"
+      ],
+      "build": "0.0.3129 ARM64",
+      "mode": "offline_existing_fixture",
+      "date": "2026-11-15",
+      "currency_unchanged": true,
+      "ledger": {
+        "before": "MORE03_ready.json",
+        "after": "MORE22_home_before_core.json"
+      }
+    }
+  ],
+  "acceptance_review_20261115": {
+    "source": "facts/feature_acceptance_20261115.json",
+    "feature_id": "HomeUI",
+    "scope": "All eleven dossier dimensions reviewed; full_feature_verified is not implied; read per-dimension gaps and actual runtime evidence."
+  },
+  "segment_ab_review_20261115": {
+    "status": "reviewed_rows_associated_assignment_not_proven",
+    "segment_ids": [
+      "MS-SEG-158"
+    ],
+    "matching_basis": "explicit_gd_config_map_or_exact_model_token_in_gdd_configs_where_key_sources; rootfieldscoped",
+    "rows": [
+      {
+        "snapshot": "firebase_20260910",
+        "model": "ColorVariant",
+        "key": "",
+        "value": "2",
+        "type": "str",
+        "source": "facts/runtime/decoded/firebase_rc.json",
+        "classification": "config_candidate_not_backend_assignment_proof",
+        "review_id": "MS-SEG-158",
+        "review_classification": "variant_config",
+        "review_status": "missing_experiment_assignment_and_outcome",
+        "consumer": {
+          "source": "com.grandgames.magicsort_Unity_20260909_112501/RecoveredNative/PseudoC/Assembly-CSharp/Modules/Contexts/Application/FirebaseNS/Scripts/FirebaseRemoteConfigResolver.c",
+          "line": 863,
+          "marker": "/* \"ColorVariant\" */",
+          "build": "0.0.3063 ARMv7",
+          "evidence": "recovered_native_historical_version"
+        },
+        "interpretation": "Giá trị variant được cache/default/Firebase; chưa có experimentID hoặc traffic split.",
+        "next_action": "Cần experimentID, variant, allocation, activation timestamp, consumer effect và đối chứng cùng điều kiện.",
+        "assignment_proof": false,
+        "uplift_proof": false,
+        "matching_basis": [
+          {
+            "kind": "exact_model_token_in_dossier_source_or_config",
+            "source": "gdd/HomeUI.json#/configs/23/key_where"
+          }
+        ]
+      }
+    ],
+    "classifications": {
+      "variant_config": 1
+    },
+    "assignment_verified": false,
+    "uplift_verified": false,
+    "note": "No matchingrow does not prove no segmentation/AB. Rewardbucketfalsepositives remain explicitly classified."
+  },
+  "continuation_review_20261116": {
+    "date": "2026-11-16",
+    "build": "0.0.3129 ARM64 host APK",
+    "build_scope": "Host APK version3129 matches LAST observed installed version15/11 only; installed bytes/live device16/11 not verified.",
+    "runtime_status": "device_unavailable",
+    "runtime_case_ids": [],
+    "current_apk_model_links": {
+      "feature": "HomeUI",
+      "models": [],
+      "status": "no_exact_model_token_identified",
+      "distribution": "sanitized_public",
+      "public_mapping_pending": false
+    },
+    "current_packaged_defaults": [],
+    "native_finding_ids": [],
+    "documentation_source_coverage": {
+      "dossier_present": true,
+      "use_case_catalog_count": 18,
+      "config_catalog_rows": 34,
+      "current_apk_default_model_links": 0,
+      "current_native_findings": 0,
+      "scope": "Documentation/source coverage only; not complete runtime verification."
+    },
+    "runtime_completion": {
+      "date": "2026-11-16",
+      "status": "device_unavailable",
+      "executed_case_count": 0,
+      "full_feature_runtime_verified": false
+    },
+    "planned_branch": "Vuốt thật giữa trang; chạm từng icon có toolbar, chụp reward/text, chạm ngoài để đóng; kiểm tra poster che/chồng icon.",
+    "target_uc_ids": [
+      "UC-02",
+      "UC-08",
+      "UC-09",
+      "UC-11",
+      "UC-17"
+    ],
+    "execution_phase": "noncore_first",
+    "core_or_levels_last": false,
+    "actionability_full_json": "facts/continuation_20261116/current/feature_actionability.json",
+    "actionability_site_data_path": "data/continuation_20261116/feature_actionability.json",
+    "source_classes": [
+      "external_dependency"
+    ],
+    "full_feature_verified": false
+  }
+}

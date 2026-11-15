@@ -1,0 +1,499 @@
+{
+  "id": "WelcomeBack",
+  "name": "Welcome Back",
+  "category": "Economy",
+  "managers": [
+    "Modules.Contexts.Home.Monetization.WelcomeBack.Scripts.WelcomeBackService",
+    "Modules.Contexts.Home.Monetization.WelcomeBack.Scripts.WelcomeBackDataService",
+    "Modules.Contexts.Home.Monetization.WelcomeBack.Scripts.WelcomeBackStateService",
+    "Modules.Contexts.Home.Monetization.WelcomeBack.Scripts.WelcomeBackRemoteService"
+  ],
+  "summary": "Welcome Back là gói quà tái tương tác: khi người chơi quay lại sau một thời gian nghỉ, server phát một WelcomeBackPackage (WelcomeBackId + danh sách RewardModels). Client hỏi server mỗi lần vào game, nếu có gói chưa nhận thì bật popup chào mừng ở Home và trao thưởng. Toàn bộ điều kiện (nghỉ bao lâu, thưởng gì) do backend quyết định qua schema magicsort.schemas.v1.liveops.welcome_back — client chỉ hỏi, hiển thị, trao và báo lại. Client còn đặt lịch thông báo đẩy (local notification) để kéo người chơi quay lại, và lưu danh sách WelcomeBackId đã nhận để không trao trùng.",
+  "unlock": "Không có level gate hay remote config bật/tắt riêng trong client. WelcomeBackStateService.GetState() trả WelcomeBackState.IsDisabled khi không có gói, ShouldClaim khi WelcomeBackDataService.HasWelcomeBackToClaim(), AllClaimed khi đã nhận. Điều kiện phát gói nằm hoàn toàn ở backend.",
+  "entry_points": [
+    "TryShowWelcomeBackHomeWelcomingCommand — popup khi vừa vào Home",
+    "TryShowWelcomeBackReturnToHomeCommand — popup khi quay lại Home từ level",
+    "Local notification do NotificationService đặt lịch (ScheduleWelcomeBackNotification)"
+  ],
+  "flow": "WelcomeBackService.InitializeData() gọi TryFetchData(): nếu WelcomeBackStateService.CanSendRequest() thì SendGetWelcomeBackRequest() → WelcomeBackRemoteService.SendGetWelcomeBackRequest() trả GetWelcomeBackResponse{WelcomeBackId, RewardModels, IsClaimed}. Khi request lỗi, RetrySendGetWelcomeBackRequest() thử lại tối đa RetryLimit = 5 lần, mỗi lần cách RetryDelayInSeconds = 10 giây (dùng NewSecondTimer, _retryCount đếm). Nếu có gói và WelcomeBackDataService.ContainsPreviousWelcomeBack(welcomeBackId) trả false thì AddWelcomeBack(package) lưu vào WelcomeBackDataModel.WelcomeBack. WelcomeBackStateService.UpdateState() chuyển sang WelcomeBackState.ShouldClaim (2), ShouldShowPopup() cho phép TryShowWelcomeBackHomeWelcomingCommand / TryShowWelcomeBackReturnToHomeCommand mở popup. Người chơi nhận: WelcomeBackService.ClaimReward() trao WelcomeBackPackage.RewardModels với CurrencyEarnReason.WelcomeBack (18), SetWelcomeBackIsClaimed(true), AddPreviousWelcomeBackId(welcomeBackId) ghi vào WelcomeBackSyncableDataModel.PreviousWelcomeBackIds, RemoveWelcomeBack() dọn gói; sau đó TrySendClaimWelcomeBackRequest() → SendClaimWelcomeBackRequest(welcomeBackId) gửi ClaimWelcomeBackRequest{WelcomeBackId} lên server (cũng có retry). EventSender.SendWelcomeBackClaimStat(welcomeBackId, rewardModels) bắn welcome_back_claim. Song song, ScheduleWelcomeBackNotification() đặt lịch thông báo cục bộ (nội dung dùng ký hiệu ' NEWLINE ' để xuống dòng). WelcomeBackDataService là ISyncable với SyncName 'WelcomeBackSyncableDataModel' — chỉ danh sách PreviousWelcomeBackIds được đồng bộ, gói hiện tại là dữ liệu cục bộ.",
+  "use_cases": [
+    {
+      "id": "UC-01",
+      "title": "Hỏi server có gói Welcome Back không",
+      "actor": "System",
+      "trigger": "Vào game / InitializeData",
+      "precondition": "WelcomeBackStateService.CanSendRequest() == true",
+      "steps": [
+        "WelcomeBackService.InitializeData() → TryFetchData()",
+        "SendGetWelcomeBackRequest() → WelcomeBackRemoteService.SendGetWelcomeBackRequest() (ServiceName = 'WelcomeBackRemoteService')",
+        "Nhận ApiResponse<GetWelcomeBackResponse>{WelcomeBackId, RewardModels, IsClaimed}",
+        "WelcomeBackDataService.ContainsPreviousWelcomeBack(welcomeBackId) kiểm tra đã nhận chưa",
+        "Chưa nhận → AddWelcomeBack(WelcomeBackPackage{WelcomeBackId, RewardModels, IsClaimed})"
+      ],
+      "result": "Gói quà nằm sẵn trong WelcomeBackDataModel chờ hiển thị",
+      "rules": "Có bản FlatBuffer tương ứng: magicsort.schemas.v1.liveops.welcome_back.GetWelcomeBackResponse",
+      "evidence": "WelcomeBackService.TryFetchData; WelcomeBackService.SendGetWelcomeBackRequest; WelcomeBackRemoteService.SendGetWelcomeBackRequest; WelcomeBackDataService.AddWelcomeBack; WelcomeBackDataService.ContainsPreviousWelcomeBack"
+    },
+    {
+      "id": "UC-02",
+      "title": "Thử lại khi request lỗi",
+      "actor": "System",
+      "trigger": "SendGetWelcomeBackRequest thất bại (mất mạng, server lỗi)",
+      "precondition": "_retryCount < RetryLimit",
+      "steps": [
+        "WelcomeBackService.RetrySendGetWelcomeBackRequest() đặt NewSecondTimer chờ RetryDelayInSeconds = 10 giây",
+        "Callback b__23_0 gọi lại SendGetWelcomeBackRequest()",
+        "_retryCount tăng; đạt RetryLimit = 5 thì dừng",
+        "Dispose() gọi NewSecondTimer.Cancel() để không rò rỉ timer"
+      ],
+      "result": "Tối đa 5 lần thử trong ~50 giây; sau đó bỏ qua cho tới lần vào game sau",
+      "rules": "RetryLimit = 5, RetryDelayInSeconds = 10 là hằng số trong WelcomeBackService",
+      "evidence": "WelcomeBackService.RetrySendGetWelcomeBackRequest; WelcomeBackService.RetryLimit; WelcomeBackService.RetryDelayInSeconds; WelcomeBackService.Dispose"
+    },
+    {
+      "id": "UC-03",
+      "title": "Hiển thị popup chào mừng khi vào Home",
+      "actor": "System",
+      "trigger": "Vào màn Home lần đầu trong phiên",
+      "precondition": "WelcomeBackStateService.ShouldShowPopup() == true và state = ShouldClaim",
+      "steps": [
+        "WelcomeBackStateService.UpdateState() → GetState() trả WelcomeBackState.ShouldClaim (2)",
+        "TryShowWelcomeBackHomeWelcomingCommand chạy trong chuỗi home welcoming",
+        "Popup hiển thị WelcomeBackPackage.RewardModels (tiêu đề localization WelcomeBackTitle 'Welcome Back')"
+      ],
+      "result": "Người chơi quay lại được chào bằng quà",
+      "rules": "WelcomeBackState: IsDisabled=0, AllClaimed=1, ShouldClaim=2",
+      "evidence": "WelcomeBackStateService.ShouldShowPopup; WelcomeBackStateService.UpdateState; WelcomeBackStateService.GetState; TryShowWelcomeBackHomeWelcomingCommand"
+    },
+    {
+      "id": "UC-04",
+      "title": "Hiển thị popup khi quay lại Home từ level",
+      "actor": "System",
+      "trigger": "Kết thúc level và về Home",
+      "precondition": "Còn gói chưa nhận",
+      "steps": [
+        "TryShowWelcomeBackReturnToHomeCommand kiểm tra ShouldShowPopup()",
+        "Mở popup nếu chưa hiện trong lần vào Home đầu"
+      ],
+      "result": "Không bỏ sót gói khi người chơi vào thẳng level",
+      "rules": "Hai command riêng cho hai thời điểm: home welcoming và return-to-home",
+      "evidence": "TryShowWelcomeBackReturnToHomeCommand; WelcomeBackStateService.ShouldShowPopup"
+    },
+    {
+      "id": "UC-05",
+      "title": "Nhận thưởng Welcome Back",
+      "actor": "Player",
+      "trigger": "Bấm nút nhận trong popup",
+      "precondition": "WelcomeBackStateService.CanClaimReward() == true",
+      "steps": [
+        "WelcomeBackService.ClaimReward()",
+        "WelcomeBackDataService.GetWelcomeBackToClaim() lấy gói",
+        "RewardService trao RewardModels với CurrencyEarnReason.WelcomeBack (18)",
+        "SetWelcomeBackIsClaimed(true) và AddPreviousWelcomeBackId(welcomeBackId)",
+        "EventSender.SendWelcomeBackClaimStat(welcomeBackId, rewardModels) → welcome_back_claim với welcome_back_id, progress"
+      ],
+      "result": "Thưởng vào kho, id ghi vào PreviousWelcomeBackIds để không trao lại",
+      "rules": "CanClaimReward() kiểm tra state = ShouldClaim và có gói",
+      "evidence": "WelcomeBackService.ClaimReward; WelcomeBackStateService.CanClaimReward; WelcomeBackDataService.GetWelcomeBackToClaim; WelcomeBackDataService.SetWelcomeBackIsClaimed; EventSender.SendWelcomeBackClaimStat"
+    },
+    {
+      "id": "UC-06",
+      "title": "Báo server đã nhận",
+      "actor": "System",
+      "trigger": "Sau khi trao thưởng",
+      "precondition": "-",
+      "steps": [
+        "WelcomeBackService.TrySendClaimWelcomeBackRequest()",
+        "WelcomeBackDataService.GetWelcomeBackToSendClaimRequest() lấy gói cần báo",
+        "SendClaimWelcomeBackRequest(welcomeBackId) → WelcomeBackRemoteService.SendClaimWelcomeBackRequest(ClaimWelcomeBackRequest{WelcomeBackId})",
+        "Nhận ClaimWelcomeBackResponse{WelcomeBackId}",
+        "WelcomeBackDataService.RemoveWelcomeBack() dọn gói khỏi cache"
+      ],
+      "result": "Server biết gói đã dùng, không phát lại",
+      "rules": "Client trao thưởng trước rồi mới báo server (optimistic) — nếu request lỗi thì gói vẫn còn trong GetWelcomeBackToSendClaimRequest và thử lại ở lần sau",
+      "evidence": "WelcomeBackService.TrySendClaimWelcomeBackRequest; WelcomeBackService.SendClaimWelcomeBackRequest; WelcomeBackDataService.GetWelcomeBackToSendClaimRequest; WelcomeBackDataService.RemoveWelcomeBack"
+    },
+    {
+      "id": "UC-07",
+      "title": "Đặt lịch thông báo đẩy kéo người chơi quay lại",
+      "actor": "System",
+      "trigger": "Khởi tạo Welcome Back",
+      "precondition": "NotificationService khả dụng",
+      "steps": [
+        "WelcomeBackService.ScheduleWelcomeBackNotification()",
+        "NotificationService đặt local notification với nội dung nhiều dòng (ký hiệu ' NEWLINE ' được thay bằng xuống dòng)",
+        "Người chơi bấm thông báo → mở game → luồng UC-01 chạy"
+      ],
+      "result": "Vòng lặp tái tương tác: nghỉ chơi → thông báo → quay lại → nhận quà",
+      "rules": "Thời điểm và nội dung thông báo không có trong client (do NotificationService/backend quyết định)",
+      "evidence": "WelcomeBackService.ScheduleWelcomeBackNotification; WelcomeBackService..ctor(notificationService)"
+    },
+    {
+      "id": "UC-08",
+      "title": "Chặn nhận trùng gói cũ",
+      "actor": "System",
+      "trigger": "Server trả lại một WelcomeBackId đã nhận",
+      "precondition": "WelcomeBackId nằm trong PreviousWelcomeBackIds",
+      "steps": [
+        "WelcomeBackDataService.ContainsPreviousWelcomeBack(welcomeBackId) trả true",
+        "Không gọi AddWelcomeBack, không bật popup",
+        "State giữ nguyên AllClaimed (1)"
+      ],
+      "result": "Không trao thưởng hai lần cho cùng một gói, kể cả khi client mất đồng bộ",
+      "rules": "PreviousWelcomeBackIds là List<string> tích luỹ, nằm trong WelcomeBackSyncableDataModel nên đồng bộ giữa thiết bị",
+      "evidence": "WelcomeBackDataService.ContainsPreviousWelcomeBack; WelcomeBackDataService.AddPreviousWelcomeBackId; WelcomeBackSyncableDataModel.PreviousWelcomeBackIds"
+    },
+    {
+      "id": "UC-09",
+      "title": "Đồng bộ giữa thiết bị",
+      "actor": "System",
+      "trigger": "SyncService",
+      "precondition": "-",
+      "steps": [
+        "WelcomeBackDataService.GetSyncName() = 'WelcomeBackSyncableDataModel'",
+        "SerializeModelForSync() chỉ xuất WelcomeBackSyncableDataModel (PreviousWelcomeBackIds)",
+        "OverwriteModelFromSync(data) ghi đè; MarkDataForLateUpdate(shouldSyncWithBackend) quyết định có đẩy lên server",
+        "LateUpdate() lưu khi IsDataChangedSinceLastSave(); DeleteData() xoá khi reset"
+      ],
+      "result": "Người chơi đổi máy không nhận lại gói cũ",
+      "rules": "WelcomeBackPackage hiện tại không nằm trong phần đồng bộ",
+      "evidence": "WelcomeBackDataService.GetSyncName; WelcomeBackDataService.SerializeModelForSync; WelcomeBackDataService.OverwriteModelFromSync; WelcomeBackDataService.DeleteData"
+    },
+    {
+      "id": "UC-10",
+      "title": "Không có gói / bị tắt",
+      "actor": "System",
+      "trigger": "Server trả rỗng hoặc IsClaimed = true",
+      "precondition": "-",
+      "steps": [
+        "WelcomeBackDataService.HasWelcomeBack() trả false",
+        "WelcomeBackStateService.GetState() trả WelcomeBackState.IsDisabled (0)",
+        "ShouldShowPopup() và CanClaimReward() đều false"
+      ],
+      "result": "Không có popup nào hiện, luồng home welcoming đi tiếp",
+      "rules": "Không có cờ remote config riêng cho Welcome Back trong client — tắt bằng cách backend không phát gói",
+      "evidence": "WelcomeBackDataService.HasWelcomeBack; WelcomeBackStateService.GetState; WelcomeBackStateService.ShouldShowPopup"
+    }
+  ],
+  "configs": [
+    {
+      "source": "code const",
+      "key": "WelcomeBackService.RetryLimit",
+      "type": "int",
+      "value": "5",
+      "meaning": "Số lần thử lại tối đa khi gọi API thất bại",
+      "where": "WelcomeBackService"
+    },
+    {
+      "source": "code const",
+      "key": "WelcomeBackService.RetryDelayInSeconds",
+      "type": "int",
+      "value": "10",
+      "meaning": "Khoảng cách giữa hai lần thử lại",
+      "where": "WelcomeBackService"
+    },
+    {
+      "source": "code const",
+      "key": "WelcomeBackRemoteService.ServiceName",
+      "type": "string",
+      "value": "\"WelcomeBackRemoteService\"",
+      "meaning": "Tên service dùng khi gọi HttpProxy",
+      "where": "WelcomeBackRemoteService"
+    },
+    {
+      "source": "code const",
+      "key": "WelcomeBackState",
+      "type": "enum",
+      "value": "IsDisabled=0, AllClaimed=1, ShouldClaim=2",
+      "meaning": "Máy trạng thái đơn giản 3 nhánh",
+      "where": "WelcomeBackStateService.GetState"
+    },
+    {
+      "source": "code const",
+      "key": "CurrencyEarnReason.WelcomeBack",
+      "type": "enum",
+      "value": "18",
+      "meaning": "Lý do nhận thưởng trong analytics 'earned'",
+      "where": "Modules.Contexts.Application.Inventory.Scripts.CurrencyEarnReason"
+    },
+    {
+      "source": "code const",
+      "key": "Ký hiệu xuống dòng trong nội dung thông báo",
+      "type": "string",
+      "value": "\" NEWLINE \"",
+      "meaning": "Chuỗi được thay bằng ký tự xuống dòng khi dựng nội dung notification",
+      "where": "WelcomeBackService.ScheduleWelcomeBackNotification"
+    },
+    {
+      "source": "server info",
+      "key": "GetWelcomeBackResponse.WelcomeBackId / RewardModels / IsClaimed",
+      "type": "response",
+      "value": "server",
+      "meaning": "Gói quà tái tương tác do backend phát",
+      "where": "WelcomeBackRemoteService.SendGetWelcomeBackRequest"
+    },
+    {
+      "source": "server info",
+      "key": "ClaimWelcomeBackRequest.WelcomeBackId / ClaimWelcomeBackResponse.WelcomeBackId",
+      "type": "request/response",
+      "value": "server",
+      "meaning": "Báo đã nhận gói",
+      "where": "WelcomeBackRemoteService.SendClaimWelcomeBackRequest"
+    },
+    {
+      "source": "server info",
+      "key": "Schema magicsort.schemas.v1.liveops.welcome_back",
+      "type": "FlatBuffer",
+      "value": "GetWelcomeBackResponse, ClaimWelcomeBackResponse",
+      "meaning": "Định nghĩa dữ liệu phía backend",
+      "where": "magicsort.schemas.v1.liveops.welcome_back"
+    },
+    {
+      "source": "storage key",
+      "key": "WelcomeBackSyncableDataModel",
+      "type": "sync name",
+      "value": "\"WelcomeBackSyncableDataModel\"",
+      "meaning": "Tên bản ghi đồng bộ",
+      "where": "WelcomeBackDataService.GetSyncName"
+    },
+    {
+      "source": "storage key",
+      "key": "WelcomeBackSyncableDataModel.PreviousWelcomeBackIds",
+      "type": "List<string>",
+      "value": "client + server",
+      "meaning": "Danh sách gói đã nhận, chống trao trùng",
+      "where": "WelcomeBackDataService.AddPreviousWelcomeBackId"
+    },
+    {
+      "source": "storage key",
+      "key": "WelcomeBackDataModel.WelcomeBack (WelcomeBackPackage{WelcomeBackId, RewardModels, IsClaimed})",
+      "type": "object",
+      "value": "client (không đồng bộ)",
+      "meaning": "Gói đang chờ nhận",
+      "where": "WelcomeBackDataModel"
+    },
+    {
+      "source": "code const",
+      "key": "Localization",
+      "type": "string",
+      "value": "WelcomeBackTitle 'Welcome Back'",
+      "meaning": "Tiêu đề popup",
+      "where": "appendix/localization.tsv"
+    },
+    {
+      "source": "AB test",
+      "key": "Firebase RC: IsWelcomeBackEnabled",
+      "type": "",
+      "value": "false",
+      "meaning": "cờ AB/tinh chỉnh server-only (giá trị nhánh máy này)",
+      "where": "Configs/CachedRemoteConfigs + Firebase RC template 3197 — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    }
+  ],
+  "rewards": [
+    {
+      "context": "Gói Welcome Back",
+      "reward": "WelcomeBackPackage.RewardModels (nội dung do server quyết định) — CurrencyEarnReason.WelcomeBack (18)",
+      "evidence": "WelcomeBackService.ClaimReward"
+    }
+  ],
+  "backend": [
+    {
+      "command": "WelcomeBackRemoteService.SendGetWelcomeBackRequest()",
+      "direction": "client→server",
+      "purpose": "hỏi có gói Welcome Back không (GetWelcomeBackResponse)"
+    },
+    {
+      "command": "WelcomeBackRemoteService.SendClaimWelcomeBackRequest(ClaimWelcomeBackRequest{WelcomeBackId})",
+      "direction": "client→server",
+      "purpose": "báo đã nhận gói"
+    },
+    {
+      "command": "SyncService – SyncName 'WelcomeBackSyncableDataModel'",
+      "direction": "hai chiều",
+      "purpose": "đồng bộ danh sách id đã nhận"
+    },
+    {
+      "command": "NotificationService",
+      "direction": "client (local)",
+      "purpose": "đặt lịch thông báo kéo người chơi quay lại"
+    }
+  ],
+  "ui": [
+    {
+      "element": "Popup chào mừng",
+      "class": "Modules.Contexts.Home.Monetization.WelcomeBack.Scripts (popup hiển thị RewardModels)",
+      "purpose": "khoe quà và nút nhận"
+    },
+    {
+      "element": "Command",
+      "class": "Modules.Contexts.Home.Monetization.WelcomeBack.Scripts.Commands.TryShowWelcomeBackHomeWelcomingCommand / TryShowWelcomeBackReturnToHomeCommand",
+      "purpose": "mở popup ở hai thời điểm khác nhau"
+    }
+  ],
+  "analytics": [
+    {
+      "event": "welcome_back_claim",
+      "params": "welcome_back_id, progress",
+      "when": "nhận gói Welcome Back"
+    },
+    {
+      "event": "earned",
+      "params": "reason=WelcomeBack, danh sách thưởng",
+      "when": "trao thưởng"
+    }
+  ],
+  "storage_keys": [
+    "WelcomeBackSyncableDataModel (sync name)",
+    "WelcomeBackSyncableDataModel.PreviousWelcomeBackIds",
+    "WelcomeBackDataModel.WelcomeBack (gói hiện tại)"
+  ],
+  "related_features": [
+    "Compensation",
+    "Store",
+    "SpecialOffer"
+  ],
+  "gaps": [
+    "Điều kiện phát gói (nghỉ bao nhiêu ngày, phân khúc người chơi) và nội dung thưởng nằm hoàn toàn ở backend; client không có config nào.",
+    "15/11 — resolved_historical_snapshot: TryShowWelcomeBackHomeWelcomingCommand gọi ClaimReward rồi đi qua GiveBulkRewards → BulkRewardAnimationService.ShowRewards. Luồng dùng chung đã được xác định; không cần giả định một lớp popup riêng mang tên WelcomeBack. Còn lại: Giữ rõ build và phiên bản cache của nguồn; kiểm nhánh runtime riêng khi cần.",
+    "15/11 — partial_static_code_unresolved: SendWelcomeBackNotification(int delayAsSeconds) lấy _welcomeBackNotificationSo.Title/Body, Replace token NEWLINE trước setbody, và schedule DateTime.Now.AddSeconds(delayAsSeconds). Nội dungcụthể do asset, thờiđiểm do caller; markerNEWLINE không là toàntextnotification. Còn lại: Trích đúng LocalNotificationSo asset và SendWelcomeBackNotification caller delay; không xem LocalScheduling như deliveryconfirmed.",
+    "Endpoint HTTP nằm trong BackendEnvironmentConfig.",
+    "[Runtime 2026-09-10] Cờ AB/tinh chỉnh server-only đọc từ Firebase Remote Config (template 3197)."
+  ],
+  "sources": [
+    "features/WelcomeBackService.md",
+    "features/WelcomeBackDataService.md",
+    "features/WelcomeBackStateService.md",
+    "features/WelcomeBackRemoteService.md",
+    "features/WelcomeBackDataModel.md",
+    "features/WelcomeBackSyncableDataModel.md",
+    "RecoveredNative/strings-by-type.tsv (EventSender.SendWelcomeBackClaimStat)",
+    "GameDesign/appendix/localization.tsv (WelcomeBackTitle)",
+    "GameDesign/facts/facts.json (WelcomeBackState, WelcomeBackPackage, GetWelcomeBackResponse, CurrencyEarnReason)"
+  ],
+  "audit_provenance": {
+    "review_date": "2026-11-15",
+    "mode": "offline_existing_files",
+    "code_build": "0.0.3063 ARMv7",
+    "runtime_build_observed_historically": "0.0.3129 ARM64 (audit 2026-10-18); not rechecked 2026-11-15",
+    "new_playtests": 0,
+    "uc_status": "See facts/audit_20261115/uc_registry.json; image reference is not pass",
+    "workbook_status": "Existing XLSX is historical; JSON and local web include 2026-11-15 corrections",
+    "static_review": "facts/local_code_gap_results_20261115.json; facts/local_asset_gap_results_20261115.json; facts/final_data_gap_decisions_20261115.json; facts/core_body_gap_decisions_20261115.json; facts/remaining_asset_gap_decisions_20261115.json"
+  },
+  "static_review_20261115": {
+    "date": "2026-11-15",
+    "scope": "Historical code/assets 0.0.3063, dated caches, device 0.0.3129 cached bundles and explicitly scoped runtime evidence. Not full runtime pass.",
+    "findings": [
+      {
+        "kind": "remaining_asset",
+        "source_report": "facts/remaining_asset_gap_decisions_20261115.json",
+        "id": "MS-RA-022",
+        "gap_ids": [
+          "MS-WelcomeBack-G002"
+        ],
+        "title": "Không có class UI riêng cho popup Welcome Back trong types-index — popup có thể dùng khung popup thưởng dùng chung.",
+        "status": "resolved_historical_snapshot",
+        "conclusion": "TryShowWelcomeBackHomeWelcomingCommand gọi ClaimReward rồi đi qua GiveBulkRewards → BulkRewardAnimationService.ShowRewards. Luồng dùng chung đã được xác định; không cần giả định một lớp popup riêng mang tên WelcomeBack.",
+        "evidence": [
+          "facts/remaining_asset_review_20261115/shared_reward_flow.json"
+        ],
+        "remaining": "",
+        "next_action": "Giữ rõ build và phiên bản cache của nguồn; kiểm nhánh runtime riêng khi cần.",
+        "scope": "Asset/native export 0.0.3063 và cache UnityFS đọc ngày 15/11 từ app 0.0.3129 được giữ riêng; ảnh render asset không phải ảnh chụp playtest.",
+        "reviewed": "2026-11-15",
+        "full_uc_pass": false
+      },
+      {
+        "kind": "code",
+        "source_report": "facts/local_code_gap_results_20261115.json",
+        "id": "MS-CODE-72",
+        "gap_ids": [
+          "MS-WelcomeBack-G003"
+        ],
+        "title": "WelcomeBack notification lấy textasset và delaycaller",
+        "status": "partial_static_code",
+        "conclusion": "SendWelcomeBackNotification(int delayAsSeconds) lấy _welcomeBackNotificationSo.Title/Body, Replace token NEWLINE trước setbody, và schedule DateTime.Now.AddSeconds(delayAsSeconds). Nội dungcụthể do asset, thờiđiểm do caller; markerNEWLINE không là toàntextnotification.",
+        "evidence": [
+          {
+            "file": "../com.grandgames.magicsort_Unity_20260909_112501/RecoveredNative/PseudoC/Assembly-CSharp/Modules/Contexts/Application/Notification/Scripts/NotificationService.c",
+            "line": 1919,
+            "end_line": 2041,
+            "method": "// ===== NotificationService :: public void SendWelcomeBackNotification(",
+            "sha256": "fa2658be1245356379244ad3830908ba6a309055f092266da9fca9d2f05a9cbb",
+            "body_checked": true,
+            "build": "0.0.3063 ARMv7",
+            "required_body_tokens": [
+              "_welcomeBackNotificationSo",
+              "System_String__Replace",
+              "System_DateTime__AddSeconds"
+            ]
+          }
+        ],
+        "remaining": "Trích đúng LocalNotificationSo asset và SendWelcomeBackNotification caller delay; không xem LocalScheduling như deliveryconfirmed.",
+        "scope": "recovered_native_0.0.3063_only",
+        "runtime_verified": false
+      }
+    ]
+  },
+  "acceptance_review_20261115": {
+    "source": "facts/feature_acceptance_20261115.json",
+    "feature_id": "WelcomeBack",
+    "scope": "All eleven dossier dimensions reviewed; full_feature_verified is not implied; read per-dimension gaps and actual runtime evidence."
+  },
+  "segment_ab_review_20261115": {
+    "status": "not_identified_in_sources",
+    "segment_ids": [],
+    "matching_basis": "explicit_gd_config_map_or_exact_model_token_in_gdd_configs_where_key_sources; rootfieldscoped",
+    "rows": [],
+    "classifications": {},
+    "assignment_verified": false,
+    "uplift_verified": false,
+    "note": "No matchingrow does not prove no segmentation/AB. Rewardbucketfalsepositives remain explicitly classified."
+  },
+  "continuation_review_20261116": {
+    "date": "2026-11-16",
+    "build": "0.0.3129 ARM64 host APK",
+    "build_scope": "Host APK version3129 matches LAST observed installed version15/11 only; installed bytes/live device16/11 not verified.",
+    "runtime_status": "device_unavailable",
+    "runtime_case_ids": [],
+    "current_apk_model_links": {
+      "feature": "WelcomeBack",
+      "models": [],
+      "status": "no_exact_model_token_identified",
+      "distribution": "sanitized_public",
+      "public_mapping_pending": false
+    },
+    "current_packaged_defaults": [],
+    "native_finding_ids": [
+      "MS-CURRENT-20261116-07"
+    ],
+    "documentation_source_coverage": {
+      "dossier_present": true,
+      "use_case_catalog_count": 10,
+      "config_catalog_rows": 14,
+      "current_apk_default_model_links": 0,
+      "current_native_findings": 1,
+      "scope": "Documentation/source coverage only; not complete runtime verification."
+    },
+    "runtime_completion": {
+      "date": "2026-11-16",
+      "status": "device_unavailable",
+      "executed_case_count": 0,
+      "full_feature_runtime_verified": false
+    },
+    "planned_branch": "Quan sát queue Home sau startup có welcome reward không; nếu có chụp trước khi nhận và ghi ledger sau nhận.",
+    "target_uc_ids": [
+      "UC-03",
+      "UC-10"
+    ],
+    "execution_phase": "noncore_first",
+    "core_or_levels_last": false,
+    "actionability_full_json": "facts/continuation_20261116/current/feature_actionability.json",
+    "actionability_site_data_path": "data/continuation_20261116/feature_actionability.json",
+    "source_classes": [
+      "external_dependency",
+      "recovered_code"
+    ],
+    "full_feature_verified": false
+  }
+}

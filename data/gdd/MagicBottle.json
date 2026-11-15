@@ -1,0 +1,886 @@
+{
+  "id": "MagicBottle",
+  "name": "Magic Bottle",
+  "category": "Core",
+  "managers": [
+    "Modules.Contexts.Home.MagicBottle.Scripts.MagicBottleService",
+    "Modules.Contexts.Home.MagicBottle.Scripts.MagicBottleDataService",
+    "Modules.Contexts.Home.MagicBottle.Scripts.MagicBottleModel",
+    "Modules.Contexts.Home.MagicBottle.Scripts.MagicBottleConfigModel",
+    "Modules.Contexts.GamePlay.MagicBottle.Scripts.MagicBottleInGameManager",
+    "Modules.Contexts.GamePlay.Board.Items.Scripts.ChargeableBottle.ChargeableBottleItem"
+  ],
+  "summary": "Magic Bottle là trợ thủ 'một chai thêm': người chơi thắng đủ số level ở Home để kích hoạt, sau đó mỗi ván sẽ được tặng thêm một chai trống trên bàn — thứ quý nhất trong game sắp xếp nước, vì một chai trống mở ra rất nhiều nước đi. Chai này bay vào bàn bằng một hoạt ảnh riêng (một cái gối/pillow hạ xuống rồi chai đáp lên). Trạng thái kích hoạt sống đến khi người chơi thua một ván, có popup Are You Sure cảnh báo trước khi bỏ ván, và một popup Congrats hoành tráng khi vừa kích hoạt xong. Tính năng do khoá remote config MagicBottleConfigModel điều khiển và không có file mặc định trong build, nghĩa là hoàn toàn phụ thuộc server. Trên bàn cờ còn có một biến thể họ hàng là ChargeableBottle — chai mini nạp lại được, dùng chung với biến thể ChargeableBottle của Super Charger. [Phạm vi bằng chứng15/11: AddBottleAsMagicBottle truyền bottleHeight=1 trong native0.0.3063. Pool/reset/water-state effective và build0.0.3129 chưa xác nhận; mô tả chai trống là thiết kế cần kiểm runtime, không phải kết quả đã pass.]",
+  "unlock": "MagicBottleService.IsEligible(): MagicBottleConfigModel.IsEnable = true và tiến độ người chơi ≥ FirstLevelToShow. MagicBottleService.HasMagicBottle(): thêm điều kiện Progress ≥ NeededProgress. IsActive() = IsEligible() && EventShownInLifeTime (đã xem popup giới thiệu).",
+  "entry_points": [
+    "MagicBottleLobbyButton ở Home (vòng tròn tiến độ, bấm mở MagicBottlePopUp — impression source LobbyIcon)",
+    "MagicBottlePopUp tự bật khi về Home (TryShowMagicBottlePopUpOnLobbyReturnCommand)",
+    "MagicBottleCongratsPopUp khi vừa đạt mốc (TryPlayMagicBottleCongratsCommand — ngay sau TryPlaySnitchActivationCommand trong chuỗi return-to-home)",
+    "MagicBottleInfoButton → MagicBottleInfoPopUp",
+    "Trong level: chai thêm bay vào qua PillowView / MagicBottleAnimationView",
+    "MagicBottleAreYouSureContainer khi định bỏ ván"
+  ],
+  "flow": "Ở Home: mỗi lần thắng level, MagicBottleService.TryIncreaseProgress() tăng MagicBottleModel.Progress thêm 1 — chỉ chạy khi IsEligible và EventShownInLifeTime = true, và trả về true nếu tiến độ vừa chạm mốc. MagicBottleService.HasGainedMagicBottle() so tiến độ trước/sau để biết vừa mới đạt NeededProgress trong lần thắng này — đây là điều kiện để TryPlayMagicBottleCongratsCommand.ShouldOpenCongratsPopup mở popup chúc mừng. Nút lobby (MagicBottleLobbyButton) vẽ vòng tròn tiến độ và có hoạt ảnh 'thu thập' khi Progress > LastSeenLobbyButtonProgress (ShouldShowCollectibleEarnAnimationOnLobbyReturn → PlayCollectibleAndProgressAnimation → TrySetLastSeenLobbyButtonProgress). MagicBottleProgressView vẽ thanh ngang có vạch ngăn hai màu (xanh cho phần đã đạt, đỏ cho phần còn lại) và đổi chữ giữa MagicBottlePopupInfo ('Beat {0} levels to activate the Magic Bottle!') và MagicBottlePopupInfoWin ('Congrats! You activated Magic Bottle!'). Popup Congrats: MagicBottleCongratsPopUpArguments mang MagicBottleSpawnPosition (vị trí chai xuất phát trên màn hình); PlayCongratsFirstPart phóng to chai và cho nó bay theo đường Bezier (GetBottleFirstPath) tới giữa màn hình kèm particle, làm mờ nền, chạy chuỗi chữ 'Congratulations!' + MagicBottleCongratsPopupInfo; PlayCongratsSecondPart đưa chai về nút Play (PlayButtonContainer, CurrencyRewardTarget) rồi đóng popup. Toàn bộ nhịp nằm trong MagicBottleCongratsAnimationConfig. Trong level: MagicBottleInGameManager.Initialize(bottleCollections) rồi AddMagicBottleAndHide() thêm một BottleItem phụ vào bàn nhưng ẩn đi; PlayMagicBottleAnimations(bottleRowCount, highestBottleCountInOneRow) chạy hoạt ảnh xuất hiện — PillowView.PlayEnterAnimation nhận số hàng chai và số chai nhiều nhất trên một hàng để tính vị trí đáp (PillowPositionValues), MagicBottleAnimationConfig điều khiển vòng xoay khi vào, đường Bezier có bộ offset riêng cho bố cục 2 hàng và 3 hàng (StartControlPointOffset vs StartControlPointOffset3Row), cú nhảy (JumpDuration/JumpHeight/JumpCurve), fade các sprite chai và bóng, hạ xuống vị trí ngồi rồi phát particle và hiệu ứng shine. Kết thúc: thắng thì giữ nguyên trạng thái; thua thì MagicBottleService.TryResetProgress() đặt Progress = 0 và LastSeenLobbyButtonProgress = 0, bắn analytics magic_bottle_lost. ChargeableBottle (Board.Items.Scripts.ChargeableBottle): một chai mini phủ trên chai thường, có _chargeCount, HasCharge(), PrepareNewBottle() tạo chai mới (clip 'ChargeableBottleNewBottle 1'), khi được chọn làm nguồn/đích thì IsSelectableAsOrigin/IsSelectableAsTarget quyết định; sau khi dùng và chai gốc trở về vị trí, OnOriginBottleReturnToInitialPosition phát clip 'ChargeableBottleDisappear' và SendSuperChargerUsedEvent bắn analytics supercharger_used — tức ChargeableBottle chính là hiện thân trên bàn của biến thể Super Charger ChargeableBottle.",
+  "use_cases": [
+    {
+      "id": "UC-01",
+      "title": "Server bật Magic Bottle",
+      "actor": "Server",
+      "trigger": "Đổi khoá Firebase MagicBottleConfigModel",
+      "precondition": "-",
+      "steps": [
+        "FirebaseRemoteConfigResolver đọc khoá MagicBottleConfigModel",
+        "MagicBottleConfigModel.IsValid() kiểm tra",
+        "MagicBottleService.get_ConfigModel() trả model"
+      ],
+      "result": "Tính năng bật cho nhóm người chơi phù hợp",
+      "rules": "Không có file MagicBottleConfigModel.json trong Resources/defaultconfigs (khoá vẫn nằm trong danh sách AddRootLevelConfigService) — toàn bộ giá trị IsEnable / FirstLevelToShow / NeededProgress do server cấp",
+      "evidence": "MagicBottleService.get_ConfigModel; MagicBottleConfigModel.IsValid; FirebaseRemoteConfigResolver.AddRootLevelConfigService"
+    },
+    {
+      "id": "UC-02",
+      "title": "Kiểm tra đủ điều kiện",
+      "actor": "System",
+      "trigger": "Vào Home / trước khi hiện icon",
+      "precondition": "-",
+      "steps": [
+        "MagicBottleService.IsEligible(): IsEnable = true và IPlayerService level ≥ GetFirstLevelToShow()",
+        "IsActive(): IsEligible && EventShownInLifeTime",
+        "HasMagicBottle(): IsEligible && Progress ≥ GetNeededProgress()"
+      ],
+      "result": "Ba mức trạng thái: chưa đủ level → đủ level nhưng chưa xem giới thiệu → đang tích tiến độ → đã có Magic Bottle",
+      "rules": "GetFirstLevelToShow / GetNeededProgress đọc thẳng từ config, có nhánh phòng khi config null",
+      "evidence": "MagicBottleService.IsEligible; MagicBottleService.IsActive; MagicBottleService.HasMagicBottle; MagicBottleService.GetFirstLevelToShow"
+    },
+    {
+      "id": "UC-03",
+      "title": "Popup giới thiệu lần đầu",
+      "actor": "System",
+      "trigger": "Về Home khi vừa đủ điều kiện",
+      "precondition": "EventShownInLifeTime = false",
+      "steps": [
+        "TryShowMagicBottlePopUpOnLobbyReturnCommand.ExecuteAsync kiểm tra MagicBottleService.ShouldAutoOpenPopUp()",
+        "Mở MagicBottlePopUp (MagicBottlePopUpArguments, impression source FirstOpen)",
+        "PlayFirstShowEverAnimations, OpenAutomaticallyInfoPopUp mở luôn MagicBottleInfoPopUp",
+        "MarkEventIntroduced → MagicBottleService.MarkEventShownInLifeTime()",
+        "Analytics magic_bottle_popup_impression"
+      ],
+      "result": "Người chơi biết tính năng; từ lần thắng sau tiến độ mới bắt đầu tính",
+      "rules": "MagicBottlePopUpImpressionSource = {LobbyIcon:0, FirstOpen:1}. TryIncreaseProgress chỉ chạy khi EventShownInLifeTime = true, nên popup giới thiệu là điều kiện tiên quyết",
+      "evidence": "MagicBottleService.ShouldAutoOpenPopUp; MagicBottlePopUp.MarkEventIntroduced; MagicBottlePopUp.OpenAutomaticallyInfoPopUp; EventSender.SendMagicBottlePopUpImpression"
+    },
+    {
+      "id": "UC-04",
+      "title": "Xem popup hướng dẫn",
+      "actor": "Player",
+      "trigger": "Bấm MagicBottleInfoButton hoặc popup tự mở",
+      "precondition": "-",
+      "steps": [
+        "MagicBottleInfoPopUpArguments(impressionSource) → mở MagicBottleInfoPopUp",
+        "_neededLevelText điền định dạng \"{0} Levels\" (khoá MagicBottleInfoPopupStep1)",
+        "3 bước: MagicBottleInfoPopupStep1 (thắng {0} level), Step2 (kích hoạt), Step3 (nhận thêm 1 chai mỗi ván) + MagicBottleInfoPopupWarning",
+        "MagicBottleService.MarkInfoPopUpIntroduced()"
+      ],
+      "result": "Analytics magic_bottle_info_impression (impression_source, current_bottle_progress, magic_bottle_max_progress)",
+      "rules": "MagicBottleInfoPopUpImpressionSource = {InfoButton:0, FirstOpen:1}",
+      "evidence": "MagicBottleInfoPopUp.Show; MagicBottleService.MarkInfoPopUpIntroduced; MagicBottleService.IsInfoPopUpIntroduced; EventSender.SendMagicBottleInfoPopUpImpression"
+    },
+    {
+      "id": "UC-05",
+      "title": "Tăng tiến độ khi thắng level",
+      "actor": "System",
+      "trigger": "Thắng một level",
+      "precondition": "IsEligible và EventShownInLifeTime = true, chưa đạt NeededProgress",
+      "steps": [
+        "MagicBottleService.TryIncreaseProgress()",
+        "MagicBottleDataService.IncreaseProgress() tăng Progress, bật _isMarkedForLateUpdate + _isDataChangedSinceLastSave",
+        "Hàm trả bool báo có vừa chạm mốc hay không"
+      ],
+      "result": "Vòng tiến độ trên MagicBottleLobbyButton nhích lên",
+      "rules": "Số mốc là MagicBottleConfigModel.NeededProgress (do server cấp)",
+      "evidence": "MagicBottleService.TryIncreaseProgress; MagicBottleDataService.IncreaseProgress; MagicBottleService.GetNeededProgress"
+    },
+    {
+      "id": "UC-06",
+      "title": "Popup chúc mừng khi vừa kích hoạt",
+      "actor": "System",
+      "trigger": "Về Home ngay sau lần thắng đưa tiến độ chạm mốc",
+      "precondition": "MagicBottleService.HasGainedMagicBottle() = true",
+      "steps": [
+        "TryPlayMagicBottleCongratsCommand.ShouldOpenCongratsPopup() dựa trên HasGainedMagicBottle",
+        "PlayMagicBottleCongrats mở MagicBottleCongratsPopUp với MagicBottleCongratsPopUpArguments(magicBottleSpawnPosition)",
+        "PlayCongratsFirstPart: phóng to chai (BottleEnlargeStartScale → BottleEnlargeEndScale), bay theo Bezier (GetBottleFirstPath, BezierAOffset/BezierBOffset/BezierEndPosition), làm mờ nền (BackgroundStartAlpha → BackgroundEndAlpha), chạy chữ 'Congratulations!' và MagicBottleCongratsPopupInfo, hiện 'tap to continue' sau TapToContinueTextTime",
+        "OnTapToContinueButtonClick → PlayCongratsSecondPart: chai bay về nút Play (PlayButtonMagicBottlePlayTime), chữ thu nhỏ, đóng popup ở ClosePopupTime"
+      ],
+      "result": "Người chơi thấy chai bay vào nút Play — cảm giác 'đã có thêm chai cho ván sau'; analytics magic_bottle_claim",
+      "rules": "Toàn bộ nhịp nằm trong MagicBottleCongratsAnimationConfig; EnableInputTime chặn thao tác trước khi hoạt ảnh xong",
+      "evidence": "TryPlayMagicBottleCongratsCommand.ShouldOpenCongratsPopup; MagicBottleCongratsPopUp.PlayCongratsFirstPart; MagicBottleCongratsPopUp.PlayCongratsSecondPart; EventSender.SendMagicBottleClaim"
+    },
+    {
+      "id": "UC-07",
+      "title": "Hoạt ảnh thu thập tiến độ khi về Home",
+      "actor": "System",
+      "trigger": "Về Home sau khi thắng",
+      "precondition": "Progress > LastSeenLobbyButtonProgress",
+      "steps": [
+        "MagicBottleService.ShouldShowCollectibleEarnAnimationOnLobbyReturn() dựa trên IsLobbyButtonProgressIncreased()",
+        "MagicBottleLobbyButton chạy LobbyIconCollectibleAnimation + CircleProgressBar (dùng chung TowerWinStreakLobbyButtonAnimationConfig)",
+        "MagicBottleService.TrySetLastSeenLobbyButtonProgress() ghi mốc đã xem"
+      ],
+      "result": "Người chơi thấy phần thưởng tiến độ bay về nút",
+      "rules": "LastSeenLobbyButtonProgress nằm trong MagicBottleModel và được đồng bộ server",
+      "evidence": "MagicBottleService.ShouldShowCollectibleEarnAnimationOnLobbyReturn; MagicBottleService.IsLobbyButtonProgressIncreased; MagicBottleService.TrySetLastSeenLobbyButtonProgress"
+    },
+    {
+      "id": "UC-08",
+      "title": "Chai thêm xuất hiện trong level",
+      "actor": "System",
+      "trigger": "Bắt đầu level khi HasMagicBottle = true",
+      "precondition": "-",
+      "steps": [
+        "MagicBottleInGameManager.Initialize(bottleCollections)",
+        "AddMagicBottleAndHide() thêm một BottleItem phụ (_magicBottleComponent) vào bàn nhưng ẩn",
+        "PlayMagicBottleAnimations(bottleRowCount, highestBottleCountInOneRow) chạy Tween xuất hiện",
+        "PillowView.PlayEnterAnimation đưa gối và chai vào theo bố cục bàn (PillowPositionValues), MagicBottleAnimationView chạy MagicBottleAnimationConfig"
+      ],
+      "result": "Bàn có thêm 1 chai trống — tăng đáng kể không gian nước đi [Phạm vi bằng chứng15/11: AddBottleAsMagicBottle truyền bottleHeight=1 trong native0.0.3063. Pool/reset/water-state effective và build0.0.3129 chưa xác nhận; mô tả chai trống là thiết kế cần kiểm runtime, không phải kết quả đã pass.]",
+      "rules": "MagicBottleAnimationConfig có bộ offset riêng cho bàn 3 hàng (StartControlPointOffset3Row, EndControlPointOffset3Row) nên hoạt ảnh khớp mọi bố cục; chuỗi gồm xoay vào (EnterAnimationRotationDuration) → bay Bezier (GoToTargetAnimationDuration) → nhảy (JumpDuration/JumpHeight) → hạ xuống chỗ ngồi (BottleMoveDownToSitPositionDuration) → particle (SitParticleTime) → shine (ShineDuration)",
+      "evidence": "MagicBottleInGameManager.AddMagicBottleAndHide; MagicBottleInGameManager.PlayMagicBottleAnimations; PillowView.PlayEnterAnimation; MagicBottleAnimationConfig"
+    },
+    {
+      "id": "UC-09",
+      "title": "Mất Magic Bottle khi thua ván",
+      "actor": "System",
+      "trigger": "Thua/bỏ level, hoặc config bị tắt",
+      "precondition": "-",
+      "steps": [
+        "MagicBottleService.TryResetProgress()",
+        "Nhánh không còn đủ điều kiện: Progress = 0, LastSeenLobbyButtonProgress = 0, đánh dấu dữ liệu bẩn",
+        "Analytics magic_bottle_lost (magic_bottle_max_progress, progress)"
+      ],
+      "result": "Phải thắng lại đủ level để có chai thêm",
+      "rules": "MagicBottleInfoPopupWarning nói rõ 'Magic Bottle will be active until you fail!'",
+      "evidence": "MagicBottleService.TryResetProgress; MagicBottleDataService.ResetProgress; EventSender.SendMagicBottleLost"
+    },
+    {
+      "id": "UC-10",
+      "title": "Cảnh báo trước khi bỏ ván",
+      "actor": "Player",
+      "trigger": "Bấm thoát / từ chối chơi tiếp",
+      "precondition": "MagicBottleService.ShouldShowAreYouSure() = true",
+      "steps": [
+        "MagicBottleAreYouSureContainer.ShouldShow()",
+        "Show() hiển thị MagicBottleAYSWarning: 'You will lose your Magic Bottle!'"
+      ],
+      "result": "Người chơi cân nhắc lại; nếu vẫn thoát thì mất tiến độ",
+      "rules": "Cùng lớp cơ sở AreYouSureContainer với Snitch và SuperCharger; ba container có thể cùng hiện trong một popup Are You Sure",
+      "evidence": "MagicBottleService.ShouldShowAreYouSure; MagicBottleAreYouSureContainer.ShouldShow; MagicBottleAreYouSureContainer.Show"
+    },
+    {
+      "id": "UC-11",
+      "title": "Reset tiến độ khi mở app",
+      "actor": "System",
+      "trigger": "Khởi động app",
+      "precondition": "-",
+      "steps": [
+        "MagicBottleService.InitializeData()",
+        "TryResetProgress() kiểm tra lại IsEligible; nếu server đã tắt tính năng hoặc người chơi tụt điều kiện thì xoá tiến độ"
+      ],
+      "result": "Dữ liệu không bị treo ở trạng thái cũ khi vận hành tắt tính năng",
+      "rules": "Đây là mẫu IDataInitializable chung của mọi sự kiện (xem EventsFramework UC-11)",
+      "evidence": "MagicBottleService.InitializeData; MagicBottleService.TryResetProgress"
+    },
+    {
+      "id": "UC-12",
+      "title": "Chai mini nạp lại được (ChargeableBottle) trên bàn",
+      "actor": "Player",
+      "trigger": "Bàn có ChargeableBottleItem",
+      "precondition": "Biến thể Super Charger ChargeableBottle hoặc level có sẵn item",
+      "steps": [
+        "ChargeableBottleItem.Prepare(viewOffset, frontSorting, backSorting, belongingBottle, hasInitialCharge) — hasInitialCharge lấy từ ChargeableBottleItemModel.HasInitialCharge, phát clip 'ChargeableBottleReset'",
+        "HasCharge() / get_ChargeCount() cho biết còn dùng được không",
+        "IsSelectableAsOrigin / IsSelectableAsTarget(originBottle, waterColorId) quyết định có chọn được không",
+        "OnBottleSelectedAsOrigin / OnBottleDeselectedAsOrigin chạy PlayBottleSelectedAnimation / PlayBottleDeSelectedAnimation (đổi màu _initialColor → _selectedColor → _movedColor)",
+        "Sau khi rót xong, OnOriginBottleReturnToInitialPosition phát 'ChargeableBottleDisappear' và SendSuperChargerUsedEvent()"
+      ],
+      "result": "Chai mini biến mất sau khi dùng; nạp lại bằng cách sắp màu (theo SuperChargerBottleTutorialDescription2)",
+      "rules": "ChargeableBottleItem là ABlockerItem với IsOverlay = true, IsParentedToBottle() gắn theo chai gốc, IsAllowShuffle() quyết định có bị xáo trộn không. PrepareNewBottle() dựng chai mới với clip 'ChargeableBottleNewBottle 1'",
+      "evidence": "ChargeableBottleItem.Prepare; ChargeableBottleItem.HasCharge; ChargeableBottleItem.OnOriginBottleReturnToInitialPosition; ChargeableBottleItem.SendSuperChargerUsedEvent; ChargeableBottleItem.PrepareNewBottle"
+    },
+    {
+      "id": "UC-13",
+      "title": "Trail Super Charger bay tới chai mini",
+      "actor": "System",
+      "trigger": "Dùng Super Charger biến thể ChargeableBottle",
+      "precondition": "-",
+      "steps": [
+        "ChargeableBottleItem.GetTrailTargetTransform() trả điểm đích cho trail",
+        "ChargeableBottleView.PlayTrailAnimation(source) chạy Sequence particle _trail",
+        "OnTrailReachedToBottle() phát _impactParticle và nạp chai"
+      ],
+      "result": "Nối liền hiệu ứng giữa nút Super Charger và chai mini trên bàn",
+      "rules": "ChargeableBottleAnimationConfig điều khiển thời lượng; SuperChargerTrailAnimationConfig có riêng TrailAnimationDurationForChargeableBottle và TrailDelayForChargeableBottle",
+      "evidence": "ChargeableBottleItem.GetTrailTargetTransform; ChargeableBottleView.PlayTrailAnimation; ChargeableBottleItem.OnTrailReachedToBottle"
+    },
+    {
+      "id": "UC-14",
+      "title": "Chai mini trong tutorial",
+      "actor": "System",
+      "trigger": "Tutorial Super Charger biến thể chai",
+      "precondition": "-",
+      "steps": [
+        "ChargeableBottleItem.SetTutorialSorting() đẩy chai lên lớp vẽ trên cùng để không bị nền tutorial che",
+        "Sau tutorial: SetDefaultSorting() trả về lớp cũ"
+      ],
+      "result": "Ngón tay hướng dẫn và chai cùng nổi bật trên nền tối",
+      "rules": "SortingService quản lý thứ tự vẽ; SuperchargerTutorialController gọi hai hàm này",
+      "evidence": "ChargeableBottleItem.SetTutorialSorting; ChargeableBottleItem.SetDefaultSorting; SuperchargerTutorialController.ShowChargeableBottleTutorial"
+    },
+    {
+      "id": "UC-15",
+      "title": "Đồng bộ / xoá dữ liệu Magic Bottle",
+      "actor": "System",
+      "trigger": "Sync định kỳ, đăng nhập lại, xoá tài khoản",
+      "precondition": "-",
+      "steps": [
+        "MagicBottleDataService.GetSyncName() = \"MagicBottleModel\", SerializeModelForSync()",
+        "SyncService gửi lên sync-data; OverwriteModelFromSync(data) khi kéo về",
+        "DeleteData() khi xoá tài khoản"
+      ],
+      "result": "Tiến độ Magic Bottle theo tài khoản",
+      "rules": "Model lưu: Progress, LastSeenLobbyButtonProgress, IsIntroduced, EventShownInLifeTime",
+      "evidence": "MagicBottleDataService.GetSyncName; MagicBottleDataService.SerializeModelForSync; MagicBottleDataService.OverwriteModelFromSync; MagicBottleDataService.DeleteData"
+    },
+    {
+      "id": "UC-16",
+      "title": "Cheat/QA: tặng ngay Magic Bottle",
+      "actor": "System",
+      "trigger": "Công cụ nội bộ",
+      "precondition": "-",
+      "steps": [
+        "MagicBottleService.TestMethodGainMagicBottle() đẩy tiến độ lên mốc"
+      ],
+      "result": "Kích hoạt ngay để kiểm thử hoạt ảnh và popup",
+      "rules": "Hàm chỉ dùng cho kiểm thử, không có UI trong bản phát hành (suy luận từ tên TestMethod*)",
+      "evidence": "MagicBottleService.TestMethodGainMagicBottle"
+    },
+    {
+      "id": "UC-17",
+      "title": "Chiếm ô icon ở Home",
+      "actor": "System",
+      "trigger": "Vào Home",
+      "precondition": "-",
+      "steps": [
+        "MagicBottleService implement ILobbyShownService: IsLobbyShown() / IsLobbyGoingToBeShown()",
+        "LobbyEventsService.CanShowService kiểm tra ô trống của cột"
+      ],
+      "result": "Nút Magic Bottle chỉ hiện khi cột icon còn chỗ",
+      "rules": "Xem EventsFramework UC-04",
+      "evidence": "MagicBottleService.IsLobbyShown; MagicBottleService.IsLobbyGoingToBeShown"
+    }
+  ],
+  "configs": [
+    {
+      "source": "server",
+      "key": "MagicBottleConfigModel.IsEnable",
+      "type": "bool",
+      "value": "server (không có file mặc định trong build)",
+      "meaning": "Bật/tắt Magic Bottle",
+      "where": "Khoá Firebase MagicBottleConfigModel; MagicBottleConfigModel"
+    },
+    {
+      "source": "Default/code0.0.3063 and historical caches20260910/20261010; per-snapshot source/hash in snapshot_values; not effective-runtime proof",
+      "key": "MagicBottleConfigModel.FirstLevelToShow",
+      "type": "int",
+      "value": "cache_20260910: 11; cache_20261010: 11; firebase_20260910: 11",
+      "meaning": "Level tối thiểu để thấy tính năng [15/11: giá trị theo snapshot cụ thể; thiếu field khác với false/0. Không xác nhận assignment hoặc effective runtime.]",
+      "where": "MagicBottleConfigModel; MagicBottleService.GetFirstLevelToShow",
+      "previous_unresolved_value": "server",
+      "snapshot_values": [
+        {
+          "snapshot": "cache_20260910",
+          "model": "magicBottleConfigModel",
+          "key": "firstLevelToShow",
+          "value": 11,
+          "type": "int",
+          "source": "facts/runtime/server_configs/magicBottleConfigModel.json",
+          "value_type": "int",
+          "source_sha256": "165e1f8a20df8487c39efc9cee987055ccce427ae45b3ac4349dc3aa2bfb2d6f",
+          "field_present": true
+        },
+        {
+          "snapshot": "cache_20261010",
+          "model": "magicBottleConfigModel",
+          "key": "firstLevelToShow",
+          "value": 11,
+          "type": "int",
+          "source": "facts/runtime/test_20261010/before/CachedRemoteConfigs",
+          "value_type": "int",
+          "source_sha256": "433164d4877b2dee55d2bbd79ef2fe83d3fe9519492fe15e3cb0926daf216050",
+          "field_present": true
+        },
+        {
+          "snapshot": "firebase_20260910",
+          "model": "MagicBottleConfigModel",
+          "key": "FirstLevelToShow",
+          "value": 11,
+          "type": "int",
+          "source": "facts/runtime/decoded/firebase_rc.json",
+          "value_type": "int",
+          "source_sha256": "e49f73c0e3854a98c0c27ffae86e6abc7897c767b5f3e82991004c48c4eb45d5",
+          "field_present": true
+        }
+      ],
+      "snapshot_review_id": "MS-CFG-MagicBottle-0001"
+    },
+    {
+      "source": "Default/code0.0.3063 and historical caches20260910/20261010; per-snapshot source/hash in snapshot_values; not effective-runtime proof",
+      "key": "MagicBottleConfigModel.NeededProgress",
+      "type": "int",
+      "value": "cache_20260910: 10; cache_20261010: 10; firebase_20260910: 10",
+      "meaning": "Số level phải thắng để nhận chai thêm [15/11: giá trị theo snapshot cụ thể; thiếu field khác với false/0. Không xác nhận assignment hoặc effective runtime.]",
+      "where": "MagicBottleConfigModel; MagicBottleService.GetNeededProgress",
+      "previous_unresolved_value": "server",
+      "snapshot_values": [
+        {
+          "snapshot": "cache_20260910",
+          "model": "magicBottleConfigModel",
+          "key": "neededProgress",
+          "value": 10,
+          "type": "int",
+          "source": "facts/runtime/server_configs/magicBottleConfigModel.json",
+          "value_type": "int",
+          "source_sha256": "165e1f8a20df8487c39efc9cee987055ccce427ae45b3ac4349dc3aa2bfb2d6f",
+          "field_present": true
+        },
+        {
+          "snapshot": "cache_20261010",
+          "model": "magicBottleConfigModel",
+          "key": "neededProgress",
+          "value": 10,
+          "type": "int",
+          "source": "facts/runtime/test_20261010/before/CachedRemoteConfigs",
+          "value_type": "int",
+          "source_sha256": "433164d4877b2dee55d2bbd79ef2fe83d3fe9519492fe15e3cb0926daf216050",
+          "field_present": true
+        },
+        {
+          "snapshot": "firebase_20260910",
+          "model": "MagicBottleConfigModel",
+          "key": "NeededProgress",
+          "value": 10,
+          "type": "int",
+          "source": "facts/runtime/decoded/firebase_rc.json",
+          "value_type": "int",
+          "source_sha256": "e49f73c0e3854a98c0c27ffae86e6abc7897c767b5f3e82991004c48c4eb45d5",
+          "field_present": true
+        }
+      ],
+      "snapshot_review_id": "MS-CFG-MagicBottle-0002"
+    },
+    {
+      "source": "code const",
+      "key": "MagicBottleInfoPopUpImpressionSource / MagicBottlePopUpImpressionSource",
+      "type": "enum",
+      "value": "InfoButton=0, FirstOpen=1 / LobbyIcon=0, FirstOpen=1",
+      "meaning": "Nguồn mở popup, gửi trong analytics",
+      "where": "Modules.Contexts.Home.MagicBottle.Scripts.UI"
+    },
+    {
+      "source": "code const",
+      "key": "Tên popup",
+      "type": "string",
+      "value": "\"MagicBottlePopUp\", \"MagicBottleInfoPopUp\", \"MagicBottleCongratsPopUp\"",
+      "meaning": "Khoá mở popup qua IPopUpService",
+      "where": "MagicBottlePopUpArguments, MagicBottleInfoPopUpArguments, MagicBottleCongratsPopUpArguments"
+    },
+    {
+      "source": "code field",
+      "key": "MagicBottleCongratsPopUpArguments.MagicBottleSpawnPosition",
+      "type": "Vector3",
+      "value": "runtime",
+      "meaning": "Vị trí chai xuất phát trong hoạt ảnh chúc mừng",
+      "where": "MagicBottleCongratsPopUpArguments"
+    },
+    {
+      "source": "asset",
+      "key": "MagicBottleCongratsAnimationConfig.asset",
+      "type": "ScriptableObject",
+      "value": "BottleEnlargeDuration, BottleEnlargeStartScale, BottleEnlargeEndScale, BottleEnlargeScaleCurve, FirstPathEndParticleTime, BezierAOffset, BezierBOffset, BezierEndPosition, BezierCurve, BezierDuration, BackgroundStartAlpha, BackgroundEndAlpha, BackgroundFadeDuration, BackgroundFadeCurve, TextSequenceTime, DescriptionTextTime, TapToContinueTextTime, TextScaleDuration, TextScaleCurve, EnableInputTime, SecondPartBottleMoveDuration, SecondPartBottleMoveCurve, SecondPartTextScaleOutDuration, SecondPartTextScaleOutCurve, ClosePopupTime, BottleScaleOutCurve, MagicBottleScaleOutTarget, PlayButtonMagicBottlePlayTime",
+      "meaning": "Toàn bộ nhịp popup chúc mừng",
+      "where": "Assets/MonoBehaviour/MagicBottleCongratsAnimationConfig.asset"
+    },
+    {
+      "source": "asset",
+      "key": "MagicBottleAnimationConfig.asset",
+      "type": "ScriptableObject",
+      "value": "EnterAnimationStartRotation, EnterAnimationEndRotation, EnterAnimationRotationDuration, EnterAnimationRotationCurve, StartControlPointOffset, StartControlPointOffset3Row, EndControlPointOffset, EndControlPointOffset3Row, GoToTargetAnimationDuration, GoToTargetAnimationCurve, JumpDuration, JumpHeight, JumpCurve, BottleSpritesFadeOutDuration, BottleDarkBackSpritesFadeDuration, BottleDarkBackSpritesFadeEndValue, SilhouetteSpriteFadeOutDuration, BottleTargetPositionOffset, BottleMoveDownToSitPositionDuration, BottleMoveDownToSitPositionCurve, FirstMoveTime, SecondMoveTime, CloseMagicBottleTime, SitParticleTime, SitParticleOffset, ScaleDuration, ScaleXCurve, ScaleYCurve, EndScaleForBottleSitXY, ShineDuration, ShineStartValue, ShineEndValue, ShineCurve",
+      "meaning": "Hoạt ảnh chai thêm bay vào bàn, có tham số riêng cho bố cục 3 hàng",
+      "where": "Assets/MonoBehaviour/MagicBottleAnimationConfig.asset"
+    },
+    {
+      "source": "code field",
+      "key": "PillowViewAnimationConfig / PillowPositionValues",
+      "type": "ScriptableObject / struct",
+      "value": "vị trí và nhịp của 'gối' đỡ chai, tính theo bottleRowCount và highestBottleCountInOneRow",
+      "meaning": "Đặt chai thêm đúng chỗ theo bố cục bàn",
+      "where": "Modules.Contexts.GamePlay.MagicBottle.Scripts.PillowView"
+    },
+    {
+      "source": "asset",
+      "key": "ChargeableBottleAnimationConfig",
+      "type": "ScriptableObject",
+      "value": "tham số hoạt ảnh chai mini (dùng chung với SuperChargerInGameManager._animationConfig)",
+      "meaning": "Nhịp xuất hiện/biến mất/trail của ChargeableBottle",
+      "where": "Modules.Contexts.GamePlay.Board.Items.Scripts.ChargeableBottle.ChargeableBottleAnimationConfig"
+    },
+    {
+      "source": "code const",
+      "key": "Clip hoạt ảnh ChargeableBottle",
+      "type": "string",
+      "value": "\"ChargeableBottleReset\", \"ChargeableBottleNewBottle 1\", \"ChargeableBottleDisappear\"",
+      "meaning": "Ba clip vòng đời của chai mini",
+      "where": "ChargeableBottleItem, ChargeableBottleView"
+    },
+    {
+      "source": "code field",
+      "key": "ChargeableBottleItemModel.HasInitialCharge",
+      "type": "bool",
+      "value": "do dữ liệu level cấp",
+      "meaning": "Chai mini đã nạp sẵn ngay khi vào ván",
+      "where": "ChargeableBottleItemModel"
+    },
+    {
+      "source": "code field",
+      "key": "ChargeableBottleItem._chargeCount",
+      "type": "int",
+      "value": "runtime",
+      "meaning": "Số lần dùng còn lại của chai mini",
+      "where": "ChargeableBottleItem.get_ChargeCount / HasCharge"
+    },
+    {
+      "source": "storage key",
+      "key": "MagicBottleModel",
+      "type": "sync name",
+      "value": "\"MagicBottleModel\"",
+      "meaning": "Khoá lưu/đồng bộ dữ liệu Magic Bottle",
+      "where": "MagicBottleDataService.GetSyncName"
+    },
+    {
+      "source": "code field",
+      "key": "MagicBottleModel",
+      "type": "class",
+      "value": "Progress, LastSeenLobbyButtonProgress, IsIntroduced, EventShownInLifeTime",
+      "meaning": "Toàn bộ dữ liệu lưu của tính năng",
+      "where": "MagicBottleModel"
+    },
+    {
+      "source": "code const",
+      "key": "Khoá localization",
+      "type": "string",
+      "value": "MagicBottle, MagicBottleTitle, MagicBottleTitle!, MagicBottlePopupInfo, MagicBottlePopupInfoWin, MagicBottleInfoPopupStep1, MagicBottleInfoPopupStep2, MagicBottleInfoPopupStep3, MagicBottleInfoPopupWarning, MagicBottleCongratsPopupInfo, MagicBottleAYSWarning",
+      "meaning": "Toàn bộ chữ hiển thị (11 ngôn ngữ)",
+      "where": "GameDesign/appendix/localization.tsv"
+    },
+    {
+      "source": "code const",
+      "key": "Định dạng chữ",
+      "type": "format string",
+      "value": "\"{0} Levels\" (MagicBottleInfoPopUp), \"{0}/{1}\" (nút lobby)",
+      "meaning": "Điền số level cần thắng và tiến độ",
+      "where": "MagicBottleInfoPopUp.Show, MagicBottleLobbyButton"
+    },
+    {
+      "source": "server cache (historical)",
+      "key": "magicBottleConfigModel: isEnable",
+      "type": "",
+      "value": "false",
+      "meaning": "server-only (không có file default)",
+      "where": "Configs/CachedRemoteConfigs + Firebase RC template 3197 — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server cache (historical)",
+      "key": "magicBottleConfigModel: firstLevelToShow",
+      "type": "",
+      "value": "11",
+      "meaning": "server-only (không có file default)",
+      "where": "Configs/CachedRemoteConfigs + Firebase RC template 3197 — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server cache (historical)",
+      "key": "magicBottleConfigModel: neededProgress",
+      "type": "",
+      "value": "10",
+      "meaning": "server-only (không có file default)",
+      "where": "Configs/CachedRemoteConfigs + Firebase RC template 3197 — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    }
+  ],
+  "rewards": [
+    {
+      "context": "Kích hoạt Magic Bottle",
+      "reward": "1 chai trống thêm trên bàn ở mỗi level, cho tới khi thua [Phạm vi bằng chứng15/11: AddBottleAsMagicBottle truyền bottleHeight=1 trong native0.0.3063. Pool/reset/water-state effective và build0.0.3129 chưa xác nhận; mô tả chai trống là thiết kế cần kiểm runtime, không phải kết quả đã pass.]",
+      "evidence": "MagicBottleInGameManager.AddMagicBottleAndHide; MagicBottleInfoPopupStep3 'Earn extra bottle for each level'"
+    },
+    {
+      "context": "Dùng ChargeableBottle",
+      "reward": "1 lần rót thêm qua chai mini, nạp lại bằng cách sắp màu",
+      "evidence": "ChargeableBottleItem.HasCharge; ChargeableBottleItem.PrepareNewBottle"
+    }
+  ],
+  "backend": [
+    {
+      "command": "sync-data",
+      "direction": "client→server",
+      "purpose": "đồng bộ MagicBottleModel"
+    }
+  ],
+  "ui": [
+    {
+      "element": "MagicBottleLobbyButton",
+      "class": "Modules.Contexts.Home.MagicBottle.Scripts.UI.MagicBottleLobbyButton",
+      "purpose": "nút Home với vòng tiến độ và hoạt ảnh thu thập"
+    },
+    {
+      "element": "MagicBottlePopUp",
+      "class": "Modules.Contexts.Home.MagicBottle.Scripts.UI.MagicBottlePopUp",
+      "purpose": "giới thiệu + thanh tiến độ (MagicBottleProgressView, vạch xanh/đỏ)"
+    },
+    {
+      "element": "MagicBottleInfoPopUp",
+      "class": "Modules.Contexts.Home.MagicBottle.Scripts.UI.MagicBottleInfoPopUp",
+      "purpose": "3 bước hướng dẫn + cảnh báo mất khi thua"
+    },
+    {
+      "element": "MagicBottleCongratsPopUp",
+      "class": "Modules.Contexts.Home.MagicBottle.Scripts.UI.MagicBottleCongratsPopUp",
+      "purpose": "hoạt ảnh chúc mừng 2 phần, kết thúc bằng chai bay vào nút Play"
+    },
+    {
+      "element": "MagicBottleAreYouSureContainer",
+      "class": "Modules.Contexts.Home.MagicBottle.Scripts.UI.MagicBottleAreYouSureContainer",
+      "purpose": "cảnh báo sẽ mất Magic Bottle"
+    },
+    {
+      "element": "PillowView / MagicBottleAnimationView",
+      "class": "Modules.Contexts.GamePlay.MagicBottle.Scripts",
+      "purpose": "hoạt ảnh chai thêm hạ xuống bàn"
+    },
+    {
+      "element": "ChargeableBottleView",
+      "class": "Modules.Contexts.GamePlay.Board.Items.Scripts.ChargeableBottle.ChargeableBottleView",
+      "purpose": "chai mini trên bàn, có trail và particle va chạm"
+    }
+  ],
+  "analytics": [
+    {
+      "event": "magic_bottle_popup_impression",
+      "params": "impression_source, current_bottle_progress, magic_bottle_max_progress, progress",
+      "when": "mở MagicBottlePopUp"
+    },
+    {
+      "event": "magic_bottle_info_impression",
+      "params": "impression_source, current_bottle_progress, magic_bottle_max_progress, progress",
+      "when": "mở MagicBottleInfoPopUp"
+    },
+    {
+      "event": "magic_bottle_claim",
+      "params": "magic_bottle_max_progress, progress",
+      "when": "tiến độ đạt NeededProgress (kích hoạt Magic Bottle)"
+    },
+    {
+      "event": "magic_bottle_lost",
+      "params": "magic_bottle_max_progress, progress",
+      "when": "mất Magic Bottle do thua/không còn đủ điều kiện"
+    },
+    {
+      "event": "supercharger_used",
+      "params": "charger_type, color_filled, usage_count, moves_made, bottle_completed...",
+      "when": "chai mini ChargeableBottle được dùng (ChargeableBottleItem.SendSuperChargerUsedEvent)"
+    }
+  ],
+  "storage_keys": [
+    "MagicBottleModel (sync name; Progress, LastSeenLobbyButtonProgress, IsIntroduced, EventShownInLifeTime)"
+  ],
+  "related_features": [
+    "EventsFramework",
+    "SuperCharger",
+    "Snitch",
+    "Analytics",
+    "Boosters"
+  ],
+  "gaps": [
+    "15/11 — resolved_historical_snapshot: Đã trích toàn bộ field/value của MagicBottleConfigModel từ default0.0.3063 và cache lịch sử hiện có. Nhận định không có giá trị trong client đã được đối chiếu bằng file thật; không xác nhận effective runtime. Còn lại: Kiểm chứng effective config/asset và nhánh runtime trên đúng build nếu cần.",
+    "15/11 — partial_static_code_unresolved: MarkInfoPopUpIntroduced ghi IsIntroduced và IsInfoPopUpIntroduced đọc nó. MarkEventShownInLifeTime ghi EventShownInLifeTime; ShouldShowActivationPopUp kiểm !EventShownInLifeTime (và các gate trước). Hai cờ phục vụ info-seen và first-activation/lifetime, không hoán đổi cho nhau; reset/new-account cần test riêng. Còn lại: Đã phân biệtreader/writer; cần trace mọi reset và UI trigger caller để đóng full lifecycle ở currentbuild.",
+    "15/11 — resolved_static_snapshot: Đã trích toàn bộ numeric, vector, curve keys của MagicBottleAnimationConfig/MagicBottleCongrats/PillowViewAnimationConfig; không chỉ durationước lượng. Còn lại: Kiểm chứng effective config/asset và nhánh runtime trên đúng build nếu cần.",
+    "15/11 — partial_static_code_unresolved: AddMagicBottleAndHide gọi AddBottleAsMagicBottle và hide sprite. AddBottleAsMagicBottle gọi AddBottle(x,0,1); tham số thứ3 có signature bottleHeight, AddBottle chọn config bằng height và gọi ItemFactory.GetBottleItem→BottleItem.Prepare. Không có bước add water trong AddMagicBottleAndHide. Vì vậy không được mặc định magic bottle cao4 như chai thường. Còn lại: Native GetBottleItem có ABI struct bị decompiler gán sai tên tham số và halt_baddata ở nhánh lỗi; height argument1 rõ tại caller, empty/full effective cần runtime/pool reset trace.",
+    "Quan hệ giữa Magic Bottle (Home.MagicBottle) và ChargeableBottle (Board.Items) là chia sẻ hiện vật trên bàn; ChargeableBottle được điều khiển bởi SuperChargerConfigModel.Type = 1 chứ không phải MagicBottleConfigModel",
+    "[Runtime 2026-09-10] Model server-only magicBottleConfigModel (không có trong Resources/defaultconfigs) đã đọc từ cache live."
+  ],
+  "sources": [
+    "GameDesign/facts/facts.json (MagicBottleService, MagicBottleDataService, MagicBottleInGameManager, ChargeableBottleItem, ChargeableBottleView, các popup UI, MagicBottleAnimationConfig, MagicBottleCongratsAnimationConfig)",
+    "RecoveredNative/PseudoC/Assembly-CSharp/Modules/Contexts/Home/MagicBottle/Scripts/MagicBottleService.c",
+    "UnityExport/ExportedProject/Assets/MonoBehaviour/MagicBottleAnimationConfig.asset, MagicBottleCongratsAnimationConfig.asset",
+    "GameDesign/appendix/localization.tsv (MagicBottle*)"
+  ],
+  "audit_provenance": {
+    "review_date": "2026-11-15",
+    "mode": "offline_existing_files",
+    "code_build": "0.0.3063 ARMv7",
+    "runtime_build_observed_historically": "0.0.3129 ARM64 (audit 2026-10-18); not rechecked 2026-11-15",
+    "new_playtests": 0,
+    "uc_status": "See facts/audit_20261115/uc_registry.json; image reference is not pass",
+    "workbook_status": "Existing XLSX is historical; JSON and local web include 2026-11-15 corrections",
+    "static_review": "facts/local_code_gap_results_20261115.json; facts/local_asset_gap_results_20261115.json; facts/final_data_gap_decisions_20261115.json; facts/core_body_gap_decisions_20261115.json; facts/remaining_asset_gap_decisions_20261115.json"
+  },
+  "static_review_20261115": {
+    "date": "2026-11-15",
+    "scope": "Historical code/assets 0.0.3063, dated caches, device 0.0.3129 cached bundles and explicitly scoped runtime evidence. Not full runtime pass.",
+    "findings": [
+      {
+        "kind": "core_body",
+        "source_report": "facts/core_body_gap_decisions_20261115.json",
+        "id": "MS-CORE-BODY-09",
+        "gap_ids": [
+          "MS-MagicBottle-G004"
+        ],
+        "title": "Magic bottle thêm với height1",
+        "conclusion": "AddMagicBottleAndHide gọi AddBottleAsMagicBottle và hide sprite. AddBottleAsMagicBottle gọi AddBottle(x,0,1); tham số thứ3 có signature bottleHeight, AddBottle chọn config bằng height và gọi ItemFactory.GetBottleItem→BottleItem.Prepare. Không có bước add water trong AddMagicBottleAndHide. Vì vậy không được mặc định magic bottle cao4 như chai thường.",
+        "evidence": [
+          {
+            "file": "../com.grandgames.magicsort_Unity_20260909_112501/RecoveredNative/PseudoC/Assembly-CSharp/Modules/Contexts/GamePlay/MagicBottle/Scripts/MagicBottleInGameManager.c",
+            "line": 78,
+            "end_line": 165,
+            "method": "// ===== MagicBottleInGameManager :: public void AddMagicBottleAndHide(",
+            "sha256": "c3cf4fafb00006c993e28b73b9d44963e751e467a4073f4c206a52665ea1c7e9",
+            "body_checked": true,
+            "build": "0.0.3063 ARMv7",
+            "required_body_tokens": []
+          },
+          {
+            "file": "../com.grandgames.magicsort_Unity_20260909_112501/RecoveredNative/PseudoC/Assembly-CSharp/Modules/Contexts/GamePlay/Board/Common/Scripts/BottleCollection.c",
+            "line": 10112,
+            "end_line": 10269,
+            "method": "// ===== BottleCollection :: public BottleItem AddBottleAsMagicBottle(",
+            "sha256": "63a000c895d1bea54297896e5fde02f69b55f1759e9889f6b88e0ccf36794387",
+            "body_checked": true,
+            "build": "0.0.3063 ARMv7",
+            "required_body_tokens": []
+          },
+          {
+            "file": "../com.grandgames.magicsort_Unity_20260909_112501/RecoveredNative/PseudoC/Assembly-CSharp/Modules/Contexts/GamePlay/Board/Common/Scripts/BottleCollection.c",
+            "line": 10913,
+            "end_line": 11289,
+            "method": "// ===== BottleCollection :: private BottleItem AddBottle(",
+            "sha256": "63a000c895d1bea54297896e5fde02f69b55f1759e9889f6b88e0ccf36794387",
+            "body_checked": true,
+            "build": "0.0.3063 ARMv7",
+            "required_body_tokens": []
+          },
+          {
+            "file": "../com.grandgames.magicsort_Unity_20260909_112501/RecoveredNative/PseudoC/Assembly-CSharp/Modules/Contexts/GamePlay/BoardItems/Scripts/Generation/ItemFactory.c",
+            "line": 281,
+            "end_line": 356,
+            "method": "// ===== ItemFactory :: public BottleItem GetBottleItem(",
+            "sha256": "5084765a0cfbfdda4b98d5689fbc5efc6db13d35069a65c37f771cea80c00d62",
+            "body_checked": true,
+            "build": "0.0.3063 ARMv7",
+            "required_body_tokens": []
+          }
+        ],
+        "status": "partial_static_code_unresolved",
+        "remaining": "Native GetBottleItem có ABI struct bị decompiler gán sai tên tham số và halt_baddata ở nhánh lỗi; height argument1 rõ tại caller, empty/full effective cần runtime/pool reset trace.",
+        "runtime_verified": false,
+        "scope": "recovered_native_0.0.3063_only"
+      },
+      {
+        "kind": "final_data",
+        "source_report": "facts/final_data_gap_decisions_20261115.json",
+        "id": "MS-FDG-012",
+        "gap_ids": [
+          "MS-MagicBottle-G001"
+        ],
+        "title": "Không có Resources/defaultconfigs/MagicBottleConfigModel.json nên không biết giá trị mặc định của IsEnable / FirstLevelToShow / NeededProgress — hoàn toàn do se",
+        "status": "resolved_historical_snapshot",
+        "conclusion": "Đã trích toàn bộ field/value của MagicBottleConfigModel từ default0.0.3063 và cache lịch sử hiện có. Nhận định không có giá trị trong client đã được đối chiếu bằng file thật; không xác nhận effective runtime.",
+        "evidence": [
+          "facts/local_asset_review_20261115/config_catalog.json"
+        ],
+        "remaining": "Full historical data answered; current effective selection and full runtime remain unverified.",
+        "next_action": "Kiểm chứng effective config/asset và nhánh runtime trên đúng build nếu cần.",
+        "scope": "question-specific source/observed branch only; no full-UC or production claim",
+        "source_records": [
+          {
+            "snapshot": "cache20260910",
+            "model": "MagicBottleConfigModel",
+            "source": "facts\\runtime\\server_configs\\magicBottleConfigModel.json",
+            "root": "GameDesign",
+            "sha256": "165e1f8a20df8487c39efc9cee987055ccce427ae45b3ac4349dc3aa2bfb2d6f",
+            "line": 1,
+            "build": "snapshot provenance at path"
+          },
+          {
+            "snapshot": "cache20261010",
+            "model": "MagicBottleConfigModel",
+            "source": "facts\\runtime\\test_20261010\\before\\CachedRemoteConfigs",
+            "root": "GameDesign",
+            "sha256": "433164d4877b2dee55d2bbd79ef2fe83d3fe9519492fe15e3cb0926daf216050",
+            "line": 1,
+            "build": "snapshot provenance at path"
+          }
+        ]
+      },
+      {
+        "kind": "code",
+        "source_report": "facts/local_code_gap_results_20261115.json",
+        "id": "MS-CODE-43",
+        "gap_ids": [
+          "MS-MagicBottle-G002"
+        ],
+        "title": "Hai MagicBottle flags có reader khác nhau",
+        "status": "partial_static_code",
+        "conclusion": "MarkInfoPopUpIntroduced ghi IsIntroduced và IsInfoPopUpIntroduced đọc nó. MarkEventShownInLifeTime ghi EventShownInLifeTime; ShouldShowActivationPopUp kiểm !EventShownInLifeTime (và các gate trước). Hai cờ phục vụ info-seen và first-activation/lifetime, không hoán đổi cho nhau; reset/new-account cần test riêng.",
+        "evidence": [
+          {
+            "file": "../com.grandgames.magicsort_Unity_20260909_112501/RecoveredNative/PseudoC/Assembly-CSharp/Modules/Contexts/Home/MagicBottle/Scripts/MagicBottleService.c",
+            "line": 809,
+            "end_line": 835,
+            "method": "// ===== MagicBottleService :: public bool IsInfoPopUpIntroduced()",
+            "sha256": "54ccf0b8ac37533e9f7a621bb963c9df4b155b83ff5cee9a2b4ea999c8a46826",
+            "body_checked": true,
+            "build": "0.0.3063 ARMv7",
+            "required_body_tokens": [
+              "_IsIntroduced_k__BackingField"
+            ]
+          }
+        ],
+        "remaining": "Đã phân biệtreader/writer; cần trace mọi reset và UI trigger caller để đóng full lifecycle ở currentbuild.",
+        "scope": "recovered_native_0.0.3063_only",
+        "runtime_verified": false
+      },
+      {
+        "kind": "asset",
+        "source_report": "facts/local_asset_gap_results_20261115.json",
+        "id": "MS-MagicBottle-G001",
+        "status": "resolved_static_snapshot",
+        "conclusion": "Đã trích toàn bộ field/value của MagicBottleConfigModel từ default0.0.3063 và cache lịch sử hiện có. Nhận định không có giá trị trong client đã được đối chiếu bằng file thật; không xác nhận effective runtime.",
+        "evidence": [
+          {
+            "snapshot": "cache20260910",
+            "model": "MagicBottleConfigModel",
+            "source": "facts\\runtime\\server_configs\\magicBottleConfigModel.json",
+            "root": "GameDesign",
+            "sha256": "165e1f8a20df8487c39efc9cee987055ccce427ae45b3ac4349dc3aa2bfb2d6f",
+            "line": 1,
+            "build": "snapshot provenance at path"
+          },
+          {
+            "snapshot": "cache20261010",
+            "model": "MagicBottleConfigModel",
+            "source": "facts\\runtime\\test_20261010\\before\\CachedRemoteConfigs",
+            "root": "GameDesign",
+            "sha256": "433164d4877b2dee55d2bbd79ef2fe83d3fe9519492fe15e3cb0926daf216050",
+            "line": 1,
+            "build": "snapshot provenance at path"
+          }
+        ],
+        "data": "config_catalog.json",
+        "scope": "static_export0.0.3063_or_historical_cache_not_runtime_pass",
+        "reviewed": "2026-11-15",
+        "next_action": "Kiểm chứng effective config/asset và nhánh runtime trên đúng build nếu cần.",
+        "superseded_or_refined_by": "MS-FDG-012"
+      },
+      {
+        "kind": "asset",
+        "source_report": "facts/local_asset_gap_results_20261115.json",
+        "id": "MS-MagicBottle-G003",
+        "status": "resolved_static_snapshot",
+        "conclusion": "Đã trích toàn bộ numeric, vector, curve keys của MagicBottleAnimationConfig/MagicBottleCongrats/PillowViewAnimationConfig; không chỉ durationước lượng.",
+        "evidence": [
+          {
+            "source": "MonoBehaviour\\MagicBottleAnimationConfig.asset",
+            "root": "UnityExport Assets 0.0.3063",
+            "sha256": "7843cead54471cbf16fdbb94e48c7193b484a4c98adcd31460416f29057f26c9",
+            "line": 1,
+            "build": "0.0.3063 ARMv7"
+          },
+          {
+            "source": "MonoBehaviour\\MagicBottleCongratsAnimationConfig.asset",
+            "root": "UnityExport Assets 0.0.3063",
+            "sha256": "1d84579f67d67ed13eedc96d670b4240f8e75021def6c406df0037423aa85dad",
+            "line": 1,
+            "build": "0.0.3063 ARMv7"
+          },
+          {
+            "source": "MonoBehaviour\\PillowViewAnimationConfig.asset",
+            "root": "UnityExport Assets 0.0.3063",
+            "sha256": "99655d45133997b258aab0019b70909f5d49b0fd336535613b329c6a47210c93",
+            "line": 1,
+            "build": "0.0.3063 ARMv7"
+          }
+        ],
+        "data": "asset_catalog.json",
+        "scope": "static_export0.0.3063_or_historical_cache_not_runtime_pass",
+        "reviewed": "2026-11-15",
+        "next_action": "Kiểm chứng effective config/asset và nhánh runtime trên đúng build nếu cần."
+      }
+    ]
+  },
+  "acceptance_review_20261115": {
+    "source": "facts/feature_acceptance_20261115.json",
+    "feature_id": "MagicBottle",
+    "scope": "All eleven dossier dimensions reviewed; full_feature_verified is not implied; read per-dimension gaps and actual runtime evidence."
+  },
+  "segment_ab_review_20261115": {
+    "status": "not_identified_in_sources",
+    "segment_ids": [],
+    "matching_basis": "explicit_gd_config_map_or_exact_model_token_in_gdd_configs_where_key_sources; rootfieldscoped",
+    "rows": [],
+    "classifications": {},
+    "assignment_verified": false,
+    "uplift_verified": false,
+    "note": "No matchingrow does not prove no segmentation/AB. Rewardbucketfalsepositives remain explicitly classified."
+  },
+  "continuation_review_20261116": {
+    "date": "2026-11-16",
+    "build": "0.0.3129 ARM64 host APK",
+    "build_scope": "Host APK version3129 matches LAST observed installed version15/11 only; installed bytes/live device16/11 not verified.",
+    "runtime_status": "device_unavailable",
+    "runtime_case_ids": [],
+    "current_apk_model_links": {
+      "feature": "MagicBottle",
+      "models": [],
+      "status": "no_exact_model_token_identified",
+      "distribution": "sanitized_public",
+      "public_mapping_pending": false
+    },
+    "current_packaged_defaults": [],
+    "native_finding_ids": [],
+    "documentation_source_coverage": {
+      "dossier_present": true,
+      "use_case_catalog_count": 17,
+      "config_catalog_rows": 20,
+      "current_apk_default_model_links": 0,
+      "current_native_findings": 0,
+      "scope": "Documentation/source coverage only; not complete runtime verification."
+    },
+    "runtime_completion": {
+      "date": "2026-11-16",
+      "status": "device_unavailable",
+      "executed_case_count": 0,
+      "full_feature_runtime_verified": false
+    },
+    "planned_branch": "Cuối lượt core: icon MagicBottle và info popup nếu hiện, ghi điều kiện kích hoạt; gameplay bottle sau khi xong noncore.",
+    "target_uc_ids": [
+      "UC-04",
+      "UC-17"
+    ],
+    "execution_phase": "core_and_levels_last",
+    "core_or_levels_last": true,
+    "actionability_full_json": "facts/continuation_20261116/current/feature_actionability.json",
+    "actionability_site_data_path": "data/continuation_20261116/feature_actionability.json",
+    "source_classes": [
+      "external_dependency"
+    ],
+    "full_feature_verified": false
+  }
+}

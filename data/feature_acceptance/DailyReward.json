@@ -1,0 +1,2589 @@
+{
+  "id": "DailyReward",
+  "feature": "DailyReward",
+  "name": "Daily Bonus",
+  "category": "Event",
+  "category_label": "Sự kiện",
+  "core_levels_last": false,
+  "acceptance_status": "documented_with_explicit_remaining_scope",
+  "full_feature_verified": false,
+  "checks": {
+    "purpose": {
+      "status": "documented_static_scope",
+      "source": "gdd/DailyReward.json#/summary",
+      "claim_excerpt": "Daily Bonus là sự kiện quà hằng ngày kiểu 'chọn hộp': người chơi mở một số ô, mỗi ô rút ngẫu nhiên một phần thưởng từ pool (Undo, Shuffle, Extra Bottle, Coin 100/200/300, Unlimited Life 15/30/60 phút). Xác suất không cố định mà đổi theo hoàn cảnh: bản V2 có ba bảng xác suất riêng cho ngày đầu tiên (DayOneProbabilities), cho lúc người chơi hết mạng hoặc đang kẹt level khó (HardLevelOrNoLifeProbabil"
+    },
+    "unlock": {
+      "status": "described_historical_conditions_runtime_boundary_unverified",
+      "source": "gdd/DailyReward.json#/unlock",
+      "content": "DailyRewardStateService.GetEventState() trả DailyRewardStateType.Disable khi DailyRewardConfigModelV2.IsEnabled == false và InsufficientLevel khi level < DailyRewardConfigModelV2.FirstLevelToShow. Cần có cache sự kiện (DailyRewardCacheModel) từ DailyRewardRemoteService, nếu không thì NoCachedEvent."
+    },
+    "entry_flow": {
+      "status": "documented_paths_not_all_executed",
+      "entry_points": [
+        "DailyRewardLobbyButton (+DailyRewardLobbyButtonAlertView / DailyRewardLobbyButtonAnimation) — icon ở Home",
+        "OpenDailyRewardPopUpCommand — mở DailyRewardPopUp",
+        "TryShowDailyRewardCommand / TryShowDailyRewardHomeWelcomingCommand — tự bật khi vào Home",
+        "DailyRewardStoreView + DailyRewardStoreClickCommand — dòng Daily Bonus trong Store (StoreViewType.DailyReward = 8)",
+        "TryShowDailyRewardBulkGiveAnimationCommand / …HomeWelcomingCommand — animation trao gộp thưởng đã chọn"
+      ],
+      "flow_source": "gdd/DailyReward.json#/flow",
+      "acceptance_scope": "Probability pools/V1V2/Collection; số hat/chọn/reroll/claim, schedule, expiry và duplicate prevention"
+    },
+    "config": {
+      "status": "source_bound_catalog_present",
+      "gdd_rows": 517,
+      "full_leaf_rows_associated": 1812,
+      "snapshots": {
+        "default_0.0.3063": 329,
+        "cache_20260910": 575,
+        "cache_20261010": 575,
+        "firebase_20260910": 329,
+        "instance_cache_observed_20261115": 4
+      },
+      "models": [
+        {
+          "model": "dailyRewardConfigModel",
+          "matching_basis": [
+            {
+              "kind": "explicit_gd_config_model_map",
+              "source": "gd_config.json#/defaultconfigs/map/DailyReward"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/DailyReward.json#/sources/4"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/DailyReward.json#/configs/14/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/DailyReward.json#/configs/22/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/DailyReward.json#/configs/23/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/DailyReward.json#/configs/24/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/DailyReward.json#/configs/25/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/DailyReward.json#/configs/26/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/DailyReward.json#/configs/27/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/DailyReward.json#/configs/28/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/DailyReward.json#/configs/29/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/DailyReward.json#/configs/30/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/DailyReward.json#/configs/31/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/DailyReward.json#/configs/32/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/DailyReward.json#/configs/33/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/DailyReward.json#/configs/34/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/DailyReward.json#/configs/35/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/DailyReward.json#/configs/351/key_where"
+            }
+          ]
+        },
+        {
+          "model": "dailyRewardConfigModelV2",
+          "matching_basis": [
+            {
+              "kind": "explicit_gd_config_model_map",
+              "source": "gd_config.json#/defaultconfigs/map/DailyReward"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/DailyReward.json#/sources/13"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/DailyReward.json#/configs/9/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/DailyReward.json#/configs/10/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/DailyReward.json#/configs/11/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/DailyReward.json#/configs/12/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/DailyReward.json#/configs/13/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/DailyReward.json#/configs/36/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/DailyReward.json#/configs/37/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/DailyReward.json#/configs/38/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/DailyReward.json#/configs/39/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/DailyReward.json#/configs/40/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/DailyReward.json#/configs/41/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/DailyReward.json#/configs/42/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/DailyReward.json#/configs/43/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/DailyReward.json#/configs/44/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/DailyReward.json#/configs/45/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/DailyReward.json#/configs/46/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/DailyReward.json#/configs/47/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/DailyReward.json#/configs/48/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/DailyReward.json#/configs/49/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/DailyReward.json#/configs/50/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/DailyReward.json#/configs/51/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/DailyReward.json#/configs/52/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/DailyReward.json#/configs/53/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/DailyReward.json#/configs/54/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/DailyReward.json#/configs/55/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/DailyReward.json#/configs/56/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/DailyReward.json#/configs/57/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/DailyReward.json#/configs/58/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/DailyReward.json#/configs/59/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/DailyReward.json#/configs/60/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/DailyReward.json#/configs/61/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/DailyReward.json#/configs/62/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/DailyReward.json#/configs/63/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/DailyReward.json#/configs/64/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/DailyReward.json#/configs/65/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/DailyReward.json#/configs/66/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/DailyReward.json#/configs/67/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/DailyReward.json#/configs/68/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/DailyReward.json#/configs/69/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/DailyReward.json#/configs/70/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/DailyReward.json#/configs/71/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/DailyReward.json#/configs/72/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/DailyReward.json#/configs/73/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/DailyReward.json#/configs/74/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/DailyReward.json#/configs/75/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/DailyReward.json#/configs/76/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/DailyReward.json#/configs/77/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/DailyReward.json#/configs/78/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/DailyReward.json#/configs/79/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/DailyReward.json#/configs/80/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/DailyReward.json#/configs/81/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/DailyReward.json#/configs/82/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/DailyReward.json#/configs/83/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/DailyReward.json#/configs/84/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/DailyReward.json#/configs/85/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/DailyReward.json#/configs/86/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/DailyReward.json#/configs/87/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/DailyReward.json#/configs/88/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/DailyReward.json#/configs/89/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/DailyReward.json#/configs/90/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/DailyReward.json#/configs/91/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/DailyReward.json#/configs/92/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/DailyReward.json#/configs/93/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/DailyReward.json#/configs/94/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/DailyReward.json#/configs/95/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/DailyReward.json#/configs/96/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/DailyReward.json#/configs/97/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/DailyReward.json#/configs/98/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/DailyReward.json#/configs/99/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/DailyReward.json#/configs/100/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/DailyReward.json#/configs/101/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/DailyReward.json#/configs/102/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/DailyReward.json#/configs/103/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/DailyReward.json#/configs/104/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/DailyReward.json#/configs/105/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/DailyReward.json#/configs/106/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/DailyReward.json#/configs/107/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/DailyReward.json#/configs/108/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/DailyReward.json#/configs/109/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/DailyReward.json#/configs/110/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/DailyReward.json#/configs/111/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/DailyReward.json#/configs/112/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/DailyReward.json#/configs/113/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/DailyReward.json#/configs/114/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/DailyReward.json#/configs/115/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/DailyReward.json#/configs/116/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/DailyReward.json#/configs/117/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/DailyReward.json#/configs/118/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/DailyReward.json#/configs/119/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/DailyReward.json#/configs/120/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/DailyReward.json#/configs/121/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/DailyReward.json#/configs/122/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/DailyReward.json#/configs/123/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/DailyReward.json#/configs/124/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/DailyReward.json#/configs/125/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/DailyReward.json#/configs/126/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/DailyReward.json#/configs/127/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/DailyReward.json#/configs/128/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/DailyReward.json#/configs/129/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/DailyReward.json#/configs/130/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/DailyReward.json#/configs/131/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/DailyReward.json#/configs/132/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/DailyReward.json#/configs/133/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/DailyReward.json#/configs/134/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/DailyReward.json#/configs/135/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/DailyReward.json#/configs/136/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/DailyReward.json#/configs/137/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/DailyReward.json#/configs/138/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/DailyReward.json#/configs/139/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/DailyReward.json#/configs/140/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/DailyReward.json#/configs/141/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/DailyReward.json#/configs/142/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/DailyReward.json#/configs/143/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/DailyReward.json#/configs/144/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/DailyReward.json#/configs/145/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/DailyReward.json#/configs/146/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/DailyReward.json#/configs/147/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/DailyReward.json#/configs/148/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/DailyReward.json#/configs/149/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/DailyReward.json#/configs/150/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/DailyReward.json#/configs/151/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/DailyReward.json#/configs/152/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/DailyReward.json#/configs/153/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/DailyReward.json#/configs/154/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/DailyReward.json#/configs/155/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/DailyReward.json#/configs/156/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/DailyReward.json#/configs/157/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/DailyReward.json#/configs/158/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/DailyReward.json#/configs/159/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/DailyReward.json#/configs/160/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/DailyReward.json#/configs/161/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/DailyReward.json#/configs/162/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/DailyReward.json#/configs/163/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/DailyReward.json#/configs/164/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/DailyReward.json#/configs/165/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/DailyReward.json#/configs/166/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/DailyReward.json#/configs/167/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/DailyReward.json#/configs/168/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/DailyReward.json#/configs/169/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/DailyReward.json#/configs/170/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/DailyReward.json#/configs/171/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/DailyReward.json#/configs/172/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/DailyReward.json#/configs/173/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/DailyReward.json#/configs/174/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/DailyReward.json#/configs/175/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/DailyReward.json#/configs/176/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/DailyReward.json#/configs/177/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/DailyReward.json#/configs/178/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/DailyReward.json#/configs/179/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/DailyReward.json#/configs/180/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/DailyReward.json#/configs/181/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/DailyReward.json#/configs/182/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/DailyReward.json#/configs/183/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/DailyReward.json#/configs/184/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/DailyReward.json#/configs/185/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/DailyReward.json#/configs/186/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/DailyReward.json#/configs/187/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/DailyReward.json#/configs/188/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/DailyReward.json#/configs/189/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/DailyReward.json#/configs/190/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/DailyReward.json#/configs/191/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/DailyReward.json#/configs/192/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/DailyReward.json#/configs/193/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/DailyReward.json#/configs/194/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/DailyReward.json#/configs/195/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/DailyReward.json#/configs/196/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/DailyReward.json#/configs/197/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/DailyReward.json#/configs/198/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/DailyReward.json#/configs/199/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/DailyReward.json#/configs/200/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/DailyReward.json#/configs/201/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/DailyReward.json#/configs/202/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/DailyReward.json#/configs/203/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/DailyReward.json#/configs/204/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/DailyReward.json#/configs/205/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/DailyReward.json#/configs/206/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/DailyReward.json#/configs/207/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/DailyReward.json#/configs/208/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/DailyReward.json#/configs/209/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/DailyReward.json#/configs/210/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/DailyReward.json#/configs/211/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/DailyReward.json#/configs/212/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/DailyReward.json#/configs/213/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/DailyReward.json#/configs/214/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/DailyReward.json#/configs/215/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/DailyReward.json#/configs/216/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/DailyReward.json#/configs/217/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/DailyReward.json#/configs/218/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/DailyReward.json#/configs/219/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/DailyReward.json#/configs/220/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/DailyReward.json#/configs/221/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/DailyReward.json#/configs/222/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/DailyReward.json#/configs/223/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/DailyReward.json#/configs/224/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/DailyReward.json#/configs/225/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/DailyReward.json#/configs/226/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/DailyReward.json#/configs/227/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/DailyReward.json#/configs/228/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/DailyReward.json#/configs/229/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/DailyReward.json#/configs/230/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/DailyReward.json#/configs/231/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/DailyReward.json#/configs/232/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/DailyReward.json#/configs/233/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/DailyReward.json#/configs/234/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/DailyReward.json#/configs/235/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/DailyReward.json#/configs/236/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/DailyReward.json#/configs/237/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/DailyReward.json#/configs/238/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/DailyReward.json#/configs/239/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/DailyReward.json#/configs/240/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/DailyReward.json#/configs/241/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/DailyReward.json#/configs/242/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/DailyReward.json#/configs/243/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/DailyReward.json#/configs/244/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/DailyReward.json#/configs/245/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/DailyReward.json#/configs/246/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/DailyReward.json#/configs/247/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/DailyReward.json#/configs/248/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/DailyReward.json#/configs/249/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/DailyReward.json#/configs/250/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/DailyReward.json#/configs/251/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/DailyReward.json#/configs/252/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/DailyReward.json#/configs/253/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/DailyReward.json#/configs/254/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/DailyReward.json#/configs/255/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/DailyReward.json#/configs/256/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/DailyReward.json#/configs/257/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/DailyReward.json#/configs/258/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/DailyReward.json#/configs/259/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/DailyReward.json#/configs/260/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/DailyReward.json#/configs/261/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/DailyReward.json#/configs/262/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/DailyReward.json#/configs/263/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/DailyReward.json#/configs/264/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/DailyReward.json#/configs/265/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/DailyReward.json#/configs/266/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/DailyReward.json#/configs/267/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/DailyReward.json#/configs/268/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/DailyReward.json#/configs/269/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/DailyReward.json#/configs/270/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/DailyReward.json#/configs/271/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/DailyReward.json#/configs/272/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/DailyReward.json#/configs/273/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/DailyReward.json#/configs/274/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/DailyReward.json#/configs/275/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/DailyReward.json#/configs/276/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/DailyReward.json#/configs/277/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/DailyReward.json#/configs/278/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/DailyReward.json#/configs/279/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/DailyReward.json#/configs/280/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/DailyReward.json#/configs/281/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/DailyReward.json#/configs/282/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/DailyReward.json#/configs/283/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/DailyReward.json#/configs/284/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/DailyReward.json#/configs/285/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/DailyReward.json#/configs/286/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/DailyReward.json#/configs/287/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/DailyReward.json#/configs/288/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/DailyReward.json#/configs/289/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/DailyReward.json#/configs/290/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/DailyReward.json#/configs/291/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/DailyReward.json#/configs/292/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/DailyReward.json#/configs/293/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/DailyReward.json#/configs/294/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/DailyReward.json#/configs/295/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/DailyReward.json#/configs/296/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/DailyReward.json#/configs/297/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/DailyReward.json#/configs/298/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/DailyReward.json#/configs/299/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/DailyReward.json#/configs/300/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/DailyReward.json#/configs/301/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/DailyReward.json#/configs/302/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/DailyReward.json#/configs/303/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/DailyReward.json#/configs/304/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/DailyReward.json#/configs/305/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/DailyReward.json#/configs/306/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/DailyReward.json#/configs/307/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/DailyReward.json#/configs/308/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/DailyReward.json#/configs/309/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/DailyReward.json#/configs/310/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/DailyReward.json#/configs/311/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/DailyReward.json#/configs/312/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/DailyReward.json#/configs/313/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/DailyReward.json#/configs/314/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/DailyReward.json#/configs/315/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/DailyReward.json#/configs/316/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/DailyReward.json#/configs/317/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/DailyReward.json#/configs/318/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/DailyReward.json#/configs/319/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/DailyReward.json#/configs/320/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/DailyReward.json#/configs/321/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/DailyReward.json#/configs/322/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/DailyReward.json#/configs/323/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/DailyReward.json#/configs/324/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/DailyReward.json#/configs/325/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/DailyReward.json#/configs/326/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/DailyReward.json#/configs/327/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/DailyReward.json#/configs/328/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/DailyReward.json#/configs/329/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/DailyReward.json#/configs/330/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/DailyReward.json#/configs/331/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/DailyReward.json#/configs/332/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/DailyReward.json#/configs/333/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/DailyReward.json#/configs/334/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/DailyReward.json#/configs/335/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/DailyReward.json#/configs/336/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/DailyReward.json#/configs/337/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/DailyReward.json#/configs/338/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/DailyReward.json#/configs/339/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/DailyReward.json#/configs/340/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/DailyReward.json#/configs/341/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/DailyReward.json#/configs/342/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/DailyReward.json#/configs/343/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/DailyReward.json#/configs/344/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/DailyReward.json#/configs/345/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/DailyReward.json#/configs/346/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/DailyReward.json#/configs/347/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/DailyReward.json#/configs/348/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/DailyReward.json#/configs/349/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/DailyReward.json#/configs/350/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/DailyReward.json#/configs/352/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/DailyReward.json#/configs/353/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/DailyReward.json#/configs/354/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/DailyReward.json#/configs/355/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/DailyReward.json#/configs/356/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/DailyReward.json#/configs/357/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/DailyReward.json#/configs/358/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/DailyReward.json#/configs/359/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/DailyReward.json#/configs/360/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/DailyReward.json#/configs/361/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/DailyReward.json#/configs/362/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/DailyReward.json#/configs/363/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/DailyReward.json#/configs/364/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/DailyReward.json#/configs/365/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/DailyReward.json#/configs/366/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/DailyReward.json#/configs/367/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/DailyReward.json#/configs/368/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/DailyReward.json#/configs/369/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/DailyReward.json#/configs/370/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/DailyReward.json#/configs/371/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/DailyReward.json#/configs/372/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/DailyReward.json#/configs/373/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/DailyReward.json#/configs/374/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/DailyReward.json#/configs/375/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/DailyReward.json#/configs/376/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/DailyReward.json#/configs/377/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/DailyReward.json#/configs/378/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/DailyReward.json#/configs/379/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/DailyReward.json#/configs/380/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/DailyReward.json#/configs/381/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/DailyReward.json#/configs/382/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/DailyReward.json#/configs/383/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/DailyReward.json#/configs/384/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/DailyReward.json#/configs/385/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/DailyReward.json#/configs/386/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/DailyReward.json#/configs/387/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/DailyReward.json#/configs/388/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/DailyReward.json#/configs/389/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/DailyReward.json#/configs/390/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/DailyReward.json#/configs/391/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/DailyReward.json#/configs/392/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/DailyReward.json#/configs/393/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/DailyReward.json#/configs/394/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/DailyReward.json#/configs/395/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/DailyReward.json#/configs/396/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/DailyReward.json#/configs/397/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/DailyReward.json#/configs/398/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/DailyReward.json#/configs/399/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/DailyReward.json#/configs/400/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/DailyReward.json#/configs/401/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/DailyReward.json#/configs/402/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/DailyReward.json#/configs/403/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/DailyReward.json#/configs/404/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/DailyReward.json#/configs/405/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/DailyReward.json#/configs/406/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/DailyReward.json#/configs/407/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/DailyReward.json#/configs/408/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/DailyReward.json#/configs/409/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/DailyReward.json#/configs/410/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/DailyReward.json#/configs/411/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/DailyReward.json#/configs/412/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/DailyReward.json#/configs/413/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/DailyReward.json#/configs/414/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/DailyReward.json#/configs/415/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/DailyReward.json#/configs/416/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/DailyReward.json#/configs/417/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/DailyReward.json#/configs/418/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/DailyReward.json#/configs/419/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/DailyReward.json#/configs/420/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/DailyReward.json#/configs/421/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/DailyReward.json#/configs/422/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/DailyReward.json#/configs/423/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/DailyReward.json#/configs/424/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/DailyReward.json#/configs/425/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/DailyReward.json#/configs/426/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/DailyReward.json#/configs/427/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/DailyReward.json#/configs/428/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/DailyReward.json#/configs/429/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/DailyReward.json#/configs/430/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/DailyReward.json#/configs/431/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/DailyReward.json#/configs/432/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/DailyReward.json#/configs/433/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/DailyReward.json#/configs/434/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/DailyReward.json#/configs/435/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/DailyReward.json#/configs/436/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/DailyReward.json#/configs/437/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/DailyReward.json#/configs/438/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/DailyReward.json#/configs/439/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/DailyReward.json#/configs/440/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/DailyReward.json#/configs/441/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/DailyReward.json#/configs/442/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/DailyReward.json#/configs/443/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/DailyReward.json#/configs/444/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/DailyReward.json#/configs/445/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/DailyReward.json#/configs/446/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/DailyReward.json#/configs/447/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/DailyReward.json#/configs/448/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/DailyReward.json#/configs/449/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/DailyReward.json#/configs/450/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/DailyReward.json#/configs/451/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/DailyReward.json#/configs/452/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/DailyReward.json#/configs/453/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/DailyReward.json#/configs/454/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/DailyReward.json#/configs/455/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/DailyReward.json#/configs/456/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/DailyReward.json#/configs/457/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/DailyReward.json#/configs/458/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/DailyReward.json#/configs/459/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/DailyReward.json#/configs/460/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/DailyReward.json#/configs/461/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/DailyReward.json#/configs/462/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/DailyReward.json#/configs/463/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/DailyReward.json#/configs/464/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/DailyReward.json#/configs/465/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/DailyReward.json#/configs/466/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/DailyReward.json#/configs/467/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/DailyReward.json#/configs/468/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/DailyReward.json#/configs/469/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/DailyReward.json#/configs/470/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/DailyReward.json#/configs/471/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/DailyReward.json#/configs/472/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/DailyReward.json#/configs/473/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/DailyReward.json#/configs/474/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/DailyReward.json#/configs/475/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/DailyReward.json#/configs/476/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/DailyReward.json#/configs/477/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/DailyReward.json#/configs/478/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/DailyReward.json#/configs/479/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/DailyReward.json#/configs/480/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/DailyReward.json#/configs/481/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/DailyReward.json#/configs/482/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/DailyReward.json#/configs/483/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/DailyReward.json#/configs/484/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/DailyReward.json#/configs/485/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/DailyReward.json#/configs/486/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/DailyReward.json#/configs/487/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/DailyReward.json#/configs/488/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/DailyReward.json#/configs/489/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/DailyReward.json#/configs/490/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/DailyReward.json#/configs/491/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/DailyReward.json#/configs/492/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/DailyReward.json#/configs/493/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/DailyReward.json#/configs/494/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/DailyReward.json#/configs/495/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/DailyReward.json#/configs/496/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/DailyReward.json#/configs/497/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/DailyReward.json#/configs/498/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/DailyReward.json#/configs/499/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/DailyReward.json#/configs/500/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/DailyReward.json#/configs/501/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/DailyReward.json#/configs/502/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/DailyReward.json#/configs/503/key_where"
+            }
+          ]
+        },
+        {
+          "model": "DailyRewardModel",
+          "matching_basis": [
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/DailyReward.json#/sources/14"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/DailyReward.json#/configs/18/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/DailyReward.json#/configs/19/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/DailyReward.json#/configs/504/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/DailyReward.json#/configs/505/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/DailyReward.json#/configs/506/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/DailyReward.json#/configs/507/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/DailyReward.json#/configs/508/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/DailyReward.json#/configs/509/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/DailyReward.json#/configs/510/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/DailyReward.json#/configs/511/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/DailyReward.json#/configs/512/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/DailyReward.json#/configs/513/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/DailyReward.json#/configs/514/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/DailyReward.json#/configs/515/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/DailyReward.json#/configs/516/key_where"
+            }
+          ]
+        }
+      ],
+      "declared_models_without_catalog_data": [],
+      "placeholder_rows_requiring_source_review": [
+        {
+          "index": 9,
+          "key": "DailyRewardConfigModelV2.IsEnabled / EventType / FirstLevelToShow",
+          "value": "server",
+          "source": "server info"
+        },
+        {
+          "index": 10,
+          "key": "DailyRewardConfigModelV2.DayOneProbabilities",
+          "value": "server",
+          "source": "server info"
+        },
+        {
+          "index": 11,
+          "key": "DailyRewardConfigModelV2.HardLevelOrNoLifeProbabilities",
+          "value": "server",
+          "source": "server info"
+        },
+        {
+          "index": 12,
+          "key": "DailyRewardConfigModelV2.OthersProbabilities",
+          "value": "server",
+          "source": "server info"
+        },
+        {
+          "index": 13,
+          "key": "DailyRewardConfigModelV2.DayOneProbabilitiesWithCollection / HardLevelOrNoLifeProbabilitiesWithCollection / OthersProbabilitiesWithCollection",
+          "value": "server",
+          "source": "server info"
+        },
+        {
+          "index": 14,
+          "key": "DailyRewardConfigModel.ProbabilityModel (bản cũ)",
+          "value": "server",
+          "source": "server info"
+        },
+        {
+          "index": 17,
+          "key": "DailyRewardEventInfoResponse.EventId / EventType / StartTime / FinishTime / Segment",
+          "value": "server",
+          "source": "server info"
+        }
+      ],
+      "exact_placeholder_snapshot_values": [
+        {
+          "gdd_config_index": 9,
+          "key": "DailyRewardConfigModelV2.IsEnabled / EventType / FirstLevelToShow",
+          "status": "no_unambiguous_exact_field_match",
+          "matches": [],
+          "basis": "Model explicitly cited in key/where, or sole declaredmodel; fieldpath exactcasefold, no alias guessing."
+        },
+        {
+          "gdd_config_index": 10,
+          "key": "DailyRewardConfigModelV2.DayOneProbabilities",
+          "status": "no_unambiguous_exact_field_match",
+          "matches": [],
+          "basis": "Model explicitly cited in key/where, or sole declaredmodel; fieldpath exactcasefold, no alias guessing."
+        },
+        {
+          "gdd_config_index": 11,
+          "key": "DailyRewardConfigModelV2.HardLevelOrNoLifeProbabilities",
+          "status": "no_unambiguous_exact_field_match",
+          "matches": [],
+          "basis": "Model explicitly cited in key/where, or sole declaredmodel; fieldpath exactcasefold, no alias guessing."
+        },
+        {
+          "gdd_config_index": 12,
+          "key": "DailyRewardConfigModelV2.OthersProbabilities",
+          "status": "no_unambiguous_exact_field_match",
+          "matches": [],
+          "basis": "Model explicitly cited in key/where, or sole declaredmodel; fieldpath exactcasefold, no alias guessing."
+        },
+        {
+          "gdd_config_index": 13,
+          "key": "DailyRewardConfigModelV2.DayOneProbabilitiesWithCollection / HardLevelOrNoLifeProbabilitiesWithCollection / OthersProbabilitiesWithCollection",
+          "status": "no_unambiguous_exact_field_match",
+          "matches": [],
+          "basis": "Model explicitly cited in key/where, or sole declaredmodel; fieldpath exactcasefold, no alias guessing."
+        },
+        {
+          "gdd_config_index": 14,
+          "key": "DailyRewardConfigModel.ProbabilityModel (bản cũ)",
+          "status": "no_unambiguous_exact_field_match",
+          "matches": [],
+          "basis": "Model explicitly cited in key/where, or sole declaredmodel; fieldpath exactcasefold, no alias guessing."
+        },
+        {
+          "gdd_config_index": 17,
+          "key": "DailyRewardEventInfoResponse.EventId / EventType / StartTime / FinishTime / Segment",
+          "status": "no_unambiguous_exact_field_match",
+          "matches": [],
+          "basis": "Model explicitly cited in key/where, or sole declaredmodel; fieldpath exactcasefold, no alias guessing."
+        }
+      ],
+      "dossier_abbreviated_values": [],
+      "note": "Model association uses explicitmap or exacttoken citations; fieldpresence does not prove allproductiondata. GDDsummaryrows and fullcatalogrows have separate counts. Abbreviated source summaries are not full arrays; catalog/source links remain authoritative."
+    },
+    "reward": {
+      "status": "documented_static_rewards_runtime_grant_not_fully_verified",
+      "entries": 5,
+      "tables_in_site_meta": 6,
+      "source": "gdd/DailyReward.json#/rewards"
+    },
+    "use_cases": {
+      "status": "specified_not_executed_in15nov_ledger",
+      "specified": 12,
+      "reviewed_uc_branch_count": 0,
+      "reviewed_uc_ids": [],
+      "not_reviewed_in_new_ledger": [
+        "UC-01",
+        "UC-02",
+        "UC-03",
+        "UC-04",
+        "UC-05",
+        "UC-06",
+        "UC-07",
+        "UC-08",
+        "UC-09",
+        "UC-10",
+        "UC-11",
+        "UC-12"
+      ],
+      "full_uc_pass_claimed": false
+    },
+    "screenshots": {
+      "historical_gallery_entries": 3,
+      "historical_uc_with_image_reference": 3,
+      "curated_new_images": [],
+      "curated_new_image_count": 0,
+      "status": "historical_references_only",
+      "source": "screens/web/screens.json#/DailyReward",
+      "note": "Image presence does not prove execution result or completeness."
+    },
+    "runtime_actual": {
+      "status": "not_observed_in15nov_ledger",
+      "case_count": 0,
+      "cases": [],
+      "mode": "offline_existing_fixture",
+      "build": "0.0.3129 ARM64"
+    },
+    "segment_ab": {
+      "status": "reviewed_rows_associated_assignment_not_proven",
+      "segment_ids": [
+        "MS-SEG-260"
+      ],
+      "matching_basis": "explicit_gd_config_map_or_exact_model_token_in_gdd_configs_where_key_sources; rootfieldscoped",
+      "rows": [
+        {
+          "snapshot": "instance_cache_observed_20261115",
+          "model": "DailyRewardModel",
+          "key": "cacheModel.segment",
+          "value": "non-purchaser",
+          "type": "str",
+          "source": "facts/runtime/review_20261115/event_instances/DailyRewardModel.json",
+          "classification": "config_candidate_not_backend_assignment_proof",
+          "review_id": "MS-SEG-260",
+          "review_classification": "cached_event_segment_label",
+          "review_status": "observed_historical_fixture_label_not_fresh_assignment",
+          "consumer": {
+            "source": "com.grandgames.magicsort_Unity_20260909_112501/RecoveredNative/PseudoC/Assembly-CSharp/Modules/Contexts/Home/DailyReward/Scripts/DailyRewardService.c",
+            "line": 2141,
+            "marker": "// ===== DailyRewardService :: public string GetSegment()",
+            "build": "0.0.3063 ARMv7",
+            "evidence": "recovered_native_historical_version"
+          },
+          "interpretation": "Nhãn thương mại được lưu trên model/cache của event lịch sử; chứng minh giá trị cache, không chứng minh tiêu chí backend, thời điểm gán mới hoặc A/B.",
+          "next_action": "Ghi đồng thời event/global segment, thời điểm event và SKU/reward đã chọn; cần fresh response/đối chứng để biết luật gán.",
+          "assignment_proof": false,
+          "uplift_proof": false,
+          "matching_basis": [
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/DailyReward.json#/sources/14"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/DailyReward.json#/configs/18/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/DailyReward.json#/configs/19/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/DailyReward.json#/configs/504/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/DailyReward.json#/configs/505/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/DailyReward.json#/configs/506/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/DailyReward.json#/configs/507/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/DailyReward.json#/configs/508/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/DailyReward.json#/configs/509/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/DailyReward.json#/configs/510/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/DailyReward.json#/configs/511/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/DailyReward.json#/configs/512/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/DailyReward.json#/configs/513/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/DailyReward.json#/configs/514/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/DailyReward.json#/configs/515/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/DailyReward.json#/configs/516/key_where"
+            }
+          ]
+        }
+      ],
+      "classifications": {
+        "cached_event_segment_label": 1
+      },
+      "assignment_verified": false,
+      "uplift_verified": false,
+      "note": "No matchingrow does not prove no segmentation/AB. Rewardbucketfalsepositives remain explicitly classified."
+    },
+    "storage_backend_analytics": {
+      "storage_keys": {
+        "entries": 5,
+        "status": "documented_static_contract_runtime_not_verified",
+        "source": "gdd/DailyReward.json#/storage_keys"
+      },
+      "backend": {
+        "entries": 2,
+        "status": "documented_static_contract_runtime_not_verified",
+        "source": "gdd/DailyReward.json#/backend"
+      },
+      "analytics": {
+        "entries": 5,
+        "status": "documented_static_contract_runtime_not_verified",
+        "source": "gdd/DailyReward.json#/analytics"
+      }
+    },
+    "remaining_next_step": {
+      "gap_count": 7,
+      "static_scoped_resolutions": 3,
+      "remaining_count": 4,
+      "all_gap_dispositions": [
+        {
+          "id": "MS-DailyReward-G001",
+          "feature": "DailyReward",
+          "source": "gdd/DailyReward.json#/gaps/0",
+          "original": "Trọng số thật của từng phần thưởng (DayOne / HardLevelOrNoLife / Others và các biến thể WithCollection) nằm hoàn toàn trong remote config.",
+          "current_note": "15/11 — resolved_historical_snapshot: Đã trích toàn bộ field/value của DailyRewardConfigModel, DailyRewardConfigModelV2 từ default0.0.3063 và cache lịch sử hiện có. Nhận định không có giá trị trong client đã được đối chiếu bằng file thật; không xác nhận effective runtime. Còn lại: Kiểm chứng effective config/asset và nhánh runtime trên đúng build nếu cần.",
+          "status": "resolved_historical_snapshot",
+          "review_status": "preserved_resolved_historical_snapshot",
+          "dependency": "local_config_reconciliation",
+          "next_action": "Đã trích toàn bộ field/value của DailyRewardConfigModel, DailyRewardConfigModelV2 từ default0.0.3063 và cache lịch sử hiện có. Nhận định không có giá trị trong client đã được đối chiếu bằng file thật; không xác nhận effective runtime. Kiểm chứng effective config/asset và nhánh runtime trên đúng build nếu cần.",
+          "conclusion": "Đã trích toàn bộ field/value của DailyRewardConfigModel, DailyRewardConfigModelV2 từ default0.0.3063 và cache lịch sử hiện có. Nhận định không có giá trị trong client đã được đối chiếu bằng file thật; không xác nhận effective runtime.",
+          "evidence": [
+            "facts/local_asset_review_20261115/config_catalog.json"
+          ],
+          "remaining": "15/11 — resolved_historical_snapshot: Đã trích toàn bộ field/value của DailyRewardConfigModel, DailyRewardConfigModelV2 từ default0.0.3063 và cache lịch sử hiện có. Nhận định không có giá trị trong client đã được đối chiếu bằng file thật; không xác nhận effective runtime. Còn lại: Kiểm chứng effective config/asset và nhánh runtime trên đúng build nếu cần.",
+          "source_records": [
+            {
+              "snapshot": "default0.0.3063",
+              "model": "DailyRewardConfigModel",
+              "source": "Resources\\defaultconfigs\\DailyRewardConfigModel.json",
+              "root": "UnityExport Assets 0.0.3063",
+              "sha256": "81af15e0ef6014b891eb2b29e4d7957fe751661f991f9fdd8965670a227c7002",
+              "line": 1,
+              "build": "0.0.3063 ARMv7"
+            },
+            {
+              "snapshot": "cache20260910",
+              "model": "DailyRewardConfigModel",
+              "source": "facts\\runtime\\server_configs\\dailyRewardConfigModel.json",
+              "root": "GameDesign",
+              "sha256": "4cb72a1188ad266dc98f5917b5a3c48e0817031ecd826bada7a1e54d6a74e7a4",
+              "line": 1,
+              "build": "snapshot provenance at path"
+            },
+            {
+              "snapshot": "cache20261010",
+              "model": "DailyRewardConfigModel",
+              "source": "facts\\runtime\\test_20261010\\before\\CachedRemoteConfigs",
+              "root": "GameDesign",
+              "sha256": "433164d4877b2dee55d2bbd79ef2fe83d3fe9519492fe15e3cb0926daf216050",
+              "line": 1,
+              "build": "snapshot provenance at path"
+            },
+            {
+              "snapshot": "default0.0.3063",
+              "model": "DailyRewardConfigModelV2",
+              "source": "Resources\\defaultconfigs\\DailyRewardConfigModelV2.json",
+              "root": "UnityExport Assets 0.0.3063",
+              "sha256": "61f524b5498fc62875d841b5e97ee66907af72cc3da8a9733891bece17096358",
+              "line": 1,
+              "build": "0.0.3063 ARMv7"
+            },
+            {
+              "snapshot": "cache20260910",
+              "model": "DailyRewardConfigModelV2",
+              "source": "facts\\runtime\\server_configs\\dailyRewardConfigModelV2.json",
+              "root": "GameDesign",
+              "sha256": "8087aee9e968022a53fb30d7d86987d8808f2720a08fd38cf05b1d84ab3b85d3",
+              "line": 1,
+              "build": "snapshot provenance at path"
+            },
+            {
+              "snapshot": "cache20261010",
+              "model": "DailyRewardConfigModelV2",
+              "source": "facts\\runtime\\test_20261010\\before\\CachedRemoteConfigs",
+              "root": "GameDesign",
+              "sha256": "433164d4877b2dee55d2bbd79ef2fe83d3fe9519492fe15e3cb0926daf216050",
+              "line": 1,
+              "build": "snapshot provenance at path"
+            }
+          ],
+          "reviewed": "2026-11-15",
+          "scope": "question-specific source/observed branch only; no full-UC or production claim",
+          "full_uc_pass": false
+        },
+        {
+          "id": "MS-DailyReward-G002",
+          "feature": "DailyReward",
+          "source": "gdd/DailyReward.json#/gaps/1",
+          "original": "Số ô người chơi được mở mỗi chu kỳ không thấy hằng số trong client — suy ra từ độ dài SelectedRewards do server/UI quyết định.",
+          "current_note": "Số ô người chơi được mở mỗi chu kỳ không thấy hằng số trong client — suy ra từ độ dài SelectedRewards do server/UI quyết định.",
+          "status": "open_review_plan",
+          "review_status": "open_review_plan",
+          "dependency": "event_rotation_or_fresh_instance",
+          "next_action": "Dùng instance SelectedRewards/UI từng cycle xác định số ô; claim/reopen/newcycle và ledger.",
+          "remaining": "Số ô người chơi được mở mỗi chu kỳ không thấy hằng số trong client — suy ra từ độ dài SelectedRewards do server/UI quyết định."
+        },
+        {
+          "id": "MS-DailyReward-G003",
+          "feature": "DailyReward",
+          "source": "gdd/DailyReward.json#/gaps/2",
+          "original": "Không tìm thấy localization key riêng cho Daily Bonus trong appendix/localization.tsv ngoài chuỗi cứng 'Daily Bonus event has ended!' trong DailyRewardPopUp.",
+          "current_note": "15/11 — resolved_static_snapshot: Có localization key Daily Bonus, Daily Bonus Pick Hat Info và Daily Bonus event has ended! với11ngôn ngữ. Nhận định chỉ có một chuỗi cứng là sai ởasset0.0.3063; không xác nhận caller/runtime mới. Còn lại: Kiểm chứng effective config/asset và nhánh runtime trên đúng build nếu cần.",
+          "status": "resolved_static_snapshot",
+          "review_status": "preserved_resolved_static_snapshot",
+          "dependency": "local_asset_or_missing_bundle",
+          "next_action": "Có localization key Daily Bonus, Daily Bonus Pick Hat Info và Daily Bonus event has ended! với11ngôn ngữ. Nhận định chỉ có một chuỗi cứng là sai ởasset0.0.3063; không xác nhận caller/runtime mới. Kiểm chứng effective config/asset và nhánh runtime trên đúng build nếu cần.",
+          "conclusion": "Có localization key Daily Bonus, Daily Bonus Pick Hat Info và Daily Bonus event has ended! với11ngôn ngữ. Nhận định chỉ có một chuỗi cứng là sai ởasset0.0.3063; không xác nhận caller/runtime mới.",
+          "evidence": [
+            "facts/local_asset_review_20261115/gap_localization_terms.json"
+          ],
+          "data": "gap_localization_terms.json",
+          "scope": "static_export0.0.3063_or_historical_cache_not_runtime_pass",
+          "reviewed": "2026-11-15",
+          "source_records": [
+            {
+              "source": "Resources\\I2Languages.asset",
+              "root": "UnityExport Assets 0.0.3063",
+              "sha256": "f47e776c45405ffc672ff57296f2c48a67b3455a3f6304ce1bd9a166e2c0894f",
+              "line": 1924,
+              "build": "0.0.3063 ARMv7"
+            },
+            {
+              "source": "Resources\\I2Languages.asset",
+              "root": "UnityExport Assets 0.0.3063",
+              "sha256": "f47e776c45405ffc672ff57296f2c48a67b3455a3f6304ce1bd9a166e2c0894f",
+              "line": 1940,
+              "build": "0.0.3063 ARMv7"
+            },
+            {
+              "source": "Resources\\I2Languages.asset",
+              "root": "UnityExport Assets 0.0.3063",
+              "sha256": "f47e776c45405ffc672ff57296f2c48a67b3455a3f6304ce1bd9a166e2c0894f",
+              "line": 1956,
+              "build": "0.0.3063 ARMv7"
+            }
+          ],
+          "remaining": "15/11 — resolved_static_snapshot: Có localization key Daily Bonus, Daily Bonus Pick Hat Info và Daily Bonus event has ended! với11ngôn ngữ. Nhận định chỉ có một chuỗi cứng là sai ởasset0.0.3063; không xác nhận caller/runtime mới. Còn lại: Kiểm chứng effective config/asset và nhánh runtime trên đúng build nếu cần."
+        },
+        {
+          "id": "MS-DailyReward-G004",
+          "feature": "DailyReward",
+          "source": "gdd/DailyReward.json#/gaps/3",
+          "original": "Bản V1 (DailyRewardConfigModel + DailyRewardProbabilityModel) và bản V2 (DailyRewardConfigModelV2) cùng tồn tại; không xác định được cờ nào chọn giữa hai bản.",
+          "current_note": "15/11 — resolved_static_code_historical_build: DailyRewardStateService.GetConfig và DailyRewardService.GetConfig trả FirebaseRemoteConfigs.DailyRewardConfigModelV2. Trong body được đọc không có branch chọnV1; sự tồn tại classV1 là schema legacy, không chứng minh đang luân phiên V1/V2. Còn lại: Cần đối chiếu ARM64/current runtime và các nhánh caller còn chưa đủ bằng chứng.",
+          "status": "resolved_static_code_historical_build",
+          "review_status": "preserved_resolved_static_code_historical_build",
+          "dependency": "local_code_review",
+          "next_action": "DailyRewardStateService.GetConfig và DailyRewardService.GetConfig trả FirebaseRemoteConfigs.DailyRewardConfigModelV2. Trong body được đọc không có branch chọnV1; sự tồn tại classV1 là schema legacy, không chứng minh đang luân phiên V1/V2. Cần đối chiếu ARM64/current runtime và các nhánh caller còn chưa đủ bằng chứng.",
+          "conclusion": "DailyRewardStateService.GetConfig và DailyRewardService.GetConfig trả FirebaseRemoteConfigs.DailyRewardConfigModelV2. Trong body được đọc không có branch chọnV1; sự tồn tại classV1 là schema legacy, không chứng minh đang luân phiên V1/V2.",
+          "evidence": [
+            "../com.grandgames.magicsort_Unity_20260909_112501/RecoveredNative/PseudoC/Assembly-CSharp/Modules/Contexts/Home/DailyReward/Scripts/DailyRewardStateService.c:101"
+          ],
+          "reviewed": "2026-11-15",
+          "mode": "file_only_recovered_native_0.0.3063",
+          "remaining": "15/11 — resolved_static_code_historical_build: DailyRewardStateService.GetConfig và DailyRewardService.GetConfig trả FirebaseRemoteConfigs.DailyRewardConfigModelV2. Trong body được đọc không có branch chọnV1; sự tồn tại classV1 là schema legacy, không chứng minh đang luân phiên V1/V2. Còn lại: Cần đối chiếu ARM64/current runtime và các nhánh caller còn chưa đủ bằng chứng."
+        },
+        {
+          "id": "MS-DailyReward-G005",
+          "feature": "DailyReward",
+          "source": "gdd/DailyReward.json#/gaps/4",
+          "original": "Endpoint HTTP nằm trong BackendEnvironmentConfig.",
+          "current_note": "Endpoint HTTP nằm trong BackendEnvironmentConfig.",
+          "status": "qualified_note_not_runtime_verification",
+          "review_status": "qualified_note_not_runtime_verification",
+          "dependency": "intentional_omission_or_scope_note",
+          "next_action": "Mô tả endpoint chức năng; không cần URL/secret vận hành.",
+          "remaining": "Endpoint HTTP nằm trong BackendEnvironmentConfig."
+        },
+        {
+          "id": "MS-DailyReward-G006",
+          "feature": "DailyReward",
+          "source": "gdd/DailyReward.json#/gaps/5",
+          "original": "[Runtime 2026-09-10] Config server LIVE đã đọc trực tiếp từ cache máy (không cần request); các hàng 'server live' là giá trị server ghi đè/thêm so với default.",
+          "current_note": "[Runtime 2026-09-10] Config server LIVE đã đọc trực tiếp từ cache máy (không cần request); các hàng 'server live' là giá trị server ghi đè/thêm so với default.",
+          "status": "historical_evidence_annotation_not_test_result",
+          "review_status": "historical_evidence_annotation_not_test_result",
+          "dependency": "historical_note_requires_qualified_use",
+          "next_action": "Ghi chú cache đã đọc tháng9, từ LIVE phải hiểu snapshot lịch sử. Đối chiếu config catalog/source, giữ default/cache/production hiện tại riêng; không coi là fresh fetch15/11.",
+          "remaining": "[Runtime 2026-09-10] Config server LIVE đã đọc trực tiếp từ cache máy (không cần request); các hàng 'server live' là giá trị server ghi đè/thêm so với default."
+        },
+        {
+          "id": "MS-DailyReward-G007",
+          "feature": "DailyReward",
+          "source": "gdd/DailyReward.json#/gaps/6",
+          "original": "[Runtime 2026-09-10] Instance phiên event đang chạy đã đọc (DailyRewardModel); phần từng ghi 'do server gửi' nay có giá trị thật trong các hàng 'server instance'.",
+          "current_note": "[Runtime 2026-09-10] Instance phiên event đang chạy đã đọc (DailyRewardModel); phần từng ghi 'do server gửi' nay có giá trị thật trong các hàng 'server instance'.",
+          "status": "historical_evidence_annotation_not_test_result",
+          "review_status": "historical_evidence_annotation_not_test_result",
+          "dependency": "historical_note_requires_qualified_use",
+          "next_action": "Ghi chú instance đã đọc tháng9: kiểm model/snapshot trong GDD configs và báo cáo lịch sử; không đóng gap thuật toán/claim/rotation từ sự hiện diện model. Vòng mới cần event hợp lệ.",
+          "remaining": "[Runtime 2026-09-10] Instance phiên event đang chạy đã đọc (DailyRewardModel); phần từng ghi 'do server gửi' nay có giá trị thật trong các hàng 'server instance'."
+        }
+      ],
+      "feature_specific_acceptance_questions": [
+        "Probability pools/V1V2/Collection",
+        " số hat/chọn/reroll/claim, schedule, expiry và duplicate prevention"
+      ],
+      "next_steps": [
+        "Dùng instance SelectedRewards/UI từng cycle xác định số ô; claim/reopen/newcycle và ledger.",
+        "Mô tả endpoint chức năng; không cần URL/secret vận hành.",
+        "Ghi chú cache đã đọc tháng9, từ LIVE phải hiểu snapshot lịch sử. Đối chiếu config catalog/source, giữ default/cache/production hiện tại riêng; không coi là fresh fetch15/11.",
+        "Ghi chú instance đã đọc tháng9: kiểm model/snapshot trong GDD configs và báo cáo lịch sử; không đóng gap thuật toán/claim/rotation từ sự hiện diện model. Vòng mới cần event hợp lệ."
+      ]
+    }
+  },
+  "use_cases": 12,
+  "configs": 517,
+  "new_review_case_count": 0,
+  "reviewed_uc_branch_count": 0,
+  "curated_new_image_count": 0,
+  "segment_ids": [
+    "MS-SEG-260"
+  ],
+  "matching_basis": "explicit_gd_config_map_or_exact_model_token_in_gdd_configs_where_key_sources; rootfieldscoped",
+  "unmatched_segment_status": null,
+  "local_document_repairs": [],
+  "sources": [
+    "features/DailyRewardService.md",
+    "features/DailyRewardDataService.md",
+    "features/DailyRewardStateService.md",
+    "features/DailyRewardRemoteService.md",
+    "features/DailyRewardConfigModel.md",
+    "features/DailyRewardCacheModel.md",
+    "features/DailyRewardProbabilityModel.md",
+    "features/DailyRewardCoinProbabilityModel.md",
+    "features/DailyRewardUnlimitedLifeProbabilityModel.md",
+    "features/DailyRewardSelectedRewardModel.md",
+    "RecoveredNative/PseudoC/.../DailyRewardDataService.c (IsPlayerHasNoLifeOrInHardLevel, GetRandomCoinAmountByConfig, GetRandomUnlimitedLifeTimeByConfig)",
+    "GameDesign/appendix/static-arrays.md (GetUnlimitedLifeOpenProbabilityByOpenedRewardCount)",
+    "RecoveredNative/strings-by-type.tsv (EventSender.SendDailyReward*)",
+    "GameDesign/facts/facts.json (DailyRewardStateType, DailyRewardPopUpImpressionSource, DailyRewardConfigModelV2)",
+    "facts/runtime/review_20261115/event_instances/DailyRewardModel.json"
+  ],
+  "source_hashes": {
+    "gdd_sha256": "e6236f9b8bda46cbaae985f273ad6d73a402403df02e57e435e9b4ad17efe075",
+    "site_meta_sha256": "d67addc4506459049ebd64da22c9b9721a0186ba94c7dadd24454800ff36f9a6"
+  }
+}

@@ -1,0 +1,337 @@
+{
+  "id": "TeamQuest",
+  "feature": "TeamQuest",
+  "name": "Nhiệm vụ đội (Team Quest)",
+  "category": "Event",
+  "category_label": "Sự kiện",
+  "core_levels_last": false,
+  "acceptance_status": "documented_with_explicit_remaining_scope",
+  "full_feature_verified": false,
+  "checks": {
+    "purpose": {
+      "status": "documented_static_scope",
+      "source": "gdd/TeamQuest.json#/summary",
+      "claim_excerpt": "Team Quest (backend gọi là 'team adventure') là sự kiện hợp tác trong đội: cả đội cùng gom điểm bằng cách thắng level, mở dần các rương mốc (TeamQuestStepModel) trên một 'bản đồ' tiến độ chung. Mỗi thành viên đóng góp điểm theo độ khó level (Normal=1, Hard=3, SuperHard=5 theo mặc định client) và toàn bộ điểm cộng vào tổng điểm đội. Khi tổng điểm đội đạt RequiredTeamScore của một mốc, mọi thành viê"
+    },
+    "unlock": {
+      "status": "described_historical_conditions_runtime_boundary_unverified",
+      "source": "gdd/TeamQuest.json#/unlock",
+      "content": "TeamQuestStateService.GetEventState(): Disable(0) nếu TeamQuestConfigModel.IsEnabled == false; ProgressNotEnough(1) nếu level người chơi < FirstLevelToShow; NoCache(2) nếu chưa fetch được; AssetsNotReady(9) nếu bundle 'team_quest_bundle' chưa tải. Ngoài ra phải có đội — TeamQuestService.GetTeamID()/IsUserEligibleToJoin() dựa vào TeamsService. Client default: IsEnabled=false, EventType=2, FirstLevelToShow=45 (Resources/defaultconfigs/TeamQuestConfigModel.json)."
+    },
+    "entry_flow": {
+      "status": "documented_paths_not_all_executed",
+      "entry_points": [
+        "TeamQuestLobbyButton ở lobby (IsLobbyButtonVisible / ShouldShowJoinTextLobbyIcon)",
+        "TeamQuestTeamChatElementView — thẻ sự kiện gắn trong chat đội (ITeamChatEventView), nguồn TeamBanner",
+        "TeamQuestJoinPopup — popup mời tham gia (ShouldShowJoinPopup / ShouldShowForceJoinPopup)",
+        "TeamQuestPopup — bản đồ tiến độ + rương (ShouldShowEventPopup / ShouldShowForceEventPopup)",
+        "Tự mở popup ngay sau khi Join thành công (ShouldShowPopupAfterJoin, source AfterJoin)",
+        "TeamQuestInfoPopup — nút info (TeamQuestInfoPopupImpressionSource InfoButton/Force)",
+        "TeamQuestLeaderboardView — bảng đóng góp trong đội"
+      ],
+      "flow_source": "gdd/TeamQuest.json#/flow",
+      "acceptance_scope": "Join-window/team-score/chest steps/progress/claim; two-account contributions/chat visibility và rollover"
+    },
+    "config": {
+      "status": "source_bound_catalog_present",
+      "gdd_rows": 36,
+      "full_leaf_rows_associated": 33,
+      "snapshots": {
+        "default_0.0.3063": 6,
+        "cache_20260910": 6,
+        "cache_20261010": 6,
+        "firebase_20260910": 6,
+        "instance_cache_observed_20261115": 9
+      },
+      "models": [
+        {
+          "model": "teamQuestConfigModel",
+          "matching_basis": [
+            {
+              "kind": "explicit_gd_config_model_map",
+              "source": "gd_config.json#/defaultconfigs/map/TeamQuest"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/TeamQuest.json#/sources/3"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/TeamQuest.json#/sources/7"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/TeamQuest.json#/configs/0/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/TeamQuest.json#/configs/1/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/TeamQuest.json#/configs/2/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/TeamQuest.json#/configs/3/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/TeamQuest.json#/configs/4/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/TeamQuest.json#/configs/5/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/TeamQuest.json#/configs/26/key_where"
+            }
+          ]
+        },
+        {
+          "model": "TeamQuestDataModel",
+          "matching_basis": [
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/TeamQuest.json#/sources/10"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/TeamQuest.json#/configs/21/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/TeamQuest.json#/configs/22/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/TeamQuest.json#/configs/27/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/TeamQuest.json#/configs/28/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/TeamQuest.json#/configs/29/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/TeamQuest.json#/configs/30/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/TeamQuest.json#/configs/31/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/TeamQuest.json#/configs/32/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/TeamQuest.json#/configs/33/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/TeamQuest.json#/configs/34/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/TeamQuest.json#/configs/35/key_where"
+            }
+          ]
+        }
+      ],
+      "declared_models_without_catalog_data": [],
+      "placeholder_rows_requiring_source_review": [],
+      "exact_placeholder_snapshot_values": [],
+      "dossier_abbreviated_values": [],
+      "note": "Model association uses explicitmap or exacttoken citations; fieldpresence does not prove allproductiondata. GDDsummaryrows and fullcatalogrows have separate counts. Abbreviated source summaries are not full arrays; catalog/source links remain authoritative."
+    },
+    "reward": {
+      "status": "documented_static_rewards_runtime_grant_not_fully_verified",
+      "entries": 3,
+      "tables_in_site_meta": 3,
+      "source": "gdd/TeamQuest.json#/rewards"
+    },
+    "use_cases": {
+      "status": "specified_not_executed_in15nov_ledger",
+      "specified": 16,
+      "reviewed_uc_branch_count": 0,
+      "reviewed_uc_ids": [],
+      "not_reviewed_in_new_ledger": [
+        "UC-01",
+        "UC-02",
+        "UC-03",
+        "UC-04",
+        "UC-05",
+        "UC-06",
+        "UC-07",
+        "UC-08",
+        "UC-09",
+        "UC-10",
+        "UC-11",
+        "UC-12",
+        "UC-13",
+        "UC-14",
+        "UC-15",
+        "UC-16"
+      ],
+      "full_uc_pass_claimed": false
+    },
+    "screenshots": {
+      "historical_gallery_entries": 3,
+      "historical_uc_with_image_reference": 2,
+      "curated_new_images": [],
+      "curated_new_image_count": 0,
+      "status": "historical_references_only",
+      "source": "screens/web/screens.json#/TeamQuest",
+      "note": "Image presence does not prove execution result or completeness."
+    },
+    "runtime_actual": {
+      "status": "not_observed_in15nov_ledger",
+      "case_count": 0,
+      "cases": [],
+      "mode": "offline_existing_fixture",
+      "build": "0.0.3129 ARM64"
+    },
+    "segment_ab": {
+      "status": "not_identified_in_sources",
+      "segment_ids": [],
+      "matching_basis": "explicit_gd_config_map_or_exact_model_token_in_gdd_configs_where_key_sources; rootfieldscoped",
+      "rows": [],
+      "classifications": {},
+      "assignment_verified": false,
+      "uplift_verified": false,
+      "note": "No matchingrow does not prove no segmentation/AB. Rewardbucketfalsepositives remain explicitly classified."
+    },
+    "storage_backend_analytics": {
+      "storage_keys": {
+        "entries": 14,
+        "status": "documented_static_contract_runtime_not_verified",
+        "source": "gdd/TeamQuest.json#/storage_keys"
+      },
+      "backend": {
+        "entries": 5,
+        "status": "documented_static_contract_runtime_not_verified",
+        "source": "gdd/TeamQuest.json#/backend"
+      },
+      "analytics": {
+        "entries": 7,
+        "status": "documented_static_contract_runtime_not_verified",
+        "source": "gdd/TeamQuest.json#/analytics"
+      }
+    },
+    "remaining_next_step": {
+      "gap_count": 5,
+      "static_scoped_resolutions": 0,
+      "remaining_count": 5,
+      "all_gap_dispositions": [
+        {
+          "id": "MS-TeamQuest-G001",
+          "feature": "TeamQuest",
+          "source": "gdd/TeamQuest.json#/gaps/0",
+          "original": "Số mốc rương, ngưỡng RequiredTeamScore và nội dung thưởng đều do server gửi — client không có bảng mặc định.",
+          "current_note": "Số mốc rương, ngưỡng RequiredTeamScore và nội dung thưởng đều do server gửi — client không có bảng mặc định.",
+          "status": "open_review_plan",
+          "review_status": "open_review_plan",
+          "dependency": "event_rotation_or_fresh_instance",
+          "next_action": "Trích RequiredTeamScore/reward stage instance/cache, nối current progress và UI; cần event mở để claim.",
+          "remaining": "Số mốc rương, ngưỡng RequiredTeamScore và nội dung thưởng đều do server gửi — client không có bảng mặc định."
+        },
+        {
+          "id": "MS-TeamQuest-G002",
+          "feature": "TeamQuest",
+          "source": "gdd/TeamQuest.json#/gaps/1",
+          "original": "Schema flatbuffer 'task_station' tồn tại trong build nhưng KHÔNG thấy TeamQuest tham chiếu tới; TeamQuest dùng JSON qua các endpoint /v1/*-team-adventure. task_station nhiều khả năng thuộc MagicLab (đã kiểm tra).",
+          "current_note": "Schema flatbuffer 'task_station' tồn tại trong build nhưng KHÔNG thấy TeamQuest tham chiếu tới; TeamQuest dùng JSON qua các endpoint /v1/*-team-adventure. task_station nhiều khả năng thuộc MagicLab (đã kiểm tra).",
+          "status": "qualified_note_not_runtime_verification",
+          "review_status": "qualified_note_not_runtime_verification",
+          "dependency": "historical_note_requires_qualified_use",
+          "next_action": "Giữ task_station schema-only cho TeamQuest theo đối chiếu cũ; không gán MagicLab chỉ vì tên, trace caller riêng.",
+          "remaining": "Schema flatbuffer 'task_station' tồn tại trong build nhưng KHÔNG thấy TeamQuest tham chiếu tới; TeamQuest dùng JSON qua các endpoint /v1/*-team-adventure. task_station nhiều khả năng thuộc MagicLab (đã kiểm tra)."
+        },
+        {
+          "id": "MS-TeamQuest-G003",
+          "feature": "TeamQuest",
+          "source": "gdd/TeamQuest.json#/gaps/2",
+          "original": "Trường 'elo' trong TeamQuestLeaderboardModel dùng để ghép đội cùng trình độ nhưng logic ghép nằm ở server.",
+          "current_note": "Trường 'elo' trong TeamQuestLeaderboardModel dùng để ghép đội cùng trình độ nhưng logic ghép nằm ở server.",
+          "status": "open_review_plan",
+          "review_status": "open_review_plan",
+          "dependency": "backend_contract_or_response",
+          "next_action": "Backend Elo grouping không đọc được từ client; cần hợp đồng hoặc cohort matching.",
+          "remaining": "Trường 'elo' trong TeamQuestLeaderboardModel dùng để ghép đội cùng trình độ nhưng logic ghép nằm ở server."
+        },
+        {
+          "id": "MS-TeamQuest-G004",
+          "feature": "TeamQuest",
+          "source": "gdd/TeamQuest.json#/gaps/3",
+          "original": "teamQuestInfoUrl trong BackendEnvironmentConfig để trống nên không rõ có endpoint info riêng hay không.",
+          "current_note": "15/11 — partial_static_code_unresolved: TeamQuestRemoteService recovered methods chỉ expose SendJoinRequest/SendGetRequest/SendClaimRequest cùng SendRequest(url,...). SendGetRequest async gọi SendRequest với configstring offset; không có methodGetInfo trongclassbody. Empty teamQuestInfoUrl không đủ kết luận API info đãbỏ hoặc fallback tựđộng. Còn lại: Map EnvironmentSettings offsets của3request và toàncaller teamQuestInfoUrl; cần servercontract để biết route nào đang hoạtđộng, không request URL đoán.",
+          "status": "partial_static_code_unresolved",
+          "review_status": "preserved_partial_static_code_unresolved",
+          "dependency": "local_code_review",
+          "next_action": "TeamQuestRemoteService recovered methods chỉ expose SendJoinRequest/SendGetRequest/SendClaimRequest cùng SendRequest(url,...). SendGetRequest async gọi SendRequest với configstring offset; không có methodGetInfo trongclassbody. Empty teamQuestInfoUrl không đủ kết luận API info đãbỏ hoặc fallback tựđộng. Map EnvironmentSettings offsets của3request và toàncaller teamQuestInfoUrl; cần servercontract để biết route nào đang hoạtđộng, không request URL đoán.",
+          "conclusion": "TeamQuestRemoteService recovered methods chỉ expose SendJoinRequest/SendGetRequest/SendClaimRequest cùng SendRequest(url,...). SendGetRequest async gọi SendRequest với configstring offset; không có methodGetInfo trongclassbody. Empty teamQuestInfoUrl không đủ kết luận API info đãbỏ hoặc fallback tựđộng.",
+          "evidence": [
+            "../com.grandgames.magicsort_Unity_20260909_112501/RecoveredNative/PseudoC/Assembly-CSharp/Modules/Contexts/Home/TeamQuest/Scripts/TeamQuestRemoteService.c:274"
+          ],
+          "reviewed": "2026-11-15",
+          "mode": "file_only_recovered_native_0.0.3063",
+          "remaining": "15/11 — partial_static_code_unresolved: TeamQuestRemoteService recovered methods chỉ expose SendJoinRequest/SendGetRequest/SendClaimRequest cùng SendRequest(url,...). SendGetRequest async gọi SendRequest với configstring offset; không có methodGetInfo trongclassbody. Empty teamQuestInfoUrl không đủ kết luận API info đãbỏ hoặc fallback tựđộng. Còn lại: Map EnvironmentSettings offsets của3request và toàncaller teamQuestInfoUrl; cần servercontract để biết route nào đang hoạtđộng, không request URL đoán."
+        },
+        {
+          "id": "MS-TeamQuest-G005",
+          "feature": "TeamQuest",
+          "source": "gdd/TeamQuest.json#/gaps/4",
+          "original": "[Runtime 2026-09-10] Config server LIVE đã đọc trực tiếp từ cache máy (không cần request); các hàng 'server live' là giá trị server ghi đè/thêm so với default.",
+          "current_note": "[Runtime 2026-09-10] Config server LIVE đã đọc trực tiếp từ cache máy (không cần request); các hàng 'server live' là giá trị server ghi đè/thêm so với default.",
+          "status": "historical_evidence_annotation_not_test_result",
+          "review_status": "historical_evidence_annotation_not_test_result",
+          "dependency": "historical_note_requires_qualified_use",
+          "next_action": "Ghi chú cache đã đọc tháng9, từ LIVE phải hiểu snapshot lịch sử. Đối chiếu config catalog/source, giữ default/cache/production hiện tại riêng; không coi là fresh fetch15/11.",
+          "remaining": "[Runtime 2026-09-10] Config server LIVE đã đọc trực tiếp từ cache máy (không cần request); các hàng 'server live' là giá trị server ghi đè/thêm so với default."
+        }
+      ],
+      "feature_specific_acceptance_questions": [
+        "Join-window/team-score/chest steps/progress/claim",
+        " two-account contributions/chat visibility và rollover"
+      ],
+      "next_steps": [
+        "Trích RequiredTeamScore/reward stage instance/cache, nối current progress và UI; cần event mở để claim.",
+        "Giữ task_station schema-only cho TeamQuest theo đối chiếu cũ; không gán MagicLab chỉ vì tên, trace caller riêng.",
+        "Backend Elo grouping không đọc được từ client; cần hợp đồng hoặc cohort matching.",
+        "TeamQuestRemoteService recovered methods chỉ expose SendJoinRequest/SendGetRequest/SendClaimRequest cùng SendRequest(url,...). SendGetRequest async gọi SendRequest với configstring offset; không có methodGetInfo trongclassbody. Empty teamQuestInfoUrl không đủ kết luận API info đãbỏ hoặc fallback tựđộng. Map EnvironmentSettings offsets của3request và toàncaller teamQuestInfoUrl; cần servercontract để biết route nào đang hoạtđộng, không request URL đoán.",
+        "Ghi chú cache đã đọc tháng9, từ LIVE phải hiểu snapshot lịch sử. Đối chiếu config catalog/source, giữ default/cache/production hiện tại riêng; không coi là fresh fetch15/11."
+      ]
+    }
+  },
+  "use_cases": 16,
+  "configs": 36,
+  "new_review_case_count": 0,
+  "reviewed_uc_branch_count": 0,
+  "curated_new_image_count": 0,
+  "segment_ids": [],
+  "matching_basis": "explicit_gd_config_map_or_exact_model_token_in_gdd_configs_where_key_sources; rootfieldscoped",
+  "unmatched_segment_status": "not_identified_in_sources",
+  "local_document_repairs": [],
+  "sources": [
+    "GameDesign/features/TeamQuestService.md",
+    "GameDesign/features/TeamQuestStateService.md",
+    "GameDesign/features/TeamQuestDataService.md",
+    "GameDesign/features/TeamQuestConfigModel.md",
+    "GameDesign/features/TeamQuestStepModel.md",
+    "RecoveredNative/PseudoC/Assembly-CSharp/Modules/Contexts/Home/TeamQuest/Scripts/*.c",
+    "RecoveredNative/Il2CppDumper/dump.cs (TypeDefIndex 2105-2172)",
+    "UnityExport/ExportedProject/Assets/Resources/defaultconfigs/TeamQuestConfigModel.json",
+    "UnityExport/ExportedProject/Assets/MonoBehaviour/BackendEnvironmentConfig.asset",
+    "RecoveredNative/strings-by-type.tsv (EventSender.SendTeamQuest*)",
+    "facts/runtime/review_20261115/event_instances/TeamQuestDataModel.json"
+  ],
+  "source_hashes": {
+    "gdd_sha256": "4ea5c5277b266407ef978e62ee4860a05155394c2dae60e4bfb325a9e22d25d3",
+    "site_meta_sha256": "8fbadcb6514c52b053ffe2e559b1c550febc84fe4fe75d1f5482cc5f3cb0f9b1"
+  }
+}

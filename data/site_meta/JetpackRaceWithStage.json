@@ -1,0 +1,446 @@
+{
+ "id": "JetpackRaceWithStage",
+ "title": "Đua Jetpack 3 chặng (Jetpack Race With Stage)",
+ "tagline": "Bản ba chặng của Jetpack Race: mỗi chặng có mốc đích và bộ thưởng riêng, chặng cuối bị giới hạn 100 lần thắng.",
+ "infobox": [
+  [
+   "Loại",
+   "Sự kiện solo"
+  ],
+  [
+   "Mở khóa",
+   "Level 80 (JetpackRaceWithStageConfigModel.json: FirstLevelToShow)"
+  ],
+  [
+   "Thời lượng",
+   "Theo startTime / finishTime của cuộc đua (server)"
+  ],
+  [
+   "Chu kỳ / lịch",
+   "Ba chặng nối tiếp trong một sự kiện; hết cuộc đua thì client hỏi thời điểm kết thúc cuộc đua kế"
+  ],
+  [
+   "Tham gia",
+   "Cá nhân, bảng leaderboard riêng gồm cả bot"
+  ],
+  [
+   "Vật phẩm thu thập",
+   "Điểm chuỗi thắng theo chặng"
+  ],
+  [
+   "Thưởng chính",
+   "Chặng 1: 100 coin, 15 phút Unlimited Lives; chặng 2: 250 coin, 30 phút; chặng 3: 500 coin, 1 Shuffle, 1 Undo, 45 phút"
+  ],
+  [
+   "Điều kiện / phụ thuộc",
+   "IsEnabled = true; chặng cuối khóa sau LastStageWinLimit = 100 lần thắng"
+  ],
+  [
+   "Manager",
+   "JetpackRaceWithStageService"
+  ]
+ ],
+ "description": [
+  "Jetpack Race With Stage là bản ba chặng của Jetpack Race, dùng bộ endpoint riêng /v1/*-jetpack-* và schema flatbuffer jet_pack_v2.",
+  "Bảng xếp hạng tách riêng khỏi giải: leaderboardID độc lập với tournamentID.",
+  "Mỗi chặng có mốc đích riêng do server gửi và một bộ phần thưởng riêng, tăng dần theo chặng.",
+  "Chặng cuối bị giới hạn số lần thắng lặp lại để tránh cày vô hạn; đạt trần thì sự kiện khóa lại.",
+  "Bản này mặc định bật chế độ không mất chuỗi, nghĩa là thua level không làm reset điểm.",
+  "Có popup riêng giải thích chế độ không mất chuỗi, chỉ hiện một lần trong đời tài khoản.",
+  "Popup tham gia có thể bị khóa nút đóng để ép người chơi vào cuộc đua.",
+  "Sự kiện tích hợp trực tiếp với Magic Lab qua mã sự kiện riêng và với Wheel of Fortune.",
+  "Mỗi sự kiện có một id dễ đọc dạng jp_<loại>_<ngày bắt đầu>_<ngày kết thúc> dùng cho analytics."
+ ],
+ "notes": [
+  "Lưu ý: khác với bản thường, StreakDisabled mặc định là true nên thua level không mất chuỗi.",
+  "Lưu ý: mốc đích maxReachableStageScore của từng chặng do server quyết định, client không có mặc định (gaps).",
+  "Lưu ý: cách server quyết định chuyển chặng (đủ điểm hay hết thời gian) không đọc được từ client (gaps).",
+  "Lưu ý: CloseDisabledInJoinPopup không xuất hiện trong json mặc định nên giá trị thực tế không xác định (gaps).",
+  "Lưu ý: quan hệ chạy song song hay loại trừ với Jetpack Race bản thường chưa rõ; hai bản có EventType khác nhau là 6 và 4 (gaps).",
+  "Lưu ý: chỉ chặng 1 và chặng 2 có thêm gói thẻ khi Collection bật; chặng 3 giữ nguyên bộ thưởng.",
+  "Lưu ý: nếu số chặng truyền vào ngoài khoảng 1–3, game ghi log 'JetpackRaceWithStageService: GetRewardsByStage: Invalid stage number'.",
+  "Lưu ý: request nhận thưởng có cờ chống bấm hai lần (_isClaimInProgress)."
+ ],
+ "how_it_works": [
+  "Sự kiện chỉ chạy khi IsEnabled = true (json default false) và level đạt FirstLevelToShow = 80, nếu không trạng thái là Disable (0) hoặc ProgressNotEnough (1).",
+  "Client gọi /v1/get-jetpack-leaderboard với eventType = 6, leaderboardId và score, hoặc dùng biến thể flatbuffer.",
+  "Server trả tournamentID, leaderboardID, startTime, finishTime, isFinished, isClaimed, userScore, maxReachableStageScore, danh sách người đua, hasUsedLimitlessLife và currentStage.",
+  "Client tạo id dễ đọc dạng jp_{tournamentType}_{ngày bắt đầu}_{ngày kết thúc}, hoặc 'jp_unknown_data' khi thiếu dữ liệu (GetEventId).",
+  "Tham gia gọi /v1/join-jetpack-leaderboard và trả về một trong ba kết quả: ConnectionFail (0), EventEnded (1) hoặc Success (2).",
+  "Popup tham gia có thể không cho đóng nếu CloseDisabledInJoinPopup bật; analytics ghi lại cờ close_button_enabled.",
+  "Mỗi lần thắng level, điểm tăng 1 và cờ đồng bộ bị tắt để lần lấy bảng kế đẩy điểm; điểm cũng có thể đẩy riêng qua /v1/set-jetpack-points.",
+  "Nếu đang ở chặng cuối, mỗi lần thắng còn tăng bộ đếm LastStageClaimCount và so với LastStageWinLimit = 100.",
+  "Đạt trần thì trạng thái chuyển LastStageWinLimitReached (8) và người chơi không nhận thêm thưởng.",
+  "Khi thua hoặc bỏ level, điểm chỉ reset nếu chế độ mất chuỗi đang bật; mặc định StreakDisabled = true nên điểm được giữ.",
+  "Phần thưởng chọn theo chặng: chặng 1 trả 100 coin và 15 phút Unlimited Lives, chặng 2 trả 250 coin và 30 phút, chặng 3 trả 500 coin, 1 Shuffle, 1 Undo và 45 phút.",
+  "Khi Collection bật, chặng 1 thêm 1 gói thẻ loại 1 và chặng 2 thêm 1 gói thẻ loại 2; chặng 3 không đổi.",
+  "Nhận thưởng gọi /v1/claim-jetpack-leaderboard, sau đó đặt cờ đã nhận ở máy và tăng kỷ lục thắng.",
+  "Analytics jetpack_race_staged_won ghi tournament_id, leaderboard_id, readable_event_id, stage và race_rank.",
+  "Hết giờ, trạng thái chuyển LocalTimeIsUp (5) rồi RemoteTimeIsUp (6); client gọi /v1/get-jetpack-endtime để lưu NextRaceFinishTime.",
+  "Bộ hẹn giờ tự lấy lại bảng khi hết hạn nên chuỗi cuộc đua chạy liên tục."
+ ],
+ "reward_tables": [
+  {
+   "title": "PHẦN THƯỞNG THEO CHẶNG (JetpackRaceWithStageConfigModel.json)",
+   "columns": [
+    "Chặng",
+    "Điều kiện",
+    "Phần thưởng"
+   ],
+   "rows": [
+    [
+     "Chặng 1",
+     "Đạt maxReachableStageScore của chặng 1 (server)",
+     "100 coin, 15 phút Unlimited Lives"
+    ],
+    [
+     "Chặng 2",
+     "Đạt maxReachableStageScore của chặng 2 (server)",
+     "250 coin, 30 phút Unlimited Lives"
+    ],
+    [
+     "Chặng 3",
+     "Đạt maxReachableStageScore của chặng 3 (server)",
+     "500 coin, 1 Shuffle, 1 Undo, 45 phút Unlimited Lives"
+    ],
+    [
+     "Sau 100 lần thắng chặng 3",
+     "LastStageClaimCount đạt LastStageWinLimit = 100",
+     "Không còn thưởng, sự kiện khóa (LastStageWinLimitReached)"
+    ]
+   ]
+  },
+  {
+   "title": "PHẦN THƯỞNG THEO CHẶNG KHI COLLECTION BẬT (…RewardModelsWithCollection)",
+   "columns": [
+    "Chặng",
+    "Điều kiện",
+    "Phần thưởng"
+   ],
+   "rows": [
+    [
+     "Chặng 1",
+     "Về đích chặng 1 khi Collection đang chạy",
+     "1 gói thẻ Collection loại 1, 100 coin, 15 phút Unlimited Lives"
+    ],
+    [
+     "Chặng 2",
+     "Về đích chặng 2 khi Collection đang chạy",
+     "1 gói thẻ Collection loại 2, 250 coin, 30 phút Unlimited Lives"
+    ],
+    [
+     "Chặng 3",
+     "Về đích chặng 3 khi Collection đang chạy",
+     "500 coin, 1 Shuffle, 1 Undo, 45 phút Unlimited Lives (giống bản thường)"
+    ]
+   ]
+  },
+  {
+   "title": "TRẠNG THÁI, POPUP VÀ KẾT QUẢ THAM GIA",
+   "columns": [
+    "Nhóm",
+    "Giá trị",
+    "Ghi chú"
+   ],
+   "rows": [
+    [
+     "JetpackRaceWithStageStateType",
+     "Disable=0, ProgressNotEnough=1, NoCache=2, Join=3, InProgress=4, LocalTimeIsUp=5, RemoteTimeIsUp=6, ClaimedLocally=7, LastStageWinLimitReached=8",
+     "Có thêm trạng thái trần thắng so với bản thường"
+    ],
+    [
+     "JetpackRaceWithStagePopUpState",
+     "Disabled=0, Join=1, FirstShowEver=2, FirstShow=3, InProgress=4, Result=5, JoinIntroduced=6",
+     "Layout popup theo tình huống"
+    ],
+    [
+     "JetpackRaceWithStageImpressionSource",
+     "None=0, LobbyIcon=1, EventJoin=2, Result=3, StepIncrease=4, TryAgain=5",
+     "Nguồn mở popup gửi kèm analytics"
+    ],
+    [
+     "JoinResult",
+     "ConnectionFail=0, EventEnded=1, Success=2",
+     "Kết quả gọi tham gia"
+    ]
+   ]
+  }
+ ],
+ "key_numbers": [
+  {
+   "label": "Level mở sự kiện",
+   "value": "80",
+   "source": "JetpackRaceWithStageConfigModel.json: FirstLevelToShow"
+  },
+  {
+   "label": "IsEnabled mặc định",
+   "value": "false (chờ remote config bật)",
+   "source": "JetpackRaceWithStageConfigModel.json: IsEnabled"
+  },
+  {
+   "label": "EventType (tournamentType)",
+   "value": "6",
+   "source": "JetpackRaceWithStageConfigModel.json: EventType"
+  },
+  {
+   "label": "MagicLabEventType",
+   "value": "19",
+   "source": "JetpackRaceWithStageConfigModel.json: MagicLabEventType"
+  },
+  {
+   "label": "Chế độ mất chuỗi",
+   "value": "StreakDisabled = true (mặc định KHÔNG mất chuỗi)",
+   "source": "JetpackRaceWithStageConfigModel.json: StreakDisabled"
+  },
+  {
+   "label": "Trần thắng ở chặng cuối",
+   "value": "100",
+   "source": "JetpackRaceWithStageConfigModel.json: LastStageWinLimit"
+  },
+  {
+   "label": "Số chặng",
+   "value": "3",
+   "source": "JetpackRaceWithStageService.GetRewardsByStage"
+  },
+  {
+   "label": "Thưởng chặng 1",
+   "value": "100 coin, 15 phút Unlimited Lives",
+   "source": "JetpackRaceWithStageConfigModel.json: Stage1RewardModels"
+  },
+  {
+   "label": "Thưởng chặng 2",
+   "value": "250 coin, 30 phút Unlimited Lives",
+   "source": "JetpackRaceWithStageConfigModel.json: Stage2RewardModels"
+  },
+  {
+   "label": "Thưởng chặng 3",
+   "value": "500 coin, 1 Shuffle, 1 Undo, 45 phút Unlimited Lives",
+   "source": "JetpackRaceWithStageConfigModel.json: Stage3RewardModels"
+  },
+  {
+   "label": "Gói thẻ thêm ở chặng 1 và 2",
+   "value": "loại 1 và loại 2",
+   "source": "JetpackRaceWithStageConfigModel.json: Stage1/Stage2RewardModelsWithCollection"
+  },
+  {
+   "label": "Tổng coin nếu qua đủ ba chặng",
+   "value": "850 coin",
+   "source": "JetpackRaceWithStageConfigModel.json: Stage1/2/3RewardModels"
+  },
+  {
+   "label": "Tổng Unlimited Lives nếu qua đủ ba chặng",
+   "value": "90 phút",
+   "source": "JetpackRaceWithStageConfigModel.json: Stage1/2/3RewardModels"
+  },
+  {
+   "label": "Số trạng thái sự kiện",
+   "value": "9 (Disable=0 … LastStageWinLimitReached=8)",
+   "source": "JetpackRaceWithStageStateType"
+  },
+  {
+   "label": "Số layout popup",
+   "value": "7 (Disabled=0 … JoinIntroduced=6)",
+   "source": "JetpackRaceWithStagePopUpState"
+  },
+  {
+   "label": "Số kết quả tham gia",
+   "value": "3 (ConnectionFail=0, EventEnded=1, Success=2)",
+   "source": "JoinResult"
+  },
+  {
+   "label": "Số endpoint backend",
+   "value": "5 (get-jetpack-leaderboard, set-jetpack-points, join, claim, get-jetpack-endtime)",
+   "source": "JetpackRaceWithStageRemoteService"
+  },
+  {
+   "label": "Định dạng id sự kiện đọc được",
+   "value": "jp_{0}_{1:yyyyMMdd}_{2:yyyyMMdd}, fallback 'jp_unknown_data'",
+   "source": "JetpackRaceWithStageService.GetEventId"
+  },
+  {
+   "label": "Số trường của response",
+   "value": "12",
+   "source": "JetpackRaceWithStageResponseModel"
+  },
+  {
+   "label": "Số trường của cache cuộc đua",
+   "value": "20",
+   "source": "JetpackRaceWithStageCacheModel"
+  },
+  {
+   "label": "Schema FlatBuffer",
+   "value": "magicsort.schemas.v1.liveops.jet_pack_v2",
+   "source": "PseudoC/Assembly-CSharp/MagicSort/schemas/v1/liveops/jet_pack_v2"
+  },
+  {
+   "label": "Tên khối đồng bộ",
+   "value": "JetpackRaceWithStageModel",
+   "source": "JetpackRaceWithStageDataService"
+  }
+ ],
+ "config_highlights": [
+  {
+   "key": "JetpackRaceWithStageConfigModel.json: IsEnabled",
+   "value": "false",
+   "meaning": "Mặc định tắt, remote config bật sự kiện"
+  },
+  {
+   "key": "JetpackRaceWithStageConfigModel.json: EventType",
+   "value": "6",
+   "meaning": "tournamentType gửi kèm mọi request"
+  },
+  {
+   "key": "JetpackRaceWithStageConfigModel.json: MagicLabEventType",
+   "value": "19",
+   "meaning": "Mã sự kiện dùng khi tích hợp Magic Lab"
+  },
+  {
+   "key": "JetpackRaceWithStageConfigModel.json: FirstLevelToShow",
+   "value": "80",
+   "meaning": "Level tối thiểu để thấy sự kiện"
+  },
+  {
+   "key": "JetpackRaceWithStageConfigModel.json: StreakDisabled",
+   "value": "true",
+   "meaning": "Tắt cơ chế mất chuỗi khi thua level"
+  },
+  {
+   "key": "JetpackRaceWithStageConfigModel.json: LastStageWinLimit",
+   "value": "100",
+   "meaning": "Số lần thắng tối đa ở chặng cuối trước khi khóa sự kiện"
+  },
+  {
+   "key": "CloseDisabledInJoinPopup",
+   "value": "không có trong json mặc định",
+   "meaning": "Ẩn nút đóng popup tham gia, ép người chơi vào cuộc đua"
+  },
+  {
+   "key": "Stage1RewardModels",
+   "value": "100 coin + 15 phút Unlimited Lives",
+   "meaning": "Thưởng chặng 1"
+  },
+  {
+   "key": "Stage2RewardModels",
+   "value": "250 coin + 30 phút Unlimited Lives",
+   "meaning": "Thưởng chặng 2"
+  },
+  {
+   "key": "Stage3RewardModels",
+   "value": "500 coin + 1 Shuffle + 1 Undo + 45 phút Unlimited Lives",
+   "meaning": "Thưởng chặng 3"
+  },
+  {
+   "key": "Stage1RewardModelsWithCollection",
+   "value": "1 gói thẻ loại 1 + 100 coin + 15 phút Unlimited Lives",
+   "meaning": "Thưởng chặng 1 khi Collection bật"
+  },
+  {
+   "key": "Stage2RewardModelsWithCollection",
+   "value": "1 gói thẻ loại 2 + 250 coin + 30 phút Unlimited Lives",
+   "meaning": "Thưởng chặng 2 khi Collection bật"
+  },
+  {
+   "key": "Stage3RewardModelsWithCollection",
+   "value": "giống bản thường",
+   "meaning": "Chặng 3 không thêm gói thẻ"
+  },
+  {
+   "key": "readable event id",
+   "value": "jp_{0}_{1:yyyyMMdd}_{2:yyyyMMdd}",
+   "meaning": "Id dễ đọc cho analytics, fallback 'jp_unknown_data'"
+  },
+  {
+   "key": "Log lỗi chặng không hợp lệ",
+   "value": "'JetpackRaceWithStageService: GetRewardsByStage: Invalid stage number'",
+   "meaning": "Hàm chọn thưởng chỉ chấp nhận chặng 1, 2, 3"
+  },
+  {
+   "key": "JetpackRaceWithStageStateType",
+   "value": "Disable=0, ProgressNotEnough=1, NoCache=2, Join=3, InProgress=4, LocalTimeIsUp=5, RemoteTimeIsUp=6, ClaimedLocally=7, LastStageWinLimitReached=8",
+   "meaning": "Máy trạng thái sự kiện"
+  },
+  {
+   "key": "JetpackRaceWithStagePopUpState",
+   "value": "Disabled=0, Join=1, FirstShowEver=2, FirstShow=3, InProgress=4, Result=5, JoinIntroduced=6",
+   "meaning": "Layout popup theo tình huống"
+  },
+  {
+   "key": "JetpackRaceWithStageImpressionSource",
+   "value": "None=0, LobbyIcon=1, EventJoin=2, Result=3, StepIncrease=4, TryAgain=5",
+   "meaning": "Nguồn mở popup gửi kèm analytics"
+  },
+  {
+   "key": "JoinResult",
+   "value": "ConnectionFail=0, EventEnded=1, Success=2",
+   "meaning": "Kết quả gọi tham gia"
+  },
+  {
+   "key": "jetpackRaceWithStageGetUrl",
+   "value": "{base}/v1/get-jetpack-leaderboard",
+   "meaning": "Lấy bảng đua, chặng và mốc đích"
+  },
+  {
+   "key": "jetpackRaceWithStageSetUrl",
+   "value": "{base}/v1/set-jetpack-points",
+   "meaning": "Đẩy điểm lên server"
+  },
+  {
+   "key": "jetpackRaceWithStageJoinUrl",
+   "value": "{base}/v1/join-jetpack-leaderboard",
+   "meaning": "Tham gia cuộc đua"
+  },
+  {
+   "key": "jetpackRaceWithStageClaimUrl",
+   "value": "{base}/v1/claim-jetpack-leaderboard",
+   "meaning": "Nhận thưởng chặng"
+  },
+  {
+   "key": "jetpackRaceWithStageGetNextRaceFinishTimeUrl",
+   "value": "{base}/v1/get-jetpack-endtime",
+   "meaning": "Lấy thời điểm kết thúc cuộc đua kế"
+  },
+  {
+   "key": "JetpackRaceWithStageResponseModel",
+   "value": "tournamentID, leaderboardID, tournamentType, startTime, finishTime, isFinished, isClaimed, userScore, maxReachableStageScore, players[], hasUsedLimitlessLife, currentStage",
+   "meaning": "Trạng thái cuộc đua kèm chặng hiện tại"
+  },
+  {
+   "key": "JetpackRaceWithStageResponseUserModel",
+   "value": "publicId, nickName, score, rank, isMe, isBot, imageUrl, imageId",
+   "meaning": "Một người đua trên bảng"
+  },
+  {
+   "key": "JetpackRaceWithStageModel",
+   "value": "WinRecord, JetpackRaceWithStageCache, LastStageClaimCount, HasUsedLimitlessLife, IsEventIntroducedEverInLifeTime, IsStreakDisabledTutorialShowedEverInLifeTime, IsJoinPopupIntroduced, NextRaceFinishTime",
+   "meaning": "Dữ liệu lưu và đồng bộ"
+  },
+  {
+   "key": "JetpackRaceWithStageCacheModel",
+   "value": "20 trường gồm LeaderboardId, CurrentStage, EventType, Score, MaxReachableScore, LastScoreBeforeReset …",
+   "meaning": "Cache cuộc đua hiện tại"
+  },
+  {
+   "key": "analytics jetpack_race_staged_joined",
+   "value": "tournament_id, leaderboard_id, readable_event_id, stage, close_button_enabled, progress, start_time, remaining_duration",
+   "meaning": "Ghi lại lúc tham gia, gồm cả việc popup có cho đóng hay không"
+  },
+  {
+   "key": "FlatBuffer API",
+   "value": "GetWithFlatBuffer, JoinWithFlatBuffer, ClaimWithFlatBuffer, GetNextRaceEndTimeWithFlatBuffer",
+   "meaning": "Bốn lời gọi có biến thể nhị phân"
+  }
+ ],
+ "tips": [
+  "Chia một cuộc đua thành ba chặng biến mục tiêu xa thành ba mục tiêu ngắn, giữ người chơi lâu hơn.",
+  "Mặc định tắt mất chuỗi khiến bản này thân thiện hơn hẳn bản thường, phù hợp cho nhóm người chơi dễ nản.",
+  "Trần 100 lần thắng ở chặng cuối là van an toàn kinh tế, chặn việc cày thưởng vô hạn.",
+  "Phần thưởng leo từ 100 lên 250 rồi 500 coin tạo cảm giác giá trị tăng rõ theo từng chặng.",
+  "Popup tham gia không cho đóng là công cụ mạnh để tăng tỉ lệ tham gia, và được đo bằng tham số close_button_enabled."
+ ],
+ "categories": [
+  "Sự kiện",
+  "Có bảng xếp hạng",
+  "Live-ops",
+  "Tiến trình"
+ ]
+}

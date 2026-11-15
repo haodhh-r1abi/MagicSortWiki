@@ -1,0 +1,1085 @@
+{
+  "id": "Referral",
+  "name": "Mời bạn (Referral)",
+  "category": "Social",
+  "managers": [
+    "Modules.Infrastructure.Social.ReferralService",
+    "Modules.Infrastructure.Social.ReferralRemoteService",
+    "Modules.Infrastructure.Social.ReferralDataService"
+  ],
+  "summary": "Referral là vòng lặp mời người chơi mới: người chơi chia sẻ một link mời riêng (invite_link do backend cấp, hoặc link store kèm payload) qua hộp thoại chia sẻ hệ điều hành. Người được mời cài game, hệ thống attribution (Adjust) trả về referrer_public_id, client đăng ký quan hệ giới thiệu; khi người mới đạt mốc level Milestone thì người mời nhận thưởng theo danh sách ReferralRewards, tối đa MaxRewardLimit lượt. Mỗi lượt thưởng gắn với một ReferralRewardItem chứa hồ sơ người được mời (tên, avatar, tiến độ) nên popup thưởng hiển thị cụ thể 'ai' đã giúp bạn nhận thưởng. Đây là kênh UA tự nhiên, gắn chặt với Friends (link mời cũng tự kết bạn) và Profile (public id).",
+  "unlock": "Bật/tắt bằng Firebase Remote Config key 'ReferralConfigModel': ReferralConfigModel.IsEnabled. ReferralService.CanShowInvite() còn kiểm tra cờ phiên _showedInviteInSession để không hiện popup mời nhiều lần trong một phiên.",
+  "entry_points": [
+    "Popup mời bạn FriendsInvitePopup (nút Invite trong tab Friends)",
+    "Nút Invite trong FindFriendPopup (FindFriendPopup.OnInviteButtonSelected)",
+    "Popup thông tin phần thưởng FriendsInviteInfoPopup",
+    "Deeplink/attribution khi người mới cài game (ReferralService.CacheReferrerIdFromAttribution)",
+    "Popup nhận thưởng khi có ReferralRewardItem đủ điều kiện (localize 'ReferralRewards')"
+  ],
+  "flow": "Khi khởi tạo dữ liệu, ReferralService.InitializeData() gọi InitializeInviteData() → ReferralRemoteService.GetMyInviteData() lấy InviteDataResponse{invite_link, rewards}. _url được đặt bằng invite_link nếu ReferralConfigModel.UseBackendUrl = true, ngược lại dùng GetStoreUrl(config) chọn PlayStoreUrl hoặc AppStoreUrl theo nền tảng. Danh sách _referralRewards là các ReferralRewardItem với trường status/created_at/earned_at/claimed_at cho biết từng người được mời đang ở giai đoạn nào. Khi người chơi bấm mời, OpenShareDialogue(source) dựng payload bằng BuildPayload() = text mẫu localize 'ShareMessageTemplate' (\"Lets play Magic Sort together!\") + xuống dòng + _url, rồi AndroidShare(payload) mở Intent ACTION_SEND kiểu text/plain qua createChooser; kết quả về HandleShareCompleted(success) và SendShareOpenedEvent(source) gửi analytics 'invite_send'. Ở phía người được mời: CacheReferrerIdFromAttribution() đọc referrer id từ dữ liệu attribution, ReferralDataService.ReferralRegistered(referrerId) lưu vào ReferralDataModel.ReferrerId và client gửi RegisterReferralRequestModel{referrer_public_id}; analytics 'referral_registered' kèm 'referrer_id'. Mỗi lần thắng level, LevelWin() → CheckMilestoneStatus() so tiến độ với GetMilestone() (= ReferralConfigModel.Milestone); khi đạt, ReferralRemoteService.ConfirmReferralMilestone(referrerPublicId) báo server, ReferralDataService.ReachedMilestone() đánh dấu DidReachMilestone() = true và bắn analytics 'referral_milestone_reached'. Người mời thấy HasReferralRewards = true, GetEarnedRewards() trả các RewardModel đã đủ điều kiện; nhận bằng ClaimInviteRewards() → ClaimInviteRewardsResponse{claimed_count}, sau đó RewardsClaimed() và ReferralDataService.AddToClaimedRewards(rewards) để không nhận trùng (RewardClaimed(reward), GetClaimedRewardsCount() so với MaxRewardLimit).",
+  "use_cases": [
+    {
+      "id": "UC-01",
+      "title": "Nạp dữ liệu mời và link riêng",
+      "actor": "System",
+      "trigger": "Khởi tạo dữ liệu người chơi",
+      "precondition": "ReferralConfigModel.IsEnabled = true",
+      "steps": [
+        "ReferralService.InitializeData() → InitializeInviteData()",
+        "ReferralRemoteService.GetMyInviteData() → InviteDataResponse{invite_link, rewards}",
+        "Đặt _url = invite_link nếu UseBackendUrl, ngược lại GetStoreUrl(config)",
+        "_referralRewards = danh sách ReferralRewardItem"
+      ],
+      "result": "Sẵn sàng chia sẻ link và biết đang có bao nhiêu người được mời",
+      "rules": "GetStoreUrl chọn PlayStoreUrl (Android) hoặc AppStoreUrl (iOS)",
+      "evidence": "ReferralService.InitializeData; ReferralService.InitializeInviteData; ReferralRemoteService.GetMyInviteData; ReferralService.GetStoreUrl"
+    },
+    {
+      "id": "UC-02",
+      "title": "Mở hộp thoại chia sẻ link mời",
+      "actor": "Player",
+      "trigger": "Bấm Invite trong FriendsInvitePopup hoặc FindFriendPopup",
+      "precondition": "Đã có _url",
+      "steps": [
+        "ReferralService.OpenShareDialogue(source)",
+        "BuildPayload(): localize 'ShareMessageTemplate' (\"Lets play Magic Sort together!\") + \"\\n\" + _url",
+        "AndroidShare(payload): Intent android.content.Intent, setAction ACTION_SEND, putExtra EXTRA_TEXT, setType text/plain, createChooser(\"Share\"), startActivity qua com.unity3d.player.UnityPlayer.currentActivity",
+        "HandleShareCompleted(success) xử lý kết quả",
+        "SendShareOpenedEvent(source) gửi analytics 'invite_send' kèm 'source'"
+      ],
+      "result": "Người chơi chọn ứng dụng để gửi link mời",
+      "rules": "DefaultShareText = \"ShareMessageTemplate\" (khoá localize, const trong ReferralService)",
+      "evidence": "ReferralService.OpenShareDialogue; ReferralService.BuildPayload; ReferralService.AndroidShare; ReferralService.HandleShareCompleted; ReferralService.SendShareOpenedEvent"
+    },
+    {
+      "id": "UC-03",
+      "title": "Hiển thị popup mời một lần mỗi phiên",
+      "actor": "System",
+      "trigger": "Điều kiện hiển thị popup mời",
+      "precondition": "CanShowInvite() = true",
+      "steps": [
+        "ReferralService.CanShowInvite() kiểm tra cấu hình và _showedInviteInSession",
+        "Hiện FriendsInvitePopup (localize 'FriendsInviteFriend')",
+        "ReferralService.MarkInviteShowed() đặt _showedInviteInSession = true"
+      ],
+      "result": "Không spam popup mời trong cùng một phiên chơi",
+      "rules": "Cờ chỉ tồn tại trong phiên (không lưu). Analytics 'invite_popup_impression', 'referral_popup_invite_impression'; chuỗi 'force_invite_popup' trong FriendsInvitePopup cho luồng ép hiện",
+      "evidence": "ReferralService.CanShowInvite; ReferralService.MarkInviteShowed; FriendsInvitePopup.Show"
+    },
+    {
+      "id": "UC-04",
+      "title": "Xem thông tin phần thưởng mời",
+      "actor": "Player",
+      "trigger": "Bấm nút info trong FriendsInvitePopup",
+      "precondition": "-",
+      "steps": [
+        "FriendsInvitePopup.OnInfoButtonSelected() mở FriendsInviteInfoPopup",
+        "Hiển thị 4 bước: 'FriendsInviteInfo1' (Send an invite!), 'FriendsInviteInfo2' (Friend reaches level {0}), 'FriendsInviteInfo3' (Earn amazing rewards!), 'FriendsInviteInfo4' (bạn phải là người chơi MỚI)",
+        "FriendsInvitePopup.UpdateView() dựng danh sách phần thưởng bằng CurrencyViewFactory và InitializePlusSigns()"
+      ],
+      "result": "Người chơi hiểu điều kiện: người được mời phải mới và phải đạt level mốc",
+      "rules": "Level trong text lấy từ ReferralConfigModel.Milestone (localize 'FriendsInviteRewardDescription')",
+      "evidence": "FriendsInvitePopup.OnInfoButtonSelected; FriendsInvitePopup.UpdateView; FriendsInviteInfoPopup; ReferralService.GetMilestone"
+    },
+    {
+      "id": "UC-05",
+      "title": "Đăng ký quan hệ giới thiệu khi cài game qua link",
+      "actor": "System",
+      "trigger": "Người mới mở game lần đầu sau khi cài từ link mời",
+      "precondition": "Dữ liệu attribution có referrer id; chưa đăng ký (IsReferralRegistered() = false)",
+      "steps": [
+        "ReferralService.CacheReferrerIdFromAttribution() đọc referrer id",
+        "GetReferrerPublicId() trả id",
+        "ReferralDataService.ReferralRegistered(referrerId) lưu ReferralDataModel.ReferrerId",
+        "Gửi RegisterReferralRequestModel{referrer_public_id} lên backend",
+        "Analytics 'referral_registered' kèm tham số 'referrer_id'"
+      ],
+      "result": "Backend ghi nhận ai là người giới thiệu, mở đường cho thưởng mốc",
+      "rules": "Chỉ đăng ký được một lần (IsReferralRegistered chặn ghi đè)",
+      "evidence": "ReferralService.CacheReferrerIdFromAttribution; ReferralService.GetReferrerPublicId; ReferralDataService.ReferralRegistered; ReferralDataService.IsReferralRegistered; RegisterReferralRequestModel"
+    },
+    {
+      "id": "UC-06",
+      "title": "Người được mời đạt mốc level",
+      "actor": "System",
+      "trigger": "Thắng level",
+      "precondition": "Có ReferrerId và DidReachMilestone() = false",
+      "steps": [
+        "ReferralService.LevelWin() → CheckMilestoneStatus()",
+        "So sánh tiến độ người chơi với GetMilestone() = ReferralConfigModel.Milestone",
+        "Đủ điều kiện → ReferralRemoteService.ConfirmReferralMilestone(referrerPublicId) → ReferralWebResponse",
+        "ReferralDataService.ReachedMilestone() đặt cờ ReachedMilestone = true",
+        "Analytics 'referral_milestone_reached'"
+      ],
+      "result": "Người mời đủ điều kiện nhận thưởng cho lượt giới thiệu này",
+      "rules": "Chỉ báo một lần cho mỗi tài khoản được mời",
+      "evidence": "ReferralService.LevelWin; ReferralService.CheckMilestoneStatus; ReferralRemoteService.ConfirmReferralMilestone; ReferralDataService.ReachedMilestone; ReferralDataService.DidReachMilestone"
+    },
+    {
+      "id": "UC-07",
+      "title": "Người mời nhận thưởng giới thiệu",
+      "actor": "Player",
+      "trigger": "Mở popup thưởng ('ReferralRewards' = Friend Referral Rewards)",
+      "precondition": "HasReferralRewards = true",
+      "steps": [
+        "ReferralService.GetEarnedRewards() lọc ReferralRewardItem có earned_at nhưng chưa claimed_at",
+        "Bấm nhận → ReferralRemoteService.ClaimInviteRewards() → ClaimInviteRewardsResponse{claimed_count}",
+        "ReferralService.RewardsClaimed() cập nhật trạng thái",
+        "ReferralDataService.AddToClaimedRewards(rewards) ghi vào ClaimedRefRewards",
+        "RewardService trao RewardModel từ ReferralConfigModel.ReferralRewards"
+      ],
+      "result": "Coin/booster được cộng, danh sách thưởng chờ rỗng dần",
+      "rules": "RewardClaimed(reward) chặn nhận trùng; GetClaimedRewardsCount() so với MaxRewardLimit để dừng khi đạt trần",
+      "evidence": "ReferralService.GetEarnedRewards; ReferralService.RewardsClaimed; ReferralRemoteService.ClaimInviteRewards; ReferralDataService.AddToClaimedRewards; ReferralDataService.RewardClaimed; ReferralDataService.GetClaimedRewardsCount"
+    },
+    {
+      "id": "UC-08",
+      "title": "Hiển thị danh sách người đã mời",
+      "actor": "Player",
+      "trigger": "Mở popup thưởng mời",
+      "precondition": "Có ReferralRewardItem",
+      "steps": [
+        "Mỗi item mang referred_user_public_id, referred_nick_name, referred_image_url/id, referred_progress, referred_frame_id, referred_name_style",
+        "status cho biết giai đoạn (đã cài / đã đạt mốc / đã nhận thưởng)",
+        "created_at / earned_at / claimed_at làm mốc thời gian"
+      ],
+      "result": "Người chơi thấy rõ ai đã cài game và ai còn đang tiến tới mốc",
+      "rules": "Avatar dùng chung ProfileSpriteCacheService như Friends",
+      "evidence": "ReferralRewardItem; ReferralService.GetReferralRewards; InviteDataResponse"
+    },
+    {
+      "id": "UC-09",
+      "title": "Đạt trần số phần thưởng giới thiệu",
+      "actor": "System",
+      "trigger": "Số lượt đã nhận bằng MaxRewardLimit",
+      "precondition": "GetClaimedRewardsCount() >= ReferralConfigModel.MaxRewardLimit",
+      "steps": [
+        "ReferralService.GetEarnedRewards() không trả thêm phần thưởng",
+        "HasReferralRewards = false"
+      ],
+      "result": "Không thể nhận thêm dù tiếp tục mời (chống lạm dụng)",
+      "rules": "MaxRewardLimit do remote config",
+      "evidence": "ReferralDataService.GetClaimedRewardsCount; ReferralService.get_HasReferralRewards; ReferralConfigModel.MaxRewardLimit"
+    },
+    {
+      "id": "UC-10",
+      "title": "Đồng bộ và xoá dữ liệu Referral",
+      "actor": "System",
+      "trigger": "SyncService hoặc xoá tài khoản",
+      "precondition": "-",
+      "steps": [
+        "ReferralDataService.MarkDataForLateUpdate() khi có thay đổi, LateUpdate() lưu qua ISaveLoad<ReferralDataModel>",
+        "SerializeModelForSync() / GetSyncName() = \"ReferralDataModel\"",
+        "OverwriteModelFromSync(data) khi đăng nhập máy khác",
+        "DeleteData() (IDeletable) xoá ReferrerId, ReachedMilestone, ClaimedRefRewards khi xoá tài khoản"
+      ],
+      "result": "Quan hệ giới thiệu và thưởng đã nhận theo tài khoản, không theo thiết bị",
+      "rules": "IsDataChangedSinceLastSave/DataSynced quản lý cờ bẩn",
+      "evidence": "ReferralDataService.SerializeModelForSync; ReferralDataService.GetSyncName; ReferralDataService.OverwriteModelFromSync; ReferralDataService.DeleteData"
+    },
+    {
+      "id": "UC-11",
+      "title": "Chia sẻ thất bại hoặc bị huỷ",
+      "actor": "System",
+      "trigger": "Người chơi thoát hộp thoại chia sẻ",
+      "precondition": "Đã mở Intent chia sẻ",
+      "steps": [
+        "ReferralService.HandleShareCompleted(false)",
+        "Không gửi sự kiện thành công, không thay đổi dữ liệu"
+      ],
+      "result": "Người chơi có thể mời lại bất kỳ lúc nào",
+      "rules": "Không có cooldown mời trong client",
+      "evidence": "ReferralService.HandleShareCompleted"
+    },
+    {
+      "id": "UC-12",
+      "title": "Lỗi mạng khi lấy dữ liệu mời",
+      "actor": "System",
+      "trigger": "GetMyInviteData thất bại",
+      "precondition": "-",
+      "steps": [
+        "ApiResponse<InviteDataResponse> không hợp lệ → _url giữ giá trị store url dự phòng",
+        "ReferralRemoteService.CancelRequests() huỷ request treo khi Dispose"
+      ],
+      "result": "Vẫn mời được bằng link store, chỉ mất phần theo dõi cá nhân hoá",
+      "rules": "UseBackendUrl = false là chế độ dự phòng thuần store url",
+      "evidence": "ReferralRemoteService.GetMyInviteData; ReferralRemoteService.CancelRequests; ReferralService.GetStoreUrl"
+    }
+  ],
+  "configs": [
+    {
+      "source": "Default/code0.0.3063 and historical caches20260910/20261010; per-snapshot source/hash in snapshot_values; not effective-runtime proof",
+      "key": "ReferralConfigModel.IsEnabled",
+      "type": "bool",
+      "value": "default_0.0.3063: false; cache_20260910: false; cache_20261010: false; firebase_20260910: false",
+      "meaning": "Bật/tắt tính năng mời bạn [15/11: giá trị theo snapshot cụ thể; thiếu field khác với false/0. Không xác nhận assignment hoặc effective runtime.]",
+      "where": "Firebase Remote Config key 'ReferralConfigModel'",
+      "previous_unresolved_value": "server",
+      "snapshot_values": [
+        {
+          "snapshot": "default_0.0.3063",
+          "model": "ReferralConfigModel",
+          "key": "IsEnabled",
+          "value": false,
+          "type": "bool",
+          "source": "../com.grandgames.magicsort_Unity_20260909_112501/UnityExport/ExportedProject/Assets/Resources/defaultconfigs/ReferralConfigModel.json",
+          "value_type": "bool",
+          "source_sha256": "703677551f5deb51df81a7ccacdff77b69a906ad92d5b2ce6c95fd5d08740d28",
+          "field_present": true
+        },
+        {
+          "snapshot": "cache_20260910",
+          "model": "referralConfigModel",
+          "key": "isEnabled",
+          "value": false,
+          "type": "bool",
+          "source": "facts/runtime/server_configs/referralConfigModel.json",
+          "value_type": "bool",
+          "source_sha256": "0e4babfefb4acd264c2ac7299452fc090c5c4df4c3bd1a0ace0fd046fe7af3f4",
+          "field_present": true
+        },
+        {
+          "snapshot": "cache_20261010",
+          "model": "referralConfigModel",
+          "key": "isEnabled",
+          "value": false,
+          "type": "bool",
+          "source": "facts/runtime/test_20261010/before/CachedRemoteConfigs",
+          "value_type": "bool",
+          "source_sha256": "433164d4877b2dee55d2bbd79ef2fe83d3fe9519492fe15e3cb0926daf216050",
+          "field_present": true
+        },
+        {
+          "snapshot": "firebase_20260910",
+          "model": "ReferralConfigModel",
+          "key": "IsEnabled",
+          "value": false,
+          "type": "bool",
+          "source": "facts/runtime/decoded/firebase_rc.json",
+          "value_type": "bool",
+          "source_sha256": "e49f73c0e3854a98c0c27ffae86e6abc7897c767b5f3e82991004c48c4eb45d5",
+          "field_present": true
+        }
+      ],
+      "snapshot_review_id": "MS-CFG-Referral-0000"
+    },
+    {
+      "source": "Default/code0.0.3063 and historical caches20260910/20261010; per-snapshot source/hash in snapshot_values; not effective-runtime proof",
+      "key": "ReferralConfigModel.UseBackendUrl",
+      "type": "bool",
+      "value": "default_0.0.3063: false; cache_20260910: true; cache_20261010: true; firebase_20260910: true",
+      "meaning": "Dùng invite_link cá nhân từ backend hay chỉ link store [15/11: giá trị theo snapshot cụ thể; thiếu field khác với false/0. Không xác nhận assignment hoặc effective runtime.]",
+      "where": "ReferralService.InitializeInviteData",
+      "previous_unresolved_value": "server",
+      "snapshot_values": [
+        {
+          "snapshot": "default_0.0.3063",
+          "model": "ReferralConfigModel",
+          "key": "UseBackendUrl",
+          "value": false,
+          "type": "bool",
+          "source": "../com.grandgames.magicsort_Unity_20260909_112501/UnityExport/ExportedProject/Assets/Resources/defaultconfigs/ReferralConfigModel.json",
+          "value_type": "bool",
+          "source_sha256": "703677551f5deb51df81a7ccacdff77b69a906ad92d5b2ce6c95fd5d08740d28",
+          "field_present": true
+        },
+        {
+          "snapshot": "cache_20260910",
+          "model": "referralConfigModel",
+          "key": "useBackendUrl",
+          "value": true,
+          "type": "bool",
+          "source": "facts/runtime/server_configs/referralConfigModel.json",
+          "value_type": "bool",
+          "source_sha256": "0e4babfefb4acd264c2ac7299452fc090c5c4df4c3bd1a0ace0fd046fe7af3f4",
+          "field_present": true
+        },
+        {
+          "snapshot": "cache_20261010",
+          "model": "referralConfigModel",
+          "key": "useBackendUrl",
+          "value": true,
+          "type": "bool",
+          "source": "facts/runtime/test_20261010/before/CachedRemoteConfigs",
+          "value_type": "bool",
+          "source_sha256": "433164d4877b2dee55d2bbd79ef2fe83d3fe9519492fe15e3cb0926daf216050",
+          "field_present": true
+        },
+        {
+          "snapshot": "firebase_20260910",
+          "model": "ReferralConfigModel",
+          "key": "UseBackendUrl",
+          "value": true,
+          "type": "bool",
+          "source": "facts/runtime/decoded/firebase_rc.json",
+          "value_type": "bool",
+          "source_sha256": "e49f73c0e3854a98c0c27ffae86e6abc7897c767b5f3e82991004c48c4eb45d5",
+          "field_present": true
+        }
+      ],
+      "snapshot_review_id": "MS-CFG-Referral-0001"
+    },
+    {
+      "source": "remote config",
+      "key": "ReferralConfigModel.PlayStoreUrl",
+      "type": "string",
+      "value": "server (link store Android)",
+      "meaning": "Link dự phòng cho Android",
+      "where": "ReferralService.GetStoreUrl"
+    },
+    {
+      "source": "remote config",
+      "key": "ReferralConfigModel.AppStoreUrl",
+      "type": "string",
+      "value": "server (link store iOS)",
+      "meaning": "Link dự phòng cho iOS",
+      "where": "ReferralService.GetStoreUrl"
+    },
+    {
+      "source": "Default/code0.0.3063 and historical caches20260910/20261010; per-snapshot source/hash in snapshot_values; not effective-runtime proof",
+      "key": "ReferralConfigModel.Milestone",
+      "type": "int (level)",
+      "value": "default_0.0.3063: 5; cache_20260910: 5; cache_20261010: 5; firebase_20260910: 5",
+      "meaning": "Mốc level người được mời phải đạt để người mời có thưởng [15/11: giá trị theo snapshot cụ thể; thiếu field khác với false/0. Không xác nhận assignment hoặc effective runtime.]",
+      "where": "ReferralService.GetMilestone; localize 'FriendsInviteInfo2'",
+      "previous_unresolved_value": "server",
+      "snapshot_values": [
+        {
+          "snapshot": "default_0.0.3063",
+          "model": "ReferralConfigModel",
+          "key": "Milestone",
+          "value": 5,
+          "type": "int",
+          "source": "../com.grandgames.magicsort_Unity_20260909_112501/UnityExport/ExportedProject/Assets/Resources/defaultconfigs/ReferralConfigModel.json",
+          "value_type": "int",
+          "source_sha256": "703677551f5deb51df81a7ccacdff77b69a906ad92d5b2ce6c95fd5d08740d28",
+          "field_present": true
+        },
+        {
+          "snapshot": "cache_20260910",
+          "model": "referralConfigModel",
+          "key": "milestone",
+          "value": 5,
+          "type": "int",
+          "source": "facts/runtime/server_configs/referralConfigModel.json",
+          "value_type": "int",
+          "source_sha256": "0e4babfefb4acd264c2ac7299452fc090c5c4df4c3bd1a0ace0fd046fe7af3f4",
+          "field_present": true
+        },
+        {
+          "snapshot": "cache_20261010",
+          "model": "referralConfigModel",
+          "key": "milestone",
+          "value": 5,
+          "type": "int",
+          "source": "facts/runtime/test_20261010/before/CachedRemoteConfigs",
+          "value_type": "int",
+          "source_sha256": "433164d4877b2dee55d2bbd79ef2fe83d3fe9519492fe15e3cb0926daf216050",
+          "field_present": true
+        },
+        {
+          "snapshot": "firebase_20260910",
+          "model": "ReferralConfigModel",
+          "key": "Milestone",
+          "value": 5,
+          "type": "int",
+          "source": "facts/runtime/decoded/firebase_rc.json",
+          "value_type": "int",
+          "source_sha256": "e49f73c0e3854a98c0c27ffae86e6abc7897c767b5f3e82991004c48c4eb45d5",
+          "field_present": true
+        }
+      ],
+      "snapshot_review_id": "MS-CFG-Referral-0004"
+    },
+    {
+      "source": "remote config",
+      "key": "ReferralConfigModel.ReferralRewards",
+      "type": "List<RewardModel>",
+      "value": "server",
+      "meaning": "Danh sách phần thưởng cho mỗi lượt giới thiệu thành công",
+      "where": "ReferralService.GetReferralRewards"
+    },
+    {
+      "source": "Default/code0.0.3063 and historical caches20260910/20261010; per-snapshot source/hash in snapshot_values; not effective-runtime proof",
+      "key": "ReferralConfigModel.MaxRewardLimit",
+      "type": "int",
+      "value": "default_0.0.3063: 3; cache_20260910: 3; cache_20261010: 3; firebase_20260910: 3",
+      "meaning": "Số lượt thưởng tối đa nhận được [15/11: giá trị theo snapshot cụ thể; thiếu field khác với false/0. Không xác nhận assignment hoặc effective runtime.]",
+      "where": "ReferralDataService.GetClaimedRewardsCount",
+      "previous_unresolved_value": "server",
+      "snapshot_values": [
+        {
+          "snapshot": "default_0.0.3063",
+          "model": "ReferralConfigModel",
+          "key": "MaxRewardLimit",
+          "value": 3,
+          "type": "int",
+          "source": "../com.grandgames.magicsort_Unity_20260909_112501/UnityExport/ExportedProject/Assets/Resources/defaultconfigs/ReferralConfigModel.json",
+          "value_type": "int",
+          "source_sha256": "703677551f5deb51df81a7ccacdff77b69a906ad92d5b2ce6c95fd5d08740d28",
+          "field_present": true
+        },
+        {
+          "snapshot": "cache_20260910",
+          "model": "referralConfigModel",
+          "key": "maxRewardLimit",
+          "value": 3,
+          "type": "int",
+          "source": "facts/runtime/server_configs/referralConfigModel.json",
+          "value_type": "int",
+          "source_sha256": "0e4babfefb4acd264c2ac7299452fc090c5c4df4c3bd1a0ace0fd046fe7af3f4",
+          "field_present": true
+        },
+        {
+          "snapshot": "cache_20261010",
+          "model": "referralConfigModel",
+          "key": "maxRewardLimit",
+          "value": 3,
+          "type": "int",
+          "source": "facts/runtime/test_20261010/before/CachedRemoteConfigs",
+          "value_type": "int",
+          "source_sha256": "433164d4877b2dee55d2bbd79ef2fe83d3fe9519492fe15e3cb0926daf216050",
+          "field_present": true
+        },
+        {
+          "snapshot": "firebase_20260910",
+          "model": "ReferralConfigModel",
+          "key": "MaxRewardLimit",
+          "value": 3,
+          "type": "int",
+          "source": "facts/runtime/decoded/firebase_rc.json",
+          "value_type": "int",
+          "source_sha256": "e49f73c0e3854a98c0c27ffae86e6abc7897c767b5f3e82991004c48c4eb45d5",
+          "field_present": true
+        }
+      ],
+      "snapshot_review_id": "MS-CFG-Referral-0006"
+    },
+    {
+      "source": "code const",
+      "key": "ReferralService.DefaultShareText",
+      "type": "string const",
+      "value": "\"ShareMessageTemplate\"",
+      "meaning": "Khoá localize của câu mời; bản EN = \"Lets play Magic Sort together!\"",
+      "where": "ReferralService (const) + localization.tsv"
+    },
+    {
+      "source": "code const",
+      "key": "Android share intent",
+      "type": "string",
+      "value": "\"android.content.Intent\", \"ACTION_SEND\", \"EXTRA_TEXT\", \"text/plain\", \"createChooser\", \"Share\", \"com.unity3d.player.UnityPlayer\", \"currentActivity\", \"startActivity\"",
+      "meaning": "Chuỗi JNI dựng hộp thoại chia sẻ hệ thống",
+      "where": "ReferralService.AndroidShare (strings-by-type.tsv)"
+    },
+    {
+      "source": "code field",
+      "key": "ReferralDataModel",
+      "type": "class",
+      "value": "ReferrerId, ReachedMilestone, ClaimedRefRewards",
+      "meaning": "Dữ liệu Referral lưu cục bộ/đồng bộ",
+      "where": "ReferralDataModel"
+    },
+    {
+      "source": "code field",
+      "key": "ReferralRewardItem",
+      "type": "class (JSON)",
+      "value": "referred_user_public_id, referred_nick_name, referred_image_url, referred_image_id, referred_progress, referred_frame_id, referred_name_style, status, created_at, earned_at, claimed_at",
+      "meaning": "Một lượt giới thiệu và trạng thái của nó",
+      "where": "ReferralRewardItem"
+    },
+    {
+      "source": "storage key",
+      "key": "ReferralDataModel",
+      "type": "sync name",
+      "value": "\"ReferralDataModel\"",
+      "meaning": "Tên khối dữ liệu Referral trong SyncService",
+      "where": "ReferralDataService.GetSyncName"
+    },
+    {
+      "source": "code field",
+      "key": "_showedInviteInSession",
+      "type": "bool",
+      "value": "false mỗi phiên",
+      "meaning": "Chỉ hiện popup mời một lần mỗi phiên",
+      "where": "ReferralService"
+    },
+    {
+      "source": "asset",
+      "key": "BackendEnvironmentConfig – endpoint Referral (chỉ path)",
+      "type": "string",
+      "value": "/v1/get-invite-link, /v1/get-my-invite-data, /v1/confirm-referral-milestone, /v1/claim-invite-rewards",
+      "meaning": "Đường dẫn API của Referral",
+      "where": "Assets/MonoBehaviour/BackendEnvironmentConfig.asset"
+    },
+    {
+      "source": "json default",
+      "key": "ReferralConfigModel.json: IsEnabled",
+      "type": "",
+      "value": "false",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/ReferralConfigModel.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "ReferralConfigModel.json: UseBackendUrl",
+      "type": "",
+      "value": "false",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/ReferralConfigModel.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "ReferralConfigModel.json: PlayStoreUrl",
+      "type": "",
+      "value": "https://play.google.com/store/apps/details?id=com.grandgames.magicsort",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/ReferralConfigModel.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "ReferralConfigModel.json: AppStoreUrl",
+      "type": "",
+      "value": "https://apps.apple.com/us/app/magic-sort/id6499209744",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/ReferralConfigModel.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "ReferralConfigModel.json: Milestone",
+      "type": "",
+      "value": "5",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/ReferralConfigModel.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "ReferralConfigModel.json: ReferralRewards[0].CurrencyType",
+      "type": "",
+      "value": "1",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/ReferralConfigModel.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "ReferralConfigModel.json: ReferralRewards[0].Amount",
+      "type": "",
+      "value": "100",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/ReferralConfigModel.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "ReferralConfigModel.json: ReferralRewards[1].CurrencyType",
+      "type": "",
+      "value": "6",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/ReferralConfigModel.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "ReferralConfigModel.json: ReferralRewards[1].Amount",
+      "type": "",
+      "value": "1",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/ReferralConfigModel.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "ReferralConfigModel.json: ReferralRewards[2].CurrencyType",
+      "type": "",
+      "value": "2",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/ReferralConfigModel.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "ReferralConfigModel.json: ReferralRewards[2].Amount",
+      "type": "",
+      "value": "1",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/ReferralConfigModel.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "ReferralConfigModel.json: ReferralRewards[2].TimeSpan",
+      "type": "",
+      "value": "00:30:00",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/ReferralConfigModel.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "ReferralConfigModel.json: MaxRewardLimit",
+      "type": "",
+      "value": "3",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/ReferralConfigModel.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "server cache (historical)",
+      "key": "ReferralConfigModel (live) = default?",
+      "type": "",
+      "value": "12/21 key trùng default, 9 key khác/thêm",
+      "meaning": "Đối chiếu config server thật (CachedRemoteConfigs) với ReferralConfigModel.json",
+      "where": "Configs/CachedRemoteConfigs + Firebase RC template 3197 — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server cache (historical)",
+      "key": "ReferralConfigModel: useBackendUrl",
+      "type": "",
+      "value": "true",
+      "meaning": "server ghi đè (default = false)",
+      "where": "Configs/CachedRemoteConfigs + Firebase RC template 3197 — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server cache (historical)",
+      "key": "ReferralConfigModel: referralRewards[0].timeSpan",
+      "type": "",
+      "value": "00:00:00",
+      "meaning": "server-only (không có trong default)",
+      "where": "Configs/CachedRemoteConfigs + Firebase RC template 3197 — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server cache (historical)",
+      "key": "ReferralConfigModel: referralRewards[0].chestType",
+      "type": "",
+      "value": "0",
+      "meaning": "server-only (không có trong default)",
+      "where": "Configs/CachedRemoteConfigs + Firebase RC template 3197 — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server cache (historical)",
+      "key": "ReferralConfigModel: referralRewards[0].collectionPackType",
+      "type": "",
+      "value": "0",
+      "meaning": "server-only (không có trong default)",
+      "where": "Configs/CachedRemoteConfigs + Firebase RC template 3197 — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server cache (historical)",
+      "key": "ReferralConfigModel: referralRewards[1].timeSpan",
+      "type": "",
+      "value": "00:00:00",
+      "meaning": "server-only (không có trong default)",
+      "where": "Configs/CachedRemoteConfigs + Firebase RC template 3197 — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server cache (historical)",
+      "key": "ReferralConfigModel: referralRewards[1].chestType",
+      "type": "",
+      "value": "0",
+      "meaning": "server-only (không có trong default)",
+      "where": "Configs/CachedRemoteConfigs + Firebase RC template 3197 — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server cache (historical)",
+      "key": "ReferralConfigModel: referralRewards[1].collectionPackType",
+      "type": "",
+      "value": "0",
+      "meaning": "server-only (không có trong default)",
+      "where": "Configs/CachedRemoteConfigs + Firebase RC template 3197 — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server cache (historical)",
+      "key": "ReferralConfigModel: referralRewards[2].chestType",
+      "type": "",
+      "value": "0",
+      "meaning": "server-only (không có trong default)",
+      "where": "Configs/CachedRemoteConfigs + Firebase RC template 3197 — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server cache (historical)",
+      "key": "ReferralConfigModel: referralRewards[2].collectionPackType",
+      "type": "",
+      "value": "0",
+      "meaning": "server-only (không có trong default)",
+      "where": "Configs/CachedRemoteConfigs + Firebase RC template 3197 — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server instance (historical)",
+      "key": "ReferralDataModel (instance)",
+      "type": "",
+      "value": "3 key, xem facts/runtime/event_instances/ReferralDataModel.json",
+      "meaning": "Dữ liệu phiên event đang chạy (ngày, mốc, thưởng, đối thủ)",
+      "where": "PlayerPrefs ReferralDataModel (instance event đang chạy) — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server instance (historical)",
+      "key": "ReferralDataModel: referrerId",
+      "type": "",
+      "value": "",
+      "meaning": "",
+      "where": "PlayerPrefs ReferralDataModel (instance event đang chạy) — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server instance (historical)",
+      "key": "ReferralDataModel: reachedMilestone",
+      "type": "",
+      "value": "true",
+      "meaning": "",
+      "where": "PlayerPrefs ReferralDataModel (instance event đang chạy) — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server instance (historical)",
+      "key": "ReferralDataModel: claimedRefRewards",
+      "type": "",
+      "value": "[]",
+      "meaning": "",
+      "where": "PlayerPrefs ReferralDataModel (instance event đang chạy) — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    }
+  ],
+  "rewards": [
+    {
+      "context": "Người được mời đạt level Milestone",
+      "reward": "ReferralConfigModel.ReferralRewards (List<RewardModel> do server cấu hình)",
+      "evidence": "ReferralService.GetEarnedRewards; ReferralRemoteService.ClaimInviteRewards"
+    },
+    {
+      "context": "Trần thưởng",
+      "reward": "Tối đa MaxRewardLimit lượt",
+      "evidence": "ReferralDataService.GetClaimedRewardsCount"
+    }
+  ],
+  "backend": [
+    {
+      "command": "GetMyInviteData → InviteDataResponse{invite_link, rewards[]}",
+      "direction": "client→server",
+      "purpose": "lấy link mời riêng và danh sách lượt giới thiệu"
+    },
+    {
+      "command": "ConfirmReferralMilestone(referrerPublicId) → ReferralWebResponse",
+      "direction": "client→server",
+      "purpose": "báo người được mời đã đạt mốc"
+    },
+    {
+      "command": "ClaimInviteRewards → ClaimInviteRewardsResponse{claimed_count}",
+      "direction": "client→server",
+      "purpose": "nhận thưởng giới thiệu"
+    },
+    {
+      "command": "RegisterReferralRequestModel{referrer_public_id}",
+      "direction": "client→server",
+      "purpose": "đăng ký quan hệ giới thiệu khi cài mới"
+    },
+    {
+      "command": "AutoAddFriend(AutoAddFriendRequestModel{target_user_public_id})",
+      "direction": "client→server",
+      "purpose": "tự kết bạn với người mời (qua FriendsService.TryAddFriendsFromDeeplink)"
+    }
+  ],
+  "ui": [
+    {
+      "element": "Popup mời bạn",
+      "class": "Modules.Contexts.Home.Friends.Scripts.UI.FriendsInvitePopup",
+      "purpose": "hiện phần thưởng và nút Invite"
+    },
+    {
+      "element": "Popup hướng dẫn mời",
+      "class": "Modules.Contexts.Home.Friends.Scripts.UI.FriendsInviteInfoPopup",
+      "purpose": "giải thích 4 bước và điều kiện người chơi mới"
+    },
+    {
+      "element": "Nút Invite trong tìm bạn",
+      "class": "FindFriendPopup.OnInviteButtonSelected",
+      "purpose": "mời khi không tìm thấy người chơi"
+    },
+    {
+      "element": "Hộp thoại chia sẻ hệ thống",
+      "class": "ReferralService.AndroidShare (Android Intent chooser)",
+      "purpose": "gửi link qua ứng dụng bất kỳ"
+    }
+  ],
+  "analytics": [
+    {
+      "event": "invite_send",
+      "params": "source",
+      "when": "mở hộp thoại chia sẻ link mời"
+    },
+    {
+      "event": "invite_popup_impression",
+      "params": "-",
+      "when": "hiện popup mời"
+    },
+    {
+      "event": "referral_popup_invite_impression",
+      "params": "-",
+      "when": "hiện popup mời từ luồng referral"
+    },
+    {
+      "event": "referral_registered",
+      "params": "referrer_id",
+      "when": "người mới đăng ký quan hệ giới thiệu"
+    },
+    {
+      "event": "referral_milestone_reached",
+      "params": "progress",
+      "when": "người được mời đạt mốc level"
+    },
+    {
+      "event": "friends_count",
+      "params": "-",
+      "when": "gửi kèm khi mời/đồng bộ"
+    }
+  ],
+  "storage_keys": [
+    "ReferralDataModel (SyncService + ISaveLoad: ReferrerId, ReachedMilestone, ClaimedRefRewards)"
+  ],
+  "related_features": [
+    "Friends",
+    "Profile",
+    "Account",
+    "Inventory"
+  ],
+  "gaps": [
+    "15/11 — partial_actual_evidence: Bản mặc định ghi Milestone=5, có 3 ReferralRewards và MaxRewardLimit=3. Đây là dữ liệu default thật của export 0.0.3063, không phải response production mới. Câu hỏi cũ không nên tiếp tục được hiểu là chưa có dữ liệu tĩnh nào. Còn lại: Giữ default, cache và runtime được chọn thành các nguồn riêng. Chỉ xác minh phần hiện hành còn thiếu bằng instance, store sandbox hoặc backend hợp lệ.",
+    "15/11 — resolved_historical_snapshot: Đã trích toàn bộ field/value của ReferralConfigModel từ default0.0.3063 và cache lịch sử hiện có. Nhận định không có giá trị trong client đã được đối chiếu bằng file thật; không xác nhận effective runtime. Còn lại: Kiểm chứng effective config/asset và nhánh runtime trên đúng build nếu cần.",
+    "15/11 — partial_static_code_unresolved: ReferralService asyncresponse duyệt ReferralRewardItem và chỉ nhánhStatus==1 thêm reward vào model; GetEarnedRewards xây list reward cho claim. Body đã cho semantics hẹp của1, nhưng chưa có đủ enum/transition cho0/2 hoặc mọi status và earned_at/claimed_at. Còn lại: Cần schema/backend response từngstate và RewardsClaimed ack; không gọi unknownstatus đãclaimed chỉ từtimestamp hoặc int.",
+    "[Runtime 2026-09-10] Config server LIVE đã đọc trực tiếp từ cache máy (không cần request); các hàng 'server live' là giá trị server ghi đè/thêm so với default.",
+    "[Runtime 2026-09-10] Instance phiên event đang chạy đã đọc (ReferralDataModel); phần từng ghi 'do server gửi' nay có giá trị thật trong các hàng 'server instance'."
+  ],
+  "sources": [
+    "Il2CppDumper/dump.cs: ReferralService, ReferralRemoteService, ReferralDataService, ReferralConfigModel, ReferralDataModel, ReferralRewardItem, InviteDataResponse, ClaimInviteRewardsResponse, RegisterReferralRequestModel",
+    "RecoveredNative/PseudoC/Assembly-CSharp/Modules/Infrastructure/Social/*.c",
+    "RecoveredNative/strings-by-type.tsv (ReferralService, FriendsInvitePopup, EventSender referral_*/invite_*)",
+    "GameDesign/appendix/localization.tsv (ShareMessageTemplate, FriendsInvite*, ReferralRewards)"
+  ],
+  "audit_provenance": {
+    "review_date": "2026-11-15",
+    "mode": "offline_existing_files",
+    "code_build": "0.0.3063 ARMv7",
+    "runtime_build_observed_historically": "0.0.3129 ARM64 (audit 2026-10-18); not rechecked 2026-11-15",
+    "new_playtests": 0,
+    "uc_status": "See facts/audit_20261115/uc_registry.json; image reference is not pass",
+    "workbook_status": "Existing XLSX is historical; JSON and local web include 2026-11-15 corrections",
+    "static_review": "facts/local_code_gap_results_20261115.json; facts/local_asset_gap_results_20261115.json; facts/final_data_gap_decisions_20261115.json; facts/core_body_gap_decisions_20261115.json; facts/remaining_asset_gap_decisions_20261115.json"
+  },
+  "static_review_20261115": {
+    "date": "2026-11-15",
+    "scope": "Historical code/assets 0.0.3063, dated caches, device 0.0.3129 cached bundles and explicitly scoped runtime evidence. Not full runtime pass.",
+    "findings": [
+      {
+        "kind": "final_data",
+        "source_report": "facts/final_data_gap_decisions_20261115.json",
+        "id": "MS-FDG-018",
+        "gap_ids": [
+          "MS-Referral-G002"
+        ],
+        "title": "PlayStoreUrl/AppStoreUrl là chuỗi remote config, không nhìn thấy trong client.",
+        "status": "resolved_historical_snapshot",
+        "conclusion": "Đã trích toàn bộ field/value của ReferralConfigModel từ default0.0.3063 và cache lịch sử hiện có. Nhận định không có giá trị trong client đã được đối chiếu bằng file thật; không xác nhận effective runtime.",
+        "evidence": [
+          "facts/local_asset_review_20261115/config_catalog.json"
+        ],
+        "remaining": "Full historical data answered; current effective selection and full runtime remain unverified.",
+        "next_action": "Kiểm chứng effective config/asset và nhánh runtime trên đúng build nếu cần.",
+        "scope": "question-specific source/observed branch only; no full-UC or production claim",
+        "source_records": [
+          {
+            "snapshot": "default0.0.3063",
+            "model": "ReferralConfigModel",
+            "source": "Resources\\defaultconfigs\\ReferralConfigModel.json",
+            "root": "UnityExport Assets 0.0.3063",
+            "sha256": "703677551f5deb51df81a7ccacdff77b69a906ad92d5b2ce6c95fd5d08740d28",
+            "line": 1,
+            "build": "0.0.3063 ARMv7"
+          },
+          {
+            "snapshot": "cache20260910",
+            "model": "ReferralConfigModel",
+            "source": "facts\\runtime\\server_configs\\referralConfigModel.json",
+            "root": "GameDesign",
+            "sha256": "0e4babfefb4acd264c2ac7299452fc090c5c4df4c3bd1a0ace0fd046fe7af3f4",
+            "line": 1,
+            "build": "snapshot provenance at path"
+          },
+          {
+            "snapshot": "cache20261010",
+            "model": "ReferralConfigModel",
+            "source": "facts\\runtime\\test_20261010\\before\\CachedRemoteConfigs",
+            "root": "GameDesign",
+            "sha256": "433164d4877b2dee55d2bbd79ef2fe83d3fe9519492fe15e3cb0926daf216050",
+            "line": 1,
+            "build": "snapshot provenance at path"
+          }
+        ]
+      },
+      {
+        "kind": "code",
+        "source_report": "facts/local_code_gap_results_20261115.json",
+        "id": "MS-CODE-61",
+        "gap_ids": [
+          "MS-Referral-G003"
+        ],
+        "title": "Referral status1 được xử lý như reward nhận được",
+        "status": "partial_static_code",
+        "conclusion": "ReferralService asyncresponse duyệt ReferralRewardItem và chỉ nhánhStatus==1 thêm reward vào model; GetEarnedRewards xây list reward cho claim. Body đã cho semantics hẹp của1, nhưng chưa có đủ enum/transition cho0/2 hoặc mọi status và earned_at/claimed_at.",
+        "evidence": [
+          {
+            "file": "../com.grandgames.magicsort_Unity_20260909_112501/RecoveredNative/PseudoC/Assembly-CSharp/Modules/Infrastructure/Social/ReferralService.c",
+            "line": 500,
+            "end_line": 603,
+            "method": "if ((reward->fields)._Status_k__BackingField == 1)",
+            "sha256": "d2dd55bc0e52d5fd82238dd62325a474b7e52c741bfd2c805dfea35ee3594386",
+            "body_checked": true,
+            "build": "0.0.3063 ARMv7",
+            "required_body_tokens": []
+          }
+        ],
+        "remaining": "Cần schema/backend response từngstate và RewardsClaimed ack; không gọi unknownstatus đãclaimed chỉ từtimestamp hoặc int.",
+        "scope": "recovered_native_0.0.3063_only",
+        "runtime_verified": false
+      },
+      {
+        "kind": "asset",
+        "source_report": "facts/local_asset_gap_results_20261115.json",
+        "id": "MS-Referral-G002",
+        "status": "resolved_static_snapshot",
+        "conclusion": "Đã trích toàn bộ field/value của ReferralConfigModel từ default0.0.3063 và cache lịch sử hiện có. Nhận định không có giá trị trong client đã được đối chiếu bằng file thật; không xác nhận effective runtime.",
+        "evidence": [
+          {
+            "snapshot": "default0.0.3063",
+            "model": "ReferralConfigModel",
+            "source": "Resources\\defaultconfigs\\ReferralConfigModel.json",
+            "root": "UnityExport Assets 0.0.3063",
+            "sha256": "703677551f5deb51df81a7ccacdff77b69a906ad92d5b2ce6c95fd5d08740d28",
+            "line": 1,
+            "build": "0.0.3063 ARMv7"
+          },
+          {
+            "snapshot": "cache20260910",
+            "model": "ReferralConfigModel",
+            "source": "facts\\runtime\\server_configs\\referralConfigModel.json",
+            "root": "GameDesign",
+            "sha256": "0e4babfefb4acd264c2ac7299452fc090c5c4df4c3bd1a0ace0fd046fe7af3f4",
+            "line": 1,
+            "build": "snapshot provenance at path"
+          },
+          {
+            "snapshot": "cache20261010",
+            "model": "ReferralConfigModel",
+            "source": "facts\\runtime\\test_20261010\\before\\CachedRemoteConfigs",
+            "root": "GameDesign",
+            "sha256": "433164d4877b2dee55d2bbd79ef2fe83d3fe9519492fe15e3cb0926daf216050",
+            "line": 1,
+            "build": "snapshot provenance at path"
+          }
+        ],
+        "data": "config_catalog.json",
+        "scope": "static_export0.0.3063_or_historical_cache_not_runtime_pass",
+        "reviewed": "2026-11-15",
+        "next_action": "Kiểm chứng effective config/asset và nhánh runtime trên đúng build nếu cần.",
+        "superseded_or_refined_by": "MS-FDG-018"
+      }
+    ]
+  },
+  "acceptance_review_20261115": {
+    "source": "facts/feature_acceptance_20261115.json",
+    "feature_id": "Referral",
+    "scope": "All eleven dossier dimensions reviewed; full_feature_verified is not implied; read per-dimension gaps and actual runtime evidence."
+  },
+  "segment_ab_review_20261115": {
+    "status": "not_identified_in_sources",
+    "segment_ids": [],
+    "matching_basis": "explicit_gd_config_map_or_exact_model_token_in_gdd_configs_where_key_sources; rootfieldscoped",
+    "rows": [],
+    "classifications": {},
+    "assignment_verified": false,
+    "uplift_verified": false,
+    "note": "No matchingrow does not prove no segmentation/AB. Rewardbucketfalsepositives remain explicitly classified."
+  },
+  "continuation_review_20261116": {
+    "date": "2026-11-16",
+    "build": "0.0.3129 ARM64 host APK",
+    "build_scope": "Host APK version3129 matches LAST observed installed version15/11 only; installed bytes/live device16/11 not verified.",
+    "runtime_status": "device_unavailable",
+    "runtime_case_ids": [],
+    "current_apk_model_links": {
+      "feature": "Referral",
+      "models": [
+        {
+          "model": "ReferralConfigModel",
+          "current_default_file": "facts/review_20261116/public_current_config_3129/defaults/ReferralConfigModel.json",
+          "resource_path": "defaultconfigs/referralconfigmodel",
+          "sha256": "703677551f5deb51df81a7ccacdff77b69a906ad92d5b2ce6c95fd5d08740d28",
+          "matching_basis": [
+            "gdd/Referral.json#/configs",
+            "gdd/Referral.json#/sources",
+            "gdd/Referral.json#/flow"
+          ],
+          "scope": "Packaged default3129, not effective server config.",
+          "site_data_path": "data/current_config_3129/defaults/ReferralConfigModel.json",
+          "original_source_sha256": "703677551f5deb51df81a7ccacdff77b69a906ad92d5b2ce6c95fd5d08740d28",
+          "public_artifact_sha256": "616e702ccc8ce4db2e4b2f68d067eb8fe59f33540ab885dcc0fefd0a77c40e54",
+          "sha256_scope": "sha256 is original raw model; public_artifact_sha256 is the sanitized download"
+        }
+      ],
+      "status": "exact_model_source_association",
+      "distribution": "sanitized_public",
+      "public_mapping_pending": false
+    },
+    "current_packaged_defaults": [
+      {
+        "model": "ReferralConfigModel",
+        "source": "facts/review_20261116/public_current_config_3129/defaults/ReferralConfigModel.json",
+        "site_data_path": "data/current_config_3129/defaults/ReferralConfigModel.json",
+        "public_artifact_sha256": "616e702ccc8ce4db2e4b2f68d067eb8fe59f33540ab885dcc0fefd0a77c40e54",
+        "original_source_sha256": "703677551f5deb51df81a7ccacdff77b69a906ad92d5b2ce6c95fd5d08740d28",
+        "source_class": "static_asset",
+        "build": "0.0.3129 host APK",
+        "scope": "Sanitized packaged default fullvalues only; not effective remote/selected config or runtime.",
+        "values": {
+          "IsEnabled": false,
+          "UseBackendUrl": false,
+          "PlayStoreUrl": "https://play.google.com/store/apps/details?id=com.grandgames.magicsort",
+          "AppStoreUrl": "https://apps.apple.com/us/app/magic-sort/id6499209744",
+          "Milestone": 5,
+          "ReferralRewards": [
+            {
+              "CurrencyType": 1,
+              "Amount": 100
+            },
+            {
+              "CurrencyType": 6,
+              "Amount": 1
+            },
+            {
+              "CurrencyType": 2,
+              "Amount": 1,
+              "TimeSpan": "00:30:00"
+            }
+          ],
+          "MaxRewardLimit": 3
+        }
+      }
+    ],
+    "native_finding_ids": [],
+    "documentation_source_coverage": {
+      "dossier_present": true,
+      "use_case_catalog_count": 12,
+      "config_catalog_rows": 41,
+      "current_apk_default_model_links": 1,
+      "current_native_findings": 0,
+      "scope": "Documentation/source coverage only; not complete runtime verification."
+    },
+    "runtime_completion": {
+      "date": "2026-11-16",
+      "status": "device_unavailable",
+      "executed_case_count": 0,
+      "full_feature_runtime_verified": false
+    },
+    "planned_branch": "Từ Friends mở Invite và info bốn bước, ghi milestone/reward; nếu chooser mở được chỉ Cancel, không chọn gửi.",
+    "target_uc_ids": [
+      "UC-02",
+      "UC-04",
+      "UC-11"
+    ],
+    "execution_phase": "noncore_first",
+    "core_or_levels_last": false,
+    "actionability_full_json": "facts/continuation_20261116/current/feature_actionability.json",
+    "actionability_site_data_path": "data/continuation_20261116/feature_actionability.json",
+    "source_classes": [
+      "static_asset"
+    ],
+    "full_feature_verified": false
+  }
+}

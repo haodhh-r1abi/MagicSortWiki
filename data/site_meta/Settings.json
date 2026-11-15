@@ -1,0 +1,522 @@
+{
+  "id": "Settings",
+  "title": "Cài đặt (Settings)",
+  "tagline": "Trang tuỳ chọn gom âm thanh, nhạc, rung, thông báo, liên kết tài khoản, pháp lý và hỗ trợ.",
+  "infobox": [
+    [
+      "Loại",
+      "Meta"
+    ],
+    [
+      "Mở khóa",
+      "Có ngay từ đầu game"
+    ],
+    [
+      "Tham gia",
+      "Người chơi đơn"
+    ],
+    [
+      "Điều kiện / phụ thuộc",
+      "HomeUI (SwipeMenu PageType.Settings = 5), Notifications, Account, Profile"
+    ],
+    [
+      "Manager",
+      "SettingsController, SoundService, VibrationService, LocalizationService, RateUsService"
+    ]
+  ],
+  "description": [
+    "Code0.0.3063 có PageType.Settings=5 và SettingsPopUp; quan sát15/11 trên0.0.3129 là popup qua bánh răng, tab dưới cùng bên phải là Collection.",
+    "Các toggle: hiệu ứng âm thanh, nhạc nền, rung và thông báo đẩy.",
+    "Popup còn có liên kết/ngắt Facebook và Apple, khôi phục giao dịch, Điều khoản, Chính sách bảo mật, liên hệ hỗ trợ và xoá tài khoản.",
+    "Âm thanh chia hai kênh riêng qua AudioMixer: SoundModel.IsSoundEffectOn và IsMusicOn, với 111 giá trị SoundType và 4 MusicType.",
+    "Rung dùng hệ phản hồi xúc giác riêng cho từng nền tảng: Android ánh xạ AndroidHapticFeedback, iOS dùng IosFeedbackConfig.",
+    "Mỗi loại rung là một ScriptableObject 'Vibration' với mảng Delays và Priority; VibrationConfigs.asset ánh xạ 16 VibrationType.",
+    "Ngôn ngữ tự nhận theo mã ngôn ngữ máy trong 11 ngôn ngữ được hỗ trợ (English … Korean).",
+    "Module còn chứa luồng đồng ý quảng cáo (Google UMP + ATT/IDFA) và luồng xin đánh giá cửa hàng theo danh sách level.",
+    "Bộ toggle hiển thị thay đổi theo thiết bị: SettingsPopupFeedbackView có 4 biến thể từ 1 đến 3 toggle."
+  ],
+  "notes": [
+    "Lưu ý: Máy không hỗ trợ rung (VibrationService.IsVibrationSupported() = false) thì ẩn toggle rung.",
+    "Lưu ý: Toggle nhạc nền chỉ hiện khi remote config 'IsMusicEnabled' bật; giá trị rung mặc định lấy từ 'IsVibrationOn'.",
+    "Lưu ý: Nút Restore Purchase chỉ hiện khi remote config 'RestorePurchaseEnabled' bật.",
+    "Lưu ý: Đồng ý quảng cáo bị huỷ nếu quá _cancelInitializationTimeout = 2.5 giây, để không chặn khởi động game.",
+    "Lưu ý: Popup đánh giá chỉ xin một lần, ghi bằng PlayerPrefs 'FirstShowRateUsPopup' (0 = chưa hiện, 1 = đã hiện).",
+    "Lưu ý: Build này không có UI cho người chơi tự chọn ngôn ngữ; ngôn ngữ suy từ hệ thống (suy luận).",
+    "Lưu ý: URL Terms/Privacy/Support nằm trong prefab hoặc cấu hình, chưa trích ra (gap).",
+    "Lưu ý: RateUsConfig.RateUsLevels thực tế do remote config quyết định; số dưới đây là client default."
+  ],
+  "how_it_works": [
+    "SettingsController.Awake() gắn ba toggle: _soundToggle (SimpleToggle), _vibrationToggle (SimpleToggle) và _notificationToggle (RadioToggle).",
+    "SettingsPopupFeedbackView chọn bố cục theo thiết bị: ShowSoundToggle, ShowSoundAndVibrationToggles, ShowSoundAndMusicToggles hoặc ShowSoundAndVibrationAndMusicToggles.",
+    "OnSoundToggleChanged(toggle) / OnMusicToggleChanged(toggle) gọi SoundService, đổi SoundModel.IsSoundEffectOn / IsMusicOn và lưu qua ISaveLoad<SoundModel>.",
+    "SoundService.OnSoundEffectPreferenceChanged / OnMusicPreferenceChanged chỉnh AudioMixer tương ứng và gọi StopMusic() / PlayMusic(MusicType) khi cần.",
+    "OnVibrationToggleChanged(toggle) đặt VibrationModel.IsVibrationOn qua VibrationService, MarkDataForLateUpdate() rồi LateUpdate() lưu.",
+    "OnNotificationToggleChanged(toggle) chuyển tiếp sang NotificationService (xem tính năng Notifications).",
+    "Khi gameplay phát tiếng, SoundService dùng PlaySoundEffect(SoundType), PlayOneShotSFX(SoundType) và PlayLoopingSoundEffect / StopLoopingSoundEffect cho tiếng lặp (BoilingLoop, CoinsLoop).",
+    "Hai hàm ngẫu nhiên hoá tránh nghe lặp: PlayRandomSoundEffect(pourAmount) chọn trong nhóm PourShort/PourMid/PourLong 1–8, PlayRandomIceSoundEffect() chọn trong Ice1–Ice4 (68–71).",
+    "Rung: OnPlayVibration(VibrationType) tra VibrationConfigs.GetVibration(vibrationType) lấy ScriptableObject Vibration tương ứng.",
+    "FeedbackRunner chạy Feedback với FeedbackConfig{Delays[], Priority}; Android dùng AndroidFeedbackConfig.Feedbacks (mảng AndroidHapticFeedback), iOS dùng IosFeedbackConfig.",
+    "Ngôn ngữ: LocalizationService.Initialize() đọc mã ngôn ngữ hệ thống, GetLanguage(languageCode) ánh xạ sang enum Language, GetCultureCode(language) đặt CultureInfo cho định dạng số/ngày.",
+    "I2 Localization (LocalizationManager, I2Languages.asset) cung cấp chuỗi cho toàn bộ 11 ngôn ngữ.",
+    "Khi khởi động, GoogleUmpService.InitializeGoogleMobileAdsConsent(adService, idfaService) → GatherConsent() → LoadAndShowConsentForm() hiện form đồng ý quảng cáo.",
+    "IdfaService.RequestATTAndCacheIdfa() xin quyền theo dõi trên iOS và lấy Google Ad Id trên Android.",
+    "Đánh giá: RateUsService.ShouldShow() so level hiện tại với RateUsConfig.RateUsLevels ([20, 60, 150, 300] mặc định) và PlayerPrefs 'FirstShowRateUsPopup'.",
+    "TryShowRateUsPopup() dùng Google Play ReviewManager (in-app review); nếu thất bại thì đặt _isRateUsPopupFailedToOpen."
+  ],
+  "reward_tables": [
+    {
+      "title": "MỐC LEVEL XIN ĐÁNH GIÁ (RateUsConfig.json, client default)",
+      "columns": [
+        "Mốc",
+        "Điều kiện",
+        "Hành động"
+      ],
+      "rows": [
+        [
+          "Mốc 1",
+          "Level 20",
+          "Mở in-app review qua Google Play ReviewManager"
+        ],
+        [
+          "Mốc 2",
+          "Level 60",
+          "Mở in-app review"
+        ],
+        [
+          "Mốc 3",
+          "Level 150",
+          "Mở in-app review"
+        ],
+        [
+          "Mốc 4",
+          "Level 300",
+          "Mở in-app review"
+        ],
+        [
+          "LevelToShowRateUs",
+          "Level 35",
+          "Giá trị riêng LevelToShowRateUs trong cùng file cấu hình"
+        ]
+      ]
+    },
+    {
+      "title": "BẢNG LOẠI RUNG (enum VibrationType → VibrationConfigs.asset)",
+      "columns": [
+        "Mã",
+        "VibrationType",
+        "Asset cấu hình"
+      ],
+      "rows": [
+        [
+          "0",
+          "None",
+          "-"
+        ],
+        [
+          "1",
+          "ButtonClick",
+          "buttonclick.asset (Delays=[0], Priority=0, Feedbacks=[1] → VIRTUAL_KEY)"
+        ],
+        [
+          "2",
+          "BottleSelect",
+          "bottleselect.asset"
+        ],
+        [
+          "3",
+          "BottleFillStart",
+          "bottlefillstart.asset"
+        ],
+        [
+          "4",
+          "BottleFillEnd",
+          "bottlefillend.asset"
+        ],
+        [
+          "5",
+          "BottleDeselect",
+          "bottledeselect.asset"
+        ],
+        [
+          "6",
+          "LevelWin",
+          "levelwin.asset"
+        ],
+        [
+          "7",
+          "LevelLose",
+          "levellose.asset"
+        ],
+        [
+          "8",
+          "LevelStart",
+          "levelstart.asset"
+        ],
+        [
+          "9",
+          "RewardSitToPosition",
+          "rewardsittoposition.asset"
+        ],
+        [
+          "10",
+          "CauldronSmoke",
+          "cauldronsmoke.asset"
+        ],
+        [
+          "11",
+          "CauldronBottleWaterFallComplete",
+          "cauldronbottlewaterfallcomplete.asset"
+        ],
+        [
+          "12",
+          "CurtainReveal",
+          "curtainreveal.asset"
+        ],
+        [
+          "13",
+          "BlockerBreak",
+          "blockerbreak.asset"
+        ],
+        [
+          "14",
+          "BlockerGenerator",
+          "blockergenerator.asset"
+        ],
+        [
+          "15",
+          "BlockerGeneratorExplosion",
+          "blockergeneratorexplosion.asset"
+        ],
+        [
+          "16",
+          "DrillStep",
+          "drillstep.asset"
+        ]
+      ]
+    },
+    {
+      "title": "NGÔN NGỮ HỖ TRỢ (enum Language)",
+      "columns": [
+        "Mã",
+        "Ngôn ngữ",
+        "Ghi chú"
+      ],
+      "rows": [
+        [
+          "0",
+          "English",
+          "Ngôn ngữ gốc"
+        ],
+        [
+          "1",
+          "Turkish",
+          "-"
+        ],
+        [
+          "2",
+          "Dutch",
+          "-"
+        ],
+        [
+          "3",
+          "German",
+          "-"
+        ],
+        [
+          "4",
+          "French",
+          "-"
+        ],
+        [
+          "5",
+          "Italian",
+          "-"
+        ],
+        [
+          "6",
+          "Portuguese",
+          "-"
+        ],
+        [
+          "7",
+          "Spanish",
+          "-"
+        ],
+        [
+          "8",
+          "Russian",
+          "-"
+        ],
+        [
+          "9",
+          "Japanese",
+          "-"
+        ],
+        [
+          "10",
+          "Korean",
+          "-"
+        ]
+      ]
+    },
+    {
+      "title": "NHẠC NỀN (enum MusicType)",
+      "columns": [
+        "Mã",
+        "MusicType",
+        "Bối cảnh"
+      ],
+      "rows": [
+        [
+          "1",
+          "Home",
+          "Màn hình chính"
+        ],
+        [
+          "2",
+          "Gameplay",
+          "Trong màn chơi"
+        ],
+        [
+          "3",
+          "ChampionsLeaguePreJoin",
+          "Trước khi vào Champions League"
+        ],
+        [
+          "4",
+          "MiniGameTrident",
+          "Mini game Trident"
+        ]
+      ]
+    }
+  ],
+  "key_numbers": [
+    {
+      "label": "Số hiệu ứng âm thanh",
+      "value": "111 giá trị (None=0 … MiniGameItemMove=110)",
+      "source": "Sound.Scripts.SoundType"
+    },
+    {
+      "label": "Số bản nhạc nền",
+      "value": "4",
+      "source": "Sound.Scripts.MusicType"
+    },
+    {
+      "label": "Số loại rung",
+      "value": "17 giá trị (None=0 … DrillStep=16)",
+      "source": "Vibration.Scripts.VibrationType"
+    },
+    {
+      "label": "Số trường trong VibrationConfigs.asset",
+      "value": "16",
+      "source": "VibrationConfigs.asset"
+    },
+    {
+      "label": "Số ngôn ngữ hỗ trợ",
+      "value": "11",
+      "source": "Localization.Language"
+    },
+    {
+      "label": "Số biến thể bố cục toggle",
+      "value": "4",
+      "source": "SettingsPopupFeedbackView"
+    },
+    {
+      "label": "Trang Settings trong SwipeMenu",
+      "value": "PageType.Settings = 5",
+      "source": "HomeUI SwipeMenu"
+    },
+    {
+      "label": "Nhóm âm rót ngắn",
+      "value": "PourShort1–8 (32–36, 51–53)",
+      "source": "SoundType"
+    },
+    {
+      "label": "Nhóm âm rót vừa",
+      "value": "PourMid1–8 (37–41, 54–56)",
+      "source": "SoundType"
+    },
+    {
+      "label": "Nhóm âm rót dài",
+      "value": "PourLong1–8 (42–46, 48–50)",
+      "source": "SoundType"
+    },
+    {
+      "label": "Nhóm âm đập băng",
+      "value": "Ice1–Ice4 (68–71)",
+      "source": "SoundType"
+    },
+    {
+      "label": "Timeout khởi tạo đồng ý quảng cáo",
+      "value": "2.5 giây",
+      "source": "GoogleUmpService._cancelInitializationTimeout"
+    },
+    {
+      "label": "Level xin đánh giá (client default)",
+      "value": "[20, 60, 150, 300]",
+      "source": "RateUsConfig.json: RateUsLevels"
+    },
+    {
+      "label": "LevelToShowRateUs",
+      "value": "35",
+      "source": "RateUsConfig.json: LevelToShowRateUs"
+    },
+    {
+      "label": "Khoá PlayerPrefs đánh giá",
+      "value": "FirstShowRateUsPopup (1 = đã hiện, 0 = chưa)",
+      "source": "RateUsService.firstShowKey"
+    },
+    {
+      "label": "Cấu hình rung nút bấm",
+      "value": "Delays=[0], Priority=0, Feedbacks=[1] → VIRTUAL_KEY",
+      "source": "buttonclick.asset"
+    },
+    {
+      "label": "Số hằng AndroidHapticFeedback",
+      "value": "20 giá trị (LONG_PRESS=0 … SEGMENT_FREQUENT_TICK=27)",
+      "source": "AndroidHapticFeedback"
+    },
+    {
+      "label": "Bật nhạc nền",
+      "value": "(server) IsMusicEnabled",
+      "source": "FirebaseRemoteConfigResolver"
+    },
+    {
+      "label": "Rung mặc định cho người mới",
+      "value": "(server) IsVibrationOn",
+      "source": "VibrationService.InitializeForNewDownload"
+    },
+    {
+      "label": "Hiện nút khôi phục giao dịch",
+      "value": "(server) RestorePurchaseEnabled",
+      "source": "FirebaseRemoteConfigResolver"
+    },
+    {
+      "label": "Số điểm vào Settings",
+      "value": "5 (trang SwipeMenu, nút bánh răng, popup điều khoản, form UMP, popup đánh giá)",
+      "source": "Settings.entry_points"
+    }
+  ],
+  "config_highlights": [
+    {
+      "key": "MusicType",
+      "value": "Home=1, Gameplay=2, ChampionsLeaguePreJoin=3, MiniGameTrident=4",
+      "meaning": "Các bản nhạc nền"
+    },
+    {
+      "key": "SoundType",
+      "value": "111 giá trị (None=0 … MiniGameItemMove=110)",
+      "meaning": "Toàn bộ hiệu ứng âm thanh của game"
+    },
+    {
+      "key": "VibrationType",
+      "value": "None=0, ButtonClick=1 … DrillStep=16",
+      "meaning": "Các loại rung theo sự kiện"
+    },
+    {
+      "key": "AndroidHapticFeedback",
+      "value": "LONG_PRESS=0, VIRTUAL_KEY=1 … SEGMENT_FREQUENT_TICK=27",
+      "meaning": "Ánh xạ sang HapticFeedbackConstants của Android"
+    },
+    {
+      "key": "Language",
+      "value": "English=0, Turkish=1, Dutch=2, German=3, French=4, Italian=5, Portuguese=6, Spanish=7, Russian=8, Japanese=9, Korean=10",
+      "meaning": "11 ngôn ngữ hỗ trợ"
+    },
+    {
+      "key": "SoundConfig.asset",
+      "value": "SoundDataList, MusicDataList",
+      "meaning": "Ánh xạ SoundType/MusicType sang AudioClip và tham số phát"
+    },
+    {
+      "key": "VibrationConfigs.asset",
+      "value": "16 trường trỏ tới asset Vibration",
+      "meaning": "Bản đồ VibrationType → cấu hình rung"
+    },
+    {
+      "key": "buttonclick.asset (Vibration)",
+      "value": "_androidFeedbackConfig{Delays=[0], Priority=0, Feedbacks=[1]}; _iosFeedbackConfig{Delays=[0], Priority=0}",
+      "meaning": "Ví dụ cấu hình rung thật cho tiếng bấm nút"
+    },
+    {
+      "key": "FeedbackConfig",
+      "value": "Delays (int[]), Priority (int)",
+      "meaning": "Mẫu rung: các mốc trễ và độ ưu tiên khi trùng"
+    },
+    {
+      "key": "SoundModel / VibrationModel",
+      "value": "SoundModel{IsSoundEffectOn, IsMusicOn}; VibrationModel{IsVibrationOn}",
+      "meaning": "Tuỳ chọn lưu cục bộ qua ISaveLoad"
+    },
+    {
+      "key": "FirstShowRateUsPopup",
+      "value": "0 = chưa hiện, 1 = đã hiện",
+      "meaning": "Chỉ xin đánh giá một lần (PlayerPrefs)"
+    },
+    {
+      "key": "RateUsService.playerShownRateUsPopup / playerNotShownRateUsPopup",
+      "value": "1 / 0",
+      "meaning": "Hai giá trị của khoá FirstShowRateUsPopup"
+    },
+    {
+      "key": "RateUsConfig.json: RateUsLevels",
+      "value": "[20, 60, 150, 300]",
+      "meaning": "Các level sẽ xin đánh giá (client default)"
+    },
+    {
+      "key": "RateUsConfig.json: LevelToShowRateUs",
+      "value": "35",
+      "meaning": "Level hiện popup đánh giá (client default)"
+    },
+    {
+      "key": "GoogleUmpService._cancelInitializationTimeout",
+      "value": "2.5 giây",
+      "meaning": "Thời gian tối đa chờ khởi tạo đồng ý quảng cáo trước khi bỏ qua"
+    },
+    {
+      "key": "IsMusicEnabled",
+      "value": "(server)",
+      "meaning": "Bật kênh nhạc nền và toggle Music"
+    },
+    {
+      "key": "IsVibrationOn",
+      "value": "(server)",
+      "meaning": "Giá trị rung mặc định cho người chơi mới"
+    },
+    {
+      "key": "RestorePurchaseEnabled / IsAndroidIapVerificationEnabled",
+      "value": "(server)",
+      "meaning": "Hiện nút khôi phục giao dịch và bật kiểm chứng biên lai"
+    },
+    {
+      "key": "I2Languages.asset",
+      "value": "Bảng chuỗi cho 11 ngôn ngữ",
+      "meaning": "Nguồn mọi chuỗi UI"
+    },
+    {
+      "key": "AudioMixer (AudioMixerController)",
+      "value": "Nhóm kênh SFX và Music",
+      "meaning": "Bật/tắt hai kênh âm thanh độc lập"
+    },
+    {
+      "key": "PutFile(fileName, serializedData) / GetFile(link)",
+      "value": "công cụ nội bộ",
+      "meaning": "Tải cấu hình rung lên/xuống (putFileUrl trống ở môi trường test)"
+    },
+    {
+      "key": "SettingsPopupFeedbackView",
+      "value": "ShowSoundToggle, ShowSoundAndVibrationToggles, ShowSoundAndMusicToggles, ShowSoundAndVibrationAndMusicToggles",
+      "meaning": "Bố cục toggle theo thiết bị và cấu hình"
+    }
+  ],
+  "tips": [
+    "Tách SFX và Music thành hai kênh AudioMixer cho người chơi tắt nhạc mà vẫn nghe phản hồi thao tác.",
+    "Ngẫu nhiên hoá âm rót và âm đập băng giữ trải nghiệm nghe tươi mới trong hàng trăm nước đi mỗi phiên.",
+    "Xin đánh giá đúng ở các mốc level đã vượt qua (20, 60, 150, 300) là lúc người chơi đang có cảm xúc tích cực.",
+    "Timeout 2.5 giây cho form đồng ý quảng cáo bảo vệ thời gian khởi động khỏi phụ thuộc mạng."
+  ],
+  "categories": [
+    "Meta",
+    "Cơ chế lõi"
+  ]
+}

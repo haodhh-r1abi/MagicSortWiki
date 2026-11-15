@@ -1,0 +1,876 @@
+{
+  "id": "Inventory",
+  "title": "Kho đồ và tiền tệ (Inventory)",
+  "tagline": "Sổ cái duy nhất cho coin, mạng, booster và mọi vật phẩm, với hệ thưởng chờ để UI luôn khớp số dư thật.",
+  "infobox": [
+    [
+      "Loại",
+      "Kinh tế"
+    ],
+    [
+      "Mở khóa",
+      "Có từ đầu game; booster mở dần từ level 15 (undo, shuffle, extra bottle)"
+    ],
+    [
+      "Tham gia",
+      "Cá nhân"
+    ],
+    [
+      "Tiền tệ",
+      "16 CurrencyType: Coin=1, Life=2, Undo=4, Shuffle=5, ExtraBottle=6, NoAds=7, Chest=13, CollectionPack=14, ProfileToken=15, DuckMultiplier=16, MiniGameTrident=17, MegaShuffle=18, Reveal=19, WheelOfFortuneCurrency=20, MergeMiniGameEnergy=21"
+    ],
+    [
+      "Thưởng chính",
+      "20 coin thắng level thường, 60 coin level khó, 100 coin level siêu khó"
+    ],
+    [
+      "Điều kiện / phụ thuộc",
+      "Toàn bộ số liệu kinh tế đọc từ Firebase Remote Config key GameEconomyModel"
+    ],
+    [
+      "Manager",
+      "InventoryService"
+    ]
+  ],
+  "description": [
+    "InventoryService là sổ cái duy nhất cho mọi thứ người chơi sở hữu, từ coin và mạng tới booster, rương, gói thẻ và quyền bỏ quảng cáo.",
+    "Một loại tài nguyên có thể tồn tại ở ba dạng: theo số lượng, theo thời hạn có giới hạn và theo thời hạn không giới hạn dùng như mạng vô hạn.",
+    "Điểm thiết kế quan trọng là hệ thưởng chờ: phần thưởng được ghi nhận trước ở dạng pending rồi mới chốt khi animation chạy xong.",
+    "Nhờ hệ pending, UI luôn khớp với số dư thật và người chơi không mất thưởng nếu thoát giữa chừng.",
+    "Mạng hồi theo thời gian bằng một mốc LifeFillDate tính theo UTC, nên chỉnh giờ máy không sinh thêm mạng.",
+    "Việc trao thưởng có ba kiểu trình diễn: trao thẳng, bay tuần tự từng món về ô tiền tệ, và popup phần thưởng lớn có reveal rồi gather.",
+    "Toàn bộ đầu ra của tiền tệ chỉ gồm 5 lý do tiêu: booster, refill mạng, play on, tạo đội và mini game merge.",
+    "Ngược lại có tới 61 lý do nhận thưởng, tạo thành bản đồ đầy đủ mọi tính năng phát thưởng trong game.",
+    "Số dư kho đồ được gắn kèm mọi sự kiện analytics qua bộ cung cấp tham số riêng."
+  ],
+  "notes": [
+    "Lưu ý: mọi số dưới đây là bản mặc định trong Resources/defaultconfigs/GameEconomyModel.json; remote config có thể ghi đè toàn bộ (server).",
+    "Lưu ý: CurrencyType bỏ trống giá trị 3 và 8–12, nhiều khả năng là các loại tiền tệ cũ đã gỡ (suy luận).",
+    "Lưu ý: DoesEnoughVisibleCurrency chỉ tính số dư đã chốt, không tính phần pending, tránh cho tiêu tiền chưa nhận xong.",
+    "Lưu ý: khi tổng coin đã tiêu vượt 1899, game bắn một sự kiện attribution một lần rồi đặt cờ SpendEventSent.",
+    "Lưu ý: trần mạng tối đa đổi sang giá trị của Magic Pass khi pass đang hoạt động; giá trị đó chưa xác định được (gaps).",
+    "Lưu ý: ô đích của thưởng bay được đăng ký theo tín hiệu hiển thị, nên nếu ô không hiện thì thưởng vẫn được cộng.",
+    "Lưu ý: Chest cũng là một CurrencyType (13) nên đi chung hạ tầng pending và earn với mọi vật phẩm khác.",
+    "Lưu ý: bảng PlayOnConfigModels trong json default ghi cả ba dòng với PlayOnType = 0, giá 900 / 1900 / 2300."
+  ],
+  "how_it_works": [
+    "Tài khoản mới được cấp số dư khởi tạo từ GameEconomyModel: 1000 coin, 3 Undo, 3 Shuffle, 3 Extra Bottle và 3 booster thứ tư nếu bật (InitializeForNewDownload).",
+    "Mọi số dư nằm trong các dictionary khóa bằng (int)CurrencyType, gồm ba nhóm số dư thật và ba nhóm pending tương ứng.",
+    "Khi có thưởng, hệ thống đẩy vào hàng đợi tuần tự hoặc hàng đợi gộp, rồi ghi trước vào phần chờ (QueueReward, Pending).",
+    "Thưởng tuần tự tách một phần thưởng lớn thành nhiều icon nhỏ bay từ vị trí nguồn về ô tiền tệ, rồi mới chốt vào số dư (ApplyPending, Earn).",
+    "Thưởng lớn mở popup nền mờ, lộ từng món, xếp lưới tối đa 6 x 6, người chơi bấm Continue để gom về ô tiền (ShowRewards, GatherRewards).",
+    "Khi số lượng quá lớn, số icon hiển thị bị giới hạn bằng một phép ánh xạ thay vì vẽ hết (MapRewardToViewCount).",
+    "Gói thẻ sưu tập có nhánh riêng: mở từng gói theo trình tự, với nút Claim Cards và Skip để bỏ qua animation.",
+    "Thắng level thường trao 20 coin, level khó 60 coin và level siêu khó 100 coin (GameEconomyModel).",
+    "Mạng hồi bằng cách so mốc LifeFillDate với giờ UTC hiện tại, mỗi mạng mất 30 phút và trần mặc định là 5 mạng.",
+    "Mua đầy mạng tốn 900 coin với lý do tiêu Refill (2); game cũng hẹn hoặc hủy thông báo mạng đầy tương ứng.",
+    "Mạng vô hạn được cộng dồn vào hạn kết thúc riêng, và UI đếm ngược cho tới khi hết hạn (EarnLimitless).",
+    "Booster mở dần theo level: cả Undo, Shuffle và Extra Bottle đều mở ở level 15; Reveal và Mega Shuffle có tutorial riêng.",
+    "Hết booster thì mua bằng coin: Undo và Shuffle 300 coin, Extra Bottle, Mega Shuffle và Reveal 900 coin.",
+    "Chơi tiếp khi thua tốn 900 coin lần đầu, 1900 lần hai và 2300 lần ba trong cùng một màn; cờ IsFirstPlayOnFree mặc định false.",
+    "Mọi lần nhận hoặc tiêu đều bắn analytics virtual_resource_transaction kèm loại, số lượng và tổng số dư.",
+    "Thay đổi được đánh dấu rồi ghi đĩa ở cuối frame và đẩy lên server qua khối đồng bộ 'InventoryModel'."
+  ],
+  "reward_tables": [
+    {
+      "title": "SỐ DƯ KHỞI TẠO CHO TÀI KHOẢN MỚI (GameEconomyModel.json)",
+      "columns": [
+        "Mục",
+        "Giá trị mặc định",
+        "Ghi chú"
+      ],
+      "rows": [
+        [
+          "initialCoin",
+          "1000 coin",
+          "Số coin ban đầu"
+        ],
+        [
+          "initialUndoAmount",
+          "3 Undo",
+          ""
+        ],
+        [
+          "initialShuffleAmount",
+          "3 Shuffle",
+          ""
+        ],
+        [
+          "initialExtraBottleAmount",
+          "3 Extra Bottle",
+          ""
+        ],
+        [
+          "initialFourthBoosterAmount",
+          "3 booster thứ tư",
+          "Chỉ cấp khi booster thứ tư được bật"
+        ],
+        [
+          "maxLifeAmount",
+          "5 mạng",
+          "Trần mạng mặc định"
+        ],
+        [
+          "refillDurationAsMinutes",
+          "30 phút",
+          "Thời gian hồi một mạng"
+        ]
+      ]
+    },
+    {
+      "title": "THƯỞNG COIN KHI THẮNG LEVEL",
+      "columns": [
+        "Loại level",
+        "Điều kiện",
+        "Phần thưởng"
+      ],
+      "rows": [
+        [
+          "Level thường",
+          "Thắng một level thường",
+          "20 coin"
+        ],
+        [
+          "Level khó",
+          "Thắng một level Hard",
+          "60 coin"
+        ],
+        [
+          "Level siêu khó",
+          "Thắng một level Super Hard",
+          "100 coin"
+        ]
+      ]
+    },
+    {
+      "title": "BẢNG GIÁ QUY ĐỔI BẰNG COIN (GameEconomyModel.json)",
+      "columns": [
+        "Mục",
+        "Giá",
+        "Lý do tiêu"
+      ],
+      "rows": [
+        [
+          "Undo",
+          "300 coin",
+          "CurrencySpendReason.Boosters (1)"
+        ],
+        [
+          "Shuffle",
+          "300 coin",
+          "CurrencySpendReason.Boosters (1)"
+        ],
+        [
+          "Extra Bottle",
+          "900 coin",
+          "CurrencySpendReason.Boosters (1)"
+        ],
+        [
+          "Mega Shuffle",
+          "900 coin",
+          "CurrencySpendReason.Boosters (1)"
+        ],
+        [
+          "Reveal",
+          "900 coin",
+          "CurrencySpendReason.Boosters (1)"
+        ],
+        [
+          "Đầy mạng (Refill)",
+          "900 coin",
+          "CurrencySpendReason.Refill (2)"
+        ],
+        [
+          "Play On lần 1",
+          "900 coin",
+          "CurrencySpendReason.PlayOn (3); miễn phí nếu IsFirstPlayOnFree bật"
+        ],
+        [
+          "Play On lần 2",
+          "1900 coin",
+          "CurrencySpendReason.PlayOn (3)"
+        ],
+        [
+          "Play On lần 3",
+          "2300 coin",
+          "CurrencySpendReason.PlayOn (3)"
+        ],
+        [
+          "Tạo đội",
+          "TeamsService.GetTeamCreateCost() (server)",
+          "CurrencySpendReason.TeamCreate (4)"
+        ],
+        [
+          "Năng lượng Merge Mini Game",
+          "(server)",
+          "CurrencySpendReason.MergeMiniGame (5)"
+        ]
+      ]
+    },
+    {
+      "title": "MỐC MỞ KHÓA BOOSTER (GameEconomyModel.json)",
+      "columns": [
+        "Booster",
+        "Level mở khóa",
+        "Ghi chú"
+      ],
+      "rows": [
+        [
+          "Undo",
+          "Level 15",
+          "undoUnlockAtLevel"
+        ],
+        [
+          "Shuffle",
+          "Level 15",
+          "shuffleUnlockAtLevel"
+        ],
+        [
+          "Extra Bottle",
+          "Level 15",
+          "extraBottleUnlockAtLevel"
+        ],
+        [
+          "Mega Shuffle",
+          "Có tutorial riêng (ShouldShowMegaShuffleTutorial)",
+          "Không có mốc level trong config"
+        ],
+        [
+          "Reveal",
+          "Có tutorial riêng (ShouldShowRevealTutorial)",
+          "Không có mốc level trong config"
+        ]
+      ]
+    },
+    {
+      "title": "CÁC LOẠI TÀI NGUYÊN (CurrencyType)",
+      "columns": [
+        "Mã",
+        "Loại",
+        "Ghi chú"
+      ],
+      "rows": [
+        [
+          "0",
+          "None",
+          "Giá trị rỗng"
+        ],
+        [
+          "1",
+          "Coin",
+          "Tiền tệ chính"
+        ],
+        [
+          "2",
+          "Life",
+          "Mạng, có cả dạng số lượng và dạng vô hạn theo thời gian"
+        ],
+        [
+          "4",
+          "Undo",
+          "Booster"
+        ],
+        [
+          "5",
+          "Shuffle",
+          "Booster"
+        ],
+        [
+          "6",
+          "ExtraBottle",
+          "Booster"
+        ],
+        [
+          "7",
+          "NoAds",
+          "Quyền bỏ quảng cáo, có thể theo hạn hoặc vĩnh viễn"
+        ],
+        [
+          "13",
+          "Chest",
+          "Rương, 33 ChestId trong ChestSpriteConfig"
+        ],
+        [
+          "14",
+          "CollectionPack",
+          "Gói thẻ sưu tập"
+        ],
+        [
+          "15",
+          "ProfileToken",
+          "Token hồ sơ"
+        ],
+        [
+          "16",
+          "DuckMultiplier",
+          "Vật phẩm x2 của Duck Festival"
+        ],
+        [
+          "17",
+          "MiniGameTrident",
+          "Vé mini game"
+        ],
+        [
+          "18",
+          "MegaShuffle",
+          "Booster mở rộng"
+        ],
+        [
+          "19",
+          "Reveal",
+          "Booster mở rộng"
+        ],
+        [
+          "20",
+          "WheelOfFortuneCurrency",
+          "Đồng xu Wheel of Fortune"
+        ],
+        [
+          "21",
+          "MergeMiniGameEnergy",
+          "Năng lượng mini game merge"
+        ]
+      ]
+    },
+    {
+      "title": "DANH MỤC MỌI NGUỒN THU (CurrencyEarnReason, 61 giá trị)",
+      "columns": [
+        "Mã",
+        "Nguồn thưởng"
+      ],
+      "rows": [
+        [
+          "0",
+          "None"
+        ],
+        [
+          "1",
+          "LevelWin"
+        ],
+        [
+          "2",
+          "HardSuperHardLevel"
+        ],
+        [
+          "3",
+          "Shop"
+        ],
+        [
+          "4",
+          "StreakTournament"
+        ],
+        [
+          "5",
+          "Refill"
+        ],
+        [
+          "6",
+          "Debugger"
+        ],
+        [
+          "7",
+          "WeeklyTournament"
+        ],
+        [
+          "8",
+          "Rewarded2XCoin"
+        ],
+        [
+          "9",
+          "RewardedOneLife"
+        ],
+        [
+          "10",
+          "TowerWinStreak"
+        ],
+        [
+          "11",
+          "MagicStreakTournament"
+        ],
+        [
+          "12",
+          "JetpackRace"
+        ],
+        [
+          "13",
+          "SkyJump"
+        ],
+        [
+          "14",
+          "EndlessPortal"
+        ],
+        [
+          "15",
+          "DailyLevelWin"
+        ],
+        [
+          "16",
+          "DailyProgressBarStep"
+        ],
+        [
+          "17",
+          "SpecialOffer"
+        ],
+        [
+          "18",
+          "WelcomeBack"
+        ],
+        [
+          "19",
+          "BroomStreak"
+        ],
+        [
+          "20",
+          "PawTouchOffer"
+        ],
+        [
+          "21",
+          "Compensation"
+        ],
+        [
+          "22",
+          "Journey"
+        ],
+        [
+          "23",
+          "MagicStreakGae"
+        ],
+        [
+          "24",
+          "ChampionsLeague"
+        ],
+        [
+          "25",
+          "JetpackJoinLimitless"
+        ],
+        [
+          "26",
+          "MagicLab"
+        ],
+        [
+          "27",
+          "NoAdsOffer"
+        ],
+        [
+          "28",
+          "JetpackRaceWithStage"
+        ],
+        [
+          "29",
+          "ChooseOneSpecialOffer"
+        ],
+        [
+          "30",
+          "DailyReward"
+        ],
+        [
+          "31",
+          "SkyJumpWithStage"
+        ],
+        [
+          "32",
+          "WatchAndWin"
+        ],
+        [
+          "33",
+          "CollectionChest"
+        ],
+        [
+          "34",
+          "CollectionThemeCompleted"
+        ],
+        [
+          "35",
+          "CollectionCompleted"
+        ],
+        [
+          "36",
+          "CollectionActivated"
+        ],
+        [
+          "37",
+          "TeamCardHelp"
+        ],
+        [
+          "38",
+          "TeamsFreeLife"
+        ],
+        [
+          "39",
+          "TeamsHelpSupport"
+        ],
+        [
+          "40",
+          "TreasureDrill"
+        ],
+        [
+          "41",
+          "MagicPass"
+        ],
+        [
+          "42",
+          "MagicPassFinished"
+        ],
+        [
+          "43",
+          "MagicPassTicketClaim"
+        ],
+        [
+          "44",
+          "DuckFestival"
+        ],
+        [
+          "45",
+          "WheelOfFortune"
+        ],
+        [
+          "46",
+          "TeamArena"
+        ],
+        [
+          "47",
+          "TeamArenaContribution"
+        ],
+        [
+          "48",
+          "TeamArenaProgress"
+        ],
+        [
+          "49",
+          "MiniGameUnderwaterTreasures"
+        ],
+        [
+          "50",
+          "TeamQuest"
+        ],
+        [
+          "51",
+          "Referral"
+        ],
+        [
+          "52",
+          "FacebookLogin"
+        ],
+        [
+          "53",
+          "MiniGameOffer"
+        ],
+        [
+          "54",
+          "BoatRushRaceCompleted"
+        ],
+        [
+          "55",
+          "BoatRushTierCompleted"
+        ],
+        [
+          "56",
+          "BoatRushJoinLimitless"
+        ],
+        [
+          "57",
+          "MergeMiniGameCollectibleItem"
+        ],
+        [
+          "58",
+          "MergeMiniGameStageCompleted"
+        ],
+        [
+          "59",
+          "MergeMiniGameGrandPrize"
+        ],
+        [
+          "60",
+          "WebShopBonus"
+        ]
+      ]
+    }
+  ],
+  "key_numbers": [
+    {
+      "label": "Coin khởi tạo",
+      "value": "1000",
+      "source": "GameEconomyModel.json: initialCoin"
+    },
+    {
+      "label": "Booster khởi tạo",
+      "value": "3 Undo, 3 Shuffle, 3 Extra Bottle, 3 booster thứ tư",
+      "source": "GameEconomyModel.json: initial*Amount"
+    },
+    {
+      "label": "Số mạng tối đa",
+      "value": "5",
+      "source": "GameEconomyModel.json: maxLifeAmount"
+    },
+    {
+      "label": "Thời gian hồi một mạng",
+      "value": "30 phút",
+      "source": "GameEconomyModel.json: refillDurationAsMinutes"
+    },
+    {
+      "label": "Giá mua đầy mạng",
+      "value": "900 coin",
+      "source": "GameEconomyModel.json: refillPrice"
+    },
+    {
+      "label": "Giá Play On lần 1 / 2 / 3",
+      "value": "900 / 1900 / 2300 coin",
+      "source": "GameEconomyModel.json: PlayOnPrice, SecondPlayOnPrice, ThirdSecondPlayOnPrice"
+    },
+    {
+      "label": "Play On đầu tiên miễn phí",
+      "value": "false",
+      "source": "GameEconomyModel.json: IsFirstPlayOnFree"
+    },
+    {
+      "label": "Giá Undo / Shuffle",
+      "value": "300 coin",
+      "source": "GameEconomyModel.json: UndoPrice, ShufflePrice"
+    },
+    {
+      "label": "Giá Extra Bottle / Mega Shuffle / Reveal",
+      "value": "900 coin",
+      "source": "GameEconomyModel.json: ExtraBottlePrice, MegaShufflePrice, RevealPrice"
+    },
+    {
+      "label": "Thưởng coin thắng level thường",
+      "value": "20 coin",
+      "source": "GameEconomyModel.json: RegularLevelWinCoinReward"
+    },
+    {
+      "label": "Thưởng coin thắng level khó",
+      "value": "60 coin",
+      "source": "GameEconomyModel.json: HardLevelWinCoinReward"
+    },
+    {
+      "label": "Thưởng coin thắng level siêu khó",
+      "value": "100 coin",
+      "source": "GameEconomyModel.json: SuperHardLevelWinCoinReward"
+    },
+    {
+      "label": "Level mở khóa booster cơ bản",
+      "value": "15 cho cả Undo, Shuffle và Extra Bottle",
+      "source": "GameEconomyModel.json: undoUnlockAtLevel, shuffleUnlockAtLevel, extraBottleUnlockAtLevel"
+    },
+    {
+      "label": "Số loại tài nguyên",
+      "value": "16 giá trị (giá trị 3 và 8–12 đã bỏ)",
+      "source": "CurrencyType"
+    },
+    {
+      "label": "Số lý do tiêu tiền",
+      "value": "6 (None=0, Boosters=1, Refill=2, PlayOn=3, TeamCreate=4, MergeMiniGame=5)",
+      "source": "CurrencySpendReason"
+    },
+    {
+      "label": "Số lý do nhận thưởng",
+      "value": "61 (None=0 … WebShopBonus=60)",
+      "source": "CurrencyEarnReason"
+    },
+    {
+      "label": "Ngưỡng bắn sự kiện tiêu coin",
+      "value": "1899 coin (0x76b)",
+      "source": "InventoryService.CheckCanSendEventForSpendCoin"
+    },
+    {
+      "label": "Khung xếp lưới phần thưởng trong popup",
+      "value": "maxWidth 6, maxHeight 6",
+      "source": "BulkRewardAnimationService.GetDynamicRewardPositions"
+    },
+    {
+      "label": "Số loại rương có sprite",
+      "value": "25 ánh xạ sprite (ChestId 1–25) trong ChestSpriteConfig 0.0.3063",
+      "source": "ChestSpriteConfig.asset"
+    },
+    {
+      "label": "Số bộ sprite library rương",
+      "value": "8 ánh xạ library (ChestId 1–8); file Chest9SpriteLibrary tồn tại riêng nhưng không được map trong config này",
+      "source": "ChestSpriteConfig.asset"
+    },
+    {
+      "label": "Số trường của InventoryModel",
+      "value": "11",
+      "source": "InventoryModel"
+    },
+    {
+      "label": "Tên khối đồng bộ",
+      "value": "InventoryModel",
+      "source": "InventoryService.GetSyncName"
+    },
+    {
+      "label": "Số phân loại animation rút gọn",
+      "value": "4 (None=0, LevelWinCauldron=1, StreakTournament=2, WeeklyTournament=3)",
+      "source": "EarnReason"
+    }
+  ],
+  "config_highlights": [
+    {
+      "key": "GameEconomyModel.json: initialCoin",
+      "value": "1000",
+      "meaning": "Coin cấp cho tài khoản mới"
+    },
+    {
+      "key": "GameEconomyModel.json: initialUndoAmount",
+      "value": "3",
+      "meaning": "Undo khởi tạo"
+    },
+    {
+      "key": "GameEconomyModel.json: initialShuffleAmount",
+      "value": "3",
+      "meaning": "Shuffle khởi tạo"
+    },
+    {
+      "key": "GameEconomyModel.json: initialExtraBottleAmount",
+      "value": "3",
+      "meaning": "Extra Bottle khởi tạo"
+    },
+    {
+      "key": "GameEconomyModel.json: initialFourthBoosterAmount",
+      "value": "3",
+      "meaning": "Booster thứ tư khởi tạo, chỉ cấp khi bật"
+    },
+    {
+      "key": "GameEconomyModel.json: maxLifeAmount",
+      "value": "5",
+      "meaning": "Trần mạng mặc định"
+    },
+    {
+      "key": "GameEconomyModel.json: refillDurationAsMinutes",
+      "value": "30",
+      "meaning": "Phút để hồi một mạng"
+    },
+    {
+      "key": "GameEconomyModel.json: refillPrice",
+      "value": "900",
+      "meaning": "Coin để mua đầy mạng"
+    },
+    {
+      "key": "GameEconomyModel.json: PlayOnPrice",
+      "value": "900",
+      "meaning": "Giá Play On lần đầu trong màn"
+    },
+    {
+      "key": "GameEconomyModel.json: SecondPlayOnPrice",
+      "value": "1900",
+      "meaning": "Giá Play On lần hai"
+    },
+    {
+      "key": "GameEconomyModel.json: ThirdSecondPlayOnPrice",
+      "value": "2300",
+      "meaning": "Giá Play On lần ba"
+    },
+    {
+      "key": "GameEconomyModel.json: PlayOnConfigModels",
+      "value": "3 dòng PlayOnType 0 với giá 900 / 1900 / 2300",
+      "meaning": "Bảng giá Play On chi tiết thay cho ba trường rời"
+    },
+    {
+      "key": "GameEconomyModel.json: IsFirstPlayOnFree",
+      "value": "false",
+      "meaning": "Lần Play On đầu tiên có miễn phí hay không"
+    },
+    {
+      "key": "GameEconomyModel.json: UndoPrice / ShufflePrice",
+      "value": "300",
+      "meaning": "Giá mua hai booster cơ bản rẻ nhất"
+    },
+    {
+      "key": "GameEconomyModel.json: ExtraBottlePrice / MegaShufflePrice / RevealPrice",
+      "value": "900",
+      "meaning": "Giá mua ba booster đắt hơn"
+    },
+    {
+      "key": "GameEconomyModel.json: RegularLevelWinCoinReward",
+      "value": "20",
+      "meaning": "Coin thắng level thường"
+    },
+    {
+      "key": "GameEconomyModel.json: HardLevelWinCoinReward",
+      "value": "60",
+      "meaning": "Coin thắng level khó"
+    },
+    {
+      "key": "GameEconomyModel.json: SuperHardLevelWinCoinReward",
+      "value": "100",
+      "meaning": "Coin thắng level siêu khó"
+    },
+    {
+      "key": "GameEconomyModel.json: undoUnlockAtLevel / shuffleUnlockAtLevel / extraBottleUnlockAtLevel",
+      "value": "15",
+      "meaning": "Ba booster cơ bản cùng mở ở level 15"
+    },
+    {
+      "key": "CurrencyType",
+      "value": "None=0, Coin=1, Life=2, Undo=4, Shuffle=5, ExtraBottle=6, NoAds=7, Chest=13, CollectionPack=14, ProfileToken=15, DuckMultiplier=16, MiniGameTrident=17, MegaShuffle=18, Reveal=19, WheelOfFortuneCurrency=20, MergeMiniGameEnergy=21",
+      "meaning": "Mọi loại tài nguyên và vật phẩm"
+    },
+    {
+      "key": "CurrencySpendReason",
+      "value": "None=0, Boosters=1, Refill=2, PlayOn=3, TeamCreate=4, MergeMiniGame=5",
+      "meaning": "Toàn bộ đầu ra của tiền tệ trong game"
+    },
+    {
+      "key": "CurrencyEarnReason",
+      "value": "61 giá trị từ None=0 tới WebShopBonus=60",
+      "meaning": "Bản đồ mọi tính năng phát thưởng trong game"
+    },
+    {
+      "key": "EarnReason",
+      "value": "None=0, LevelWinCauldron=1, StreakTournament=2, WeeklyTournament=3",
+      "meaning": "Phân loại rút gọn cho một số animation thưởng"
+    },
+    {
+      "key": "Ngưỡng sự kiện tiêu coin",
+      "value": "1899 (0x76b)",
+      "meaning": "Mốc bắn sự kiện attribution một lần rồi đặt SpendEventSent"
+    },
+    {
+      "key": "BulkRewardAnimationService.GetDynamicRewardPositions",
+      "value": "maxWidth = 6, maxHeight = 6",
+      "meaning": "Khung xếp lưới phần thưởng trong popup"
+    },
+    {
+      "key": "InventoryModel",
+      "value": "CurrencyAmountByType, TimedCurrencyEndDateByType, LimitlessCurrencyEndDateByType, PendingCurrencyAmountByType, PendingTimedCurrencyByType, PendingLimitlessCurrencyByType, LifeFillDate, PendingCollectionPackAmountByType, SpendCoin, SpendEventSent, UsedPlayOnForFree",
+      "meaning": "Toàn bộ kho đồ, khóa dictionary là (int)CurrencyType"
+    },
+    {
+      "key": "RewardModel",
+      "value": "CurrencyType, Amount, TimeSpan, Rewards (lồng nhau), ChestType, CollectionPackType, TokenId, PrimaryRewards",
+      "meaning": "Mô tả một phần thưởng bất kỳ, có thể lồng nhiều tầng"
+    },
+    {
+      "key": "ChestSpriteConfig.asset",
+      "value": "ChestSpriteConfig trong export 0.0.3063 có 25 ánh xạ sprite (ChestId 1–25) và 8 ánh xạ SpriteLibrary (ChestId 1–8). File Chest9SpriteLibrary.asset tồn tại riêng nhưng không nằm trong 8 ánh xạ của config này. Không cộng 25+8 thành 33 ChestId.",
+      "meaning": "Hình rương theo bậc"
+    },
+    {
+      "key": "GameEconomyModel.MaxLifeAmount khi có Magic Pass",
+      "value": "GetMagicPassMaxLifeAmount() (server)",
+      "meaning": "Trần mạng cao hơn khi pass đang hoạt động"
+    },
+    {
+      "key": "magicsort.schemas.v1.common.ClientRewardModel",
+      "value": "schema server",
+      "meaning": "Định dạng phần thưởng do server cấp cho các sự kiện"
+    },
+    {
+      "key": "InventoryParametersProvider",
+      "value": "coin_inventory, life_inventory, limitless_life_duration_inventory, undo_inventory, shuffle_inventory, extra_bottle_inventory, additional_life_inventory, trident_inventory, vault_inventory, map_inventory",
+      "meaning": "Số dư gắn kèm mọi sự kiện analytics"
+    }
+  ],
+  "tips": [
+    "Hệ pending là mấu chốt: nó cho phép animation dài mà vẫn đảm bảo người chơi không mất thưởng khi thoát giữa chừng.",
+    "Mốc LifeFillDate thay cho bộ đếm giúp mạng hồi đúng cả khi app bị đóng, và dùng UTC nên chống chỉnh giờ.",
+    "Chỉ 5 lý do tiêu coin so với 61 lý do nhận cho thấy kinh tế game rất rộng đầu vào và rất hẹp đầu ra.",
+    "Giá Play On tăng theo bậc 900, 1900, 2300 trong cùng màn tạo áp lực quyết định sớm.",
+    "Việc đưa NoAds, rương và tiền tệ sự kiện vào chung một hệ CurrencyType giúp mọi tính năng dùng lại nguyên hạ tầng thưởng."
+  ],
+  "categories": [
+    "Kinh tế",
+    "Cơ chế lõi",
+    "Meta",
+    "Booster"
+  ]
+}

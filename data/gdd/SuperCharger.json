@@ -1,0 +1,1100 @@
+{
+  "id": "SuperCharger",
+  "name": "Super Charger",
+  "category": "Core",
+  "managers": [
+    "Modules.Contexts.Home.SuperCharger.Scripts.SuperChargerService",
+    "Modules.Contexts.Home.SuperCharger.Scripts.SuperChargerDataService",
+    "Modules.Contexts.Home.SuperCharger.Scripts.SuperChargerModel",
+    "Modules.Contexts.GamePlay.SuperCharger.SuperChargerInGameManager",
+    "Modules.Contexts.GamePlay.SuperCharger.SuperChargerConfigModel",
+    "Modules.Contexts.GamePlay.SuperCharger.Strategies.SuperChargerStrategyFactory",
+    "Modules.Contexts.GamePlay.SuperCharger.Strategies.BestSort.BestSortSuperChargerStrategy",
+    "Modules.Contexts.GamePlay.SuperCharger.Strategies.BestSort.BestSortSolver",
+    "Modules.Contexts.GamePlay.SuperCharger.Strategies.BestSortTargetFinder",
+    "Modules.Contexts.GamePlay.SuperCharger.Strategies.ChargeableBottleSuperChargerStrategy"
+  ],
+  "summary": "Super Charger là một trợ thủ dùng trong level: người chơi phải thắng đủ số level ở Home để 'kích hoạt' nó, sau đó trong mỗi ván sẽ có một nút Super Charger nạp dần theo tiến trình chơi (hoặc theo số nước đi, hoặc theo số chai hoàn thành, tuỳ cấu hình). Khi nút đầy, người chơi bấm để dùng một lần 'phép': tuỳ biến thể (SuperChargerType) mà nó sẽ tự sắp xếp lại nhiều chai cùng lúc cho tối ưu (BestSort) hoặc tạo/nạp một chai mini đặc biệt trên bàn (ChargeableBottle). Trạng thái kích hoạt là 'sống đến khi thua': thua một ván là mất Super Charger và phải làm lại tiến độ, nên game có cả popup Are You Sure cảnh báo trước khi bỏ ván. Toàn bộ tính năng do một khoá remote config điều khiển (SuperChargerConfigModel), mặc định client là tắt.",
+  "unlock": "SuperChargerService.IsEligible(): cần SuperChargerConfigModel.IsEnabled = true và tiến độ người chơi ≥ FirstLevelToShow; trong code có bước kẹp: nếu FirstLevelToShow < 5 thì dùng 10 thay thế (chống cấu hình sai). Mặc định client FirstLevelToShow = 5, IsEnabled = false. IsActive() còn đòi tiến độ tích luỹ Progress ≥ TargetLevelProgress.",
+  "entry_points": [
+    "Icon Super Charger ở Home (SuperChargerService.IsLobbyIconVisible → SuperChargerJoinPopUp, impression source LobbyIcon)",
+    "SuperChargerJoinPopUp tự bật khi về Home (TryShowSuperChargerPopUpOnLobbyReturnCommand — lệnh thứ 2 trong chuỗi return-to-home)",
+    "SuperChargerActivationPopUp khi vừa đủ tiến độ (TryPlaySuperChargerActivationCommand)",
+    "Nút info trong join popup → SuperChargerInfoPopUp (impression source InfoButton hoặc FirstOpen)",
+    "Trong level: InLevelSuperChargerView (thanh tiến độ) và nút SuperChargerButtonUI",
+    "Popup Are You Sure khi định thoát/bỏ ván (SuperChargerAreYouSureContainer)"
+  ],
+  "flow": "Ở Home: mỗi lần thắng level, SuperChargerService.TryIncreaseProgress() tăng SuperChargerModel.Progress thêm 1 (chỉ khi EventShownInLifeTime đã bật và Progress chưa chạm TargetLevelProgress). Khi Progress == TargetLevelProgress, service bật cờ ShouldShowInLevelActivationPopUp để lần vào level kế tiếp sẽ mở popup thông báo 'Super Charger đã sẵn sàng'. SuperChargerService.IsActive() = IsEligible() && Progress ≥ TargetLevelProgress. Popup: lần đầu đủ điều kiện, ShouldAutoOpenPopUp() trả true vì EventShownInLifeTime còn false → mở SuperChargerJoinPopUp (reason lấy từ GetJoinPopupShowReason: Activate nếu đã đủ tiến độ, Tutorial nếu chưa, Lose sau khi mất); popup gọi MarkEventShownInLifeTime và MarkJoinPopUpShown. SuperChargerProgressView vẽ thanh tiến độ với các vạch ngăn, chữ SuperChargerJoinProgressText khi chưa xong và SuperChargerIsActiveText khi đã kích hoạt. Trong level: SuperChargerInGameManager.Initialize(bottleCollections) đọc config, đặt _moveCount = _bottleCompleted = _superChargerUseCount = 0, _remainingGoal = ChargeMatchCount[0]; sau mỗi lần dùng, IncreaseSuperChargerUseCount tăng index rồi kẹp vào Count−1 và lấy goal ở index đó (mã0.0.3063), chọn view theo SuperChargerType (SuperChargerButtonUI.Initialize) và tạo chiến lược qua SuperChargerStrategyFactory.Create(configModel). Nếu ShouldHaveInitialCharge = true thì TryApplyInitialCharge đặt _remainingGoal = 0 ngay từ đầu (nút đầy sẵn). Nạp: nếu ChargeWithMove = true thì mỗi nước đi (OnAnyMoveStarted) trừ 1 vào _remainingGoal, nhưng CheckMoveIsRepetitive lọc theo state chai hiện tại (nguồn1màu sang chai trống, nguồnheight1 trừ blocker9, hoặc target không đủ top-water); không đọc lịch sử SelectionSystem (mã0.0.3063); nếu ChargeWithMove = false thì mỗi chai hoàn thành (OnAnyBottleCompleted) trừ 1, và CountsTowardCharge chặn màu đã tính rồi (danh sách _completedColors) để mỗi màu chỉ tính một lần. Khi _remainingGoal ≤ 0 nút chuyển trạng thái Ready (SuperChargerButtonInnerView.OnReady, hoạt ảnh readyClip + particle). Dùng: với type ChargeableBottle, ShouldUseAutomatically() trả true nên hệ thống tự kích hoạt (tạo/nạp ChargeableBottleItem trên bàn); với type BestSort, người chơi phải bấm nút (OnUseChargerButtonClicked) → UseSuperCharger() → strategy.Use(source). BestSortSuperChargerStrategy: BestSortTargetFinder.FindSuitableTargets chọn tập chai ứng viên (giới hạn theo BestSortBottleCapByCandidateCount / BestSortMaxEffectedBottleCap), BestSortSolver.Solve chạy 5 pha (TagBottom → CompleteFill → TopColor → BestFit → RandomReverse) để dựng BestSortSolution gồm danh sách BottleSolution; sau đó PlaySuperChargerSequence chạy trail particle từ nút tới các chai (SuperChargerTrailAnimationController), ApplySolutions ghi lại nội dung chai, UnlockCompletedBottles mở khoá chai đã hoàn thành, CompleteOverBoardItemsOnEmptiedCells xử lý vật thể phủ trên ô vừa trống. FinishCharge kiểm tra IsBoardStuck; nếu bàn kẹt sau khi dùng thì TryRescueFromStuck thêm một chai (cờ _addedBottleForStuck) — số liệu này được gửi trong analytics supercharger_used. Kết thúc ván: SuperChargerService.CompleteSuperChargerTargetProgress khi thắng; thua thì trạng thái Lost (ChargerStatus.Lost) và tiến độ bị reset qua TryResetProgress. Mở app: InitializeData → TryResetProgress(onAppLaunch: true) dọn tiến độ nếu người chơi không còn đủ điều kiện.",
+  "use_cases": [
+    {
+      "id": "UC-01",
+      "title": "Server bật Super Charger và chọn biến thể",
+      "actor": "Server",
+      "trigger": "Đổi khoá Firebase SuperChargerConfigModel",
+      "precondition": "-",
+      "steps": [
+        "FirebaseRemoteConfigResolver đọc khoá SuperChargerConfigModel",
+        "SuperChargerConfigModel.IsValid() kiểm tra; hỏng thì fallback bản mặc định",
+        "SuperChargerService.GetConfig() trả model; GetSuperChargerType() trả Type"
+      ],
+      "result": "Biến thể BestSort (Type=2) hoặc ChargeableBottle (Type=1) được bật cho toàn bộ người chơi trong nhóm",
+      "rules": "Mặc định client: IsEnabled=false, Type=2 (BestSort). Type=0 là None",
+      "evidence": "SuperChargerService.GetConfig; SuperChargerService.GetSuperChargerType; SuperChargerService.IsChargeableBottleActive; SuperChargerConfigModel.IsValid"
+    },
+    {
+      "id": "UC-02",
+      "title": "Kiểm tra đủ điều kiện tham gia",
+      "actor": "System",
+      "trigger": "Vào Home / trước khi hiện icon hoặc popup",
+      "precondition": "Config đã nạp",
+      "steps": [
+        "SuperChargerService.IsEligible() đọc IsEnabled và FirstLevelToShow",
+        "Nếu FirstLevelToShow < 5 thì lấy 10 làm mốc (bảo vệ trước cấu hình sai)",
+        "So mốc với tiến độ IPlayerService"
+      ],
+      "result": "true/false quyết định mọi UI và luồng của tính năng",
+      "rules": "FirstLevelToShow mặc định client = 5; giá trị < 5 bị thay bằng 10",
+      "evidence": "SuperChargerService.IsEligible; SuperChargerService.IsLobbyIconVisible"
+    },
+    {
+      "id": "UC-03",
+      "title": "Tăng tiến độ khi thắng level ở Home",
+      "actor": "System",
+      "trigger": "Thắng một level",
+      "precondition": "IsEligible = true và EventShownInLifeTime = true",
+      "steps": [
+        "SuperChargerService.TryIncreaseProgress()",
+        "Nếu Progress != TargetLevelProgress → SuperChargerDataService.IncreaseProgress() (Progress + 1), đánh dấu _isMarkedForLateUpdate và _isDataChangedSinceLastSave",
+        "Nếu Progress == TargetLevelProgress → SetShouldShowLevelActivationPopUp(true)"
+      ],
+      "result": "Thanh tiến độ nhích lên; đủ mốc thì lần vào level sau sẽ có popup kích hoạt",
+      "rules": "TargetLevelProgress mặc định client = 0 (tức kích hoạt ngay); server thường đặt số > 0",
+      "evidence": "SuperChargerService.TryIncreaseProgress; SuperChargerDataService.IncreaseProgress; SuperChargerDataService.SetShouldShowLevelActivationPopUp"
+    },
+    {
+      "id": "UC-04",
+      "title": "Mở popup giới thiệu lần đầu",
+      "actor": "System",
+      "trigger": "Về Home khi vừa đủ điều kiện",
+      "precondition": "EventShownInLifeTime = false",
+      "steps": [
+        "TryShowSuperChargerPopUpOnLobbyReturnCommand.ExecuteAsync kiểm tra SuperChargerService.ShouldAutoOpenPopUp()",
+        "GetJoinPopupShowReason() trả Activate / Tutorial / Lose",
+        "Mở SuperChargerJoinPopUp với SuperChargerJoinPopUpArguments(impressionSource, reason)",
+        "SuperChargerJoinPopUp.PlayFirstShowEverAnimations và OpenAutomaticallyInfoPopUp (mở info popup lần đầu)",
+        "MarkEventShownInLifeTime + MarkJoinPopUpShown; analytics supercharger_popup_impression"
+      ],
+      "result": "Người chơi hiểu tính năng, thanh tiến độ bắt đầu chạy",
+      "rules": "SuperChargerJoinPopUpImpressionSource = {LobbyIcon:0, FirstOpen:1}; SuperChargerJoinPopupReason = {Lose:0, Activate:1, Tutorial:2}",
+      "evidence": "SuperChargerService.ShouldAutoOpenPopUp; SuperChargerService.GetJoinPopupShowReason; SuperChargerJoinPopUp.ShowAsync; SuperChargerJoinPopUp.OpenAutomaticallyInfoPopUp; EventSender.SendSuperChargerJoinPopUpImpression"
+    },
+    {
+      "id": "UC-05",
+      "title": "Xem popup hướng dẫn (Info)",
+      "actor": "Player",
+      "trigger": "Bấm nút info hoặc popup tự mở lần đầu",
+      "precondition": "-",
+      "steps": [
+        "SuperChargerInfoPopUpArguments(impressionSource) mở SuperChargerInfoPopUp",
+        "SetVariant(type) chọn biến thể; SuperChargerInfoText1 hiển thị số level cần thắng; dòng thứ 3 chọn giữa SuperChargerInfoText3WithMove và SuperChargerInfoText3WithMatch theo cờ ChargeWithMove",
+        "MarkInfoPopUpAsIntroduced() ghi nhận đã xem"
+      ],
+      "result": "Analytics supercharger_info (SendSuperChargerJoinPopUpImpression / info impression) và cờ IsInfoPopUpIntroduced",
+      "rules": "SuperChargerInfoPopUpImpressionSource = {InfoButton:0, FirstOpen:1}. Khoá localization: SuperChargerInfoText1, SuperChargerInfoText2, SuperChargerInfoText3WithMove, SuperChargerInfoText3WithMatch, SuperChargerInfoText4MagicWand, SuperChargerInfoText4ChargeableBottle, SuperChargerInfoTextFailInfo",
+      "evidence": "SuperChargerInfoPopUp.Show; SuperChargerService.MarkInfoPopUpAsIntroduced; SuperChargerService.IsInfoPopUpIntroduced"
+    },
+    {
+      "id": "UC-06",
+      "title": "Popup kích hoạt trong level",
+      "actor": "System",
+      "trigger": "Vào level sau khi vừa đủ tiến độ",
+      "precondition": "ShouldShowInLevelActivationPopUp = true",
+      "steps": [
+        "SuperChargerService.ShouldShowInLevelActivationPopup()",
+        "TryPlaySuperChargerActivationCommand.ShouldOpenActivationPopup → mở SuperChargerActivationPopUp",
+        "SetVariant(chargerType) chọn hoạt ảnh theo biến thể; PlayAnimationsWithInterval",
+        "MarkInLevelActivationPopUpAsIntroduced() tắt cờ; analytics supercharger_activation_impression"
+      ],
+      "result": "Người chơi thấy Super Charger đã sẵn sàng dùng trong ván này",
+      "rules": "Chỉ hiện một lần cho mỗi lần kích hoạt",
+      "evidence": "SuperChargerService.ShouldShowInLevelActivationPopup; SuperChargerService.MarkInLevelActivationPopUpAsIntroduced; TryPlaySuperChargerActivationCommand.ShouldOpenActivationPopup; EventSender.SendSuperChargerActivationPopUpImpression"
+    },
+    {
+      "id": "UC-07",
+      "title": "Nạp Super Charger bằng số nước đi",
+      "actor": "Player",
+      "trigger": "Mỗi nước rót nước trong level",
+      "precondition": "SuperChargerConfigModel.ChargeWithMove = true",
+      "steps": [
+        "SuperChargerInGameManager.OnAnyMoveStarted(originBottle, targetBottle) tăng _moveCount",
+        "CheckMoveIsRepetitive chỉ đọc state hiện tại: reject khi (origin water list.Count==1 && target empty && !origin.HasBlocker(9)) OR (origin.Height==1 && !origin.HasBlocker(9)) OR target.EmptyCellCount<origin.TopWaterHeight. Không đọc SelectionSystem/history và không có history-depth N trong body; không được diễn giải thành undo/qua-lại filter. (Mã0.0.3063; chưa xác nhận runtime0.0.3129.)",
+        "strategy.CanIncreaseProgress() cho phép → _remainingGoal giảm 1, UpdateView chạy hoạt ảnh thanh tròn",
+        "_remainingGoal ≤ 0 → phát signal Ready"
+      ],
+      "result": "Nút Super Charger sáng lên, sẵn sàng dùng",
+      "rules": "CheckMoveIsRepetitive chỉ đọc state hiện tại: reject khi (origin water list.Count==1 && target empty && !origin.HasBlocker(9)) OR (origin.Height==1 && !origin.HasBlocker(9)) OR target.EmptyCellCount<origin.TopWaterHeight. Không đọc SelectionSystem/history và không có history-depth N trong body; không được diễn giải thành undo/qua-lại filter. (Mã0.0.3063; chưa xác nhận runtime0.0.3129.)",
+      "evidence": "SuperChargerInGameManager.OnAnyMoveStarted; SuperChargerInGameManager.CheckMoveIsRepetitive; SuperChargerInGameManager.UpdateView; ISuperChargerStrategy.CanIncreaseProgress"
+    },
+    {
+      "id": "UC-08",
+      "title": "Nạp Super Charger bằng số chai hoàn thành",
+      "actor": "Player",
+      "trigger": "Hoàn thành một chai (đủ 4 đơn vị cùng màu)",
+      "precondition": "ChargeWithMove = false",
+      "steps": [
+        "SuperChargerInGameManager.OnAnyBottleCompleted(waterColorId) tăng _bottleCompleted",
+        "CountsTowardCharge(waterColorId) kiểm tra màu đã nằm trong _completedColors chưa",
+        "Chưa có → thêm màu vào danh sách và giảm _remainingGoal 1",
+        "_remainingGoal < 1 → nút Ready; nếu Type == ChargeableBottle thì đi tiếp nhánh tự dùng"
+      ],
+      "result": "Nút nạp theo số màu khác nhau đã hoàn tất, không cày lại một màu",
+      "rules": "_chargeMatchCounts lấy từ SuperChargerConfigModel.ChargeMatchCount (mặc định client [1] — chỉ cần 1 chai/màu để đầy); BestSortSolver.CompleteFillCount = 4 là số đơn vị nước để một chai coi là đầy",
+      "evidence": "SuperChargerInGameManager.OnAnyBottleCompleted; SuperChargerInGameManager.CountsTowardCharge; SuperChargerInGameManager.Initialize"
+    },
+    {
+      "id": "UC-09",
+      "title": "Nạp sẵn ngay đầu ván",
+      "actor": "System",
+      "trigger": "Bắt đầu level",
+      "precondition": "ShouldHaveInitialCharge = true",
+      "steps": [
+        "SuperChargerInGameManager.TryApplyInitialCharge đặt _remainingGoal = 0",
+        "Phát signal Ready ngay"
+      ],
+      "result": "Người chơi có sẵn một lượt Super Charger từ nước đi đầu tiên",
+      "rules": "Mặc định client false; dùng cho các nhóm A/B muốn tăng cảm giác mạnh ngay đầu ván",
+      "evidence": "SuperChargerInGameManager.TryApplyInitialCharge; SuperChargerConfigModel.ShouldHaveInitialCharge"
+    },
+    {
+      "id": "UC-10",
+      "title": "Dùng Super Charger biến thể BestSort",
+      "actor": "Player",
+      "trigger": "Bấm nút khi đã đầy",
+      "precondition": "Type = BestSort (2), nút Ready",
+      "steps": [
+        "OnUseChargerButtonClicked → UseSuperCharger() (đặt _cancelTutorial = true)",
+        "BestSortSuperChargerStrategy.Use(source): CanUse() kiểm tra hợp lệ",
+        "BestSortTargetFinder.FindSuitableTargets: FindCandidateBottles → GetCompletableColors → SelectBestBottles (GetCheapestFittingColor, CountNewBottles, FillWithRandomBottles) với giới hạn GetBestSortBottleLimit(candidateCount)",
+        "BestSortSolver.Solve chạy các pha ExecuteTagBottomPhase → ExecuteCompleteFillPhase → ExecuteTopColorPhase → ExecuteBestFitPhase → ExecuteRandomReversePhase",
+        "PlaySuperChargerSequence: PrepareChargeAnimation → PlayTrailAnimation (trail particle từ nút tới từng chai) → StartChargeAnimation → ApplySolutions → UnlockCompletedBottles → CompleteOverBoardItemsOnEmptiedCells → FinishCharge"
+      ],
+      "result": "Nhiều chai được sắp lại tối ưu cùng lúc, một số chai hoàn thành ngay",
+      "rules": "BestSortMaxEffectedBottleCap mặc định 4; BestSortBottleCapByCandidateCount mặc định {7:4} (khi có 7 chai ứng viên thì tối đa tác động 4 chai); BestSortTargetFinder.DefaultBestSortBottleCap = 4; CompleteFillCount = 4. GetLongBottleColors và GetValidMoveColors loại các màu không hợp lệ",
+      "evidence": "SuperChargerInGameManager.UseSuperCharger; BestSortSuperChargerStrategy.Use; BestSortTargetFinder.FindSuitableTargets; BestSortSolver.Solve; BestSortSuperChargerStrategy.PlaySuperChargerSequence"
+    },
+    {
+      "id": "UC-11",
+      "title": "Cứu bàn cờ bị kẹt sau khi dùng BestSort",
+      "actor": "System",
+      "trigger": "Sau khi ApplySolutions",
+      "precondition": "-",
+      "steps": [
+        "BestSortSuperChargerStrategy.FinishCharge → IsBoardStuck() kiểm tra còn nước đi hợp lệ không",
+        "Kẹt → TryRescueFromStuck(solution) thêm một chai trống, đặt _addedBottleForStuck = true, _stuckAfterUse = true",
+        "SendSuperChargerUsedEvent(colorFilled) gửi analytics kèm hai cờ này"
+      ],
+      "result": "Người chơi không bị kẹt cứng vì chính trợ thủ",
+      "rules": "Hai cờ is_stuck_after_use và added_bottle_for_stuck nằm trong analytics supercharger_used để vận hành theo dõi chất lượng thuật toán",
+      "evidence": "BestSortSuperChargerStrategy.FinishCharge; BestSortSuperChargerStrategy.TryRescueFromStuck; BestSortSuperChargerStrategy.IsBoardStuck; BestSortSuperChargerStrategy.SendSuperChargerUsedEvent"
+    },
+    {
+      "id": "UC-12",
+      "title": "Dùng Super Charger biến thể ChargeableBottle (tự động)",
+      "actor": "System",
+      "trigger": "Nút đầy",
+      "precondition": "Type = ChargeableBottle (1)",
+      "steps": [
+        "SuperChargerInGameManager.ShouldUseAutomatically() trả true khi Type == 1",
+        "ChargeableBottleSuperChargerStrategy.Use(source): FindChargeableBottleItem tìm ChargeableBottleItem trên bàn",
+        "GetTargets() trả các Transform đích cho trail; ChargeableBottleAnimationConfig điều khiển hoạt ảnh",
+        "Chai mini được nạp; mỗi chai chỉ dùng được một lần (theo mô tả SuperChargerBottleTutorialDescription2)"
+      ],
+      "result": "Xuất hiện/nạp một chai mini đặc biệt giúp chứa thêm nước",
+      "rules": "SuperChargerInGameManager.GetChargeableBottleItem và IsChargeableBottleIsAvailable kiểm tra sự tồn tại của chai; CanIncreaseHealth (mặc định false) cho phép chai tăng dung tích",
+      "evidence": "SuperChargerInGameManager.ShouldUseAutomatically; ChargeableBottleSuperChargerStrategy.Use; ChargeableBottleSuperChargerStrategy.FindChargeableBottleItem; SuperChargerInGameManager.IsChargeableBottleIsAvailable"
+    },
+    {
+      "id": "UC-13",
+      "title": "Tutorial dùng Super Charger",
+      "actor": "System",
+      "trigger": "Lần đầu nút sẵn sàng trong level",
+      "precondition": "SuperChargerService.ShouldShowChargerTutorial() = true",
+      "steps": [
+        "ShouldShowChargerTutorial: với Type=2 so ForceTutorialShowCount của model với config; với Type=1 so GetChargableBottleTutorialShowCount",
+        "SuperChargerInGameManager.TryStartTutorial(delay) đặt _waitingForTutorial",
+        "SuperchargerTutorialController.Show(bottleCollections): ShowWandTutorial (biến thể BestSort) hoặc ShowChargeableBottleTutorial → ShowChargeableBottleUseTutorial (biến thể chai)",
+        "SuperChargerService.IncreaseTutorialShowCount(); analytics super_charger_tutorial_seen (tutorial_seen_count)"
+      ],
+      "result": "Ngón tay hướng dẫn + dòng chữ mô tả; tutorial bị huỷ nếu người chơi tự bấm nút trước (_cancelTutorial)",
+      "rules": "Khoá localization: SuperChargerTutorialDescription, SuperChargerBottleTutorialDescription1, SuperChargerBottleTutorialDescription2. Số lần ép hiện lấy từ SuperChargerConfigModel.ForceTutorialShowCount",
+      "evidence": "SuperChargerService.ShouldShowChargerTutorial; SuperChargerInGameManager.TryStartTutorial; SuperchargerTutorialController.ShowChargeableBottleTutorial; SuperChargerService.IncreaseTutorialShowCount; EventSender.SendSuperChargerTutorialSeen"
+    },
+    {
+      "id": "UC-14",
+      "title": "Cảnh báo mất Super Charger khi định bỏ ván",
+      "actor": "Player",
+      "trigger": "Bấm thoát / từ chối chơi tiếp khi hết nước",
+      "precondition": "SuperChargerService.ShouldShowAreYouSure() = true",
+      "steps": [
+        "SuperChargerAreYouSureContainer.ShouldShow() kiểm tra IsEligible và Progress ≥ TargetLevelProgress",
+        "SetVariant(chargerType) chọn hình theo biến thể; Show() trả Task<bool>",
+        "Hiển thị SuperChargerLoseAreYouSureText: 'You will lose your Super Charger !'"
+      ],
+      "result": "Người chơi cân nhắc lại; nếu vẫn thoát thì mất trạng thái kích hoạt",
+      "rules": "Điều kiện giống IsActive (IsEligible && Progress ≥ TargetLevelProgress)",
+      "evidence": "SuperChargerService.ShouldShowAreYouSure; SuperChargerAreYouSureContainer.ShouldShow; SuperChargerAreYouSureContainer.Show"
+    },
+    {
+      "id": "UC-15",
+      "title": "Thua level → mất Super Charger",
+      "actor": "System",
+      "trigger": "Thua hoặc bỏ ván",
+      "precondition": "Đang Active",
+      "steps": [
+        "Gửi analytics supercharger_status với ChargerStatus.Lost và ChargerContext.level_end",
+        "SuperChargerService.TryResetProgress() → SuperChargerDataService.ResetProgress()",
+        "Lần sau join popup mở với reason = Lose"
+      ],
+      "result": "Tiến độ về 0, phải thắng lại đủ level để kích hoạt",
+      "rules": "SuperChargerInfoTextFailInfo nói rõ 'Super Charger will be active until you fail!'",
+      "evidence": "SuperChargerService.TryResetProgress; SuperChargerDataService.ResetProgress; EventSender.SendSuperChargerStatus; SuperChargerService.GetJoinPopupShowReason"
+    },
+    {
+      "id": "UC-16",
+      "title": "Thắng level khi đang dùng Super Charger",
+      "actor": "System",
+      "trigger": "Thắng ván",
+      "precondition": "-",
+      "steps": [
+        "SuperChargerService.CompleteSuperChargerTargetProgress() đưa Progress lên mốc mục tiêu (giữ trạng thái Active)",
+        "Gửi supercharger_status với didWin = true, context = level_end"
+      ],
+      "result": "Super Charger tiếp tục sống sang ván sau",
+      "rules": "-",
+      "evidence": "SuperChargerService.CompleteSuperChargerTargetProgress; EventSender.SendSuperChargerStatus"
+    },
+    {
+      "id": "UC-17",
+      "title": "Báo trạng thái ở đầu ván và khi mở app",
+      "actor": "System",
+      "trigger": "Bắt đầu level / khởi động app",
+      "precondition": "-",
+      "steps": [
+        "SuperChargerStatusEventDTO { Context, ChargerStatus }",
+        "EventSender.SendSuperChargerStatus(dto, onAppLaunch, didWin)",
+        "ChargerStatus: Active (đang dùng được), Passive (chưa đủ tiến độ), Lost (vừa mất), Activated (vừa kích hoạt)"
+      ],
+      "result": "Vận hành đo được tỉ lệ người chơi ở từng trạng thái theo level",
+      "rules": "ChargerContext = {level_start:0, level_end:1}; ChargerStatus = {Active:0, Passive:1, Lost:2, Activated:3}",
+      "evidence": "SuperChargerStatusEventDTO; EventSender.SendSuperChargerStatus; SuperChargerService.InitializeData"
+    },
+    {
+      "id": "UC-18",
+      "title": "Đồng bộ và xoá dữ liệu Super Charger",
+      "actor": "System",
+      "trigger": "Sync định kỳ / xoá tài khoản",
+      "precondition": "-",
+      "steps": [
+        "SuperChargerDataService.IsDataChangedSinceLastSave → SerializeModelForSync với GetSyncName() = \"SuperChargerModel\"",
+        "SyncService gửi lên sync-data; DataSynced() xoá cờ",
+        "OverwriteModelFromSync(data) khi kéo dữ liệu từ server; DeleteData() khi xoá tài khoản"
+      ],
+      "result": "Tiến độ Super Charger theo tài khoản",
+      "rules": "Model lưu: Progress, ShouldShowJoinPopUp, ShouldShowInLevelActivationPopUp, EventShownInLifeTime, IsInfoPopUpIntroduced, ForceTutorialShowCount, GetChargableBottleTutorialShowCount",
+      "evidence": "SuperChargerDataService.GetSyncName; SuperChargerDataService.SerializeModelForSync; SuperChargerDataService.OverwriteModelFromSync; SuperChargerDataService.DeleteData"
+    },
+    {
+      "id": "UC-19",
+      "title": "Bù trừ khi Super Charger lỗi",
+      "actor": "Server",
+      "trigger": "Vận hành phát compensation liên quan Super Charger",
+      "precondition": "-",
+      "steps": [
+        "Client nhận compensation qua get-compensation",
+        "Nhận xong bắn compensation_claim với is_super_charger = true"
+      ],
+      "result": "Người chơi được đền bù riêng cho sự cố Super Charger",
+      "rules": "Tham số is_super_charger phân biệt loại bù trừ này",
+      "evidence": "EventSender.SendCompensationClaimStat"
+    }
+  ],
+  "configs": [
+    {
+      "source": "json default",
+      "key": "SuperChargerConfigModel.IsEnabled",
+      "type": "bool",
+      "value": "false (client default; server bật)",
+      "meaning": "Bật/tắt toàn bộ tính năng",
+      "where": "Resources/defaultconfigs/SuperChargerConfigModel.json"
+    },
+    {
+      "source": "json default",
+      "key": "SuperChargerConfigModel.Type",
+      "type": "enum int",
+      "value": "2 = BestSort (0=None, 1=ChargeableBottle)",
+      "meaning": "Biến thể phép thuật",
+      "where": "Resources/defaultconfigs/SuperChargerConfigModel.json; Modules.Contexts.GamePlay.SuperCharger.SuperChargerType"
+    },
+    {
+      "source": "json default",
+      "key": "SuperChargerConfigModel.FirstLevelToShow",
+      "type": "int",
+      "value": "5 (nếu cấu hình < 5 thì code dùng 10)",
+      "meaning": "Level tối thiểu để thấy tính năng",
+      "where": "SuperChargerConfigModel; SuperChargerService.IsEligible"
+    },
+    {
+      "source": "json default",
+      "key": "SuperChargerConfigModel.TargetLevelProgress",
+      "type": "int",
+      "value": "0",
+      "meaning": "Số level phải thắng để kích hoạt",
+      "where": "Resources/defaultconfigs/SuperChargerConfigModel.json"
+    },
+    {
+      "source": "json default",
+      "key": "SuperChargerConfigModel.ChargeWithMove",
+      "type": "bool",
+      "value": "false",
+      "meaning": "true = nạp theo nước đi; false = nạp theo chai hoàn thành",
+      "where": "Resources/defaultconfigs/SuperChargerConfigModel.json"
+    },
+    {
+      "source": "json default",
+      "key": "SuperChargerConfigModel.CanIncreaseHealth",
+      "type": "bool",
+      "value": "false",
+      "meaning": "Cho phép tăng dung tích chai (biến thể ChargeableBottle)",
+      "where": "Resources/defaultconfigs/SuperChargerConfigModel.json"
+    },
+    {
+      "source": "json default",
+      "key": "SuperChargerConfigModel.ShouldHaveInitialCharge",
+      "type": "bool",
+      "value": "false",
+      "meaning": "Nạp sẵn đầy ngay đầu ván",
+      "where": "Resources/defaultconfigs/SuperChargerConfigModel.json"
+    },
+    {
+      "source": "json default",
+      "key": "SuperChargerConfigModel.ChargeMatchCount",
+      "type": "List<int>",
+      "value": "[1]",
+      "meaning": "Số lần match/chai cần cho mỗi nấc nạp",
+      "where": "Resources/defaultconfigs/SuperChargerConfigModel.json"
+    },
+    {
+      "source": "json default",
+      "key": "SuperChargerConfigModel.BestSortMaxEffectedBottleCap",
+      "type": "int",
+      "value": "4",
+      "meaning": "Số chai tối đa BestSort được động vào",
+      "where": "Resources/defaultconfigs/SuperChargerConfigModel.json"
+    },
+    {
+      "source": "json default",
+      "key": "SuperChargerConfigModel.BestSortBottleCapByCandidateCount",
+      "type": "Dictionary<int,int>",
+      "value": "{\"7\": 4}",
+      "meaning": "Giới hạn số chai bị tác động theo số chai ứng viên trên bàn",
+      "where": "Resources/defaultconfigs/SuperChargerConfigModel.json; BestSortTargetFinder.GetBestSortBottleLimit"
+    },
+    {
+      "source": "code field",
+      "key": "SuperChargerConfigModel.ForceTutorialShowCount",
+      "type": "int",
+      "value": "(không có trong file mặc định — server cấp)",
+      "meaning": "Số lần ép hiện tutorial",
+      "where": "SuperChargerConfigModel"
+    },
+    {
+      "source": "code const",
+      "key": "BestSortTargetFinder.CompleteFillCount / DefaultBestSortBottleCap",
+      "type": "int",
+      "value": "4 / 4",
+      "meaning": "Số đơn vị nước để một chai đầy; giới hạn chai mặc định khi không có mục trong dictionary",
+      "where": "BestSortTargetFinder"
+    },
+    {
+      "source": "code const",
+      "key": "BestSortSolver.CompleteFillCount",
+      "type": "int",
+      "value": "4",
+      "meaning": "Số đơn vị nước tính là chai hoàn chỉnh",
+      "where": "BestSortSolver"
+    },
+    {
+      "source": "code const",
+      "key": "InLevelSuperChargerView._fullDistance",
+      "type": "float",
+      "value": "1.165",
+      "meaning": "Chiều dài thanh tiến độ trong level (đơn vị world)",
+      "where": "InLevelSuperChargerView"
+    },
+    {
+      "source": "code const",
+      "key": "SuperChargerButtonInnerView.AnimatorBaseLayer",
+      "type": "int",
+      "value": "0",
+      "meaning": "Layer animator dùng cho các clip ready/idle/use",
+      "where": "SuperChargerButtonInnerView"
+    },
+    {
+      "source": "code const",
+      "key": "SuperChargerProgressView.info_localization_term / info_completed_localization_term",
+      "type": "string",
+      "value": "\"SuperChargerJoinProgressText\" / \"SuperChargerIsActiveText\"",
+      "meaning": "Khoá chữ cho thanh tiến độ ở popup",
+      "where": "SuperChargerProgressView"
+    },
+    {
+      "source": "code const",
+      "key": "SuperChargerInfoPopUp.SuperChargerInfoText1Key / SuperChargerInfoText3WithMoveKey / SuperChargerInfoText3WithMatchKey",
+      "type": "string",
+      "value": "\"SuperChargerInfoText1\" / \"SuperChargerInfoText3WithMove\" / \"SuperChargerInfoText3WithMatch\"",
+      "meaning": "Khoá chữ trong popup hướng dẫn, chọn theo ChargeWithMove",
+      "where": "SuperChargerInfoPopUp"
+    },
+    {
+      "source": "asset",
+      "key": "SuperChargerTrailAnimationConfig.asset",
+      "type": "ScriptableObject",
+      "value": "BestSortTrailAnimationTime, TrailAnimationDuration, TrailAnimationDurationForChargeableBottle, ChargeAnimationStartTime, BestSortBottleAnimationBottleCoverTime, BestSortBottleAnimationRemainingTime, TrailDelayForChargeableBottle",
+      "meaning": "Nhịp hoạt ảnh trail và nạp chai",
+      "where": "Assets/MonoBehaviour/SuperChargerTrailAnimationConfig.asset"
+    },
+    {
+      "source": "code const",
+      "key": "SuperChargerType",
+      "type": "enum",
+      "value": "None=0, ChargeableBottle=1, BestSort=2",
+      "meaning": "Ba biến thể",
+      "where": "Modules.Contexts.GamePlay.SuperCharger.SuperChargerType"
+    },
+    {
+      "source": "code const",
+      "key": "ChargerStatus",
+      "type": "enum",
+      "value": "Active=0, Passive=1, Lost=2, Activated=3",
+      "meaning": "Trạng thái báo về analytics",
+      "where": "Modules.Contexts.Home.SuperCharger.Scripts.ChargerStatus"
+    },
+    {
+      "source": "code const",
+      "key": "ChargerContext",
+      "type": "enum",
+      "value": "level_start=0, level_end=1",
+      "meaning": "Thời điểm báo trạng thái",
+      "where": "Modules.Contexts.Home.SuperCharger.Scripts.ChargerContext"
+    },
+    {
+      "source": "code const",
+      "key": "SuperChargerJoinPopupReason",
+      "type": "enum",
+      "value": "Lose=0, Activate=1, Tutorial=2",
+      "meaning": "Lý do mở join popup",
+      "where": "Modules.Contexts.Home.SuperCharger.Scripts.SuperChargerJoinPopupReason"
+    },
+    {
+      "source": "code const",
+      "key": "SuperChargerInfoPopUpImpressionSource / SuperChargerJoinPopUpImpressionSource",
+      "type": "enum",
+      "value": "InfoButton=0, FirstOpen=1 / LobbyIcon=0, FirstOpen=1",
+      "meaning": "Nguồn mở popup, gửi trong analytics",
+      "where": "Modules.Contexts.Home.SuperCharger.Scripts.UI"
+    },
+    {
+      "source": "storage key",
+      "key": "SuperChargerModel",
+      "type": "sync name",
+      "value": "\"SuperChargerModel\"",
+      "meaning": "Khoá lưu/đồng bộ dữ liệu Super Charger",
+      "where": "SuperChargerDataService.GetSyncName"
+    },
+    {
+      "source": "code field",
+      "key": "SuperChargerModel",
+      "type": "class",
+      "value": "Progress, ShouldShowJoinPopUp, ShouldShowInLevelActivationPopUp, EventShownInLifeTime, IsInfoPopUpIntroduced, ForceTutorialShowCount, GetChargableBottleTutorialShowCount",
+      "meaning": "Toàn bộ dữ liệu lưu của tính năng",
+      "where": "SuperChargerModel"
+    },
+    {
+      "source": "json default",
+      "key": "SuperChargerConfigModel.json: IsEnabled",
+      "type": "",
+      "value": "false",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/SuperChargerConfigModel.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "SuperChargerConfigModel.json: Type",
+      "type": "",
+      "value": "2",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/SuperChargerConfigModel.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "SuperChargerConfigModel.json: FirstLevelToShow",
+      "type": "",
+      "value": "5",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/SuperChargerConfigModel.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "SuperChargerConfigModel.json: TargetLevelProgress",
+      "type": "",
+      "value": "0",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/SuperChargerConfigModel.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "SuperChargerConfigModel.json: ChargeWithMove",
+      "type": "",
+      "value": "false",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/SuperChargerConfigModel.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "SuperChargerConfigModel.json: CanIncreaseHealth",
+      "type": "",
+      "value": "false",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/SuperChargerConfigModel.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "SuperChargerConfigModel.json: ShouldHaveInitialCharge",
+      "type": "",
+      "value": "false",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/SuperChargerConfigModel.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "SuperChargerConfigModel.json: ChargeMatchCount",
+      "type": "",
+      "value": "[1]",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/SuperChargerConfigModel.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "SuperChargerConfigModel.json: BestSortMaxEffectedBottleCap",
+      "type": "",
+      "value": "4",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/SuperChargerConfigModel.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "SuperChargerConfigModel.json: BestSortBottleCapByCandidateCount.7",
+      "type": "",
+      "value": "4",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/SuperChargerConfigModel.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "server cache (historical)",
+      "key": "SuperChargerConfigModel (live) = default?",
+      "type": "",
+      "value": "4/10 key trùng default, 6 key khác/thêm",
+      "meaning": "Đối chiếu config server thật (CachedRemoteConfigs) với SuperChargerConfigModel.json",
+      "where": "Configs/CachedRemoteConfigs + Firebase RC template 3197 — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server cache (historical)",
+      "key": "SuperChargerConfigModel: firstLevelToShow",
+      "type": "",
+      "value": "200",
+      "meaning": "server ghi đè (default = 5)",
+      "where": "Configs/CachedRemoteConfigs + Firebase RC template 3197 — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server cache (historical)",
+      "key": "SuperChargerConfigModel: targetLevelProgress",
+      "type": "",
+      "value": "10",
+      "meaning": "server ghi đè (default = 0)",
+      "where": "Configs/CachedRemoteConfigs + Firebase RC template 3197 — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server cache (historical)",
+      "key": "SuperChargerConfigModel: shouldHaveInitialCharge",
+      "type": "",
+      "value": "true",
+      "meaning": "server ghi đè (default = false)",
+      "where": "Configs/CachedRemoteConfigs + Firebase RC template 3197 — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server cache (historical)",
+      "key": "SuperChargerConfigModel: chargeMatchCount",
+      "type": "",
+      "value": "[1, 2]",
+      "meaning": "server ghi đè (default = [1])",
+      "where": "Configs/CachedRemoteConfigs + Firebase RC template 3197 — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server cache (historical)",
+      "key": "SuperChargerConfigModel: bestSortMaxEffectedBottleCap",
+      "type": "",
+      "value": "0",
+      "meaning": "server ghi đè (default = 4)",
+      "where": "Configs/CachedRemoteConfigs + Firebase RC template 3197 — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server cache (historical)",
+      "key": "SuperChargerConfigModel: forceTutorialShowCount",
+      "type": "",
+      "value": "0",
+      "meaning": "server-only (không có trong default)",
+      "where": "Configs/CachedRemoteConfigs + Firebase RC template 3197 — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    }
+  ],
+  "rewards": [
+    {
+      "context": "Dùng Super Charger (BestSort)",
+      "reward": "Sắp xếp lại tới BestSortMaxEffectedBottleCap chai, hoàn thành ngay các chai đủ 4 đơn vị cùng màu; thêm 1 chai cứu nếu bàn kẹt",
+      "evidence": "BestSortSolver.Solve; BestSortSuperChargerStrategy.ApplySolutions; BestSortSuperChargerStrategy.TryRescueFromStuck"
+    },
+    {
+      "context": "Dùng Super Charger (ChargeableBottle)",
+      "reward": "Tạo/nạp một chai mini dùng được một lần",
+      "evidence": "ChargeableBottleSuperChargerStrategy.Use; SuperChargerBottleTutorialDescription2"
+    }
+  ],
+  "backend": [
+    {
+      "command": "sync-data",
+      "direction": "client→server",
+      "purpose": "đồng bộ SuperChargerModel"
+    },
+    {
+      "command": "get-compensation / claim-compensation",
+      "direction": "client→server",
+      "purpose": "bù trừ liên quan Super Charger (is_super_charger)"
+    }
+  ],
+  "ui": [
+    {
+      "element": "SuperChargerJoinPopUp",
+      "class": "Modules.Contexts.Home.SuperCharger.Scripts.UI.SuperChargerJoinPopUp",
+      "purpose": "giới thiệu + thanh tiến độ, có nút info"
+    },
+    {
+      "element": "SuperChargerInfoPopUp",
+      "class": "Modules.Contexts.Home.SuperCharger.Scripts.UI.SuperChargerInfoPopUp",
+      "purpose": "hướng dẫn 4 dòng, đổi theo biến thể và cờ ChargeWithMove"
+    },
+    {
+      "element": "SuperChargerActivationPopUp",
+      "class": "Modules.Contexts.Home.SuperCharger.Scripts.UI.SuperChargerActivationPopUp",
+      "purpose": "báo đã kích hoạt trong level"
+    },
+    {
+      "element": "SuperChargerAreYouSureContainer",
+      "class": "Modules.Contexts.Home.SuperCharger.Scripts.UI.SuperChargerAreYouSureContainer",
+      "purpose": "cảnh báo sẽ mất Super Charger"
+    },
+    {
+      "element": "SuperChargerProgressView",
+      "class": "Modules.Contexts.Home.SuperCharger.Scripts.UI.SuperChargerProgressView",
+      "purpose": "thanh tiến độ có vạch ngăn ở popup"
+    },
+    {
+      "element": "InLevelSuperChargerView",
+      "class": "Modules.Contexts.GamePlay.SuperCharger.UI.InLevelSuperChargerView",
+      "purpose": "thanh tiến độ {0}/{1} trong level"
+    },
+    {
+      "element": "SuperChargerButtonUI / SuperChargerButtonInnerView / SuperChargerProgressBar",
+      "class": "Modules.Contexts.GamePlay.SuperCharger",
+      "purpose": "nút tròn có vòng tiến độ, hoạt ảnh ready/idle/use"
+    },
+    {
+      "element": "SuperChargerTrailAnimationController",
+      "class": "Modules.Contexts.GamePlay.SuperCharger.UI.SuperChargerTrailAnimationController",
+      "purpose": "bắn trail particle từ nút tới các chai đích"
+    },
+    {
+      "element": "SuperchargerTutorialController",
+      "class": "Modules.Contexts.Home.SuperCharger.Scripts.UI.SuperchargerTutorialController",
+      "purpose": "ngón tay + panel mô tả cho 2 biến thể"
+    }
+  ],
+  "analytics": [
+    {
+      "event": "supercharger_popup_impression",
+      "params": "charger_type, is_active, reason, supercharger_progress, progress",
+      "when": "mở SuperChargerJoinPopUp"
+    },
+    {
+      "event": "supercharger_activation_impression",
+      "params": "supercharger_progress, progress",
+      "when": "mở SuperChargerActivationPopUp"
+    },
+    {
+      "event": "supercharger_used",
+      "params": "charger_type, is_active, color_filled, is_stuck_after_use, added_bottle_for_stuck, usage_count, moves_made, bottle_completed, attempt, supercharger_progress, progress",
+      "when": "mỗi lần dùng Super Charger"
+    },
+    {
+      "event": "supercharger_status",
+      "params": "charger_type, charger_status, context (level_start/level_end), ingame_status, is_active, usage_count, moves_made, play_on_count, attempt, supercharger_progress, progress",
+      "when": "đầu ván, cuối ván, và khi mở app"
+    },
+    {
+      "event": "super_charger_tutorial_seen",
+      "params": "charger_type, tutorial_seen_count, attempt, progress",
+      "when": "xem tutorial"
+    },
+    {
+      "event": "compensation_claim",
+      "params": "compensation_id, is_super_charger",
+      "when": "nhận bù trừ liên quan Super Charger"
+    }
+  ],
+  "storage_keys": [
+    "SuperChargerModel (sync name; các trường Progress, EventShownInLifeTime, IsInfoPopUpIntroduced, ShouldShowJoinPopUp, ShouldShowInLevelActivationPopUp, ForceTutorialShowCount, GetChargableBottleTutorialShowCount)"
+  ],
+  "related_features": [
+    "EventsFramework",
+    "LiveOps",
+    "Analytics",
+    "MagicBottle",
+    "Snitch",
+    "Compensation"
+  ],
+  "gaps": [
+    "15/11 — partial_actual_evidence: ForceTutorialShowCount thiếu ở default; hai cache có forceTutorialShowCount=0. Đã có giá trị lịch sử, còn constructor fallback và effective runtime cần xác minh riêng. Còn lại: Đọc constructor và serializer fallback ForceTutorialShowCount đúng build; không gán absent=0.",
+    "15/11 — resolved_static_code_historical_build: Initialize lấy config.ChargeMatchCount, đặt useCount0 và remainingGoal=chargeMatchCounts[0] khi strategy tạo được. IncreaseSuperChargerUseCount tăng1, clamp vào list.Count−1 rồi remainingGoal=chargeMatchCounts[clampedIndex]. Do đó list là goal từng lầnuse, dùng lặp phần tửcuối; không phải tổngcộngdồn. Initialcharge/counter decrement là các nhánh riêng. Còn lại: Cần đối chiếu ARM64/current runtime và các nhánh caller còn chưa đủ bằng chứng.",
+    "15/11 — partial_static_code_unresolved: ExecuteRandomReversePhase duyệt solution có flag, chỉ khi listcolors.Count>1 và UnityEngine.Random.Range(0,2)==0 mới Reverse colors. Với integerRange semantics đây là một trong hai outcome; không gọi mọi solution có50%reverse vì còn eligibility. ExecuteBestFitPhase dùng TryFindBestFit theo pool; fullscoring heuristic còn nestedtype/indirectbranches chưa giải hết. Còn lại: Đã có concrete randombranch; cần TryFindBestFit/score comparator từngcase và solver fixture để mô tả toànheuristic, không đóng fullgap.",
+    "15/11 — resolved_static_snapshot: SuperChargerTrailAnimationConfig có7scalar:0.8/0.2/0.39/0.05/0.48/0.6/0.28 theo từng field. Ghi theo config0.0.3063, không đo animation thực. Còn lại: Kiểm chứng effective config/asset và nhánh runtime trên đúng build nếu cần.",
+    "15/11 — resolved_static_code_historical_build: CheckMoveIsRepetitive chỉ đọc state hiện tại: reject khi (origin water list.Count==1 && target empty && !origin.HasBlocker(9)) OR (origin.Height==1 && !origin.HasBlocker(9)) OR target.EmptyCellCount<origin.TopWaterHeight. Không đọc SelectionSystem/history và không có history-depth N trong body; không được diễn giải thành undo/qua-lại filter. Còn lại: Đối chiếu nhánh này trên app0.0.3129 ARM64; chưa là runtime pass.",
+    "[Runtime 2026-09-10] Config server LIVE đã đọc trực tiếp từ cache máy (không cần request); các hàng 'server live' là giá trị server ghi đè/thêm so với default."
+  ],
+  "sources": [
+    "GameDesign/facts/facts.json (SuperChargerService, SuperChargerDataService, SuperChargerInGameManager, BestSortSolver, BestSortTargetFinder, các popup UI)",
+    "RecoveredNative/PseudoC/Assembly-CSharp/Modules/Contexts/Home/SuperCharger/Scripts/SuperChargerService.c",
+    "RecoveredNative/PseudoC/Assembly-CSharp/Modules/Contexts/GamePlay/SuperCharger/SuperChargerInGameManager.c",
+    "UnityExport/ExportedProject/Assets/Resources/defaultconfigs/SuperChargerConfigModel.json",
+    "GameDesign/appendix/localization.tsv (SuperCharger*)"
+  ],
+  "audit_provenance": {
+    "review_date": "2026-11-15",
+    "mode": "offline_existing_files",
+    "code_build": "0.0.3063 ARMv7",
+    "runtime_build_observed_historically": "0.0.3129 ARM64 (audit 2026-10-18); not rechecked 2026-11-15",
+    "new_playtests": 0,
+    "uc_status": "See facts/audit_20261115/uc_registry.json; image reference is not pass",
+    "workbook_status": "Existing XLSX is historical; JSON and local web include 2026-11-15 corrections",
+    "static_review": "facts/local_code_gap_results_20261115.json; facts/local_asset_gap_results_20261115.json; facts/final_data_gap_decisions_20261115.json; facts/core_body_gap_decisions_20261115.json; facts/remaining_asset_gap_decisions_20261115.json"
+  },
+  "static_review_20261115": {
+    "date": "2026-11-15",
+    "scope": "Historical code/assets 0.0.3063, dated caches, device 0.0.3129 cached bundles and explicitly scoped runtime evidence. Not full runtime pass.",
+    "findings": [
+      {
+        "kind": "core_body",
+        "source_report": "facts/core_body_gap_decisions_20261115.json",
+        "id": "MS-CORE-BODY-15",
+        "gap_ids": [
+          "MS-SuperCharger-G005"
+        ],
+        "title": "Repetitive không đọc history",
+        "conclusion": "CheckMoveIsRepetitive chỉ đọc state hiện tại: reject khi (origin water list.Count==1 && target empty && !origin.HasBlocker(9)) OR (origin.Height==1 && !origin.HasBlocker(9)) OR target.EmptyCellCount<origin.TopWaterHeight. Không đọc SelectionSystem/history và không có history-depth N trong body; không được diễn giải thành undo/qua-lại filter.",
+        "evidence": [
+          {
+            "file": "../com.grandgames.magicsort_Unity_20260909_112501/RecoveredNative/PseudoC/Assembly-CSharp/Modules/Contexts/GamePlay/SuperCharger/SuperChargerInGameManager.c",
+            "line": 1539,
+            "end_line": 1610,
+            "method": "// ===== SuperChargerInGameManager :: private bool CheckMoveIsRepetitive(",
+            "sha256": "eae335811190de5379ecfb05a379e4fc78858e93e0a6e5cc50b7c1e09f34a275",
+            "body_checked": true,
+            "build": "0.0.3063 ARMv7",
+            "required_body_tokens": []
+          }
+        ],
+        "status": "resolved_static_code_historical_build",
+        "remaining": "Đối chiếu nhánh này trên app0.0.3129 ARM64; chưa là runtime pass.",
+        "runtime_verified": false,
+        "scope": "recovered_native_0.0.3063_only"
+      },
+      {
+        "kind": "final_data",
+        "source_report": "facts/final_data_gap_decisions_20261115.json",
+        "id": "MS-FDG-022",
+        "gap_ids": [
+          "MS-SuperCharger-G001"
+        ],
+        "title": "SuperChargerConfigModel.ForceTutorialShowCount không có trong file mặc định nên không biết giá trị vận hành thực tế",
+        "status": "partial_actual_evidence",
+        "conclusion": "ForceTutorialShowCount thiếu ở default; hai cache có forceTutorialShowCount=0. Đã có giá trị lịch sử, còn constructor fallback và effective runtime cần xác minh riêng.",
+        "evidence": [
+          "facts/local_asset_review_20261115/config_catalog.json"
+        ],
+        "remaining": "ForceTutorialShowCount thiếu ở default nhưng hai cache tháng9/10 có forceTutorialShowCount=0. Chưa xác minh constructor/consumer khi field thiếu hoặc effective runtime mới.",
+        "next_action": "Đọc constructor và serializer fallback ForceTutorialShowCount đúng build; không gán absent=0.",
+        "scope": "question-specific source/observed branch only; no full-UC or production claim",
+        "source_records": [
+          {
+            "snapshot": "default0.0.3063",
+            "model": "SuperChargerConfigModel",
+            "source": "Resources\\defaultconfigs\\SuperChargerConfigModel.json",
+            "root": "UnityExport Assets 0.0.3063",
+            "sha256": "c16dc90cbfd363ac5aad2e777bda3a7a99701b315258fe1d5df1102927378103",
+            "line": 1,
+            "build": "0.0.3063 ARMv7"
+          },
+          {
+            "snapshot": "cache20260910",
+            "model": "SuperChargerConfigModel",
+            "source": "facts\\runtime\\server_configs\\superChargerConfigModel.json",
+            "root": "GameDesign",
+            "sha256": "06833dd137708149e1148f7d72ec0eb26277cd417d58e528f9525327c4cff3c7",
+            "line": 1,
+            "build": "snapshot provenance at path"
+          },
+          {
+            "snapshot": "cache20261010",
+            "model": "SuperChargerConfigModel",
+            "source": "facts\\runtime\\test_20261010\\before\\CachedRemoteConfigs",
+            "root": "GameDesign",
+            "sha256": "433164d4877b2dee55d2bbd79ef2fe83d3fe9519492fe15e3cb0926daf216050",
+            "line": 1,
+            "build": "snapshot provenance at path"
+          }
+        ]
+      },
+      {
+        "kind": "code",
+        "source_report": "facts/local_code_gap_results_20261115.json",
+        "id": "MS-CODE-65",
+        "gap_ids": [
+          "MS-SuperCharger-G002"
+        ],
+        "title": "Charge goal chọn theo usecount có clamp",
+        "status": "resolved_static_code",
+        "conclusion": "Initialize lấy config.ChargeMatchCount, đặt useCount0 và remainingGoal=chargeMatchCounts[0] khi strategy tạo được. IncreaseSuperChargerUseCount tăng1, clamp vào list.Count−1 rồi remainingGoal=chargeMatchCounts[clampedIndex]. Do đó list là goal từng lầnuse, dùng lặp phần tửcuối; không phải tổngcộngdồn. Initialcharge/counter decrement là các nhánh riêng.",
+        "evidence": [
+          {
+            "file": "../com.grandgames.magicsort_Unity_20260909_112501/RecoveredNative/PseudoC/Assembly-CSharp/Modules/Contexts/GamePlay/SuperCharger/SuperChargerInGameManager.c",
+            "line": 1756,
+            "end_line": 1867,
+            "method": "// ===== SuperChargerInGameManager :: public void IncreaseSuperChargerUseCount()",
+            "sha256": "eae335811190de5379ecfb05a379e4fc78858e93e0a6e5cc50b7c1e09f34a275",
+            "body_checked": true,
+            "build": "0.0.3063 ARMv7",
+            "required_body_tokens": [
+              "iVar9 = iVar1 + 1",
+              "iVar1 = iVar2 + -1",
+              "_remainingGoal = iVar3"
+            ]
+          }
+        ],
+        "remaining": "Cần đối chiếu ARM64/current runtime và các nhánh caller còn chưa đủ bằng chứng.",
+        "scope": "recovered_native_0.0.3063_only",
+        "runtime_verified": false
+      },
+      {
+        "kind": "code",
+        "source_report": "facts/local_code_gap_results_20261115.json",
+        "id": "MS-CODE-66",
+        "gap_ids": [
+          "MS-SuperCharger-G003"
+        ],
+        "title": "RandomReverse có xácsuất1/2 đủđiềukiện",
+        "status": "partial_static_code",
+        "conclusion": "ExecuteRandomReversePhase duyệt solution có flag, chỉ khi listcolors.Count>1 và UnityEngine.Random.Range(0,2)==0 mới Reverse colors. Với integerRange semantics đây là một trong hai outcome; không gọi mọi solution có50%reverse vì còn eligibility. ExecuteBestFitPhase dùng TryFindBestFit theo pool; fullscoring heuristic còn nestedtype/indirectbranches chưa giải hết.",
+        "evidence": [
+          {
+            "file": "../com.grandgames.magicsort_Unity_20260909_112501/RecoveredNative/PseudoC/Assembly-CSharp/Modules/Contexts/GamePlay/SuperCharger/Strategies/BestSort/BestSortSolver.c",
+            "line": 1305,
+            "end_line": 1404,
+            "method": "// ===== BestSortSolver :: private void ExecuteRandomReversePhase(",
+            "sha256": "0723da2a94459af7de2bf26549c4199a184b403ba26d7174bb6eecd5326b7c6e",
+            "body_checked": true,
+            "build": "0.0.3063 ARMv7",
+            "required_body_tokens": [
+              "UnityEngine_Random__Range(0,2",
+              "List<ColorId>_Reverse"
+            ]
+          }
+        ],
+        "remaining": "Đã có concrete randombranch; cần TryFindBestFit/score comparator từngcase và solver fixture để mô tả toànheuristic, không đóng fullgap.",
+        "scope": "recovered_native_0.0.3063_only",
+        "runtime_verified": false
+      },
+      {
+        "kind": "asset",
+        "source_report": "facts/local_asset_gap_results_20261115.json",
+        "id": "MS-SuperCharger-G001",
+        "status": "partial_static_reconciliation",
+        "conclusion": "ForceTutorialShowCount thiếu ở default; hai cache có forceTutorialShowCount=0. Đã có giá trị lịch sử, còn constructor fallback và effective runtime cần xác minh riêng.",
+        "evidence": [
+          {
+            "snapshot": "default0.0.3063",
+            "model": "SuperChargerConfigModel",
+            "source": "Resources\\defaultconfigs\\SuperChargerConfigModel.json",
+            "root": "UnityExport Assets 0.0.3063",
+            "sha256": "c16dc90cbfd363ac5aad2e777bda3a7a99701b315258fe1d5df1102927378103",
+            "line": 1,
+            "build": "0.0.3063 ARMv7"
+          },
+          {
+            "snapshot": "cache20260910",
+            "model": "SuperChargerConfigModel",
+            "source": "facts\\runtime\\server_configs\\superChargerConfigModel.json",
+            "root": "GameDesign",
+            "sha256": "06833dd137708149e1148f7d72ec0eb26277cd417d58e528f9525327c4cff3c7",
+            "line": 1,
+            "build": "snapshot provenance at path"
+          },
+          {
+            "snapshot": "cache20261010",
+            "model": "SuperChargerConfigModel",
+            "source": "facts\\runtime\\test_20261010\\before\\CachedRemoteConfigs",
+            "root": "GameDesign",
+            "sha256": "433164d4877b2dee55d2bbd79ef2fe83d3fe9519492fe15e3cb0926daf216050",
+            "line": 1,
+            "build": "snapshot provenance at path"
+          }
+        ],
+        "data": "config_catalog.json",
+        "scope": "static_export0.0.3063_or_historical_cache_not_runtime_pass",
+        "reviewed": "2026-11-15",
+        "next_action": "Đọc constructor và serializer fallback ForceTutorialShowCount đúng build; không gán absent=0.",
+        "remaining": "ForceTutorialShowCount thiếu ở default nhưng hai cache tháng9/10 có forceTutorialShowCount=0. Chưa xác minh constructor/consumer khi field thiếu hoặc effective runtime mới.",
+        "superseded_or_refined_by": "MS-FDG-022"
+      },
+      {
+        "kind": "asset",
+        "source_report": "facts/local_asset_gap_results_20261115.json",
+        "id": "MS-SuperCharger-G004",
+        "status": "resolved_static_snapshot",
+        "conclusion": "SuperChargerTrailAnimationConfig có7scalar:0.8/0.2/0.39/0.05/0.48/0.6/0.28 theo từng field. Ghi theo config0.0.3063, không đo animation thực.",
+        "evidence": [
+          {
+            "source": "MonoBehaviour\\SuperChargerTrailAnimationConfig.asset",
+            "root": "UnityExport Assets 0.0.3063",
+            "sha256": "66683aaa88dfc8c0fd33160e7d9e5e301dd93bfc0d3f003d95a33e18463d2ba4",
+            "line": 1,
+            "build": "0.0.3063 ARMv7"
+          }
+        ],
+        "data": "asset_catalog.json",
+        "scope": "static_export0.0.3063_or_historical_cache_not_runtime_pass",
+        "reviewed": "2026-11-15",
+        "next_action": "Kiểm chứng effective config/asset và nhánh runtime trên đúng build nếu cần."
+      }
+    ]
+  },
+  "acceptance_review_20261115": {
+    "source": "facts/feature_acceptance_20261115.json",
+    "feature_id": "SuperCharger",
+    "scope": "All eleven dossier dimensions reviewed; full_feature_verified is not implied; read per-dimension gaps and actual runtime evidence."
+  },
+  "segment_ab_review_20261115": {
+    "status": "not_identified_in_sources",
+    "segment_ids": [],
+    "matching_basis": "explicit_gd_config_map_or_exact_model_token_in_gdd_configs_where_key_sources; rootfieldscoped",
+    "rows": [],
+    "classifications": {},
+    "assignment_verified": false,
+    "uplift_verified": false,
+    "note": "No matchingrow does not prove no segmentation/AB. Rewardbucketfalsepositives remain explicitly classified."
+  },
+  "continuation_review_20261116": {
+    "date": "2026-11-16",
+    "build": "0.0.3129 ARM64 host APK",
+    "build_scope": "Host APK version3129 matches LAST observed installed version15/11 only; installed bytes/live device16/11 not verified.",
+    "runtime_status": "device_unavailable",
+    "runtime_case_ids": [],
+    "current_apk_model_links": {
+      "feature": "SuperCharger",
+      "models": [
+        {
+          "model": "SuperChargerConfigModel",
+          "current_default_file": "facts/review_20261116/public_current_config_3129/defaults/SuperChargerConfigModel.json",
+          "resource_path": "defaultconfigs/superchargerconfigmodel",
+          "sha256": "c16dc90cbfd363ac5aad2e777bda3a7a99701b315258fe1d5df1102927378103",
+          "matching_basis": [
+            "gdd/SuperCharger.json#/configs",
+            "gdd/SuperCharger.json#/sources",
+            "gdd/SuperCharger.json#/summary",
+            "gdd/SuperCharger.json#/managers"
+          ],
+          "scope": "Packaged default3129, not effective server config.",
+          "site_data_path": "data/current_config_3129/defaults/SuperChargerConfigModel.json",
+          "original_source_sha256": "c16dc90cbfd363ac5aad2e777bda3a7a99701b315258fe1d5df1102927378103",
+          "public_artifact_sha256": "e77e9025476edc2c0d0ebdb5288a6924ae30dd86e63747b526d2e0dbc730fe91",
+          "sha256_scope": "sha256 is original raw model; public_artifact_sha256 is the sanitized download"
+        }
+      ],
+      "status": "exact_model_source_association",
+      "distribution": "sanitized_public",
+      "public_mapping_pending": false
+    },
+    "current_packaged_defaults": [
+      {
+        "model": "SuperChargerConfigModel",
+        "source": "facts/review_20261116/public_current_config_3129/defaults/SuperChargerConfigModel.json",
+        "site_data_path": "data/current_config_3129/defaults/SuperChargerConfigModel.json",
+        "public_artifact_sha256": "e77e9025476edc2c0d0ebdb5288a6924ae30dd86e63747b526d2e0dbc730fe91",
+        "original_source_sha256": "c16dc90cbfd363ac5aad2e777bda3a7a99701b315258fe1d5df1102927378103",
+        "source_class": "static_asset",
+        "build": "0.0.3129 host APK",
+        "scope": "Sanitized packaged default fullvalues only; not effective remote/selected config or runtime.",
+        "values": {
+          "IsEnabled": false,
+          "Type": 2,
+          "FirstLevelToShow": 5,
+          "TargetLevelProgress": 0,
+          "ChargeWithMove": false,
+          "CanIncreaseHealth": false,
+          "ShouldHaveInitialCharge": false,
+          "ChargeMatchCount": [
+            1
+          ],
+          "BestSortMaxEffectedBottleCap": 4,
+          "BestSortBottleCapByCandidateCount": {
+            "7": 4
+          }
+        }
+      }
+    ],
+    "native_finding_ids": [],
+    "documentation_source_coverage": {
+      "dossier_present": true,
+      "use_case_catalog_count": 19,
+      "config_catalog_rows": 42,
+      "current_apk_default_model_links": 1,
+      "current_native_findings": 0,
+      "scope": "Documentation/source coverage only; not complete runtime verification."
+    },
+    "runtime_completion": {
+      "date": "2026-11-16",
+      "status": "device_unavailable",
+      "executed_case_count": 0,
+      "full_feature_runtime_verified": false
+    },
+    "planned_branch": "Cuối lượt core: popup Info và activation UI nếu hiện, xác định variant trước khi dùng.",
+    "target_uc_ids": [
+      "UC-05",
+      "UC-06"
+    ],
+    "execution_phase": "core_and_levels_last",
+    "core_or_levels_last": true,
+    "actionability_full_json": "facts/continuation_20261116/current/feature_actionability.json",
+    "actionability_site_data_path": "data/continuation_20261116/feature_actionability.json",
+    "source_classes": [
+      "static_asset"
+    ],
+    "full_feature_verified": false
+  }
+}

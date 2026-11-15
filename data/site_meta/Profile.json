@@ -1,0 +1,441 @@
+{
+  "id": "Profile",
+  "title": "Hồ sơ người chơi (Profile)",
+  "tagline": "Danh tính công khai gồm tên, avatar, token bộ sưu tập, khung viền và kiểu chữ tên, hiện ở mọi màn xã hội.",
+  "infobox": [
+    [
+      "Loại",
+      "Xã hội"
+    ],
+    [
+      "Mở khóa",
+      "Có từ đầu game; luồng bắt buộc đặt tên bật bằng remote config IsForcedNamePopupEnabled"
+    ],
+    [
+      "Tham gia",
+      "Người chơi đơn (hiển thị cho người khác xem)"
+    ],
+    [
+      "Vật phẩm thu thập",
+      "8 avatar dựng sẵn + ảnh Facebook, 10 token bộ sưu tập, 2 khung viền, 2 kiểu chữ tên"
+    ],
+    [
+      "Thưởng chính",
+      "Token bộ sưu tập (collection_N_token / _gold), frame magic_pass_frame, name style magic_pass_name_style"
+    ],
+    [
+      "Điều kiện / phụ thuộc",
+      "Friends, Teams, Leaderboards, Account, Inventory, Collection, MagicPass"
+    ],
+    [
+      "Manager",
+      "ProfileSpriteService, PlayerService, ProfileSpriteCacheService, ProfileSpritePersistenceService"
+    ]
+  ],
+  "description": [
+    "Hồ sơ gồm tên hiển thị, ảnh đại diện, token trang trí (huy hiệu bộ sưu tập), khung viền và kiểu chữ tên.",
+    "Frame và name style có thể có hạn dùng theo thời gian (ExpireTime), ví dụ phần thưởng từ Magic Pass.",
+    "Có 8 avatar dựng sẵn với Id \"1\"–\"8\"; DefaultSprite là id \"1\", ảnh Facebook dùng id \"fb\".",
+    "Hồ sơ hiện ở khắp nơi: chat đội, bảng xếp hạng, danh sách bạn bè; bấm vào người chơi khác mở OtherUserProfilePopup.",
+    "Tên bị kiểm duyệt bằng bộ lọc từ xấu (Crosstales BadWordFilter/BadWordManager) và phải dài ít nhất 3 ký tự hợp lệ.",
+    "Bộ lọc còn xử lý leetspeak (replaceLeetAdvancedToText) nên né bằng ký tự thay thế không hiệu quả.",
+    "Ảnh đại diện của người khác được tải qua HTTP và cache 2 tầng: bộ nhớ và file trên đĩa có catalog kèm hạn theo số phiên.",
+    "Game có luồng bắt buộc đặt tên (force name change) chạy trong chuỗi lệnh về Home qua TryShowForceNameChangeCommand.",
+    "Popup chỉnh hồ sơ EditProfilePopup có 4 tab: Avatar, Token, Frame, Name."
+  ],
+  "notes": [
+    "Lưu ý: Tên phải ít nhất 3 ký tự hợp lệ; sai thì hiện cảnh báo 'ProfileNameWarning' (\"Name should be at least 3 valid characters!\").",
+    "Lưu ý: Chưa chọn ảnh thì hiện cảnh báo 'ProfilePictureWarning' (\"Select a profile picture!\").",
+    "Lưu ý: Khi _isForceEnter, nút đóng của ProfileEnterNamePopup bị ẩn (UpdateCloseButtonVisibility).",
+    "Lưu ý: Cả hai popup tên đều kiểm tra HasInternetConnection() — không chỉnh hồ sơ được khi offline.",
+    "Lưu ý: File ảnh cache bị xoá sau CacheExpirationSessionCount = 5 phiên; catalog ghi cách nhau tối thiểu 3 giây.",
+    "Lưu ý: Đăng xuất Facebook thì DeleteProfilePhoto() xoá ảnh khỏi PlayerPrefs khoá 'facebook_profile_photo'.",
+    "Lưu ý: Server có thể cấp id avatar/token không có sprite trong bản đóng gói, khi đó FindSpriteById trả null (gap).",
+    "15/11: ProfileSpriteHttpProvider.Initialize gán spacing tải0.1giây, retry cooldown10giây và trần200giây; không nhầm với cache catalog interval3giây."
+  ],
+  "how_it_works": [
+    "ProfileSpriteService nhận ProfileSpriteConfig (ScriptableObject) chứa danh sách avatar dựng sẵn, token, frames và nameStyles.",
+    "GetActiveProfileId() / GetActiveSprite() đọc PlayerService.GetProfileInfo() trả ProfileInfo{imageId, userName, tokenId, frameInfo, nameStyleInfo}.",
+    "Nếu remote config IsForcedNamePopupEnabled bật và ShouldShowForce đúng, TryShowForceNameChangeCommand chèn popup nhập tên vào chuỗi về Home.",
+    "Người chơi nhập tên trong ProfileEnterNamePopup, hai chế độ: nhập lần đầu ('Profile Enter Name') và đổi tên ('Profile Change Name').",
+    "Nếu người chơi liên kết Facebook, TryLoadFacebookPhoto() tải ảnh qua FacebookLoginService và SocialProfilePhotoManager.SaveProfilePhoto(texture) lưu vào PlayerPrefs 'facebook_profile_photo'.",
+    "Trong EditProfilePopup, bốn container tab cho chọn avatar (8 id), token (10 id), frame (2 mục) và name style (2 mục).",
+    "SaveProfileButtonHandler.OnButtonClick() kiểm tra IsNameInputValid(name) rồi lưu ProfileInfo qua PlayerService.SetProfileInfo.",
+    "Dữ liệu đẩy lên server bằng SyncService (PlayerService.SerializeModelForSync), endpoint /v1/change-profile.",
+    "Hoàn thành bộ sưu tập cấp token qua PlayerService.AddProfileToken(tokenId) và mở ProfileTokenEquipPopUp để gắn ngay.",
+    "Kích hoạt Magic Pass cấp frame 'magic_pass_frame' và name style 'magic_pass_name_style' có ExpireTime; hết hạn thì dùng ProfileFrameInfo.Default.",
+    "Xem hồ sơ người khác: ShowUserProfileCommand(userPublicId, source, canShowAddFriend).ExecuteAsync() → FetchUserProfile() gửi GetUserProfileRequestModel{UserId} tới /v2/get-profile.",
+    "Server trả GetUserProfileResponse (FlatBuffers) thành UserProfileModel với đầy đủ thống kê, rồi ShowOtherUserProfilePopup(profile) hiện lên.",
+    "Avatar người khác đi qua ProfileSpriteCacheService.RequestCacheSprite(imageId, imageUrl, publicId); RequestCacheSprites(List) nạp hàng loạt cho leaderboard.",
+    "AssignProviderTypeTo() chọn nguồn: ProfileSpritePersistenceProvider đọc file cache, hoặc ProfileSpriteHttpProvider tải HTTP với cooldown tăng dần khi lỗi.",
+    "Thành công thì OnProfileSpriteLoadSuccess() ghi vào _profileSpriteDictionary và lưu file; thất bại thì OnProfileSpriteLoadFail() đẩy sang danh sách retry, xử lý dần trong FrameUpdate().",
+    "ProfileSpritePersistenceService quản lý thư mục 'ProfileSpriteCache' và file catalog; mỗi mục có ExpirationSession, xoá sau 5 phiên."
+  ],
+  "reward_tables": [
+    {
+      "title": "VẬT PHẨM HỒ SƠ VÀ NGUỒN NHẬN",
+      "columns": [
+        "Mốc",
+        "Điều kiện",
+        "Phần thưởng"
+      ],
+      "rows": [
+        [
+          "Bộ sưu tập 1",
+          "Hoàn thành bộ sưu tập 1",
+          "1 token collection_1_token hoặc bản vàng collection_1_token_gold"
+        ],
+        [
+          "Bộ sưu tập 2",
+          "Hoàn thành bộ sưu tập 2",
+          "1 token collection_2_token hoặc bản vàng collection_2_token_gold"
+        ],
+        [
+          "Bộ sưu tập 3",
+          "Hoàn thành bộ sưu tập 3",
+          "1 token collection_3_token hoặc bản vàng collection_3_token_gold"
+        ],
+        [
+          "Bộ sưu tập 4",
+          "Hoàn thành bộ sưu tập 4",
+          "1 token collection_4_token hoặc bản vàng collection_4_token_gold"
+        ],
+        [
+          "Bộ sưu tập 5",
+          "Hoàn thành bộ sưu tập 5",
+          "1 token collection_5_token hoặc bản vàng collection_5_token_gold"
+        ],
+        [
+          "Magic Pass",
+          "Kích hoạt Magic Pass",
+          "1 khung viền magic_pass_frame, 1 kiểu chữ magic_pass_name_style (có hạn theo ExpireTime)"
+        ]
+      ]
+    },
+    {
+      "title": "BỘ ẢNH ĐẠI DIỆN (ProfileSpriteConfig.asset)",
+      "columns": [
+        "Nhóm",
+        "Id",
+        "Ghi chú"
+      ],
+      "rows": [
+        [
+          "Avatar dựng sẵn",
+          "\"1\", \"2\", \"3\", \"4\", \"5\", \"6\", \"7\", \"8\"",
+          "8 ảnh đóng gói trong asset"
+        ],
+        [
+          "Mặc định",
+          "\"1\"",
+          "DefaultSprite"
+        ],
+        [
+          "Facebook",
+          "\"fb\"",
+          "FacebookSprite — ảnh tải từ Facebook"
+        ],
+        [
+          "Facebook dự phòng",
+          "(Id rỗng)",
+          "FacebookDefaultSprite"
+        ],
+        [
+          "Khung viền",
+          "\"\" (mặc định), \"magic_pass_frame\"",
+          "ProfileSpriteConfig.frames"
+        ],
+        [
+          "Kiểu chữ tên",
+          "\"\" (mặc định), \"magic_pass_name_style\"",
+          "ProfileSpriteConfig.nameStyles"
+        ]
+      ]
+    },
+    {
+      "title": "NGUỒN MỞ POPUP HỒ SƠ (enum ShowProfileCommandSource)",
+      "columns": [
+        "Mã",
+        "Nguồn",
+        "Ghi chú"
+      ],
+      "rows": [
+        [
+          "1",
+          "TeamsInfo",
+          "Thông tin đội"
+        ],
+        [
+          "2",
+          "TeamsChat",
+          "Chat đội"
+        ],
+        [
+          "3",
+          "PlayerLeaderboard",
+          "Bảng xếp hạng người chơi"
+        ],
+        [
+          "4",
+          "WeeklyLeaderboard",
+          "Bảng xếp hạng tuần"
+        ],
+        [
+          "5",
+          "ChampionsLeagueLeaderboard",
+          "Champions League"
+        ],
+        [
+          "6",
+          "Jetpack",
+          "Jetpack Race"
+        ],
+        [
+          "7",
+          "DuckFestivalLeaderboard",
+          "Duck Festival"
+        ],
+        [
+          "8",
+          "TeamArena",
+          "Team Arena"
+        ],
+        [
+          "9",
+          "TeamQuestLeaderboard",
+          "Team Quest"
+        ],
+        [
+          "10",
+          "FriendsLeaderboard",
+          "Bảng xếp hạng bạn bè"
+        ]
+      ]
+    }
+  ],
+  "key_numbers": [
+    {
+      "label": "Số avatar dựng sẵn",
+      "value": "8 (Id \"1\"–\"8\")",
+      "source": "ProfileSpriteConfig.images"
+    },
+    {
+      "label": "Id ảnh mặc định",
+      "value": "\"1\"",
+      "source": "ProfileSpriteConfig.DefaultSprite"
+    },
+    {
+      "label": "Id ảnh Facebook",
+      "value": "\"fb\"",
+      "source": "ProfileSpriteConfig.FacebookSprite"
+    },
+    {
+      "label": "Số token bộ sưu tập",
+      "value": "10 (5 bộ × bản thường + bản gold)",
+      "source": "ProfileSpriteConfig.tokens"
+    },
+    {
+      "label": "Số khung viền",
+      "value": "2 (mặc định và magic_pass_frame)",
+      "source": "ProfileSpriteConfig.frames"
+    },
+    {
+      "label": "Số kiểu chữ tên",
+      "value": "2 (mặc định và magic_pass_name_style)",
+      "source": "ProfileSpriteConfig.nameStyles"
+    },
+    {
+      "label": "Độ dài tên tối thiểu",
+      "value": "3 ký tự hợp lệ",
+      "source": "ProfileNameWarning"
+    },
+    {
+      "label": "Số phiên giữ file ảnh cache",
+      "value": "5",
+      "source": "ProfileSpritePersistenceService.CacheExpirationSessionCount"
+    },
+    {
+      "label": "Giãn cách ghi catalog",
+      "value": "3 giây",
+      "source": "ProfileSpritePersistenceService.CatalogSaveIntervalSeconds"
+    },
+    {
+      "label": "Thư mục cache ảnh",
+      "value": "\"ProfileSpriteCache\"",
+      "source": "ProfileSpritePersistenceService.CacheFolder"
+    },
+    {
+      "label": "Khoá PlayerPrefs ảnh Facebook",
+      "value": "\"facebook_profile_photo\"",
+      "source": "SocialProfilePhotoManager.FACEBOOK_PROFILE_PHOTO_KEY"
+    },
+    {
+      "label": "Số nguồn mở popup hồ sơ người khác",
+      "value": "10",
+      "source": "ShowProfileCommandSource"
+    },
+    {
+      "label": "Số tab trong EditProfilePopup",
+      "value": "4 (Avatar, Token, Frame, Name)",
+      "source": "EditProfilePopup"
+    },
+    {
+      "label": "Endpoint xem hồ sơ người khác",
+      "value": "/v2/get-profile",
+      "source": "BackendEnvironmentConfig.asset"
+    },
+    {
+      "label": "Endpoint đổi hồ sơ của mình",
+      "value": "/v1/change-profile",
+      "source": "BackendEnvironmentConfig.asset"
+    },
+    {
+      "label": "URL ảnh Facebook",
+      "value": "/picture?type=large&access_token=",
+      "source": "FacebookLoginService"
+    },
+    {
+      "label": "Số trường của UserProfileModel",
+      "value": "23 trường (UserPublicId … CanShowAddFriend)",
+      "source": "Profile.Commands.UserProfileModel"
+    },
+    {
+      "label": "Số nhãn thống kê trong ProfilePopup",
+      "value": "13 nhãn (ProfilePopupFirstTry … ProfilePopupBoatRushWins)",
+      "source": "Profile UC-09"
+    },
+    {
+      "label": "Sự kiện analytics mở hồ sơ",
+      "value": "profile_{0} theo ShowProfileCommandSource",
+      "source": "ShowUserProfileCommand"
+    },
+    {
+      "label": "Bật luồng bắt buộc đặt tên",
+      "value": "(server) IsForcedNamePopupEnabled",
+      "source": "FirebaseRemoteConfigResolver"
+    }
+  ],
+  "config_highlights": [
+    {
+      "key": "ProfileSpriteConfig.images",
+      "value": "8 avatar với Id \"1\"–\"8\"",
+      "meaning": "Bộ ảnh đại diện dựng sẵn"
+    },
+    {
+      "key": "ProfileSpriteConfig.FacebookSprite / FacebookDefaultSprite / DefaultSprite",
+      "value": "Id \"fb\" / Id rỗng / Id \"1\"",
+      "meaning": "Ảnh Facebook, ảnh Facebook dự phòng và ảnh mặc định"
+    },
+    {
+      "key": "ProfileSpriteConfig.tokens",
+      "value": "collection_1_token … collection_5_token và bản _gold (10 token)",
+      "meaning": "Huy hiệu bộ sưu tập gắn cạnh tên"
+    },
+    {
+      "key": "ProfileSpriteConfig.frames",
+      "value": "[\"\", \"magic_pass_frame\"]",
+      "meaning": "Khung viền avatar"
+    },
+    {
+      "key": "ProfileSpriteConfig.nameStyles",
+      "value": "[\"\", \"magic_pass_name_style\"]",
+      "meaning": "Kiểu chữ tên"
+    },
+    {
+      "key": "ProfileSpritePersistenceService.CacheExpirationSessionCount",
+      "value": "5",
+      "meaning": "Số phiên giữ file ảnh cache trước khi xoá"
+    },
+    {
+      "key": "ProfileSpritePersistenceService.CatalogSaveIntervalSeconds",
+      "value": "3",
+      "meaning": "Giãn cách tối thiểu giữa hai lần ghi catalog"
+    },
+    {
+      "key": "ProfileSpritePersistenceService.CacheFolder",
+      "value": "\"ProfileSpriteCache\"",
+      "meaning": "Thư mục cache ảnh hồ sơ trên đĩa"
+    },
+    {
+      "key": "SocialProfilePhotoManager.FACEBOOK_PROFILE_PHOTO_KEY",
+      "value": "\"facebook_profile_photo\"",
+      "meaning": "Ảnh Facebook đã tải lưu cục bộ (PlayerPrefs)"
+    },
+    {
+      "key": "SaveProfileButtonHandler.profile_name_warning_localization_term",
+      "value": "\"ProfileNameWarning\"",
+      "meaning": "Cảnh báo tên không hợp lệ (\"Name should be at least 3 valid characters!\")"
+    },
+    {
+      "key": "SaveProfileButtonHandler.profile_picture_warning_localization_term",
+      "value": "\"ProfilePictureWarning\"",
+      "meaning": "Cảnh báo chưa chọn ảnh (\"Select a profile picture!\")"
+    },
+    {
+      "key": "ShowProfileCommandSource",
+      "value": "TeamsInfo=1 … FriendsLeaderboard=10",
+      "meaning": "Nguồn mở popup hồ sơ, dùng cho analytics"
+    },
+    {
+      "key": "IsForcedNamePopupEnabled",
+      "value": "(server)",
+      "meaning": "Bật luồng bắt buộc đặt tên"
+    },
+    {
+      "key": "ProfileInfo",
+      "value": "imageId, userName, tokenId, frameInfo, nameStyleInfo, frameId, nameStyleId",
+      "meaning": "Toàn bộ danh tính hiển thị của người chơi"
+    },
+    {
+      "key": "ProfileFrameInfo / ProfileNameStyleInfo",
+      "value": "FrameId|NameStyleId, ExpireTime (long), IsValid, IsTimeBased, Default",
+      "meaning": "Vật phẩm hồ sơ có thể có hạn dùng"
+    },
+    {
+      "key": "UserProfileModel",
+      "value": "UserPublicId, UserName, AvatarId, AvatarUrl, Level, FirstTryWinCount, WeeklyWinCount, MagicStreakWinCount, BroomMaxWinStreak, JetpackWinCount, SkyJumpWinCount, ChampionsSilverWins, ChampionsBronzeWins, ChampionsGoldWins, ChampionsEmeraldWins, ChampionsDiamondWins, CurrentTeamId, CurrentTeamName, CurrentTeamBadgeId, TokenId, FrameId, NameStyleId, CanShowAddFriend",
+      "meaning": "Hồ sơ công khai của người chơi khác"
+    },
+    {
+      "key": "ProfileSpriteCacheRequest",
+      "value": "ImageId, ImageUrl, PublicId, RequestInProcess, IsLoaded, IsFailed, Retries, ProviderType",
+      "meaning": "Một yêu cầu tải ảnh hồ sơ"
+    },
+    {
+      "key": "ProfileSpritePersistenceCatalogItem",
+      "value": "ImageUrl, ExpirationSession",
+      "meaning": "Một dòng trong file catalog cache ảnh"
+    },
+    {
+      "key": "PlayerModel (phần hồ sơ)",
+      "value": "ProfileInfo, Tokens, FrameInfos, NameStyleInfos",
+      "meaning": "Dữ liệu hồ sơ lưu và đồng bộ theo tài khoản"
+    },
+    {
+      "key": "BackendEnvironmentConfig – endpoint Profile",
+      "value": "/v2/get-profile, /v1/change-profile",
+      "meaning": "Đường dẫn API của Profile"
+    },
+    {
+      "key": "ProfilePopupAnimationConfig.asset",
+      "value": "ScriptableObject",
+      "meaning": "Animation mở/đóng popup hồ sơ"
+    },
+    {
+      "key": "BadWordManager",
+      "value": "replaceChars, ReplaceMode, removeSpaces, maxTextLength, simpleCheck",
+      "meaning": "Tham số bộ lọc từ ngữ xấu áp cho tên và chat"
+    }
+  ],
+  "tips": [
+    "Token bộ sưu tập là phần thưởng khoe được, biến Collection thành mục tiêu dài hạn có giá trị xã hội.",
+    "Frame và name style có hạn của Magic Pass tạo động lực gia hạn pass để giữ hình ảnh nổi bật.",
+    "Cache ảnh 2 tầng với hạn 5 phiên giữ băng thông thấp mà vẫn cập nhật avatar khi người chơi đổi.",
+    "Bắt buộc đặt tên qua remote config cho phép bật dần, tránh chặn người chơi mới nếu backend gặp sự cố."
+  ],
+  "categories": [
+    "Xã hội",
+    "Meta",
+    "Tiến trình"
+  ]
+}

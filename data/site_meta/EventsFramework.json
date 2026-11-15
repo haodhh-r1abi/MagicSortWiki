@@ -1,0 +1,876 @@
+{
+  "id": "EventsFramework",
+  "title": "Khung sự kiện (Events Framework)",
+  "tagline": "Bộ khung dùng chung cho mọi sự kiện live-ops: Service, DataService, RemoteService, StateService cộng một ConfigModel do server bật tắt.",
+  "infobox": [
+    [
+      "Loại",
+      "Live-ops"
+    ],
+    [
+      "Mở khóa",
+      "Mỗi sự kiện có FirstLevelToShow riêng (ví dụ SuperCharger 5, BoatRush 90, WheelOfFortune 130, Snitch 290)"
+    ],
+    [
+      "Chu kỳ / lịch",
+      "Thời gian mọi sự kiện tính theo giờ server lấy từ endpoint get-time"
+    ],
+    [
+      "Tham gia",
+      "Tùy sự kiện: cá nhân hoặc đội"
+    ],
+    [
+      "Điều kiện / phụ thuộc",
+      "Firebase Remote Config bật IsEnabled; backend trả dữ liệu qua endpoint get-*; HTTP 425 nghĩa là sự kiện chưa mở"
+    ],
+    [
+      "Manager",
+      "LobbyEventsService"
+    ]
+  ],
+  "description": [
+    "Magic Sort không viết mỗi sự kiện một kiểu riêng: tất cả đều dựng trên cùng một bộ khung 3–4 class theo mẫu tên cố định.",
+    "Mẫu gồm <X>Service cho logic, <X>DataService cho dữ liệu cục bộ và đồng bộ, <X>RemoteService cho HTTP, <X>StateService cho máy trạng thái.",
+    "Mỗi sự kiện có một <X>ConfigModel đọc từ Firebase Remote Config, với bản mặc định trong Resources/defaultconfigs hầu hết để IsEnabled = false.",
+    "Vòng đời do container DI điều khiển qua các interface IService, IInitializable, IDataInitializable, IRestartableService, IIntervalUpdate, ISecondUpdate, ILateUpdate, ISyncable, IDeletable.",
+    "Icon sự kiện ở Home được xếp vào hai cột trái và phải, mỗi cột có hạn ngạch ô nên không phải sự kiện nào cũng hiện cùng lúc.",
+    "ReturnToHome chọn một trong4danh sách của code0.0.3063: thua thường9, thắng thường57, thua daily2, thắng daily6 command. Mỗi command có gate/skip riêng; số command không là số popup thực hiện.",
+    "Thời gian sự kiện luôn tính theo giờ server để chống chỉnh giờ máy; segment người chơi lấy từ endpoint get-user-segment.",
+    "Dữ liệu sự kiện được gom bởi SyncService và đẩy lên endpoint sync-data theo chu kỳ mặc định 60 giây.",
+    "Config hỏng được phát hiện bằng IRemoteConfigValidatable và tự quay về bản cache hoặc bản mặc định, đồng thời bắn analytics invalid_config_fetched."
+  ],
+  "notes": [
+    "Lưu ý: hầu hết config sự kiện mặc định IsEnabled = false, nghĩa là sự kiện chỉ sống khi server bật.",
+    "Lưu ý: HTTP 425 là quy ước chung để server báo sự kiện chưa mở, khác hoàn toàn với lỗi mạng.",
+    "Lưu ý: lỗi phía client được quy về dải mã riêng 900–904, không trộn lẫn với mã HTTP của server.",
+    "Lưu ý: chuỗi popup về Home có thể cắt sớm nếu các lệnh còn lại đều được đánh dấu IsSkippable.",
+    "Lưu ý: có hai cờ giới hạn số popup: một cho lúc mở phiên và một cho lúc quay về Home (RootLevelConfigModel).",
+    "15/11: 8/12 là byte offset của hai field HashSet, không là số ô. Registration phải11/trái6 service không chứng minh capacity hay thứ tự UI; cần đối chiếu layout/runtime.",
+    "15/11: đã tách đủ4danh sách theo field assignment và thứ tự Add trong Initialize; bảng dưới giữ toàn bộ command và dòng nguồn. Chưa xác nhận thứ tự tương đương trên build0.0.3129.",
+    "RemoteTimeService.Initialize3129: STRB WZR vào+0x3C (ByPassRemoteTimeCheck=false); load literal packed int32[10,0] và STR D0 vào+0x30→coolDown10,elapsed0; MOV W9,#300 và STR W9 vào+0x38→maxCoolDown300. Metadata current khớp offsets0x30/0x34/0x38/0x3C. Sau đó gọi GetAndSetRemoteTime và đăng ký AddSecondUpdate. Đây là init thực, không server time đã hợp lệ hoặc một request retry đã quan sát. Chưa có runtime mới16/11."
+  ],
+  "how_it_works": [
+    "App khởi động chạy Firebase trước tiên: khởi tạo, fetch remote config với timeout 2.5 giây, rồi tạo bộ gửi analytics (InitFirebaseAndEventSenderAndGetRemoteConfigs).",
+    "Bộ giải mã config đọc khoảng 82 key và kiểm tra từng key; key hỏng thì quay về file cache Configs/CachedRemoteConfigs hoặc Resources/DefaultConfigs và bắn invalid_config_fetched.",
+    "Config level thường và daily được lấy riêng từ backend, thử lại tối đa 10 lần với timeout 2500 ms mỗi lần.",
+    "Container DI gọi Initialize() cho mọi IService rồi InitializeData() cho các IDataInitializable, đây là bước đọc dữ liệu đã lưu và tự reset tiến độ nếu vòng sự kiện đã kết thúc.",
+    "Các service cần nhịp thời gian tự đăng ký vào bộ cập nhật chung theo ba mức: mỗi khoảng (IIntervalUpdate), mỗi giây (ISecondUpdate) và cuối frame (ILateUpdate).",
+    "Giờ server được lấy định kỳ qua endpoint get-time; cooldown giữa hai lần gọi tăng dần tới ngưỡng tối đa, và có cờ ByPassRemoteTimeCheck cho dev.",
+    "Segment người chơi lấy qua get-user-segment, trả SegmentResponse{Segment, IsAdsDisabled}, rồi được gắn vào tham số user_segment hoặc segment của rất nhiều analytics.",
+    "Mỗi sự kiện kiểm tra điều kiện theo cùng công thức: IsEnabled trong config, FirstLevelToShow so với tiến độ, có dữ liệu backend chưa, và segment người chơi.",
+    "Khi cần dữ liệu, <X>Service gọi <X>RemoteService để lấy trạng thái sự kiện rồi nạp vào cache của <X>DataService; nhận HTTP 425 thì hiểu là sự kiện chưa mở.",
+    "Muốn có icon ở Home, service phải khai báo IsLobbyShown và IsLobbyGoingToBeShown; bộ xếp chỗ đếm số service đang chiếm ô của cột Left (0) hoặc Right (1) trước khi cho hiện. Khi trạng thái sự kiện đổi, các nút được xếp lại vị trí, có tính tới việc né thanh tiến độ MagicStreakGae.",
+    "Kết thúc level, hệ thống chọn đúng context thắng/thua và thường/daily, rồi duyệt danh sách tương ứng (57/9/6/2 command trong code0.0.3063). Gate và skip/terminate quyết định popup nào thật sự hiện.",
+    "Mỗi lệnh tự quyết IsSkippable, ShouldTerminateTheFlow và ShouldShowForce, nên thực tế chỉ một vài popup được bật mỗi lần về Home.",
+    "Popup được mở qua dịch vụ dùng chung theo tên; năm popup nóng được preload sẵn: LevelWinPopUp, LevelCongratsPopUp, StuckPopup, StuckAreYouSurePopup, TryAgainPopup.",
+    "Dữ liệu bẩn của mọi ISyncable được gom và đẩy lên sync-data theo chu kỳ 60 giây; khi đăng nhập lại có thể kéo toàn bộ về bằng get-data rồi báo lại bằng force-fetched. Asset của sự kiện được tải trước khi hiện, tối đa 3 bundle song song.",
+    "Sự kiện đội dùng WebSocket riêng: ping mỗi 10 giây, mất kết nối thì reconnect sau 5 giây và giãn dần tới tối đa 120 giây; khi hết giờ, <X>Service gửi analytics *_finished hoặc *_lost, gọi endpoint claim-*, rồi <X>DataService dọn dữ liệu."
+  ],
+  "reward_tables": [
+    {
+      "title": "CẤU TRÚC CHUẨN CỦA MỘT SỰ KIỆN (mô tả khung, giá trị thật do server)",
+      "columns": [
+        "Thành phần",
+        "Vai trò",
+        "Ví dụ / giá trị"
+      ],
+      "rows": [
+        [
+          "<X>Service",
+          "Logic và view-model của sự kiện",
+          "BoatRushService, DuckFestivalService, EndlessPortalService"
+        ],
+        [
+          "<X>DataService",
+          "Dữ liệu cục bộ, đồng bộ qua ISyncable",
+          "GetSyncName() trả \"SuperChargerModel\", \"SegmentDataModel\""
+        ],
+        [
+          "<X>RemoteService",
+          "Gọi HTTP tới backend",
+          "get-boat-rush-leaderboard, join-boat-rush-leaderboard, claim-boat-rush-leaderboard"
+        ],
+        [
+          "<X>StateService",
+          "Máy trạng thái bật, tắt, claim",
+          "IsInProgress / IsRemoteEnd / IsClaimed, ShouldShowJoinPopUp"
+        ],
+        [
+          "<X>ConfigModel",
+          "Cấu hình từ Firebase Remote Config",
+          "IsEnabled, EventType, FirstLevelToShow (server)"
+        ],
+        [
+          "Cờ bật/tắt",
+          "Mặc định client",
+          "IsEnabled = false ở hầu hết Resources/defaultconfigs (server ghi đè)"
+        ],
+        [
+          "Điều kiện level",
+          "FirstLevelToShow",
+          "SuperCharger 5, BoatRush 90, WheelOfFortune 130, Snitch 290"
+        ],
+        [
+          "Mã sự kiện chưa mở",
+          "HTTP status",
+          "425"
+        ],
+        [
+          "Analytics vòng đời",
+          "Mẫu tên chung",
+          "*_started, *_joined, *_popup_impression, *_finished, *_lost, *_won"
+        ]
+      ]
+    },
+    {
+      "title": "15/11 · ReturnHome · _regularLoseSequenceCommands · code0.0.3063",
+      "columns": [
+        "Thứ tự",
+        "Command",
+        "Dòng Initialize"
+      ],
+      "rows": [
+        [
+          "1",
+          "Modules_Contexts_GamePlay_Loop_Scripts_InitializeReturnToHomeForLevelQuitCommand",
+          "1330"
+        ],
+        [
+          "2",
+          "Modules_Contexts_Home_Monetization_WelcomeBack_Scripts_Commands_TryShowWelcomeBackReturnToHomeCommand",
+          "1359"
+        ],
+        [
+          "3",
+          "Modules_Contexts_Home_SuperCharger_Scripts_UI_TryShowSuperChargerPopUpOnLobbyReturnCommand",
+          "1390"
+        ],
+        [
+          "4",
+          "Modules_Contexts_Home_MagicStreakTournament_Scripts_Commands_TryShowMagicStreakLeaderboardLobbyReturnCommand",
+          "1421"
+        ],
+        [
+          "5",
+          "Modules_Contexts_Home_JetpackRace_Scripts_TryShowJetpackRacePopUpOnLobbyReturnCommand",
+          "1452"
+        ],
+        [
+          "6",
+          "Modules_Contexts_Home_JetpackRaceWithStage_Scripts_TryShowJetpackRaceWithStagePopUpOnLobbyReturnCommand",
+          "1483"
+        ],
+        [
+          "7",
+          "Modules_Contexts_Home_Teams_Scripts_UI_Commands_TryShowTeamsCommand",
+          "1514"
+        ],
+        [
+          "8",
+          "Modules_Contexts_Home_MagicPass_Scripts_UI_TryShowMagicPassFinishedCommand",
+          "1544"
+        ],
+        [
+          "9",
+          "Modules_Contexts_Home_Monetization_SpecialOffer_Scripts_Commands_TryToShowNoAdsOfferLobbyReturnCommand",
+          "1575"
+        ]
+      ]
+    },
+    {
+      "title": "15/11 · ReturnHome · _regularWinSequenceCommands · code0.0.3063",
+      "columns": [
+        "Thứ tự",
+        "Command",
+        "Dòng Initialize"
+      ],
+      "rows": [
+        [
+          "1",
+          "Modules_Contexts_GamePlay_Loop_Scripts_InitializeReturnToHomeCommand",
+          "1618"
+        ],
+        [
+          "2",
+          "Modules_Contexts_Home_SuperCharger_Scripts_UI_TryShowSuperChargerPopUpOnLobbyReturnCommand",
+          "1647"
+        ],
+        [
+          "3",
+          "Modules_Contexts_Home_Monetization_WatchAndWin_Scripts_Commands_TryToShowWatchAndWinLobbyReturnCommand",
+          "1678"
+        ],
+        [
+          "4",
+          "Modules_Contexts_Home_SkyJump_Scripts_TryShowSkyJumpStepIncreasedOnLobbyReturnCommand",
+          "1711"
+        ],
+        [
+          "5",
+          "Modules_Contexts_Home_SkyJumpWithStage_Scripts_TryShowSkyJumpWithStageStepIncreasedOnLobbyReturnCommand",
+          "1744"
+        ],
+        [
+          "6",
+          "Modules_Contexts_Home_MagicStreakGAE_Scripts_Commands_TryPlayMagicStreakGaeTutorialCommand",
+          "1777"
+        ],
+        [
+          "7",
+          "Modules_Contexts_Home_MagicStreakGAE_Scripts_Commands_TryPlayMagicStreakGaeProgressBarAnimationOnLobbyReturnCommand",
+          "1809"
+        ],
+        [
+          "8",
+          "Modules_Contexts_GamePlay_Loop_Scripts_ShowHomePlayButtonAnimationCommand",
+          "1843"
+        ],
+        [
+          "9",
+          "Modules_Contexts_GamePlay_Loop_Scripts_Regular_GiveRegularCoinRewardsCommand",
+          "1875"
+        ],
+        [
+          "10",
+          "Modules_Contexts_Home_Profile_Scripts_TryShowForceNameChangeCommand",
+          "1907"
+        ],
+        [
+          "11",
+          "Modules_Contexts_Home_Collection_Scripts_UI_TryShowCollectionActivationCommand",
+          "1938"
+        ],
+        [
+          "12",
+          "Modules_Contexts_Social_TryShowReferralRewards",
+          "1969"
+        ],
+        [
+          "13",
+          "Modules_Contexts_GamePlay_Loop_Scripts_PlayJourneyAnimationsCommand",
+          "1998"
+        ],
+        [
+          "14",
+          "Modules_Contexts_Home_SkyJump_Scripts_TryShowSkyJumpResultOnLobbyReturn",
+          "2027"
+        ],
+        [
+          "15",
+          "Modules_Contexts_Home_SkyJumpWithStage_Scripts_TryShowSkyJumpWithStageResultOnLobbyReturn",
+          "2059"
+        ],
+        [
+          "16",
+          "Modules_Contexts_GamePlay_Loop_Scripts_TryPlayLobbyButtonsCollectibleAnimationsCommand",
+          "2092"
+        ],
+        [
+          "17",
+          "Modules_Contexts_Home_Monetization_WelcomeBack_Scripts_Commands_TryShowWelcomeBackReturnToHomeCommand",
+          "2121"
+        ],
+        [
+          "18",
+          "Modules_Contexts_Home_Snitch_Scripts_UI_TryPlaySnitchActivationCommand",
+          "2152"
+        ],
+        [
+          "19",
+          "Modules_Contexts_Home_MagicBottle_Scripts_UI_TryPlayMagicBottleCongratsCommand",
+          "2184"
+        ],
+        [
+          "20",
+          "Modules_Contexts_Home_MagicStreakTournament_Scripts_Commands_TryPlayMagicStreakRewardAnimationLobbyReturnCommand",
+          "2216"
+        ],
+        [
+          "21",
+          "Modules_Contexts_GamePlay_Loop_Scripts_TryShowRateUsCommand",
+          "2249"
+        ],
+        [
+          "22",
+          "Modules_Contexts_Home_MagicBottle_Scripts_UI_TryShowMagicBottlePopUpOnLobbyReturnCommand",
+          "2279"
+        ],
+        [
+          "23",
+          "Modules_Contexts_Home_Monetization_SpecialOffer_Scripts_Commands_TryToShowNoAdsOfferLobbyReturnCommand",
+          "2312"
+        ],
+        [
+          "24",
+          "Modules_Contexts_Home_Snitch_Scripts_UI_TryShowSnitchPopUpOnLobbyReturnCommand",
+          "2344"
+        ],
+        [
+          "25",
+          "Modules_Contexts_GamePlay_Loop_Scripts_TryShowBroomStreakCommand",
+          "2376"
+        ],
+        [
+          "26",
+          "Modules_Contexts_Home_Monetization_TreasureDrill_Scripts_Commands_TryShowTreasureDrillCommand",
+          "2407"
+        ],
+        [
+          "27",
+          "Modules_Contexts_Home_WheelOfFortune_Commands_TryShowWheelOfFortuneCommand",
+          "2440"
+        ],
+        [
+          "28",
+          "Modules_Contexts_GamePlay_Loop_Scripts_TryShowTowerWinStreakCommand",
+          "2472"
+        ],
+        [
+          "29",
+          "Modules_Contexts_Home_JetpackRace_Scripts_TryShowJetpackRacePopUpOnLobbyReturnCommand",
+          "2503"
+        ],
+        [
+          "30",
+          "Modules_Contexts_Home_JetpackRaceWithStage_Scripts_TryShowJetpackRaceWithStagePopUpOnLobbyReturnCommand",
+          "2534"
+        ],
+        [
+          "31",
+          "Modules_Contexts_Home_BoatRush_Scripts_Commands_TryShowBoatRushJoinCommand",
+          "2565"
+        ],
+        [
+          "32",
+          "Modules_Contexts_Home_BoatRush_Scripts_Commands_TryShowBoatRushPopUpCommand",
+          "2597"
+        ],
+        [
+          "33",
+          "Modules_Contexts_Home_MagicStreakTournament_Scripts_Commands_TryShowMagicStreakLeaderboardLobbyReturnCommand",
+          "2629"
+        ],
+        [
+          "34",
+          "Modules_Contexts_Home_SkyJump_Scripts_TryShowSkyJumpJoinPopUpOnLobbyReturnCommand",
+          "2660"
+        ],
+        [
+          "35",
+          "Modules_Contexts_Home_SkyJumpWithStage_Scripts_TryShowSkyJumpWithStageJoinPopUpOnLobbyReturnCommand",
+          "2692"
+        ],
+        [
+          "36",
+          "Modules_Contexts_Home_DailyReward_Scripts_Commands_TryShowDailyRewardCommand",
+          "2725"
+        ],
+        [
+          "37",
+          "Modules_Contexts_Home_DailyReward_Scripts_Commands_TryShowDailyRewardBulkGiveAnimationCommand",
+          "2757"
+        ],
+        [
+          "38",
+          "Modules_Contexts_Home_ChampionsLeague_UI_Leaderboard_TryShowChampionsLeagueLeaderboardPopupClaimCommand",
+          "2790"
+        ],
+        [
+          "39",
+          "Modules_Contexts_Home_ChampionsLeague_UI_Leaderboard_TryShowChampionsLeagueLeaderboardPopupCommand",
+          "2823"
+        ],
+        [
+          "40",
+          "Modules_Contexts_Home_ChampionsLeague_UI_Join_TryShowChampionsLeagueJoinPopupCommand",
+          "2856"
+        ],
+        [
+          "41",
+          "Modules_Contexts_Home_DuckFestival_Scripts_Commands_TryShowDuckFestivalPopUpCommand",
+          "2889"
+        ],
+        [
+          "42",
+          "Modules_Contexts_Home_MagicLab_Scripts_TryShowMagicLabCommand",
+          "2922"
+        ],
+        [
+          "43",
+          "Modules_Contexts_Home_Monetization_EndlessPortal_Scripts_Commands_TryToShowEndlessPortalLobbyReturnCommand",
+          "2952"
+        ],
+        [
+          "44",
+          "Modules_Contexts_Home_Monetization_SpecialOffer_Scripts_Commands_TryToShowSpecialOfferLobbyReturnCommand",
+          "2985"
+        ],
+        [
+          "45",
+          "Modules_Contexts_Home_Monetization_ChooseOneSpecialOffer_Scripts_Commands_TryToShowChooseOneSpecialOfferLobbyReturnCommand",
+          "3018"
+        ],
+        [
+          "46",
+          "Modules_Contexts_GamePlay_Loop_Scripts_TryShowWeeklyTournamentCommand",
+          "3051"
+        ],
+        [
+          "47",
+          "Modules_Contexts_GamePlay_Loop_Scripts_TryShowDailyCommand",
+          "3081"
+        ],
+        [
+          "48",
+          "Modules_Contexts_Home_Teams_Scripts_UI_Commands_TryShowTeamsCommand",
+          "3111"
+        ],
+        [
+          "49",
+          "Modules_Contexts_Home_MagicPass_Scripts_UI_TryShowMagicPassTutorialCommand",
+          "3141"
+        ],
+        [
+          "50",
+          "Modules_Contexts_Home_MagicPass_Scripts_UI_TryShowMagicPassFinishedCommand",
+          "3173"
+        ],
+        [
+          "51",
+          "Modules_Contexts_Home_MiniGame_Scripts_UI_TryShowMiniGamePopUpOpenCommand",
+          "3204"
+        ],
+        [
+          "52",
+          "Modules_Contexts_Home_TeamQuest_Scripts_Commands_TryShowTeamQuestJoinCommand",
+          "3236"
+        ],
+        [
+          "53",
+          "Modules_Contexts_Home_TeamQuest_Scripts_Commands_TryShowTeamQuestPopupCommand",
+          "3268"
+        ],
+        [
+          "54",
+          "Modules_Contexts_Home_TeamArena_Commands_TryShowTeamArenaJoinCommand",
+          "3300"
+        ],
+        [
+          "55",
+          "Modules_Contexts_Home_TeamArena_Commands_TryShowTeamArenaEventCommand",
+          "3331"
+        ],
+        [
+          "56",
+          "Modules_Contexts_Home_MergeMiniGame_Scripts_UI_Commands_TryShowMergeMiniGamePopUpOpenCommand",
+          "3362"
+        ],
+        [
+          "57",
+          "Modules_Contexts_Application_TryShowSoftUpdateCommand",
+          "3394"
+        ]
+      ]
+    },
+    {
+      "title": "15/11 · ReturnHome · _dailyLoseSequenceCommands · code0.0.3063",
+      "columns": [
+        "Thứ tự",
+        "Command",
+        "Dòng Initialize"
+      ],
+      "rows": [
+        [
+          "1",
+          "Modules_Contexts_GamePlay_Loop_Scripts_InitializeReturnToHomeFailDailyCommand",
+          "3434"
+        ],
+        [
+          "2",
+          "Modules_Contexts_GamePlay_Loop_Scripts_Daily_OpenDailyPageCommand",
+          "3463"
+        ]
+      ]
+    },
+    {
+      "title": "15/11 · ReturnHome · _dailyWinSequenceCommands · code0.0.3063",
+      "columns": [
+        "Thứ tự",
+        "Command",
+        "Dòng Initialize"
+      ],
+      "rows": [
+        [
+          "1",
+          "Modules_Contexts_GamePlay_Loop_Scripts_InitializeReturnToHomeWinDailyCommand",
+          "3505"
+        ],
+        [
+          "2",
+          "Modules_Contexts_GamePlay_Loop_Scripts_OpenHomePageCommand",
+          "3533"
+        ],
+        [
+          "3",
+          "Modules_Contexts_GamePlay_Loop_Scripts_Daily_GiveDailyCoinRewardsCommand",
+          "3561"
+        ],
+        [
+          "4",
+          "Modules_Contexts_Home_Monetization_WelcomeBack_Scripts_Commands_TryShowWelcomeBackReturnToHomeCommand",
+          "3593"
+        ],
+        [
+          "5",
+          "Modules_Contexts_GamePlay_Loop_Scripts_Daily_SwipeToDailyPageCommand",
+          "3624"
+        ],
+        [
+          "6",
+          "Modules_Contexts_GamePlay_Loop_Scripts_Daily_GiveDailyProgressBarStepRewards",
+          "3655"
+        ]
+      ]
+    }
+  ],
+  "key_numbers": [
+    {
+      "label": "Timeout fetch remote config Firebase",
+      "value": "2.5 giây",
+      "source": "FirebaseRemoteConfigFetcher._timeOut"
+    },
+    {
+      "label": "Số key remote config được đọc",
+      "value": "khoảng 82",
+      "source": "FirebaseRemoteConfigResolver.ResolveAndGetConfigService"
+    },
+    {
+      "label": "Timeout fetch config level",
+      "value": "2500 ms",
+      "source": "GrandRemoteConfigFetcher.FetchTimeoutMilliseconds"
+    },
+    {
+      "label": "Số lần thử lại fetch config level",
+      "value": "10",
+      "source": "GrandRemoteConfigFetcher.MaxAttemptCount"
+    },
+    {
+      "label": "Chu kỳ đồng bộ dữ liệu với backend",
+      "value": "60 giây",
+      "source": "ServerCommunicationModel.json: CommunicationIntervalInSeconds"
+    },
+    {
+      "label": "HTTP status báo sự kiện chưa mở",
+      "value": "425",
+      "source": "BoatRushService.NotActiveStatusCode"
+    },
+    {
+      "label": "Dải mã lỗi phía client",
+      "value": "900 bị chặn do chưa đăng nhập, 901 lỗi request, 902 lỗi bất ngờ, 903 lỗi tạo request, 904 bị hủy",
+      "source": "Modules.Infrastructure.Network.Http.ClientStatusCode"
+    },
+    {
+      "label": "Ping WebSocket",
+      "value": "10 giây",
+      "source": "WebSocketHearthBeat.PingInterval"
+    },
+    {
+      "label": "Chờ trước lần reconnect đầu",
+      "value": "5 giây",
+      "source": "WebSocketManager.ReconnectAttemptDelay"
+    },
+    {
+      "label": "Chờ reconnect tối đa",
+      "value": "120 giây",
+      "source": "WebSocketManager.MaxReconnectDelay"
+    },
+    {
+      "label": "Số bundle tải song song tối đa",
+      "value": "3",
+      "source": "AssetManager.ConcurrentDownloadLimit"
+    },
+    {
+      "label": "Số cột đặt icon sự kiện ở Home",
+      "value": "2 (Left=0, Right=1)",
+      "source": "LobbyIconPositionType"
+    },
+    {
+      "label": "Số lệnh trong chuỗi popup về Home",
+      "value": "Thua thường9; thắng thường57; thua daily2; thắng daily6 (0.0.3063)",
+      "source": "ReturnToHomeSequenceService.Initialize"
+    },
+    {
+      "label": "Số danh sách lệnh về Home",
+      "value": "4 (thắng thường, thua thường, thắng daily, thua daily)",
+      "source": "ReturnToHomeSequenceService.SelectReturnToHomeSequence"
+    },
+    {
+      "label": "Số popup được preload sẵn",
+      "value": "5 (LevelWinPopUp, LevelCongratsPopUp, StuckPopup, StuckAreYouSurePopup, TryAgainPopup)",
+      "source": "PopUpService.Initialize"
+    },
+    {
+      "label": "FirstLevelToShow của SuperCharger",
+      "value": "5",
+      "source": "SuperChargerConfigModel.FirstLevelToShow"
+    },
+    {
+      "label": "FirstLevelToShow của BoatRush",
+      "value": "90",
+      "source": "BoatRushConfigModel.json"
+    },
+    {
+      "label": "FirstLevelToShow của Wheel of Fortune",
+      "value": "130",
+      "source": "WheelOfFortuneConfigModelV2.json"
+    },
+    {
+      "label": "FirstLevelToShow của Snitch",
+      "value": "290",
+      "source": "SnitchConfigModel.FirstLevelToShow"
+    },
+    {
+      "label": "Chip khởi điểm Wheel of Fortune",
+      "value": "5",
+      "source": "WheelOfFortuneConfigModelV2.json: InitialChipCount"
+    },
+    {
+      "label": "Xác suất theo stage của Wheel of Fortune",
+      "value": "Premium 0.25, Basic 0.25, Poor 0.5 cho stage 0–3",
+      "source": "WheelOfFortuneConfigModelV2.json: StageProbabilities"
+    },
+    {
+      "label": "EventType của BoatRush",
+      "value": "1",
+      "source": "BoatRushConfigModel.json"
+    },
+    {
+      "label": "EventType của Wheel of Fortune",
+      "value": "10",
+      "source": "WheelOfFortuneConfigModelV2.json"
+    },
+    {
+      "label": "Số endpoint hạ tầng dùng chung",
+      "value": "get-time, get-user-segment, cheat-user-update, sync-data, get-data, force-fetched, delete-user",
+      "source": "EventsFramework backend"
+    }
+  ],
+  "config_highlights": [
+    {
+      "key": "LobbyIconPositionType",
+      "value": "Left=0, Right=1",
+      "meaning": "Hai cột đặt icon sự kiện ở Home"
+    },
+    {
+      "key": "LobbyEventsService._availablePositions",
+      "value": "Chưa xác minh capacity layout; không dùng offset8/12",
+      "meaning": "Registration11phải/6trái không đồng nghĩa số ô hiển thị"
+    },
+    {
+      "key": "BoatRushService.NotActiveStatusCode",
+      "value": "425",
+      "meaning": "HTTP code server báo sự kiện chưa mở, dùng làm mẫu chung"
+    },
+    {
+      "key": "FirebaseRemoteConfigFetcher._timeOut",
+      "value": "2.5",
+      "meaning": "Giây chờ tối đa khi fetch remote config"
+    },
+    {
+      "key": "GrandRemoteConfigFetcher.FetchTimeoutMilliseconds",
+      "value": "2500",
+      "meaning": "Timeout mỗi lần fetch config level"
+    },
+    {
+      "key": "GrandRemoteConfigFetcher.MaxAttemptCount",
+      "value": "10",
+      "meaning": "Số lần thử lại fetch config level"
+    },
+    {
+      "key": "ServerCommunicationModel.json: CommunicationIntervalInSeconds",
+      "value": "60",
+      "meaning": "Chu kỳ đẩy dữ liệu bẩn lên sync-data"
+    },
+    {
+      "key": "WebSocketHearthBeat.PingInterval",
+      "value": "10",
+      "meaning": "Giây giữa hai lần ping socket"
+    },
+    {
+      "key": "WebSocketManager.ReconnectAttemptDelay",
+      "value": "5",
+      "meaning": "Giây chờ trước lần reconnect đầu"
+    },
+    {
+      "key": "WebSocketManager.MaxReconnectDelay",
+      "value": "120",
+      "meaning": "Giây chờ reconnect tối đa"
+    },
+    {
+      "key": "AssetManager.ConcurrentDownloadLimit",
+      "value": "3",
+      "meaning": "Số bundle tải song song tối đa"
+    },
+    {
+      "key": "ClientStatusCode",
+      "value": "900, 901, 902, 903, 904",
+      "meaning": "Mã lỗi phía client tách khỏi mã HTTP server"
+    },
+    {
+      "key": "BoatRushConfigModel.json",
+      "value": "{\"IsEnabled\":false, \"EventType\":1, \"FirstLevelToShow\":90}",
+      "meaning": "Ví dụ config một sự kiện: tắt mặc định, mở từ level 90"
+    },
+    {
+      "key": "WheelOfFortuneConfigModelV2.json",
+      "value": "IsEnabled=false, EventType=10, InitialChipCount=5, FirstLevelToShow=130, IsNotificationEnabled=false",
+      "meaning": "Ví dụ config sự kiện có thêm bảng xác suất theo stage"
+    },
+    {
+      "key": "WheelOfFortuneConfigModelV2 StageProbabilities",
+      "value": "stage 0–3: Premium 0.25, Basic 0.25, Poor 0.5",
+      "meaning": "Bảng xác suất theo stage và theo việc có Collection hay không"
+    },
+    {
+      "key": "RootLevelConfigModel.IsSessionStartPopupShowLimitEnabled / SessionStartPopUpShowLimit",
+      "value": "server",
+      "meaning": "Giới hạn số popup bật khi mở phiên"
+    },
+    {
+      "key": "RootLevelConfigModel.IsHomeReturnPopupShowLimitEnabled / HomeReturnPopupShowLimit",
+      "value": "server",
+      "meaning": "Giới hạn số popup bật khi về Home"
+    },
+    {
+      "key": "RootLevelConfigModel.IsNewLobbyIconsEnabled",
+      "value": "server",
+      "meaning": "Bật bộ icon sự kiện kiểu mới ở lobby"
+    },
+    {
+      "key": "RootLevelConfigModel.IsNoInternetPopupEnable",
+      "value": "server",
+      "meaning": "Bật tắt popup báo mất mạng"
+    },
+    {
+      "key": "ReturnToHomeSequenceService.IsPopupLimitAbEnabled",
+      "value": "server",
+      "meaning": "Cờ A/B cho cơ chế giới hạn popup"
+    },
+    {
+      "key": "FirebaseConfigPersistenceService",
+      "value": "Configs / CachedRemoteConfigs / DefaultConfigs",
+      "meaning": "Nơi cache config Firebase và nơi lấy bản mặc định"
+    },
+    {
+      "key": "SyncService._profileNameChangeClickedKey / _profileNameChangeForceCountKey",
+      "value": "ProfileNameChangeClicked / ProfileNameChangeForceCount",
+      "meaning": "PlayerPrefs điều khiển popup ép đổi tên trong chuỗi về Home"
+    },
+    {
+      "key": "SegmentResponse.Segment",
+      "value": "server",
+      "meaning": "Mã phân khúc người chơi gửi kèm mọi analytics"
+    },
+    {
+      "key": "SegmentResponse.IsAdsDisabled",
+      "value": "server",
+      "meaning": "Server tắt quảng cáo cho segment này"
+    },
+    {
+      "key": "SegmentDataModel",
+      "value": "\"SegmentDataModel\"",
+      "meaning": "Khóa lưu và đồng bộ segment"
+    },
+    {
+      "key": "BackendEnvironmentConfig",
+      "value": "stage: grand-water-sort-stage.grandgamesbe.com; production: api.grandgamestech.com",
+      "meaning": "Hai bộ endpoint, chọn theo build"
+    },
+    {
+      "key": "level_event.liveOps_stats",
+      "value": "{\"MLS\", \"MLR\", \"MLT\", \"SjSc\", \"SjSs\", \"JrSc\", \"JrSs\", \"JrR\"}",
+      "meaning": "Gói tiến độ nhiều sự kiện gửi kèm mỗi level"
+    },
+    {
+      "key": "readable_event_id",
+      "value": "ví dụ \"br_{0}_{1:yyyyMMdd}\"",
+      "meaning": "Mã sự kiện đọc được, ghép loại và ngày"
+    },
+    {
+      "key": "Endpoint teamsChat",
+      "value": "wss://.../ws",
+      "meaning": "Kênh realtime cho sự kiện đội"
+    },
+    {
+      "key": "Nhóm endpoint xóa tài khoản",
+      "value": "delete-user, delete-request, cancel-delete-request, ack-fulfilled-deletion-request",
+      "meaning": "Xóa dữ liệu người chơi kéo theo mọi sự kiện"
+    }
+  ],
+  "tips": [
+    "Một khung chung cho mọi sự kiện giúp thêm sự kiện mới gần như chỉ là viết config và bốn class theo mẫu.",
+    "Mặc định tắt toàn bộ ở client là cách an toàn: sự kiện chỉ sống khi live-ops chủ động bật.",
+    "Hạn ngạch ô icon hai cột chống việc Home bị ngập icon khi nhiều sự kiện cùng chạy.",
+    "Bốn danh sách return-home cùng gate từng command và cờ giới hạn popup điều khiển mật độ popup; số command không đồng nghĩa số popup người chơi thấy.",
+    "Tách mã lỗi client 900–904 khỏi mã HTTP giúp phân biệt rõ lỗi mạng với việc server chủ động từ chối."
+  ],
+  "categories": [
+    "Live-ops",
+    "Meta",
+    "Cơ chế lõi"
+  ],
+  "current_native_review_20261116": {
+    "reviewed": "2026-11-16",
+    "scope": "file_only_host_APK_0.0.3129_ARM64_matches_last_observed_installed_version_2026-11-15",
+    "live_installed_20261116_verified": false,
+    "installed_binary_identity_verified": false,
+    "runtime_cases_new": 0,
+    "source_facts": "facts/review_20261116/code_findings.json",
+    "source_facts_sha256": "7adb0ab760cea248de7baaa76671082aff9231708782bc0bbcdadff38e2564ea",
+    "native_sha256": "d901f86380bdecae3a8ec5cf9a9b60acc5132d50dfcf7ec1f606de807e22b2d5",
+    "metadata_sha256": "d019f1787d94bcaf0e31508eea72a86dae8df2f422454f6263a2df7d56e3786a",
+    "findings": [
+      {
+        "id": "MS-CURRENT-20261116-10",
+        "gap_ids": [
+          "MS-EventsFramework-G004"
+        ],
+        "status": "resolved_static_code_current_build",
+        "conclusion": "RemoteTimeService.Initialize3129: STRB WZR vào+0x3C (ByPassRemoteTimeCheck=false); load literal packed int32[10,0] và STR D0 vào+0x30→coolDown10,elapsed0; MOV W9,#300 và STR W9 vào+0x38→maxCoolDown300. Metadata current khớp offsets0x30/0x34/0x38/0x3C. Sau đó gọi GetAndSetRemoteTime và đăng ký AddSecondUpdate. Đây là init thực, không server time đã hợp lệ hoặc một request retry đã quan sát.",
+        "remaining": "Giữ scope constructor/init constants; remote response và cooldown progression runtime chưa được kiểm16/11.",
+        "evidence": [
+          {
+            "file": "facts/review_20261116/current_build_dump/dump.cs",
+            "line": 198139,
+            "end_line": 198197,
+            "sha256": "47edf53b3a3e0e82dd81316c145d0cebde72ad2bc5d2dfe3a35492e9cfbd2df2",
+            "text": "public class RemoteTimeService : IService, IInitializable, IDisposable, ISecondUpdate // TypeDefIndex: 4718\n{\n\t// Fields\n\tprivate HttpProxy _httpProxy; // 0x10\n\tprivate BackendEnvironmentConfig _backendEnvironmentConfig; // 0x18\n\tprivate CustomUpdater _customUpdater; // 0x20\n\t[CompilerGenerated]\n\tprivate DateTime <RemoteTime>k__BackingField; // 0x28\n\tprivate int _coolDownDurationAsSeconds; // 0x30\n\tprivate int _elapsedCoolDown; // 0x34\n\tprivate int _maxCoolDownDurationAsSeconds; // 0x38\n\t[CompilerGenerated]\n\tprivate bool <ByPassRemoteTimeCheck>k__BackingField; // 0x3C\n\n\t// Properties\n\tpublic DateTime RemoteTime { get; set; }\n\tpublic bool ByPassRemoteTimeCheck { get; set; }\n\n\t// Methods\n\n\t[CompilerGenerated]\n\t// RVA: 0x357FA94 Offset: 0x357FA94 VA: 0x357FA94\n\tpublic DateTime get_RemoteTime() { }\n\n\t[CompilerGenerated]\n\t// RVA: 0x357FA9C Offset: 0x357FA9C VA: 0x357FA9C\n\tprivate void set_RemoteTime(DateTime value) { }\n\n\t[CompilerGenerated]\n\t// RVA: 0x357FAA4 Offset: 0x357FAA4 VA: 0x357FAA4\n\tpublic bool get_ByPassRemoteTimeCheck() { }\n\n\t[CompilerGenerated]\n\t// RVA: 0x357FAAC Offset: 0x357FAAC VA: 0x357FAAC\n\tpublic void set_ByPassRemoteTimeCheck(bool value) { }\n\n\t// RVA: 0x357FAB8 Offset: 0x357FAB8 VA: 0x357FAB8\n\tpublic void .ctor(HttpProxy httpProxy, BackendEnvironmentConfig backendEnvironmentConfig, CustomUpdater customUpdater) { }\n\n\t// RVA: 0x357FB18 Offset: 0x357FB18 VA: 0x357FB18 Slot: 4\n\tpublic void Initialize() { }\n\n\t// RVA: 0x357FC64 Offset: 0x357FC64 VA: 0x357FC64 Slot: 5\n\tpublic void Dispose() { }\n\n\t// RVA: 0x357FC84 Offset: 0x357FC84 VA: 0x357FC84 Slot: 6\n\tpublic void SecondUpdate() { }\n\n\t// RVA: 0x3572F80 Offset: 0x3572F80 VA: 0x3572F80\n\tpublic bool IsRemoteDaySameWithLocalDay() { }\n\n\t[AsyncStateMachine(typeof(RemoteTimeService.<GetAndSetRemoteTime>d__19))]\n\t// RVA: 0x357FBAC Offset: 0x357FBAC VA: 0x357FBAC\n\tprivate void GetAndSetRemoteTime() { }\n\n\t[AsyncStateMachine(typeof(RemoteTimeService.<GetRemoteTime>d__20))]\n\t// RVA: 0x357FCD0 Offset: 0x357FCD0 VA: 0x357FCD0\n\tprivate Task<ApiResponse<RemoteTimeResponse>> GetRemoteTime() { }\n}",
+            "build": "0.0.3129 ARM64",
+            "kind": "metadata_declaration_not_method_body"
+          },
+          {
+            "file": "facts/review_20261116/current_build_inputs/libil2cpp.so",
+            "sha256": "d901f86380bdecae3a8ec5cf9a9b60acc5132d50dfcf7ec1f606de807e22b2d5",
+            "build": "0.0.3129 ARM64",
+            "kind": "native_instruction_bytes",
+            "start_va": "0x357fb18",
+            "end_va_exclusive": "0x357fba8",
+            "file_offset": "0x357fb18",
+            "bytes_sha256": "8fd5f2b720ba103efa22f267aeb47b7441eff66a90856e14b6655b4ef038a935"
+          },
+          {
+            "file": "facts/review_20261116/current_build_inputs/libil2cpp.so",
+            "sha256": "d901f86380bdecae3a8ec5cf9a9b60acc5132d50dfcf7ec1f606de807e22b2d5",
+            "build": "0.0.3129 ARM64",
+            "kind": "native_instruction_bytes",
+            "start_va": "0x3d4de60",
+            "end_va_exclusive": "0x3d4de68",
+            "file_offset": "0x3d4de60",
+            "bytes_sha256": "a111f275cc2e7588000001d300a31e76336d15b9d314cd1a1d8f3d3556975eed"
+          }
+        ]
+      }
+    ],
+    "historical_review_policy": "Existing15Nov fields/gap decisions retained unchanged. Current native review is independent; static evidence is not device acceptance."
+  }
+}

@@ -1,0 +1,358 @@
+{
+  "id": "Profile",
+  "feature": "Profile",
+  "name": "Hồ sơ (Profile)",
+  "category": "Social",
+  "category_label": "Xã hội",
+  "core_levels_last": false,
+  "acceptance_status": "documented_with_explicit_remaining_scope",
+  "full_feature_verified": false,
+  "checks": {
+    "purpose": {
+      "status": "documented_static_scope",
+      "source": "gdd/Profile.json#/summary",
+      "claim_excerpt": "Profile là danh tính công khai của người chơi: tên hiển thị, ảnh đại diện (8 avatar dựng sẵn + ảnh Facebook), token trang trí (huy hiệu bộ sưu tập), khung viền (frame) và kiểu chữ tên (name style) — trong đó frame/name style có thể có hạn dùng theo thời gian (Magic Pass). Hồ sơ hiện ở khắp nơi: chat đội, bảng xếp hạng, danh sách bạn bè; bấm vào một người chơi khác sẽ mở OtherUserProfilePopup với t"
+    },
+    "unlock": {
+      "status": "described_historical_conditions_runtime_boundary_unverified",
+      "source": "gdd/Profile.json#/unlock",
+      "content": "Có từ đầu game. Luồng bắt buộc nhập tên bật bằng remote config 'IsForcedNamePopupEnabled' (FirebaseRemoteConfigResolver) và được thực thi bởi TryShowForceNameChangeCommand (thuộc IHomeWelcomingSequenceCommand / IReturnToHomeSequenceCommand) với thuộc tính ShouldShowForce. Frame và name style chỉ mở khi người chơi sở hữu (PlayerService.GetProfileFrames / GetProfileNameStyles, ví dụ 'magic_pass_frame' từ Magic Pass)."
+    },
+    "entry_flow": {
+      "status": "documented_paths_not_all_executed",
+      "entry_points": [
+        "Nút hồ sơ ở Home (ProfileButton, OpenEditProfilePopupButton)",
+        "Popup chỉnh hồ sơ EditProfilePopup (localize 'EditProfilePopupTitle' = Edit Profile)",
+        "Popup nhập tên ProfileEnterNamePopup (bắt buộc hoặc tự nguyện)",
+        "Bấm vào avatar người chơi khác (ShowUserProfileButton → ShowUserProfileCommand)",
+        "Popup hồ sơ người khác OtherUserProfilePopup từ 10 nguồn (ShowProfileCommandSource)",
+        "Popup gắn token ProfileTokenEquipPopUp khi hoàn thành bộ sưu tập"
+      ],
+      "flow_source": "gdd/Profile.json#/flow",
+      "acceptance_scope": "Avatar/token/frame/name style/badwords/name change/local-server conflict; public display and fallback sprite"
+    },
+    "config": {
+      "status": "source_bound_catalog_present",
+      "gdd_rows": 22,
+      "full_leaf_rows_associated": 1,
+      "snapshots": {
+        "firebase_20260910": 1
+      },
+      "models": [
+        {
+          "model": "IsForcedNamePopupEnabled",
+          "matching_basis": [
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/Profile.json#/configs/13/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/Profile.json#/configs/21/key_where"
+            }
+          ]
+        }
+      ],
+      "declared_models_without_catalog_data": [],
+      "placeholder_rows_requiring_source_review": [
+        {
+          "index": 13,
+          "key": "IsForcedNamePopupEnabled",
+          "value": "server",
+          "source": "remote config"
+        }
+      ],
+      "exact_placeholder_snapshot_values": [
+        {
+          "gdd_config_index": 13,
+          "key": "IsForcedNamePopupEnabled",
+          "status": "no_unambiguous_exact_field_match",
+          "matches": [],
+          "basis": "Model explicitly cited in key/where, or sole declaredmodel; fieldpath exactcasefold, no alias guessing."
+        }
+      ],
+      "dossier_abbreviated_values": [],
+      "note": "Model association uses explicitmap or exacttoken citations; fieldpresence does not prove allproductiondata. GDDsummaryrows and fullcatalogrows have separate counts. Abbreviated source summaries are not full arrays; catalog/source links remain authoritative."
+    },
+    "reward": {
+      "status": "documented_static_rewards_runtime_grant_not_fully_verified",
+      "entries": 2,
+      "tables_in_site_meta": 3,
+      "source": "gdd/Profile.json#/rewards"
+    },
+    "use_cases": {
+      "status": "reviewed_branches_only",
+      "specified": 17,
+      "reviewed_uc_branch_count": 7,
+      "reviewed_uc_ids": [
+        "UC-02",
+        "UC-03",
+        "UC-05",
+        "UC-06",
+        "UC-07",
+        "UC-09",
+        "UC-15"
+      ],
+      "not_reviewed_in_new_ledger": [
+        "UC-01",
+        "UC-04",
+        "UC-08",
+        "UC-10",
+        "UC-11",
+        "UC-12",
+        "UC-13",
+        "UC-14",
+        "UC-16",
+        "UC-17"
+      ],
+      "full_uc_pass_claimed": false
+    },
+    "screenshots": {
+      "historical_gallery_entries": 5,
+      "historical_uc_with_image_reference": 5,
+      "curated_new_images": [
+        "MORE04_profile",
+        "MORE05_profile_edit",
+        "MORE06_avatar_selected",
+        "MORE07_avatar_save",
+        "MORE08_frames",
+        "MORE09_name_styles",
+        "MORE10_tokens",
+        "MORE11_token_locked",
+        "MORE13_rename_popup",
+        "MORE14_short_name",
+        "MORE15_name_cancel",
+        "MORE16_profile_cancelled"
+      ],
+      "curated_new_image_count": 12,
+      "status": "new_case_evidence_available",
+      "source": "screens/web/screens.json#/Profile",
+      "note": "Image presence does not prove execution result or completeness."
+    },
+    "runtime_actual": {
+      "status": "observed_subset_offline_fixture",
+      "case_count": 4,
+      "cases": [
+        {
+          "id": "MS-R15-META04",
+          "title": "Thống kê Profile sau level351",
+          "status": "observed_partial",
+          "uc": [
+            "UC-09"
+          ],
+          "actual": "Profile hiện level352, First Try Wins5, Broom Max Streak4; các mục league/cup/streak khác đang dấu gạch.",
+          "limitations": "Chỉ UI từ save/cache; không xác minh tính đúng toàn bộ lịch sử thống kê hoặc cập nhật server.",
+          "images": [
+            "MORE04_profile"
+          ],
+          "before": "MORE04_profile",
+          "after": "MORE04_profile"
+        },
+        {
+          "id": "MS-R15-META05",
+          "title": "Chọn avatar và Save khi offline",
+          "status": "verified_observed_branch",
+          "uc": [
+            "UC-03",
+            "UC-15"
+          ],
+          "actual": "Editor có8avatar. Chọn avatar thứ2 hiện checkmark; Save báo No Internet Connection. Sau đóng editor, Profile vẫn tên và avatar ban đầu.",
+          "limitations": "Không xác minh lưu thành công/đồng bộ; selection checkmark không được coi là avatar đã lưu. Không suy ra cache avatar người khác.",
+          "images": [
+            "MORE05_profile_edit",
+            "MORE06_avatar_selected",
+            "MORE07_avatar_save",
+            "MORE16_profile_cancelled"
+          ],
+          "before": "MORE05_profile_edit",
+          "after": "MORE16_profile_cancelled"
+        },
+        {
+          "id": "MS-R15-META06",
+          "title": "Frame, Name style và Token bị khóa",
+          "status": "observed_partial",
+          "uc": [
+            "UC-05",
+            "UC-06",
+            "UC-07"
+          ],
+          "actual": "Frame và Name chỉ hiện lựa chọn mặc định. Token Wonderland có khóa; popup Wonderland Badge! có nút Equip màu xám.",
+          "limitations": "Chỉ UI/gate; chưa sở hữu token, equip thành công, unlock hoặc dùng style khác. MORE12_name_edit thực tế vẫn token popup nên không đưa vào gallery.",
+          "images": [
+            "MORE08_frames",
+            "MORE09_name_styles",
+            "MORE10_tokens",
+            "MORE11_token_locked"
+          ],
+          "before": "MORE08_frames",
+          "after": "MORE11_token_locked"
+        },
+        {
+          "id": "MS-R15-META07",
+          "title": "Tên hai ký tự bị chặn, hủy giữ tên cũ",
+          "status": "verified_observed_branch",
+          "uc": [
+            "UC-02"
+          ],
+          "actual": "Nhập AB làm Continue xám và hiện Name should be at least3 valid characters! Sau hủy, Profile giữ tên ban đầu.",
+          "limitations": "Chưa kiểm tra đúng3ký tự, maximum, Unicode, profanity, rename thành công hoặc phí. Không ghi AB thành tên đã lưu.",
+          "images": [
+            "MORE13_rename_popup",
+            "MORE14_short_name",
+            "MORE15_name_cancel",
+            "MORE16_profile_cancelled"
+          ],
+          "before": "MORE13_rename_popup",
+          "after": "MORE16_profile_cancelled"
+        }
+      ],
+      "mode": "offline_existing_fixture",
+      "build": "0.0.3129 ARM64"
+    },
+    "segment_ab": {
+      "status": "not_identified_in_sources",
+      "segment_ids": [],
+      "matching_basis": "explicit_gd_config_map_or_exact_model_token_in_gdd_configs_where_key_sources; rootfieldscoped",
+      "rows": [],
+      "classifications": {},
+      "assignment_verified": false,
+      "uplift_verified": false,
+      "note": "No matchingrow does not prove no segmentation/AB. Rewardbucketfalsepositives remain explicitly classified."
+    },
+    "storage_backend_analytics": {
+      "storage_keys": {
+        "entries": 3,
+        "status": "documented_static_contract_runtime_not_verified",
+        "source": "gdd/Profile.json#/storage_keys"
+      },
+      "backend": {
+        "entries": 5,
+        "status": "documented_static_contract_runtime_not_verified",
+        "source": "gdd/Profile.json#/backend"
+      },
+      "analytics": {
+        "entries": 2,
+        "status": "documented_static_contract_runtime_not_verified",
+        "source": "gdd/Profile.json#/analytics"
+      }
+    },
+    "remaining_next_step": {
+      "gap_count": 5,
+      "static_scoped_resolutions": 3,
+      "remaining_count": 2,
+      "all_gap_dispositions": [
+        {
+          "id": "MS-Profile-G001",
+          "feature": "Profile",
+          "source": "gdd/Profile.json#/gaps/0",
+          "original": "Danh sách avatar/token trong asset là bản đóng gói; server có thể cấp thêm id không có sprite (khi đó FindSpriteById trả null).",
+          "current_note": "15/11 — resolved_historical_snapshot: ProfileSpriteConfig đóng gói 8 avatar, 10 token, 2 mục frame và 2 mục name style, cùng các tham chiếu Facebook. Đã xuất GUID, đường dẫn và hash của tài nguyên. Không công khai ProfileSpriteCache hoặc ảnh đại diện từ xa của người dùng. Còn lại: Giữ rõ build và phiên bản cache của nguồn; kiểm nhánh runtime riêng khi cần.",
+          "status": "resolved_historical_snapshot",
+          "review_status": "preserved_resolved_historical_snapshot",
+          "dependency": "local_asset_or_missing_bundle",
+          "next_action": "ProfileSpriteConfig đóng gói 8 avatar, 10 token, 2 mục frame và 2 mục name style, cùng các tham chiếu Facebook. Đã xuất GUID, đường dẫn và hash của tài nguyên. Không công khai ProfileSpriteCache hoặc ảnh đại diện từ xa của người dùng. Giữ rõ build và phiên bản cache của nguồn; kiểm nhánh runtime riêng khi cần.",
+          "conclusion": "ProfileSpriteConfig đóng gói 8 avatar, 10 token, 2 mục frame và 2 mục name style, cùng các tham chiếu Facebook. Đã xuất GUID, đường dẫn và hash của tài nguyên. Không công khai ProfileSpriteCache hoặc ảnh đại diện từ xa của người dùng.",
+          "evidence": [
+            "facts/remaining_asset_review_20261115/profile_references.json",
+            "facts/remaining_asset_review_20261115/asset_catalog.json"
+          ],
+          "remaining": "15/11 — resolved_historical_snapshot: ProfileSpriteConfig đóng gói 8 avatar, 10 token, 2 mục frame và 2 mục name style, cùng các tham chiếu Facebook. Đã xuất GUID, đường dẫn và hash của tài nguyên. Không công khai ProfileSpriteCache hoặc ảnh đại diện từ xa của người dùng. Còn lại: Giữ rõ build và phiên bản cache của nguồn; kiểm nhánh runtime riêng khi cần.",
+          "scope": "Asset/native export 0.0.3063 và cache UnityFS đọc ngày 15/11 từ app 0.0.3129 được giữ riêng; ảnh render asset không phải ảnh chụp playtest.",
+          "reviewed": "2026-11-15",
+          "full_uc_pass": false
+        },
+        {
+          "id": "MS-Profile-G002",
+          "feature": "Profile",
+          "source": "gdd/Profile.json#/gaps/1",
+          "original": "Bộ từ điển từ xấu của BadWordFilter nằm trong resource riêng, không liệt kê ở đây.",
+          "current_note": "Bộ từ điển từ xấu của BadWordFilter nằm trong resource riêng, không liệt kê ở đây.",
+          "status": "qualified_note_not_runtime_verification",
+          "review_status": "qualified_note_not_runtime_verification",
+          "dependency": "intentional_omission_or_scope_note",
+          "next_action": "Bộ badwords không cần in nguyên văn; ghi nguồn/count/normalization và ca test lọc đã khử nội dung nhạy cảm.",
+          "remaining": "Bộ từ điển từ xấu của BadWordFilter nằm trong resource riêng, không liệt kê ở đây."
+        },
+        {
+          "id": "MS-Profile-G003",
+          "feature": "Profile",
+          "source": "gdd/Profile.json#/gaps/2",
+          "original": "Điều kiện chính xác để TryShowForceNameChangeCommand.ShouldShowForce = true không đọc được rõ từ pseudo-C (suy luận: chưa có userName hoặc server yêu cầu đổi tên).",
+          "current_note": "15/11 — resolved_static_code_historical_build: TryShowForceNameChangeCommand.ShouldShowForce getter trả true; không phải gate eligibility. Initialize đặt _isSkippable = !SyncService.ShouldShowForceProfileNameChange. Sync method yêu cầu RootLevelConfigModel.IsForcedNamePopupEnabled, !IsNameChanged, PlayerPrefs ProfileNameChangeForceCount<2 và GetLevel()%50==36. IsNameChanged true khi tên không rỗng và không chứa player_. Do đó ví dụ level36/86/136 là gate mã cũ, không phải chỉ thiếu tên hoặc server yêu cầu tùy ý. Còn lại: Cần đối chiếu method/consumer trên app0.0.3129 ARM64; chưa là runtime pass.",
+          "status": "resolved_static_code_historical_build",
+          "review_status": "preserved_resolved_static_code_historical_build",
+          "dependency": "local_code_review",
+          "next_action": "TryShowForceNameChangeCommand.ShouldShowForce getter trả true; không phải gate eligibility. Initialize đặt _isSkippable = !SyncService.ShouldShowForceProfileNameChange. Sync method yêu cầu RootLevelConfigModel.IsForcedNamePopupEnabled, !IsNameChanged, PlayerPrefs ProfileNameChangeForceCount<2 và GetLevel()%50==36. IsNameChanged true khi tên không rỗng và không chứa player_. Do đó ví dụ level36/86/136 là gate mã cũ, không phải chỉ thiếu tên hoặc server yêu cầu tùy ý. Cần đối chiếu method/consumer trên app0.0.3129 ARM64; chưa là runtime pass.",
+          "conclusion": "TryShowForceNameChangeCommand.ShouldShowForce getter trả true; không phải gate eligibility. Initialize đặt _isSkippable = !SyncService.ShouldShowForceProfileNameChange. Sync method yêu cầu RootLevelConfigModel.IsForcedNamePopupEnabled, !IsNameChanged, PlayerPrefs ProfileNameChangeForceCount<2 và GetLevel()%50==36. IsNameChanged true khi tên không rỗng và không chứa player_. Do đó ví dụ level36/86/136 là gate mã cũ, không phải chỉ thiếu tên hoặc server yêu cầu tùy ý.",
+          "evidence": [
+            "../com.grandgames.magicsort_Unity_20260909_112501/RecoveredNative/PseudoC/Assembly-CSharp/Modules/Contexts/Home/Profile/Scripts/TryShowForceNameChangeCommand.c:567",
+            "../com.grandgames.magicsort_Unity_20260909_112501/RecoveredNative/PseudoC/Assembly-CSharp/Modules/Contexts/Home/Profile/Scripts/TryShowForceNameChangeCommand.c:679",
+            "../com.grandgames.magicsort_Unity_20260909_112501/RecoveredNative/PseudoC/Assembly-CSharp/Modules/Contexts/Application/ServerCommunication/Scripts/SyncService.c:4791",
+            "../com.grandgames.magicsort_Unity_20260909_112501/RecoveredNative/PseudoC/Assembly-CSharp/Modules/Contexts/Application/ServerCommunication/Scripts/SyncService.c:4880"
+          ],
+          "reviewed": "2026-11-15",
+          "mode": "file_only_recovered_native_0.0.3063",
+          "remaining": "15/11 — resolved_static_code_historical_build: TryShowForceNameChangeCommand.ShouldShowForce getter trả true; không phải gate eligibility. Initialize đặt _isSkippable = !SyncService.ShouldShowForceProfileNameChange. Sync method yêu cầu RootLevelConfigModel.IsForcedNamePopupEnabled, !IsNameChanged, PlayerPrefs ProfileNameChangeForceCount<2 và GetLevel()%50==36. IsNameChanged true khi tên không rỗng và không chứa player_. Do đó ví dụ level36/86/136 là gate mã cũ, không phải chỉ thiếu tên hoặc server yêu cầu tùy ý. Còn lại: Cần đối chiếu method/consumer trên app0.0.3129 ARM64; chưa là runtime pass."
+        },
+        {
+          "id": "MS-Profile-G004",
+          "feature": "Profile",
+          "source": "gdd/Profile.json#/gaps/3",
+          "original": "Giá trị cooldown tải ảnh (_coolDownDurationBetweenDownloadAsSeconds, _maxCoolDownDurationAsSeconds) đặt trong constructor/Initialize, chưa đọc được số cụ thể.",
+          "current_note": "15/11 — resolved_static_code_historical_build: ProfileSpriteHttpProvider.Initialize gán download-spacing0.1s, retry cooldown10s và maxcooldown200s. Các field nằm ở HTTP provider dưới namespace MagicStreakTournament, không ở ProfileSpriteCacheService constructor. Đây là timer init; success/retry/cancel runtime cần ledger/network fixture riêng. Còn lại: Cần đối chiếu method/consumer trên app0.0.3129 ARM64; chưa là runtime pass.",
+          "status": "resolved_static_code_historical_build",
+          "review_status": "preserved_resolved_static_code_historical_build",
+          "dependency": "local_code_review",
+          "next_action": "ProfileSpriteHttpProvider.Initialize gán download-spacing0.1s, retry cooldown10s và maxcooldown200s. Các field nằm ở HTTP provider dưới namespace MagicStreakTournament, không ở ProfileSpriteCacheService constructor. Đây là timer init; success/retry/cancel runtime cần ledger/network fixture riêng. Cần đối chiếu method/consumer trên app0.0.3129 ARM64; chưa là runtime pass.",
+          "conclusion": "ProfileSpriteHttpProvider.Initialize gán download-spacing0.1s, retry cooldown10s và maxcooldown200s. Các field nằm ở HTTP provider dưới namespace MagicStreakTournament, không ở ProfileSpriteCacheService constructor. Đây là timer init; success/retry/cancel runtime cần ledger/network fixture riêng.",
+          "evidence": [
+            "../com.grandgames.magicsort_Unity_20260909_112501/RecoveredNative/PseudoC/Assembly-CSharp/Modules/Contexts/Home/MagicStreakTournament/Scripts/ProfileSpriteHttpProvider.c:648"
+          ],
+          "reviewed": "2026-11-15",
+          "mode": "file_only_recovered_native_0.0.3063",
+          "remaining": "15/11 — resolved_static_code_historical_build: ProfileSpriteHttpProvider.Initialize gán download-spacing0.1s, retry cooldown10s và maxcooldown200s. Các field nằm ở HTTP provider dưới namespace MagicStreakTournament, không ở ProfileSpriteCacheService constructor. Đây là timer init; success/retry/cancel runtime cần ledger/network fixture riêng. Còn lại: Cần đối chiếu method/consumer trên app0.0.3129 ARM64; chưa là runtime pass."
+        },
+        {
+          "id": "MS-Profile-G005",
+          "feature": "Profile",
+          "source": "gdd/Profile.json#/gaps/4",
+          "original": "[Runtime 2026-09-10] Cờ AB/tinh chỉnh server-only đọc từ Firebase Remote Config (template 3197).",
+          "current_note": "[Runtime 2026-09-10] Cờ AB/tinh chỉnh server-only đọc từ Firebase Remote Config (template 3197).",
+          "status": "historical_evidence_annotation_not_test_result",
+          "review_status": "historical_evidence_annotation_not_test_result",
+          "dependency": "historical_note_requires_qualified_use",
+          "next_action": "Ghi chú Firebase template3197 lịch sử, chưa có experiment assignment/traffic/outcome; dùng bài21 và row classifications, không gọi mọi key là A/B.",
+          "remaining": "[Runtime 2026-09-10] Cờ AB/tinh chỉnh server-only đọc từ Firebase Remote Config (template 3197)."
+        }
+      ],
+      "feature_specific_acceptance_questions": [
+        "Avatar/token/frame/name style/badwords/name change/local-server conflict",
+        " public display and fallback sprite"
+      ],
+      "next_steps": [
+        "Bộ badwords không cần in nguyên văn; ghi nguồn/count/normalization và ca test lọc đã khử nội dung nhạy cảm.",
+        "Ghi chú Firebase template3197 lịch sử, chưa có experiment assignment/traffic/outcome; dùng bài21 và row classifications, không gọi mọi key là A/B."
+      ]
+    }
+  },
+  "use_cases": 17,
+  "configs": 22,
+  "new_review_case_count": 4,
+  "reviewed_uc_branch_count": 7,
+  "curated_new_image_count": 12,
+  "segment_ids": [],
+  "matching_basis": "explicit_gd_config_map_or_exact_model_token_in_gdd_configs_where_key_sources; rootfieldscoped",
+  "unmatched_segment_status": "not_identified_in_sources",
+  "local_document_repairs": [],
+  "sources": [
+    "Il2CppDumper/dump.cs: ProfileSpriteService, ProfileSpriteConfig, ProfileSprite, ProfileTokenSprite, ProfileFrameInfo, ProfileNameStyleInfo, ProfileInfo, PlayerService, PlayerModel, ProfileSpriteCacheService, ProfileSpritePersistenceService, ProfileSpriteHttpProvider, EditProfilePopup, ProfileEnterNamePopup, SaveProfileButtonHandler, ShowUserProfileCommand, ShowProfileCommandSource, OtherUserProfilePopup, UserProfileView, UserProfileModel, SocialProfilePhotoManager, BadWordManager",
+    "Assets/MonoBehaviour/ProfileSpriteConfig.asset (giá trị thật của images/tokens/frames/nameStyles)",
+    "RecoveredNative/PseudoC/Assembly-CSharp/Modules/Contexts/Home/UI/Profile/**, Home/Profile/**",
+    "RecoveredNative/strings-by-type.tsv (ProfileSpritePersistenceService, FacebookLoginService, BadWordFilter)",
+    "GameDesign/appendix/localization.tsv (Profile*, ProfilePopup*)"
+  ],
+  "source_hashes": {
+    "gdd_sha256": "7d64d3b16840e8775bc57e08bc4eff9fc323f9684611b944561c083c16f021aa",
+    "site_meta_sha256": "fc0ebb1cd90bdd35ce207cb119b31817bb2bb39cdbe3fc2dbdba18a38c94d12a"
+  }
+}

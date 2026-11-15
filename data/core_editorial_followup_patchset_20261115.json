@@ -1,0 +1,269 @@
+{
+  "schema_version": 1,
+  "scope": "proposal_only; no target writes",
+  "summary": {
+    "patch_count": 5
+  },
+  "patches": [
+    {
+      "id": "MS-CORE-FOLLOWUP-001",
+      "file": "gdd/Tutorial.json",
+      "absolute_file": "E:/APKExport/MagicSort_HExport/GameDesign/gdd/Tutorial.json",
+      "format": "json_pointer_replace",
+      "pointer": "/use_cases/7/steps/0",
+      "old": "BoosterManager.ShouldShowRevealTutorial() kiểm điều kiện (bàn có vật cản gỡ được, người chơi chưa dùng Reveal bao giờ)",
+      "new": "ShouldShowRevealTutorial: InGameBoosterVariant==2, !IsRevealIntroduced(), !SnitchService.ShouldShowLevelTutorial(), !ILevelManager.HasNewBlockerToIntroduce(), player.GetLevel()>9. Predicate không scan vật cản gỡ được và không đọc inventory count (native0.0.3063; chưa runtime0.0.3129).",
+      "finding_id": "MS-CORE-BODY-16",
+      "gap_id": "MS-Tutorial-G003",
+      "source": [
+        {
+          "file": "../com.grandgames.magicsort_Unity_20260909_112501/RecoveredNative/PseudoC/Assembly-CSharp/Modules/Contexts/GamePlay/Boosters/Scripts/BoosterManager.c",
+          "line": 5848,
+          "end_line": 6046,
+          "method": "// ===== BoosterManager :: private bool ShouldShowRevealTutorial(",
+          "sha256": "04ad36da41aaaf64fb299feb299c6512668cd1d3d0f1cb3d1139d2b234618daf",
+          "body_checked": true,
+          "build": "0.0.3063 ARMv7",
+          "required_body_tokens": []
+        },
+        {
+          "file": "../com.grandgames.magicsort_Unity_20260909_112501/RecoveredNative/PseudoC/Assembly-CSharp/Modules/Contexts/GamePlay/Boosters/Scripts/BoosterManager.c",
+          "line": 6203,
+          "end_line": 6401,
+          "method": "// ===== BoosterManager :: private bool ShouldShowMegaShuffleTutorial(",
+          "sha256": "04ad36da41aaaf64fb299feb299c6512668cd1d3d0f1cb3d1139d2b234618daf",
+          "body_checked": true,
+          "build": "0.0.3063 ARMv7",
+          "required_body_tokens": []
+        }
+      ],
+      "source_build": "0.0.3063 ARMv7",
+      "runtime_confirmation": "not_claimed",
+      "original_target_sha256": null,
+      "hash_note": "Exact current target snapshot before proposed followup; targets not modified by this tool.",
+      "already_applied": false,
+      "apply_rule": "Replace only current==old; skip current==new; conflict otherwise.",
+      "snapshot_sha256": "318714ef6964d461b367716fa725c69d99483d72d7f66f3d5113bf1e211d24af"
+    },
+    {
+      "id": "MS-CORE-FOLLOWUP-002",
+      "file": "gdd/Tutorial.json",
+      "absolute_file": "E:/APKExport/MagicSort_HExport/GameDesign/gdd/Tutorial.json",
+      "format": "json_pointer_replace",
+      "pointer": "/use_cases/7/steps/2",
+      "old": "BoosterManager.ShouldShowMegaShuffleTutorial() / StartMegaShuffleTutorial() tương tự khi bàn sắp kẹt",
+      "new": "ShouldShowMegaShuffleTutorial: InGameBoosterVariant==1, !IsMegaShuffleIntroduced(), !SnitchService.ShouldShowLevelTutorial(), !ILevelManager.HasNewBlockerToIntroduce(), player.GetLevel()>9. Không có stuck gate trong predicate; StartMegaShuffleTutorial thực hiện hướng dẫn sau khi predicate đạt (native0.0.3063).",
+      "finding_id": "MS-CORE-BODY-16",
+      "gap_id": "MS-Tutorial-G003",
+      "source": [
+        {
+          "file": "../com.grandgames.magicsort_Unity_20260909_112501/RecoveredNative/PseudoC/Assembly-CSharp/Modules/Contexts/GamePlay/Boosters/Scripts/BoosterManager.c",
+          "line": 5848,
+          "end_line": 6046,
+          "method": "// ===== BoosterManager :: private bool ShouldShowRevealTutorial(",
+          "sha256": "04ad36da41aaaf64fb299feb299c6512668cd1d3d0f1cb3d1139d2b234618daf",
+          "body_checked": true,
+          "build": "0.0.3063 ARMv7",
+          "required_body_tokens": []
+        },
+        {
+          "file": "../com.grandgames.magicsort_Unity_20260909_112501/RecoveredNative/PseudoC/Assembly-CSharp/Modules/Contexts/GamePlay/Boosters/Scripts/BoosterManager.c",
+          "line": 6203,
+          "end_line": 6401,
+          "method": "// ===== BoosterManager :: private bool ShouldShowMegaShuffleTutorial(",
+          "sha256": "04ad36da41aaaf64fb299feb299c6512668cd1d3d0f1cb3d1139d2b234618daf",
+          "body_checked": true,
+          "build": "0.0.3063 ARMv7",
+          "required_body_tokens": []
+        }
+      ],
+      "source_build": "0.0.3063 ARMv7",
+      "runtime_confirmation": "not_claimed",
+      "original_target_sha256": null,
+      "hash_note": "Exact current target snapshot before proposed followup; targets not modified by this tool.",
+      "already_applied": false,
+      "apply_rule": "Replace only current==old; skip current==new; conflict otherwise.",
+      "snapshot_sha256": "318714ef6964d461b367716fa725c69d99483d72d7f66f3d5113bf1e211d24af"
+    },
+    {
+      "id": "MS-CORE-FOLLOWUP-003",
+      "file": "gdd/MagicBottle.json",
+      "absolute_file": "E:/APKExport/MagicSort_HExport/GameDesign/gdd/MagicBottle.json",
+      "format": "json_pointer_replace",
+      "pointer": "/summary",
+      "old": "Magic Bottle là trợ thủ 'một chai thêm': người chơi thắng đủ số level ở Home để kích hoạt, sau đó mỗi ván sẽ được tặng thêm một chai trống trên bàn — thứ quý nhất trong game sắp xếp nước, vì một chai trống mở ra rất nhiều nước đi. Chai này bay vào bàn bằng một hoạt ảnh riêng (một cái gối/pillow hạ xuống rồi chai đáp lên). Trạng thái kích hoạt sống đến khi người chơi thua một ván, có popup Are You Sure cảnh báo trước khi bỏ ván, và một popup Congrats hoành tráng khi vừa kích hoạt xong. Tính năng do khoá remote config MagicBottleConfigModel điều khiển và không có file mặc định trong build, nghĩa là hoàn toàn phụ thuộc server. Trên bàn cờ còn có một biến thể họ hàng là ChargeableBottle — chai mini nạp lại được, dùng chung với biến thể ChargeableBottle của Super Charger.",
+      "new": "Magic Bottle là trợ thủ 'một chai thêm': người chơi thắng đủ số level ở Home để kích hoạt, sau đó mỗi ván sẽ được tặng thêm một chai trống trên bàn — thứ quý nhất trong game sắp xếp nước, vì một chai trống mở ra rất nhiều nước đi. Chai này bay vào bàn bằng một hoạt ảnh riêng (một cái gối/pillow hạ xuống rồi chai đáp lên). Trạng thái kích hoạt sống đến khi người chơi thua một ván, có popup Are You Sure cảnh báo trước khi bỏ ván, và một popup Congrats hoành tráng khi vừa kích hoạt xong. Tính năng do khoá remote config MagicBottleConfigModel điều khiển và không có file mặc định trong build, nghĩa là hoàn toàn phụ thuộc server. Trên bàn cờ còn có một biến thể họ hàng là ChargeableBottle — chai mini nạp lại được, dùng chung với biến thể ChargeableBottle của Super Charger. [Phạm vi bằng chứng15/11: AddBottleAsMagicBottle truyền bottleHeight=1 trong native0.0.3063. Pool/reset/water-state effective và build0.0.3129 chưa xác nhận; mô tả chai trống là thiết kế cần kiểm runtime, không phải kết quả đã pass.]",
+      "finding_id": "MS-CORE-BODY-09",
+      "gap_id": "MS-MagicBottle-G004",
+      "source": [
+        {
+          "file": "../com.grandgames.magicsort_Unity_20260909_112501/RecoveredNative/PseudoC/Assembly-CSharp/Modules/Contexts/GamePlay/MagicBottle/Scripts/MagicBottleInGameManager.c",
+          "line": 78,
+          "end_line": 165,
+          "method": "// ===== MagicBottleInGameManager :: public void AddMagicBottleAndHide(",
+          "sha256": "c3cf4fafb00006c993e28b73b9d44963e751e467a4073f4c206a52665ea1c7e9",
+          "body_checked": true,
+          "build": "0.0.3063 ARMv7",
+          "required_body_tokens": []
+        },
+        {
+          "file": "../com.grandgames.magicsort_Unity_20260909_112501/RecoveredNative/PseudoC/Assembly-CSharp/Modules/Contexts/GamePlay/Board/Common/Scripts/BottleCollection.c",
+          "line": 10112,
+          "end_line": 10269,
+          "method": "// ===== BottleCollection :: public BottleItem AddBottleAsMagicBottle(",
+          "sha256": "63a000c895d1bea54297896e5fde02f69b55f1759e9889f6b88e0ccf36794387",
+          "body_checked": true,
+          "build": "0.0.3063 ARMv7",
+          "required_body_tokens": []
+        },
+        {
+          "file": "../com.grandgames.magicsort_Unity_20260909_112501/RecoveredNative/PseudoC/Assembly-CSharp/Modules/Contexts/GamePlay/Board/Common/Scripts/BottleCollection.c",
+          "line": 10913,
+          "end_line": 11289,
+          "method": "// ===== BottleCollection :: private BottleItem AddBottle(",
+          "sha256": "63a000c895d1bea54297896e5fde02f69b55f1759e9889f6b88e0ccf36794387",
+          "body_checked": true,
+          "build": "0.0.3063 ARMv7",
+          "required_body_tokens": []
+        },
+        {
+          "file": "../com.grandgames.magicsort_Unity_20260909_112501/RecoveredNative/PseudoC/Assembly-CSharp/Modules/Contexts/GamePlay/BoardItems/Scripts/Generation/ItemFactory.c",
+          "line": 281,
+          "end_line": 356,
+          "method": "// ===== ItemFactory :: public BottleItem GetBottleItem(",
+          "sha256": "5084765a0cfbfdda4b98d5689fbc5efc6db13d35069a65c37f771cea80c00d62",
+          "body_checked": true,
+          "build": "0.0.3063 ARMv7",
+          "required_body_tokens": []
+        }
+      ],
+      "source_build": "0.0.3063 ARMv7",
+      "runtime_confirmation": "not_claimed",
+      "original_target_sha256": null,
+      "hash_note": "Exact current target snapshot before proposed followup; targets not modified by this tool.",
+      "already_applied": false,
+      "apply_rule": "Replace only current==old; skip current==new; conflict otherwise.",
+      "snapshot_sha256": "86ad2e4a0c67a93642d52e79cbeaf313ebf1c7b37fa662756522d84ed29abee5"
+    },
+    {
+      "id": "MS-CORE-FOLLOWUP-004",
+      "file": "gdd/MagicBottle.json",
+      "absolute_file": "E:/APKExport/MagicSort_HExport/GameDesign/gdd/MagicBottle.json",
+      "format": "json_pointer_replace",
+      "pointer": "/use_cases/7/result",
+      "old": "Bàn có thêm 1 chai trống — tăng đáng kể không gian nước đi",
+      "new": "Bàn có thêm 1 chai trống — tăng đáng kể không gian nước đi [Phạm vi bằng chứng15/11: AddBottleAsMagicBottle truyền bottleHeight=1 trong native0.0.3063. Pool/reset/water-state effective và build0.0.3129 chưa xác nhận; mô tả chai trống là thiết kế cần kiểm runtime, không phải kết quả đã pass.]",
+      "finding_id": "MS-CORE-BODY-09",
+      "gap_id": "MS-MagicBottle-G004",
+      "source": [
+        {
+          "file": "../com.grandgames.magicsort_Unity_20260909_112501/RecoveredNative/PseudoC/Assembly-CSharp/Modules/Contexts/GamePlay/MagicBottle/Scripts/MagicBottleInGameManager.c",
+          "line": 78,
+          "end_line": 165,
+          "method": "// ===== MagicBottleInGameManager :: public void AddMagicBottleAndHide(",
+          "sha256": "c3cf4fafb00006c993e28b73b9d44963e751e467a4073f4c206a52665ea1c7e9",
+          "body_checked": true,
+          "build": "0.0.3063 ARMv7",
+          "required_body_tokens": []
+        },
+        {
+          "file": "../com.grandgames.magicsort_Unity_20260909_112501/RecoveredNative/PseudoC/Assembly-CSharp/Modules/Contexts/GamePlay/Board/Common/Scripts/BottleCollection.c",
+          "line": 10112,
+          "end_line": 10269,
+          "method": "// ===== BottleCollection :: public BottleItem AddBottleAsMagicBottle(",
+          "sha256": "63a000c895d1bea54297896e5fde02f69b55f1759e9889f6b88e0ccf36794387",
+          "body_checked": true,
+          "build": "0.0.3063 ARMv7",
+          "required_body_tokens": []
+        },
+        {
+          "file": "../com.grandgames.magicsort_Unity_20260909_112501/RecoveredNative/PseudoC/Assembly-CSharp/Modules/Contexts/GamePlay/Board/Common/Scripts/BottleCollection.c",
+          "line": 10913,
+          "end_line": 11289,
+          "method": "// ===== BottleCollection :: private BottleItem AddBottle(",
+          "sha256": "63a000c895d1bea54297896e5fde02f69b55f1759e9889f6b88e0ccf36794387",
+          "body_checked": true,
+          "build": "0.0.3063 ARMv7",
+          "required_body_tokens": []
+        },
+        {
+          "file": "../com.grandgames.magicsort_Unity_20260909_112501/RecoveredNative/PseudoC/Assembly-CSharp/Modules/Contexts/GamePlay/BoardItems/Scripts/Generation/ItemFactory.c",
+          "line": 281,
+          "end_line": 356,
+          "method": "// ===== ItemFactory :: public BottleItem GetBottleItem(",
+          "sha256": "5084765a0cfbfdda4b98d5689fbc5efc6db13d35069a65c37f771cea80c00d62",
+          "body_checked": true,
+          "build": "0.0.3063 ARMv7",
+          "required_body_tokens": []
+        }
+      ],
+      "source_build": "0.0.3063 ARMv7",
+      "runtime_confirmation": "not_claimed",
+      "original_target_sha256": null,
+      "hash_note": "Exact current target snapshot before proposed followup; targets not modified by this tool.",
+      "already_applied": false,
+      "apply_rule": "Replace only current==old; skip current==new; conflict otherwise.",
+      "snapshot_sha256": "86ad2e4a0c67a93642d52e79cbeaf313ebf1c7b37fa662756522d84ed29abee5"
+    },
+    {
+      "id": "MS-CORE-FOLLOWUP-005",
+      "file": "gdd/MagicBottle.json",
+      "absolute_file": "E:/APKExport/MagicSort_HExport/GameDesign/gdd/MagicBottle.json",
+      "format": "json_pointer_replace",
+      "pointer": "/rewards/0/reward",
+      "old": "1 chai trống thêm trên bàn ở mỗi level, cho tới khi thua",
+      "new": "1 chai trống thêm trên bàn ở mỗi level, cho tới khi thua [Phạm vi bằng chứng15/11: AddBottleAsMagicBottle truyền bottleHeight=1 trong native0.0.3063. Pool/reset/water-state effective và build0.0.3129 chưa xác nhận; mô tả chai trống là thiết kế cần kiểm runtime, không phải kết quả đã pass.]",
+      "finding_id": "MS-CORE-BODY-09",
+      "gap_id": "MS-MagicBottle-G004",
+      "source": [
+        {
+          "file": "../com.grandgames.magicsort_Unity_20260909_112501/RecoveredNative/PseudoC/Assembly-CSharp/Modules/Contexts/GamePlay/MagicBottle/Scripts/MagicBottleInGameManager.c",
+          "line": 78,
+          "end_line": 165,
+          "method": "// ===== MagicBottleInGameManager :: public void AddMagicBottleAndHide(",
+          "sha256": "c3cf4fafb00006c993e28b73b9d44963e751e467a4073f4c206a52665ea1c7e9",
+          "body_checked": true,
+          "build": "0.0.3063 ARMv7",
+          "required_body_tokens": []
+        },
+        {
+          "file": "../com.grandgames.magicsort_Unity_20260909_112501/RecoveredNative/PseudoC/Assembly-CSharp/Modules/Contexts/GamePlay/Board/Common/Scripts/BottleCollection.c",
+          "line": 10112,
+          "end_line": 10269,
+          "method": "// ===== BottleCollection :: public BottleItem AddBottleAsMagicBottle(",
+          "sha256": "63a000c895d1bea54297896e5fde02f69b55f1759e9889f6b88e0ccf36794387",
+          "body_checked": true,
+          "build": "0.0.3063 ARMv7",
+          "required_body_tokens": []
+        },
+        {
+          "file": "../com.grandgames.magicsort_Unity_20260909_112501/RecoveredNative/PseudoC/Assembly-CSharp/Modules/Contexts/GamePlay/Board/Common/Scripts/BottleCollection.c",
+          "line": 10913,
+          "end_line": 11289,
+          "method": "// ===== BottleCollection :: private BottleItem AddBottle(",
+          "sha256": "63a000c895d1bea54297896e5fde02f69b55f1759e9889f6b88e0ccf36794387",
+          "body_checked": true,
+          "build": "0.0.3063 ARMv7",
+          "required_body_tokens": []
+        },
+        {
+          "file": "../com.grandgames.magicsort_Unity_20260909_112501/RecoveredNative/PseudoC/Assembly-CSharp/Modules/Contexts/GamePlay/BoardItems/Scripts/Generation/ItemFactory.c",
+          "line": 281,
+          "end_line": 356,
+          "method": "// ===== ItemFactory :: public BottleItem GetBottleItem(",
+          "sha256": "5084765a0cfbfdda4b98d5689fbc5efc6db13d35069a65c37f771cea80c00d62",
+          "body_checked": true,
+          "build": "0.0.3063 ARMv7",
+          "required_body_tokens": []
+        }
+      ],
+      "source_build": "0.0.3063 ARMv7",
+      "runtime_confirmation": "not_claimed",
+      "original_target_sha256": null,
+      "hash_note": "Exact current target snapshot before proposed followup; targets not modified by this tool.",
+      "already_applied": false,
+      "apply_rule": "Replace only current==old; skip current==new; conflict otherwise.",
+      "snapshot_sha256": "86ad2e4a0c67a93642d52e79cbeaf313ebf1c7b37fa662756522d84ed29abee5"
+    }
+  ]
+}

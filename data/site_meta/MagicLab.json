@@ -1,0 +1,188 @@
+{
+  "id": "MagicLab",
+  "title": "Magic Lab (Phòng thí nghiệm phép)",
+  "tagline": "Sự kiện nhiệm vụ nhiều chặng: hoàn thành quest từ mọi hệ thống khác để trộn chai phép và mở rương.",
+  "infobox": [
+    ["Loại", "Sự kiện solo"],
+    ["Mở khóa", "Level 100 (MagicLabConfigModel.FirstLevelToShow, mặc định client)"],
+    ["Thời lượng", "Theo StartTime → FinishTime của mùa do server gửi"],
+    ["Chu kỳ / lịch", "Từng mùa, server phát qua GetEventInfo với EventType = 19 (mặc định client)"],
+    ["Tham gia", "Người chơi đơn"],
+    ["Vật phẩm thu thập", "Chai phép đổ vào vạc (mỗi nhiệm vụ hoàn thành = 1 chai)"],
+    ["Thưởng chính", "Rương của từng Stage (nội dung do server gửi)"],
+    ["Điều kiện / phụ thuộc", "MagicLabConfigModel.IsEnabled = true và có cache sự kiện hợp lệ"],
+    ["Manager", "MagicLabService (kèm MagicLabDataService, MagicLabStateService, MagicLabRemoteService)"]
+  ],
+  "description": [
+    "Magic Lab là sự kiện nhiệm vụ nhiều chặng: server phát một bộ Stage, mỗi Stage gồm nhiều nhiệm vụ có loại và số lượng riêng.",
+    "Có 10 loại nhiệm vụ: thắng level Super Hard, thắng Jetpack Race, đạt bước Magic Streak / Broom Streak / Wheel Of Fortune, thắng Duck Festival, hoàn thành chặng mini-game, gom thẻ Collection, kiếm coin, thắng first-try.",
+    "Người chơi không thao tác trực tiếp trong Magic Lab — tiến độ đến từ mọi hệ thống khác, nên đây là lớp meta gắn kết các mini-event.",
+    "Hoàn thành đủ nhiệm vụ của một Stage sẽ trộn đủ chai phép trong vạc và mở rương thưởng của Stage đó.",
+    "Nhiệm vụ chia hai kiểu: cộng dồn (increase) và đạt mốc (reach) — kiểu reach đặt CurrentAmount = giá trị đã đạt nên không đếm trùng.",
+    "Ngay khi sự kiện bắt đầu, các nhiệm vụ dạng mốc được đồng bộ với tiến độ streak/wheel hiện có để người chơi không bị thiệt.",
+    "Sự kiện có thời hạn; hết giờ, phần thưởng còn lại được auto-claim nếu server bật AutoClaimEnabled.",
+    "Rương đổi nội dung khi Collection đang chạy: Stage dùng RewardModelWithCollection thay cho RewardModel để chèn gói thẻ.",
+    "Popup tự ép mở khi người chơi vừa hoàn thành nhiệm vụ thứ hai trong một Stage, mỗi Stage chỉ ép mở đúng một lần.",
+    "Popup hướng dẫn 4 bước chỉ hiện một lần cho cả đời tài khoản, các mùa sau chỉ mở ở chế độ FirstShow."
+  ],
+  "notes": [
+    "Lưu ý: mặc định client MagicLabConfigModel.IsEnabled = false, EventType = 19, FirstLevelToShow = 100, AutoClaimEnabled = false — server ghi đè.",
+    "Lưu ý: số Stage, số nhiệm vụ mỗi Stage, RequiredAmount và nội dung thưởng đều do server gửi trong MagicLabEventInfoResponse; client không có bảng mặc định.",
+    "Lưu ý: nếu AutoClaimEnabled = false thì thưởng chưa nhận sẽ mất khi hết giờ (suy luận từ việc ClaimEvent chỉ chạy qua CanAutoClaimEvent).",
+    "Lưu ý: MagicLabStateService.CanIncreaseTaskProgress() chặn mọi cập nhật tiến độ khi trạng thái không phải InProgress.",
+    "Lưu ý: mất mạng vẫn chơi được — sự kiện chạy theo FinishTime trong cache, tiến độ vẫn cộng và đồng bộ lại khi có mạng.",
+    "Lưu ý: MagicLabRemoteService chỉ có GetEventInfo — không có lệnh Claim gửi lên server, trạng thái claim chỉ đồng bộ qua SyncService.",
+    "Lưu ý: cờ IsEventIntroducedEverInLifeTime là cờ lifetime, tách khỏi cache của từng mùa."
+  ],
+  "how_it_works": [
+    "Vào Home hoặc mỗi IntervalUpdate, MagicLabStateService.GetEventState() kiểm tra lần lượt IsEnabled → level vs FirstLevelToShow → IsEventCached → IsIntroduced → IsTimeUp → IsClaimed.",
+    "Trạng thái đổi thì phát MagicLabEventStateChangedSignal cho các hệ thống khác cập nhật icon và popup.",
+    "Khi ShouldFetchCurrentEvent(), MagicLabRemoteService.GetEventInfo(EventType) gửi MagicLabEventInfoRequestModel và nhận EventId, TournamentType, StartTime, FinishTime, Segment, Stages[].",
+    "TryStartNewEvent() chuyển từng MagicLabRemoteStageModel thành MagicLabStage cục bộ với các MagicLabTaskModel có CurrentAmount = 0, CompletedSeen = false; CurrentStage = 0, LastSeenStage = 0.",
+    "EventSender bắn magic_lab_start kèm readable_event_id định dạng \"ml_{0}_{1:yyyyMMdd}_{2:yyyyMMdd}\" (fallback \"ml_unknown_data\").",
+    "TryReachTaskStepsOnEventStart() đồng bộ ngay các nhiệm vụ MagicStreakStepReach, BroomStreakStepReach, WheelOfFortuneStageReach với tiến độ hiện có.",
+    "Lần đầu vào, popup mở ở chế độ FirstShowEver kèm MagicLabInfoPopup 4 bước (Complete all quests → Collect magic bottles → Mix in the magic cauldron → Win amazing rewards).",
+    "Trong lúc chơi, các hệ thống nguồn gọi TryIncreaseTaskProgress(taskType, amount = 1) hoặc TryReachTaskProgress(taskType, reachedProgress).",
+    "IncreaseTaskProgressAndGetStageIfCompleted cộng CurrentAmount và kẹp ở RequiredAmount; hoàn thành thì trả stageId và bắn magic_lab_task_completed.",
+    "Vạc MagicLabCauldronView nhận thêm một chai phép cho mỗi nhiệm vụ hoàn thành; icon lobby bật MagicLabLobbyButtonAlertView.",
+    "Khi IsAllTasksCompletedInStage(stageId), UpdateCurrentStage() nâng CurrentStage và bắn magic_lab_stage_completed.",
+    "Người chơi bấm rương: TryClaimStage(stageId) kiểm tra IsStageRewardsEligible, GetStageRewardModels chọn RewardModel hay RewardModelWithCollection, ConvertRewardListToChestReward gộp thành một rương.",
+    "RewardService trao với CurrencyEarnReason.MagicLab (26); Stage đặt IsClaimed = true và bắn magic_lab_stage_claimed.",
+    "Hoàn thành hết mọi Stage → IsAllTasksCompletedInAllStages() = true, popup chuyển sang MagicLabPopUpState.Result và bắn magic_lab_completed.",
+    "Hết giờ: nếu AutoClaimEnabled và CanAutoClaimEvent() thì ClaimEvent() trao mọi rương còn eligible, đặt IsClaimed = true, bắn magic_lab_finished kèm completed_stage_count và claimed_chest_count."
+  ],
+  "reward_tables": [
+    {
+      "title": "PHẦN THƯỞNG MAGIC LAB",
+      "columns": ["Mốc", "Điều kiện", "Phần thưởng"],
+      "rows": [
+        ["Rương mỗi Stage", "Hoàn thành mọi nhiệm vụ của Stage đó", "MagicLabStage.RewardModel gộp thành 1 rương (server)"],
+        ["Rương mỗi Stage khi Collection đang chạy", "Stage có RewardModelWithCollection", "Rương kèm gói thẻ Collection (server)"],
+        ["Auto-claim khi hết giờ", "AutoClaimEnabled = true và còn rương eligible", "Mọi rương Stage còn lại được trao một lượt (server)"]
+      ]
+    },
+    {
+      "title": "10 LOẠI NHIỆM VỤ (MagicLabTaskType)",
+      "columns": ["Giá trị", "Loại nhiệm vụ", "Kiểu tính"],
+      "rows": [
+        ["0", "None", "-"],
+        ["1", "SuperHardLevel — thắng level Super Hard", "Cộng dồn"],
+        ["2", "JetpackRaceWin — thắng Jetpack Race", "Cộng dồn"],
+        ["3", "MagicStreakStepReach — đạt bước trong Magic Streak", "Đạt mốc"],
+        ["4", "BroomStreakStepReach — đạt bước trong Broom Streak", "Đạt mốc"],
+        ["5", "DuckFestivalWin — thắng Duck Festival", "Cộng dồn"],
+        ["6", "WheelOfFortuneStageReach — đạt chặng Wheel Of Fortune", "Đạt mốc"],
+        ["7", "MinigameStageComplete — hoàn thành chặng mini-game", "Cộng dồn"],
+        ["8", "CollectCards — gom thẻ Collection", "Cộng dồn"],
+        ["9", "EarnCoin — kiếm coin", "Cộng dồn"],
+        ["10", "FirstTryWin — thắng ngay lần thử đầu", "Cộng dồn"]
+      ]
+    },
+    {
+      "title": "MÁY TRẠNG THÁI SỰ KIỆN (MagicLabStateType)",
+      "columns": ["Giá trị", "Trạng thái", "Ý nghĩa"],
+      "rows": [
+        ["0", "NoCachedEvent", "Chưa có cache sự kiện, icon lobby ẩn"],
+        ["1", "NotIntroduced", "Có sự kiện nhưng chưa xem giới thiệu"],
+        ["2", "InProgress", "Đang chạy, được phép tăng tiến độ"],
+        ["3", "TimeIsUp", "Hết giờ, chưa claim"],
+        ["4", "Claimed", "Đã nhận hết thưởng"],
+        ["5", "ClaimedAndTimeIsUp", "Đã nhận và đã hết giờ"],
+        ["6", "InsufficientLevel", "Level người chơi dưới FirstLevelToShow"],
+        ["7", "Disable", "Server tắt tính năng"]
+      ]
+    },
+    {
+      "title": "CHẾ ĐỘ HIỂN THỊ POPUP (MagicLabPopUpState)",
+      "columns": ["Giá trị", "Chế độ", "Khi nào"],
+      "rows": [
+        ["0", "FirstShowEver", "Lần đầu tiên trong đời tài khoản"],
+        ["1", "FirstShow", "Lần đầu của mùa mới"],
+        ["2", "InProgress", "Đang chơi giữa mùa"],
+        ["3", "Result", "Đã hoàn thành mọi Stage"]
+      ]
+    },
+    {
+      "title": "CẤU HÌNH MẶC ĐỊNH (MagicLabConfigModel.json)",
+      "columns": ["Khoá", "Giá trị mặc định", "Ý nghĩa"],
+      "rows": [
+        ["IsEnabled", "false", "Bật/tắt Magic Lab"],
+        ["EventType", "19", "Loại sự kiện gửi lên GetEventInfo"],
+        ["FirstLevelToShow", "100", "Level tối thiểu để mở sự kiện"],
+        ["AutoClaimEnabled", "false", "Cho phép tự nhận thưởng khi hết giờ"]
+      ]
+    },
+    {
+      "title": "SỰ KIỆN ANALYTICS",
+      "columns": ["Event", "Tham số chính", "Khi nào"],
+      "rows": [
+        ["magic_lab_start", "event_id, readable_event_id, segment, tournament_start_time, remaining_duration, progress", "Bắt đầu mùa mới"],
+        ["magic_lab_info_impression", "current_stage, event_id, segment, progress", "Mở MagicLabInfoPopup"],
+        ["magic_lab_task_completed", "current_stage, completed_task_stage, task_no, remaining_task_count, remaining_duration", "Hoàn thành 1 nhiệm vụ"],
+        ["magic_lab_stage_completed", "completed_stage, completed_task_count_nextstage, remaining_duration", "Hoàn thành mọi nhiệm vụ của 1 Stage"],
+        ["magic_lab_stage_claimed", "claimed_stage, current_stage, event_id, segment", "Nhận rương Stage"],
+        ["magic_lab_completed", "remaining_duration, event_id, segment, progress", "Hoàn thành toàn bộ Stage"],
+        ["magic_lab_finished", "completed_stage_count, claimed_chest_count, event_id, segment", "Sự kiện kết thúc / auto-claim"],
+        ["earned", "reason = MagicLab, coin/life/undo/shuffle/extra_bottle/collection_pack_*", "Trao thưởng rương"]
+      ]
+    }
+  ],
+  "key_numbers": [
+    {"label": "Số loại nhiệm vụ", "value": "10 (giá trị 1–10, kèm None = 0)", "source": "MagicLabTaskType"},
+    {"label": "Số trạng thái sự kiện", "value": "8 (0–7)", "source": "MagicLabStateType"},
+    {"label": "Số chế độ popup", "value": "4 (0–3)", "source": "MagicLabPopUpState"},
+    {"label": "Bật/tắt mặc định", "value": "IsEnabled = false", "source": "MagicLabConfigModel.json"},
+    {"label": "Loại sự kiện mặc định", "value": "EventType = 19", "source": "MagicLabConfigModel.json"},
+    {"label": "Level mở khoá mặc định", "value": "100", "source": "MagicLabConfigModel.json: FirstLevelToShow"},
+    {"label": "Auto-claim mặc định", "value": "false", "source": "MagicLabConfigModel.json: AutoClaimEnabled"},
+    {"label": "Lý do nhận thưởng", "value": "CurrencyEarnReason.MagicLab = 26", "source": "CurrencyEarnReason"},
+    {"label": "Định dạng readable event id", "value": "\"ml_{0}_{1:yyyyMMdd}_{2:yyyyMMdd}\"", "source": "MagicLabService.GetReadableEventId"},
+    {"label": "Fallback readable event id", "value": "\"ml_unknown_data\"", "source": "MagicLabService.GetReadableEventId"},
+    {"label": "Số bước trong popup hướng dẫn", "value": "4 (MagicLabInfoPopup1..4)", "source": "MagicLabInfoPopup"},
+    {"label": "Ngưỡng ép mở popup", "value": "2 nhiệm vụ hoàn thành trong một Stage", "source": "MagicLabService.ShouldShowTwoTasksCompletedForcePopUp"},
+    {"label": "Số lần ép mở popup mỗi Stage", "value": "1 (cờ TwoTasksCompletedForcePopUpShowed)", "source": "MagicLabStage"},
+    {"label": "Khoá lưu/đồng bộ", "value": "\"MagicLabModel\"", "source": "MagicLabDataService.GetSyncName"},
+    {"label": "Số Stage mỗi mùa", "value": "(server) — trong MagicLabEventInfoResponse.Stages[]", "source": "MagicLabRemoteService.GetEventInfo"},
+    {"label": "Số nhiệm vụ mỗi Stage", "value": "(server)", "source": "MagicLabRemoteStageModel.MagicLabTaskModels"},
+    {"label": "Số lượng cần đạt mỗi nhiệm vụ", "value": "(server) — RequiredAmount", "source": "MagicLabRemoteTaskModel"},
+    {"label": "Thời gian bắt đầu / kết thúc mùa", "value": "(server) — StartTime, FinishTime", "source": "MagicLabEventInfoResponse"},
+    {"label": "Nhãn nút chặng", "value": "\"Stage\"", "source": "MagicLabStageButton.stage_localization_term"},
+    {"label": "Số sự kiện analytics riêng", "value": "7 event magic_lab_* cộng event earned", "source": "EventSender.SendMagicLab*"},
+    {"label": "Số field trong MagicLabPopUpConfig", "value": "11", "source": "MagicLabPopUpConfig"},
+    {"label": "Backend của tính năng", "value": "GetEventInfo (không có lệnh Claim)", "source": "MagicLabRemoteService"}
+  ],
+  "config_highlights": [
+    {"key": "MagicLabConfigModel.json: IsEnabled", "value": "false", "meaning": "Bật/tắt Magic Lab (client default, remote config ghi đè)"},
+    {"key": "MagicLabConfigModel.json: EventType", "value": "19", "meaning": "Loại sự kiện gửi lên GetEventInfo"},
+    {"key": "MagicLabConfigModel.json: FirstLevelToShow", "value": "100", "meaning": "Level tối thiểu để mở sự kiện"},
+    {"key": "MagicLabConfigModel.json: AutoClaimEnabled", "value": "false", "meaning": "Cho phép tự nhận thưởng khi hết giờ"},
+    {"key": "MagicLabEventInfoResponse", "value": "EventId, TournamentType, StartTime, FinishTime, Segment, Stages[] (server)", "meaning": "Toàn bộ nội dung một mùa Magic Lab"},
+    {"key": "MagicLabRemoteStageModel", "value": "Id, RewardModels, RewardModelsWithCollection, MagicLabTaskModels (server)", "meaning": "Một chặng: thưởng và danh sách nhiệm vụ"},
+    {"key": "MagicLabRemoteTaskModel", "value": "MagicLabTaskType, RequiredAmount (server)", "meaning": "Loại nhiệm vụ và số lượng cần đạt"},
+    {"key": "MagicLabTaskType", "value": "None=0, SuperHardLevel=1, JetpackRaceWin=2, MagicStreakStepReach=3, BroomStreakStepReach=4, DuckFestivalWin=5, WheelOfFortuneStageReach=6, MinigameStageComplete=7, CollectCards=8, EarnCoin=9, FirstTryWin=10", "meaning": "10 loại nhiệm vụ"},
+    {"key": "MagicLabStateType", "value": "NoCachedEvent=0, NotIntroduced=1, InProgress=2, TimeIsUp=3, Claimed=4, ClaimedAndTimeIsUp=5, InsufficientLevel=6, Disable=7", "meaning": "Máy trạng thái sự kiện"},
+    {"key": "MagicLabPopUpState", "value": "FirstShowEver=0, FirstShow=1, InProgress=2, Result=3", "meaning": "Chế độ hiển thị popup"},
+    {"key": "MagicLabStageButton.stage_localization_term", "value": "\"Stage\"", "meaning": "Nhãn nút chặng"},
+    {"key": "readable event id format", "value": "\"ml_{0}_{1:yyyyMMdd}_{2:yyyyMMdd}\" (fallback \"ml_unknown_data\")", "meaning": "Id dễ đọc cho analytics"},
+    {"key": "CurrencyEarnReason.MagicLab", "value": "26", "meaning": "Lý do nhận thưởng ghi vào analytics 'earned'"},
+    {"key": "MagicLabPopUpConfig", "value": "_magicLabTaskIcons, _progressBarWidth, _progressBarFilledSprite, _progressBarNotFilledSprite, _completedTextScaleCurve, ProgressBarMinFillRatio, StageTaskPopUpOptions, SfxDelay… (11 field)", "meaning": "Icon nhiệm vụ, kích thước và hiệu ứng thanh tiến độ, delay âm thanh"},
+    {"key": "MagicLabTaskConfigsByType", "value": "MagicLabTaskType, Sprite, SpriteSize, DescriptionLocalizationKey, PluralDescriptionLocalizationKey, ToolbarDescriptionLocalizationKey, PluralToolbarDescriptionLocalizationKey", "meaning": "Ánh xạ mỗi loại nhiệm vụ sang icon và câu mô tả"},
+    {"key": "MagicLabModel (sync name)", "value": "\"MagicLabModel\"", "meaning": "Tên bản ghi lưu/đồng bộ"},
+    {"key": "MagicLabCacheModel", "value": "EventId, EventType, Segment, StartTime, FinishTime, Stages, CurrentStage, LastSeenStage, IsClaimed", "meaning": "Trạng thái mùa hiện tại"},
+    {"key": "MagicLabStage", "value": "Id, RewardModel, RewardModelWithCollection, IsClaimed, CompletedSeen, TwoTasksCompletedForcePopUpShowed, MagicLabTaskModels", "meaning": "Trạng thái từng chặng"},
+    {"key": "MagicLabTaskModel", "value": "MagicLabTaskType, RequiredAmount, CurrentAmount, CompletedSeen", "meaning": "Tiến độ từng nhiệm vụ"},
+    {"key": "MagicLabModel.IsEventIntroducedEverInLifeTime", "value": "bool (client)", "meaning": "Đã từng xem Magic Lab lần nào chưa"},
+    {"key": "Localization keys", "value": "MagicLabTitle 'Magic Lab'; MagicLabInfoPopup1..4; MagicLabCompleteQuestsAlert; MagicLab*TaskDescription (+Plural/Toolbar)", "meaning": "Toàn bộ text hiển thị nhiệm vụ"},
+    {"key": "MagicLabCompleteQuestsAlert", "value": "\"Complete all quests to mix your bottles in the magic cauldron!\"", "meaning": "Tooltip trên badge icon lobby"},
+    {"key": "MagicLabMagicStreakStepReachTaskDescription", "value": "\"Reach step {0} in Magic Streak!\"", "meaning": "Mẫu mô tả nhiệm vụ dạng đạt mốc"},
+    {"key": "MagicLabRemoteService.GetEventInfo", "value": "MagicLabEventInfoRequestModel { EventType }", "meaning": "Lệnh backend duy nhất của tính năng"}
+  ],
+  "tips": [
+    "Magic Lab là lớp keo dán meta: mọi mini-event khác đều trở thành nguồn tiến độ, tăng lý do quay lại từng hệ thống.",
+    "Kiểu nhiệm vụ 'đạt mốc' được đồng bộ ngay lúc mở sự kiện để người chơi đang ở bước cao không bị mất tiến độ.",
+    "Popup ép mở ở nhiệm vụ thứ hai của mỗi Stage đặt đúng lúc người chơi gần hoàn thành, tối đa hoá cảm giác sắp xong.",
+    "Cơ chế RewardModelWithCollection giống MagicPassStepModel, giúp mọi rương trong game cùng chèn gói thẻ khi Collection chạy.",
+    "Không có lệnh Claim gửi lên server nên toàn bộ chống gian lận dựa vào SyncService."
+  ],
+  "categories": ["Sự kiện", "Live-ops", "Meta", "Tiến trình"]
+}

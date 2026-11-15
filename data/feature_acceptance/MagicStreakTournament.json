@@ -1,0 +1,762 @@
+{
+  "id": "MagicStreakTournament",
+  "feature": "MagicStreakTournament",
+  "name": "Magic Streak Tournament",
+  "category": "Event",
+  "category_label": "Sự kiện",
+  "core_levels_last": false,
+  "acceptance_status": "documented_with_explicit_remaining_scope",
+  "full_feature_verified": false,
+  "checks": {
+    "purpose": {
+      "status": "documented_static_scope",
+      "source": "gdd/MagicStreakTournament.json#/summary",
+      "claim_excerpt": "Magic Streak Tournament là biến thể giải đấu của cơ chế chuỗi thắng: thay vì chỉ tích điểm cho bản thân, điểm (nhân theo hệ số chuỗi 1/5/10/25/100) được đẩy lên một bảng xếp hạng có thời hạn (backend: 'magicstreak leaderboard', schema magicsort.schemas.v1.liveops.streak_leaderboard hoặc magic_streak_leaderboard). Người chơi vừa tranh hạng để lấy thưởng theo hạng (hạng 1 = 2000 Coin, hạng 2 = 1000,"
+    },
+    "unlock": {
+      "status": "described_historical_conditions_runtime_boundary_unverified",
+      "source": "gdd/MagicStreakTournament.json#/unlock",
+      "content": "MagicStreakStateService.GetState(): Disable(0) nếu MagicStreakTournamentConfigModel.IsTournamentEnable == false; ProgressNotEnough(1) nếu level < FirstLevelToShow; NoCache(2); NotIntroduced(3); InProgress(4); LocalTimeIsUp(5); RemoteTimeIsUp(6); ClaimedLocally(7). Client default: IsTournamentEnable=false, IsProgressBarEnable=false, IsBannerEnable=true, FirstLevelToShow=25, EventType=1 (Resources/defaultconfigs/MagicStreakTournamentConfigModel.json). Cấu hình cũ StreakTournamentConfigModel.json còn giữ TournamentDurationInHours = 24."
+    },
+    "entry_flow": {
+      "status": "documented_paths_not_all_executed",
+      "entry_points": [
+        "Nút lobby Magic Streak Tournament (ShouldShowLobbyIcon)",
+        "Banner (ShouldShowBanner, IsBannerEnable = true) với MagicStreakTournamentBannerPlaceType: Win(0) hiện ở màn thắng, Lose(1) ở màn thua",
+        "Popup tự bật khi thăng hạng (ShouldOpenPopUpAutomaticallyOnRankUp, source RankUp)",
+        "Popup tự bật khi giải bắt đầu/kết thúc (source TournamentStart / TournamentEnd)",
+        "Popup xác nhận thoát level (ShouldShowAreYouSure)",
+        "Thanh tiến độ cá nhân trong popup (IsProgressBarEnable)"
+      ],
+      "flow_source": "gdd/MagicStreakTournament.json#/flow",
+      "acceptance_scope": "Tournament/streak multiplier/rank/bots/reward; eligibility, join, progress, claim/reset và config variants"
+    },
+    "config": {
+      "status": "source_bound_catalog_present",
+      "gdd_rows": 132,
+      "full_leaf_rows_associated": 324,
+      "snapshots": {
+        "default_0.0.3063": 69,
+        "cache_20260910": 93,
+        "cache_20261010": 93,
+        "firebase_20260910": 69
+      },
+      "models": [
+        {
+          "model": "magicStreakTournamentConfigModel",
+          "matching_basis": [
+            {
+              "kind": "explicit_gd_config_model_map",
+              "source": "gd_config.json#/defaultconfigs/map/MagicStreakTournament"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/MagicStreakTournament.json#/sources/3"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/MagicStreakTournament.json#/sources/8"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/MagicStreakTournament.json#/configs/0/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/MagicStreakTournament.json#/configs/1/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/MagicStreakTournament.json#/configs/2/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/MagicStreakTournament.json#/configs/3/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/MagicStreakTournament.json#/configs/4/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/MagicStreakTournament.json#/configs/5/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/MagicStreakTournament.json#/configs/6/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/MagicStreakTournament.json#/configs/7/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/MagicStreakTournament.json#/configs/8/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/MagicStreakTournament.json#/configs/9/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/MagicStreakTournament.json#/configs/10/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/MagicStreakTournament.json#/configs/11/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/MagicStreakTournament.json#/configs/12/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/MagicStreakTournament.json#/configs/13/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/MagicStreakTournament.json#/configs/14/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/MagicStreakTournament.json#/configs/15/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/MagicStreakTournament.json#/configs/16/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/MagicStreakTournament.json#/configs/17/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/MagicStreakTournament.json#/configs/18/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/MagicStreakTournament.json#/configs/19/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/MagicStreakTournament.json#/configs/20/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/MagicStreakTournament.json#/configs/21/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/MagicStreakTournament.json#/configs/35/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/MagicStreakTournament.json#/configs/36/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/MagicStreakTournament.json#/configs/37/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/MagicStreakTournament.json#/configs/38/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/MagicStreakTournament.json#/configs/39/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/MagicStreakTournament.json#/configs/40/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/MagicStreakTournament.json#/configs/41/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/MagicStreakTournament.json#/configs/42/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/MagicStreakTournament.json#/configs/43/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/MagicStreakTournament.json#/configs/44/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/MagicStreakTournament.json#/configs/45/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/MagicStreakTournament.json#/configs/46/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/MagicStreakTournament.json#/configs/47/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/MagicStreakTournament.json#/configs/48/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/MagicStreakTournament.json#/configs/49/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/MagicStreakTournament.json#/configs/50/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/MagicStreakTournament.json#/configs/51/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/MagicStreakTournament.json#/configs/52/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/MagicStreakTournament.json#/configs/53/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/MagicStreakTournament.json#/configs/54/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/MagicStreakTournament.json#/configs/55/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/MagicStreakTournament.json#/configs/56/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/MagicStreakTournament.json#/configs/57/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/MagicStreakTournament.json#/configs/58/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/MagicStreakTournament.json#/configs/59/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/MagicStreakTournament.json#/configs/60/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/MagicStreakTournament.json#/configs/61/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/MagicStreakTournament.json#/configs/62/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/MagicStreakTournament.json#/configs/63/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/MagicStreakTournament.json#/configs/64/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/MagicStreakTournament.json#/configs/65/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/MagicStreakTournament.json#/configs/66/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/MagicStreakTournament.json#/configs/67/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/MagicStreakTournament.json#/configs/68/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/MagicStreakTournament.json#/configs/69/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/MagicStreakTournament.json#/configs/70/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/MagicStreakTournament.json#/configs/71/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/MagicStreakTournament.json#/configs/72/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/MagicStreakTournament.json#/configs/73/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/MagicStreakTournament.json#/configs/74/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/MagicStreakTournament.json#/configs/75/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/MagicStreakTournament.json#/configs/87/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/MagicStreakTournament.json#/configs/88/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/MagicStreakTournament.json#/configs/89/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/MagicStreakTournament.json#/configs/90/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/MagicStreakTournament.json#/configs/91/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/MagicStreakTournament.json#/configs/92/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/MagicStreakTournament.json#/configs/93/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/MagicStreakTournament.json#/configs/94/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/MagicStreakTournament.json#/configs/95/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/MagicStreakTournament.json#/configs/96/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/MagicStreakTournament.json#/configs/97/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/MagicStreakTournament.json#/configs/98/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/MagicStreakTournament.json#/configs/99/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/MagicStreakTournament.json#/configs/100/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/MagicStreakTournament.json#/configs/101/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/MagicStreakTournament.json#/configs/102/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/MagicStreakTournament.json#/configs/103/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/MagicStreakTournament.json#/configs/104/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/MagicStreakTournament.json#/configs/105/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/MagicStreakTournament.json#/configs/106/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/MagicStreakTournament.json#/configs/107/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/MagicStreakTournament.json#/configs/108/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/MagicStreakTournament.json#/configs/109/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/MagicStreakTournament.json#/configs/110/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/MagicStreakTournament.json#/configs/111/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/MagicStreakTournament.json#/configs/112/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/MagicStreakTournament.json#/configs/113/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/MagicStreakTournament.json#/configs/114/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/MagicStreakTournament.json#/configs/115/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/MagicStreakTournament.json#/configs/116/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/MagicStreakTournament.json#/configs/117/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/MagicStreakTournament.json#/configs/118/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/MagicStreakTournament.json#/configs/119/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/MagicStreakTournament.json#/configs/120/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/MagicStreakTournament.json#/configs/121/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/MagicStreakTournament.json#/configs/122/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/MagicStreakTournament.json#/configs/123/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/MagicStreakTournament.json#/configs/124/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/MagicStreakTournament.json#/configs/125/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/MagicStreakTournament.json#/configs/126/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/MagicStreakTournament.json#/configs/127/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/MagicStreakTournament.json#/configs/128/key_where"
+            }
+          ]
+        },
+        {
+          "model": "StreakTournamentConfigModel",
+          "matching_basis": [
+            {
+              "kind": "explicit_gd_config_model_map",
+              "source": "gd_config.json#/defaultconfigs/map/MagicStreakTournament"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/MagicStreakTournament.json#/sources/9"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/MagicStreakTournament.json#/configs/22/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/MagicStreakTournament.json#/configs/23/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/MagicStreakTournament.json#/configs/76/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/MagicStreakTournament.json#/configs/77/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/MagicStreakTournament.json#/configs/78/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/MagicStreakTournament.json#/configs/79/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/MagicStreakTournament.json#/configs/80/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/MagicStreakTournament.json#/configs/81/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/MagicStreakTournament.json#/configs/82/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/MagicStreakTournament.json#/configs/83/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/MagicStreakTournament.json#/configs/84/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/MagicStreakTournament.json#/configs/85/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/MagicStreakTournament.json#/configs/86/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/MagicStreakTournament.json#/configs/129/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/MagicStreakTournament.json#/configs/130/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/MagicStreakTournament.json#/configs/131/key_where"
+            }
+          ]
+        }
+      ],
+      "declared_models_without_catalog_data": [],
+      "placeholder_rows_requiring_source_review": [],
+      "exact_placeholder_snapshot_values": [],
+      "dossier_abbreviated_values": [],
+      "note": "Model association uses explicitmap or exacttoken citations; fieldpresence does not prove allproductiondata. GDDsummaryrows and fullcatalogrows have separate counts. Abbreviated source summaries are not full arrays; catalog/source links remain authoritative."
+    },
+    "reward": {
+      "status": "documented_static_rewards_runtime_grant_not_fully_verified",
+      "entries": 5,
+      "tables_in_site_meta": 8,
+      "source": "gdd/MagicStreakTournament.json#/rewards"
+    },
+    "use_cases": {
+      "status": "specified_not_executed_in15nov_ledger",
+      "specified": 16,
+      "reviewed_uc_branch_count": 0,
+      "reviewed_uc_ids": [],
+      "not_reviewed_in_new_ledger": [
+        "UC-01",
+        "UC-02",
+        "UC-03",
+        "UC-04",
+        "UC-05",
+        "UC-06",
+        "UC-07",
+        "UC-08",
+        "UC-09",
+        "UC-10",
+        "UC-11",
+        "UC-12",
+        "UC-13",
+        "UC-14",
+        "UC-15",
+        "UC-16"
+      ],
+      "full_uc_pass_claimed": false
+    },
+    "screenshots": {
+      "historical_gallery_entries": 1,
+      "historical_uc_with_image_reference": 0,
+      "curated_new_images": [],
+      "curated_new_image_count": 0,
+      "status": "historical_references_only",
+      "source": "screens/web/screens.json#/MagicStreakTournament",
+      "note": "Image presence does not prove execution result or completeness."
+    },
+    "runtime_actual": {
+      "status": "not_observed_in15nov_ledger",
+      "case_count": 0,
+      "cases": [],
+      "mode": "offline_existing_fixture",
+      "build": "0.0.3129 ARM64"
+    },
+    "segment_ab": {
+      "status": "not_identified_in_sources",
+      "segment_ids": [],
+      "matching_basis": "explicit_gd_config_map_or_exact_model_token_in_gdd_configs_where_key_sources; rootfieldscoped",
+      "rows": [],
+      "classifications": {},
+      "assignment_verified": false,
+      "uplift_verified": false,
+      "note": "No matchingrow does not prove no segmentation/AB. Rewardbucketfalsepositives remain explicitly classified."
+    },
+    "storage_backend_analytics": {
+      "storage_keys": {
+        "entries": 10,
+        "status": "documented_static_contract_runtime_not_verified",
+        "source": "gdd/MagicStreakTournament.json#/storage_keys"
+      },
+      "backend": {
+        "entries": 4,
+        "status": "documented_static_contract_runtime_not_verified",
+        "source": "gdd/MagicStreakTournament.json#/backend"
+      },
+      "analytics": {
+        "entries": 2,
+        "status": "documented_static_contract_runtime_not_verified",
+        "source": "gdd/MagicStreakTournament.json#/analytics"
+      }
+    },
+    "remaining_next_step": {
+      "gap_count": 5,
+      "static_scoped_resolutions": 2,
+      "remaining_count": 3,
+      "all_gap_dispositions": [
+        {
+          "id": "MS-MagicStreakTournament-G001",
+          "feature": "MagicStreakTournament",
+          "source": "gdd/MagicStreakTournament.json#/gaps/0",
+          "original": "Số người trong một bảng và tỉ lệ bot do server quyết định (analytics có total_users, real_user_count, bot_count nhưng client không có config).",
+          "current_note": "Số người trong một bảng và tỉ lệ bot do server quyết định (analytics có total_users, real_user_count, bot_count nhưng client không có config).",
+          "status": "open_review_plan",
+          "review_status": "open_review_plan",
+          "dependency": "backend_contract_or_response",
+          "next_action": "Đếm bot/real trong snapshot là observed; cần backend contract/cặp cohort để biết grouping ratio.",
+          "remaining": "Số người trong một bảng và tỉ lệ bot do server quyết định (analytics có total_users, real_user_count, bot_count nhưng client không có config)."
+        },
+        {
+          "id": "MS-MagicStreakTournament-G002",
+          "feature": "MagicStreakTournament",
+          "source": "gdd/MagicStreakTournament.json#/gaps/1",
+          "original": "Tồn tại song song hai file cấu hình: MagicStreakTournamentConfigModel.json (bản dùng) và StreakTournamentConfigModel.json (bản cũ, có TournamentDurationInHours = 24) — không rõ bản nào được đọc ở runtime.",
+          "current_note": "15/11 — resolved_static_code_historical_build: GetCurrentProgressbarRewardStepMaxScore và các reward/eligibility body đọc FirebaseRemoteConfigs.MagicStreakTournamentConfigModel trực tiếp. StreakTournamentConfigModel asset có duration24 là nguồnlegacy riêng; không dùng giá trị đó ghi runtime eventduration. Điều kiện transport/newbuild vẫn phải đối chiếu. Còn lại: Cần đối chiếu ARM64/current runtime và các nhánh caller còn chưa đủ bằng chứng.",
+          "status": "resolved_static_code_historical_build",
+          "review_status": "preserved_resolved_static_code_historical_build",
+          "dependency": "local_code_review",
+          "next_action": "GetCurrentProgressbarRewardStepMaxScore và các reward/eligibility body đọc FirebaseRemoteConfigs.MagicStreakTournamentConfigModel trực tiếp. StreakTournamentConfigModel asset có duration24 là nguồnlegacy riêng; không dùng giá trị đó ghi runtime eventduration. Điều kiện transport/newbuild vẫn phải đối chiếu. Cần đối chiếu ARM64/current runtime và các nhánh caller còn chưa đủ bằng chứng.",
+          "conclusion": "GetCurrentProgressbarRewardStepMaxScore và các reward/eligibility body đọc FirebaseRemoteConfigs.MagicStreakTournamentConfigModel trực tiếp. StreakTournamentConfigModel asset có duration24 là nguồnlegacy riêng; không dùng giá trị đó ghi runtime eventduration. Điều kiện transport/newbuild vẫn phải đối chiếu.",
+          "evidence": [
+            "../com.grandgames.magicsort_Unity_20260909_112501/RecoveredNative/PseudoC/Assembly-CSharp/Modules/Contexts/Home/MagicStreakTournament/Scripts/MagicStreakService.c:5413"
+          ],
+          "reviewed": "2026-11-15",
+          "mode": "file_only_recovered_native_0.0.3063",
+          "remaining": "15/11 — resolved_static_code_historical_build: GetCurrentProgressbarRewardStepMaxScore và các reward/eligibility body đọc FirebaseRemoteConfigs.MagicStreakTournamentConfigModel trực tiếp. StreakTournamentConfigModel asset có duration24 là nguồnlegacy riêng; không dùng giá trị đó ghi runtime eventduration. Điều kiện transport/newbuild vẫn phải đối chiếu. Còn lại: Cần đối chiếu ARM64/current runtime và các nhánh caller còn chưa đủ bằng chứng."
+        },
+        {
+          "id": "MS-MagicStreakTournament-G003",
+          "feature": "MagicStreakTournament",
+          "source": "gdd/MagicStreakTournament.json#/gaps/2",
+          "original": "Không tìm thấy analytics riêng cho việc claim thưởng giải (chỉ có impression).",
+          "current_note": "15/11 — partial_static_code_unresolved: ClaimTournamentReward body khởi SendClaimRequest và xử lý reward/state; không thấy named analytics claim trong body đó. IncreaseProgressbarRewardScore có SendStreakTournamentProgressClaimStat khi vượt mốc. Không được dùng progressclaim thay tournamentsettlement metric; generic UI/callback còn chưa chứng minh. Còn lại: Cần generic EventSender/UI claim and callback emission trace, phân biệt progressreward với tournamentreward; chưa khẳng định không có analytics toàn game.",
+          "status": "partial_static_code_unresolved",
+          "review_status": "preserved_partial_static_code_unresolved",
+          "dependency": "local_code_review",
+          "next_action": "ClaimTournamentReward body khởi SendClaimRequest và xử lý reward/state; không thấy named analytics claim trong body đó. IncreaseProgressbarRewardScore có SendStreakTournamentProgressClaimStat khi vượt mốc. Không được dùng progressclaim thay tournamentsettlement metric; generic UI/callback còn chưa chứng minh. Cần generic EventSender/UI claim and callback emission trace, phân biệt progressreward với tournamentreward; chưa khẳng định không có analytics toàn game.",
+          "conclusion": "ClaimTournamentReward body khởi SendClaimRequest và xử lý reward/state; không thấy named analytics claim trong body đó. IncreaseProgressbarRewardScore có SendStreakTournamentProgressClaimStat khi vượt mốc. Không được dùng progressclaim thay tournamentsettlement metric; generic UI/callback còn chưa chứng minh.",
+          "evidence": [
+            "../com.grandgames.magicsort_Unity_20260909_112501/RecoveredNative/PseudoC/Assembly-CSharp/Modules/Contexts/Home/MagicStreakTournament/Scripts/MagicStreakService.c:1728"
+          ],
+          "reviewed": "2026-11-15",
+          "mode": "file_only_recovered_native_0.0.3063",
+          "remaining": "15/11 — partial_static_code_unresolved: ClaimTournamentReward body khởi SendClaimRequest và xử lý reward/state; không thấy named analytics claim trong body đó. IncreaseProgressbarRewardScore có SendStreakTournamentProgressClaimStat khi vượt mốc. Không được dùng progressclaim thay tournamentsettlement metric; generic UI/callback còn chưa chứng minh. Còn lại: Cần generic EventSender/UI claim and callback emission trace, phân biệt progressreward với tournamentreward; chưa khẳng định không có analytics toàn game."
+        },
+        {
+          "id": "MS-MagicStreakTournament-G004",
+          "feature": "MagicStreakTournament",
+          "source": "gdd/MagicStreakTournament.json#/gaps/3",
+          "original": "MagicStreakRewardStepModel dùng trường 'Score' (điểm tích luỹ) trong khi bản GAE dùng 'NeededKeyCount' — không rõ Score là ngưỡng tích luỹ hay điểm cộng thêm.",
+          "current_note": "15/11 — resolved_static_code_historical_build: IncreaseProgressbarRewardScore cộng scoreIncrement với ProgressbarRewardScore hiện tại; nếu chưa đạt max step thì lưu. Đạt mốc tăng ProgressbarRewardIndex, reset ProgressbarRewardScore=0 rồi lấy phần dư scoreIncrement=currentTotal−stepThreshold cho vòng tiếp. Vì vậy Score của step là nhu cầu riêng step, phải cộng để tính tổng điểm toàn đường; không đọc nó thành global cumulative target. Còn lại: Cần đối chiếu method/consumer trên app0.0.3129 ARM64; chưa là runtime pass.",
+          "status": "resolved_static_code_historical_build",
+          "review_status": "preserved_resolved_static_code_historical_build",
+          "dependency": "local_code_review",
+          "next_action": "IncreaseProgressbarRewardScore cộng scoreIncrement với ProgressbarRewardScore hiện tại; nếu chưa đạt max step thì lưu. Đạt mốc tăng ProgressbarRewardIndex, reset ProgressbarRewardScore=0 rồi lấy phần dư scoreIncrement=currentTotal−stepThreshold cho vòng tiếp. Vì vậy Score của step là nhu cầu riêng step, phải cộng để tính tổng điểm toàn đường; không đọc nó thành global cumulative target. Cần đối chiếu method/consumer trên app0.0.3129 ARM64; chưa là runtime pass.",
+          "conclusion": "IncreaseProgressbarRewardScore cộng scoreIncrement với ProgressbarRewardScore hiện tại; nếu chưa đạt max step thì lưu. Đạt mốc tăng ProgressbarRewardIndex, reset ProgressbarRewardScore=0 rồi lấy phần dư scoreIncrement=currentTotal−stepThreshold cho vòng tiếp. Vì vậy Score của step là nhu cầu riêng step, phải cộng để tính tổng điểm toàn đường; không đọc nó thành global cumulative target.",
+          "evidence": [
+            "../com.grandgames.magicsort_Unity_20260909_112501/RecoveredNative/PseudoC/Assembly-CSharp/Modules/Contexts/Home/MagicStreakTournament/Scripts/MagicStreakService.c:4031"
+          ],
+          "reviewed": "2026-11-15",
+          "mode": "file_only_recovered_native_0.0.3063",
+          "remaining": "15/11 — resolved_static_code_historical_build: IncreaseProgressbarRewardScore cộng scoreIncrement với ProgressbarRewardScore hiện tại; nếu chưa đạt max step thì lưu. Đạt mốc tăng ProgressbarRewardIndex, reset ProgressbarRewardScore=0 rồi lấy phần dư scoreIncrement=currentTotal−stepThreshold cho vòng tiếp. Vì vậy Score của step là nhu cầu riêng step, phải cộng để tính tổng điểm toàn đường; không đọc nó thành global cumulative target. Còn lại: Cần đối chiếu method/consumer trên app0.0.3129 ARM64; chưa là runtime pass."
+        },
+        {
+          "id": "MS-MagicStreakTournament-G005",
+          "feature": "MagicStreakTournament",
+          "source": "gdd/MagicStreakTournament.json#/gaps/4",
+          "original": "[Runtime 2026-09-10] Config server LIVE đã đọc trực tiếp từ cache máy (không cần request); các hàng 'server live' là giá trị server ghi đè/thêm so với default.",
+          "current_note": "[Runtime 2026-09-10] Config server LIVE đã đọc trực tiếp từ cache máy (không cần request); các hàng 'server live' là giá trị server ghi đè/thêm so với default.",
+          "status": "historical_evidence_annotation_not_test_result",
+          "review_status": "historical_evidence_annotation_not_test_result",
+          "dependency": "historical_note_requires_qualified_use",
+          "next_action": "Ghi chú cache đã đọc tháng9, từ LIVE phải hiểu snapshot lịch sử. Đối chiếu config catalog/source, giữ default/cache/production hiện tại riêng; không coi là fresh fetch15/11.",
+          "remaining": "[Runtime 2026-09-10] Config server LIVE đã đọc trực tiếp từ cache máy (không cần request); các hàng 'server live' là giá trị server ghi đè/thêm so với default."
+        }
+      ],
+      "feature_specific_acceptance_questions": [
+        "Tournament/streak multiplier/rank/bots/reward",
+        " eligibility, join, progress, claim/reset và config variants"
+      ],
+      "next_steps": [
+        "Đếm bot/real trong snapshot là observed; cần backend contract/cặp cohort để biết grouping ratio.",
+        "ClaimTournamentReward body khởi SendClaimRequest và xử lý reward/state; không thấy named analytics claim trong body đó. IncreaseProgressbarRewardScore có SendStreakTournamentProgressClaimStat khi vượt mốc. Không được dùng progressclaim thay tournamentsettlement metric; generic UI/callback còn chưa chứng minh. Cần generic EventSender/UI claim and callback emission trace, phân biệt progressreward với tournamentreward; chưa khẳng định không có analytics toàn game.",
+        "Ghi chú cache đã đọc tháng9, từ LIVE phải hiểu snapshot lịch sử. Đối chiếu config catalog/source, giữ default/cache/production hiện tại riêng; không coi là fresh fetch15/11."
+      ]
+    }
+  },
+  "use_cases": 16,
+  "configs": 132,
+  "new_review_case_count": 0,
+  "reviewed_uc_branch_count": 0,
+  "curated_new_image_count": 0,
+  "segment_ids": [],
+  "matching_basis": "explicit_gd_config_map_or_exact_model_token_in_gdd_configs_where_key_sources; rootfieldscoped",
+  "unmatched_segment_status": "not_identified_in_sources",
+  "local_document_repairs": [],
+  "sources": [
+    "GameDesign/features/MagicStreakService.md",
+    "GameDesign/features/MagicStreakStateService.md",
+    "GameDesign/features/MagicStreakDataService.md",
+    "GameDesign/features/MagicStreakTournamentConfigModel.md",
+    "GameDesign/features/MagicStreakTournamentModel.md",
+    "GameDesign/features/MagicStreakRewardStepModel.md",
+    "RecoveredNative/PseudoC/Assembly-CSharp/Modules/Contexts/Home/MagicStreakTournament/Scripts/*.c",
+    "RecoveredNative/Il2CppDumper/dump.cs (TypeDefIndex 3403-3503)",
+    "UnityExport/ExportedProject/Assets/Resources/defaultconfigs/MagicStreakTournamentConfigModel.json",
+    "UnityExport/ExportedProject/Assets/Resources/defaultconfigs/StreakTournamentConfigModel.json",
+    "UnityExport/ExportedProject/Assets/MonoBehaviour/BackendEnvironmentConfig.asset",
+    "RecoveredNative/strings-by-type.tsv"
+  ],
+  "source_hashes": {
+    "gdd_sha256": "e13eb5bf08061444251f2627f6b64fd030ee25ee9e71803bf7d5821b5ca6b2f8",
+    "site_meta_sha256": "87f987bba5128cbadac02db928f18eac6c28febf0bd26327db87bdb87b41150d"
+  }
+}

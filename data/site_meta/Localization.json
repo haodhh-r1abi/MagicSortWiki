@@ -1,0 +1,488 @@
+{
+  "id": "Localization",
+  "title": "Đa ngôn ngữ (Localization)",
+  "tagline": "Full nguồn I2Languages.asset của export0.0.3063:1.471term×11ngôn ngữ; chữ ngoài asset và build khác có phạm vi riêng.",
+  "infobox": [
+    [
+      "Loại",
+      "Meta"
+    ],
+    [
+      "Mở khóa",
+      "Luôn bật, khởi tạo ngay khi mở app"
+    ],
+    [
+      "Tham gia",
+      "Toàn bộ người chơi"
+    ],
+    [
+      "Điều kiện / phụ thuộc",
+      "Plugin I2 Localization 2.8.22 f6; asset Resources/I2Languages.asset"
+    ],
+    [
+      "Manager",
+      "LocalizationService (bọc I2.Loc.LocalizationManager và LanguageSourceData)"
+    ]
+  ],
+  "description": [
+    "Nền tảng I2 Localization2.8.22f6; nguồn Resources/I2Languages.asset đã trích đủ. Chữ hardcode/platform/bundle khác và build0.0.3129 chưa được khẳng định nằm toàn bộ trong nguồn này.",
+    "Nguồn chứa 1.471 term (tất cả TermType = 0, tức Text) dịch sang 11 ngôn ngữ: English, Turkish, Dutch, German, French, Italian, Portuguese, Spanish, Russian, Japanese, Korean.",
+    "Game không có màn hình chọn ngôn ngữ: I2 tự dò ngôn ngữ thiết bị lúc khởi động và chọn ngôn ngữ hỗ trợ gần nhất, mặc định rơi về English.",
+    "Ngôn ngữ đã chọn được ghi nhớ trong PlayerPrefs khoá \"I2 Language\" nên không đổi bất ngờ giữa các phiên.",
+    "LocalizationService bọc thêm một lớp mỏng: dịch mã ngôn ngữ của I2 sang enum Language nội bộ và dựng CultureInfo để định dạng số, tiền tệ, ngày tháng.",
+    "Bản dịch nhúng sẵn thẻ màu TextMeshPro (ví dụ <color=#FFC20F>...) nên mỗi ngôn ngữ tự giữ định dạng riêng.",
+    "Tham số động dùng hai cú pháp: {[Param]} / [i2p_...] của I2, và string.Format kiểu {0}/{1} ở phần lớn code game.",
+    "I2 có sẵn hạ tầng RTL cho tiếng Ả Rập, Do Thái, Ba Tư, Urdu nhưng bản này không khai báo ngôn ngữ RTL nào nên nhánh đó không chạy.",
+    "Nguồn dịch được đồng bộ từ Google Sheets tên \"I2Loc Magic Sort\"; cấu hình live-sync còn nguyên trong build.",
+    "Danh sách Assets trong I2Languages.asset rỗng — chỉ chữ được localize, không có ảnh hay âm thanh theo ngôn ngữ."
+  ],
+  "notes": [
+    "Lưu ý: CaseInsensitiveTerms = 0 nên tra term phải khớp chính xác chữ hoa/thường.",
+    "Lưu ý: OnMissingTranslation = 1 — thiếu bản dịch thì dùng bản fallback thay vì để trống UI.",
+    "Lưu ý: IgnoreDeviceLanguage = 0 nên khởi động vẫn tự dò ngôn ngữ thiết bị.",
+    "Lưu ý: mã ngôn ngữ có phần vùng (pt-BR, es-MX) được rút gọn về mã gốc nhờ AllowDiscartingRegion.",
+    "Lưu ý: mã ngôn ngữ lạ trả về English (= 0) trong LocalizationService.GetLanguage.",
+    "Lưu ý: trên Android còn gọi java.util.Locale.getDefault().toString() để phân biệt Chinese (Simplified) và (Traditional), nhưng bản này không có tiếng Trung nên vẫn về English (suy luận).",
+    "Lưu ý: mTerm_AppName để trống nên tên app không được localize.",
+    "Lưu ý: Google_WebServiceURL và Google_SpreadsheetKey có trong asset nhưng không xác định được live-sync có thực sự bật ở bản phát hành."
+  ],
+  "how_it_works": [
+    "Khởi động: LocalizationManager.InitializeIfNeeded gọi UpdateSources → RegisterSourceInResources nạp asset tên \"I2Languages\", rồi RegisterSceneSources gom nguồn trong scene.",
+    "SelectStartupLanguage đọc PlayerPrefs \"I2 Language\"; có giá trị đã lưu và ngôn ngữ đó còn được hỗ trợ thì dùng lại.",
+    "Không có giá trị lưu → GetCurrentDeviceLanguage → DetectDeviceLanguage đọc Application.systemLanguage (Android bổ sung Locale.getDefault()).",
+    "HasLanguage / GetSupportedLanguage tìm ngôn ngữ khớp trong 11 ngôn ngữ, cho phép bỏ phần vùng; không khớp thì lấy ngôn ngữ đầu danh sách (English).",
+    "SetLanguageAndCode(name, code, rememberLanguage, force) đặt mCurrentLanguage/mLanguageCode và ghi PlayerPrefs \"I2 Language\".",
+    "Cùng lúc, IsRTL(code) so với mảng LanguagesRTL (21 mã) để đặt IsRight2Left — bản này luôn false.",
+    "SetCurrentCultureInfo dựng CultureInfo nếu EnableChangingCultureInfo được bật, rồi LocalizeAll(force) chạy lại toàn bộ component Localize trong scene.",
+    "LocalizationService.Initialize đọc LocalizationManager.CurrentLanguageCode, tra bảng hash 11 mã (en, tr, nl, de, fr, it, pt, es, ru, ja, ko) sang enum Language.",
+    "GetCultureCode(language) trả mã văn hoá (en-US, tr-TR, …, ko-KR) và dựng CultureInfo cho các nơi cần định dạng số/tiền/ngày.",
+    "Tra chữ: GetTranslation(term, …) → GetTermTranslation → GetTermData tìm TermData trong mDictionary của LanguageSourceData, lấy chuỗi theo chỉ số ngôn ngữ hiện tại.",
+    "Thiếu bản dịch thì xử lý theo OnMissingTranslation (= 1); TryGetTranslation trả false thay vì ném lỗi nếu caller muốn tự xử lý.",
+    "ApplyLocalizationParams (4 nạp chồng) thay {[Param]} và [i2p_...] bằng giá trị từ ILocalizationParamsManager hoặc dictionary truyền vào; GetPluralType chọn dạng số nhiều.",
+    "Component Localize chọn descriptor phù hợp trong mLocalizeTargets (TMP_Text, UI.Text, Image, AudioSource…) để gán kết quả.",
+    "Đổi ngôn ngữ khi đang chạy: set_CurrentLanguage → LocalizeAll(Force) → Coroutine_LocalizeAll → DoLocalizeAll, với mLocalizeIsScheduled gộp nhiều yêu cầu trong cùng frame.",
+    "Live-sync nội dung: AllowSyncFromGoogle → Delayed_Import_Google gọi web service, ApplyDownloadedDataFromGoogle nạp dữ liệu mới, Import_I2CSV giải mã theo định dạng riêng của I2."
+  ],
+  "reward_tables": [
+    {
+      "title": "11 NGÔN NGỮ ĐƯỢC HỖ TRỢ",
+      "columns": [
+        "Ngôn ngữ",
+        "Mã I2 / enum Language",
+        "CultureInfo"
+      ],
+      "rows": [
+        [
+          "English",
+          "en / English = 0",
+          "en-US"
+        ],
+        [
+          "Turkish",
+          "tr / Turkish = 1",
+          "tr-TR"
+        ],
+        [
+          "Dutch",
+          "nl / Dutch = 2",
+          "nl-NL"
+        ],
+        [
+          "German",
+          "de / German = 3",
+          "de-DE"
+        ],
+        [
+          "French",
+          "fr / French = 4",
+          "fr-FR"
+        ],
+        [
+          "Italian",
+          "it / Italian = 5",
+          "it-IT"
+        ],
+        [
+          "Portuguese",
+          "pt / Portuguese = 6",
+          "pt-PT"
+        ],
+        [
+          "Spanish",
+          "es / Spanish = 7",
+          "es-ES"
+        ],
+        [
+          "Russian",
+          "ru / Russian = 8",
+          "ru-RU"
+        ],
+        [
+          "Japanese",
+          "ja / Japanese = 9",
+          "ja-JP"
+        ],
+        [
+          "Korean",
+          "ko / Korean = 10",
+          "ko-KR"
+        ]
+      ]
+    },
+    {
+      "title": "CẤU HÌNH NGUỒN I2Languages.asset",
+      "columns": [
+        "Khoá",
+        "Giá trị",
+        "Ý nghĩa"
+      ],
+      "rows": [
+        [
+          "mLanguages",
+          "11 ngôn ngữ, Flags = 0 (đều bật)",
+          "Thứ tự cột quyết định chỉ số tra cứu"
+        ],
+        [
+          "mTerms",
+          "1.471 term, TermType = 0 (Text)",
+          "Toàn bộ chuỗi UI của game"
+        ],
+        [
+          "CaseInsensitiveTerms",
+          "0",
+          "Phân biệt hoa thường khi tra term"
+        ],
+        [
+          "OnMissingTranslation",
+          "1",
+          "Dùng fallback khi thiếu bản dịch"
+        ],
+        [
+          "IgnoreDeviceLanguage",
+          "0",
+          "Vẫn tự dò ngôn ngữ thiết bị"
+        ],
+        [
+          "_AllowUnloadingLanguages",
+          "0",
+          "Không giải phóng dữ liệu ngôn ngữ khỏi bộ nhớ"
+        ],
+        [
+          "mTerm_AppName",
+          "(trống)",
+          "Không localize tên app"
+        ],
+        [
+          "Assets",
+          "[] (rỗng)",
+          "Không localize ảnh/âm thanh"
+        ]
+      ]
+    },
+    {
+      "title": "CẤU HÌNH ĐỒNG BỘ GOOGLE SHEETS",
+      "columns": [
+        "Khoá",
+        "Giá trị",
+        "Ý nghĩa"
+      ],
+      "rows": [
+        [
+          "Google_SpreadsheetName",
+          "\"I2Loc Magic Sort\"",
+          "Tên bảng tính nguồn dịch"
+        ],
+        [
+          "Google_WebServiceURL / Google_SpreadsheetKey",
+          "(có giá trị trong asset, không chép)",
+          "Kênh live-sync bản dịch"
+        ],
+        [
+          "GoogleUpdateFrequency",
+          "1",
+          "Chu kỳ kiểm tra bản dịch mới"
+        ],
+        [
+          "GoogleInEditorCheckFrequency",
+          "1",
+          "Chu kỳ kiểm tra trong editor"
+        ],
+        [
+          "GoogleUpdateSynchronization",
+          "0",
+          "Chế độ đồng bộ"
+        ],
+        [
+          "GoogleUpdateDelay",
+          "0",
+          "Độ trễ trước khi gọi web service"
+        ],
+        [
+          "GoogleLiveSyncIsUptoDate",
+          "1",
+          "Trạng thái đồng bộ"
+        ],
+        [
+          "Google_LastUpdatedVersion",
+          "1787076417441",
+          "Phiên bản bản dịch gần nhất"
+        ]
+      ]
+    },
+    {
+      "title": "MÃ NGÔN NGỮ RTL TRONG LocalizationManager.LanguagesRTL (không dùng ở bản này)",
+      "columns": [
+        "Nhóm",
+        "Mã",
+        "Ghi chú"
+      ],
+      "rows": [
+        [
+          "Ả Rập",
+          "ar và 16 biến thể vùng: ar-AE, ar-BH, ar-DZ, ar-EG, ar-IQ, ar-JO, ar-KW, ar-LB, ar-LY, ar-MA, ar-OM, ar-QA, ar-SA, ar-SY, ar-TN, ar-YE",
+          "17 mã"
+        ],
+        [
+          "Ba Tư",
+          "fa",
+          "-"
+        ],
+        [
+          "Do Thái",
+          "he",
+          "-"
+        ],
+        [
+          "Yiddish",
+          "ji",
+          "-"
+        ],
+        [
+          "Urdu",
+          "ur",
+          "-"
+        ]
+      ]
+    }
+  ],
+  "key_numbers": [
+    {
+      "label": "Phiên bản plugin I2 Localization",
+      "value": "\"2.8.22 f6\"",
+      "source": "LocalizationManager.GetVersion"
+    },
+    {
+      "label": "Số term trong nguồn",
+      "value": "1.471 term",
+      "source": "I2Languages.asset — mTerms"
+    },
+    {
+      "label": "Số ngôn ngữ hỗ trợ",
+      "value": "11",
+      "source": "I2Languages.asset — mLanguages"
+    },
+    {
+      "label": "Kiểu term",
+      "value": "tất cả TermType = 0 (Text)",
+      "source": "I2Languages.asset — mTerms"
+    },
+    {
+      "label": "Tên asset nguồn mặc định",
+      "value": "\"I2Languages\" trong Resources",
+      "source": "LocalizationManager..cctor; RegisterSourceInResources"
+    },
+    {
+      "label": "Khoá ghi nhớ ngôn ngữ",
+      "value": "\"I2 Language\" (PlayerPrefs)",
+      "source": "LocalizationManager.SetLanguageAndCode"
+    },
+    {
+      "label": "Phân biệt hoa thường khi tra term",
+      "value": "CaseInsensitiveTerms = 0",
+      "source": "I2Languages.asset"
+    },
+    {
+      "label": "Hành vi khi thiếu bản dịch",
+      "value": "OnMissingTranslation = 1 (fallback)",
+      "source": "I2Languages.asset; LanguageSourceData.MissingTranslationAction"
+    },
+    {
+      "label": "Tự dò ngôn ngữ thiết bị",
+      "value": "IgnoreDeviceLanguage = 0",
+      "source": "I2Languages.asset"
+    },
+    {
+      "label": "Giải phóng dữ liệu ngôn ngữ",
+      "value": "_AllowUnloadingLanguages = 0",
+      "source": "I2Languages.asset"
+    },
+    {
+      "label": "Số mã ngôn ngữ RTL trong bảng tĩnh",
+      "value": "21 mã (ar + 16 biến thể, fa, he, ji, ur)",
+      "source": "LocalizationManager.LanguagesRTL"
+    },
+    {
+      "label": "Ngôn ngữ RTL được khai báo trong bản này",
+      "value": "0",
+      "source": "I2Languages.asset — mLanguages"
+    },
+    {
+      "label": "Số asset (ảnh/âm thanh) được localize",
+      "value": "0 — danh sách Assets rỗng",
+      "source": "I2Languages.asset — Assets"
+    },
+    {
+      "label": "Tên bảng tính nguồn dịch",
+      "value": "\"I2Loc Magic Sort\"",
+      "source": "I2Languages.asset — Google_SpreadsheetName"
+    },
+    {
+      "label": "Chu kỳ đồng bộ Google",
+      "value": "GoogleUpdateFrequency = 1, GoogleUpdateDelay = 0",
+      "source": "I2Languages.asset"
+    },
+    {
+      "label": "Phiên bản bản dịch gần nhất",
+      "value": "1787076417441",
+      "source": "I2Languages.asset — Google_LastUpdatedVersion"
+    },
+    {
+      "label": "Ngôn ngữ mặc định khi không khớp",
+      "value": "English (enum Language = 0)",
+      "source": "LocalizationService.GetLanguage"
+    },
+    {
+      "label": "Cú pháp tham số động của I2",
+      "value": "\"{[\" … \"]}\" và tiền tố \"[i2p_\"",
+      "source": "LocalizationManager.ApplyLocalizationParams"
+    },
+    {
+      "label": "Dấu phân nhóm term",
+      "value": "'/'",
+      "source": "LanguageSourceData.CategorySeparators"
+    },
+    {
+      "label": "Định dạng I2 CSV",
+      "value": "header \"Key[*]Type[*]Desc\", phân tách \"[*]\", xuống dòng \"[ln]\"",
+      "source": "LanguageSourceData.Export_I2CSV"
+    }
+  ],
+  "config_highlights": [
+    {
+      "key": "Resources/I2Languages.asset — mLanguages",
+      "value": "English(en), Turkish(tr), Dutch(nl), German(de), French(fr), Italian(it), Portuguese(pt), Spanish(es), Russian(ru), Japanese(ja), Korean(ko), Flags = 0",
+      "meaning": "Danh sách ngôn ngữ hỗ trợ; thứ tự cột quyết định chỉ số tra cứu"
+    },
+    {
+      "key": "Resources/I2Languages.asset — mTerms",
+      "value": "1.471 term, tất cả TermType = 0 (Text)",
+      "meaning": "Toàn bộ chuỗi UI của game"
+    },
+    {
+      "key": "CaseInsensitiveTerms",
+      "value": "0",
+      "meaning": "Tra term phải khớp chính xác chữ hoa/thường"
+    },
+    {
+      "key": "OnMissingTranslation",
+      "value": "1",
+      "meaning": "Dùng fallback khi thiếu bản dịch thay vì bỏ trống"
+    },
+    {
+      "key": "IgnoreDeviceLanguage",
+      "value": "0",
+      "meaning": "Vẫn tự dò ngôn ngữ thiết bị lúc khởi động"
+    },
+    {
+      "key": "_AllowUnloadingLanguages",
+      "value": "0",
+      "meaning": "Không giải phóng dữ liệu ngôn ngữ khỏi bộ nhớ"
+    },
+    {
+      "key": "mTerm_AppName",
+      "value": "(trống)",
+      "meaning": "Không localize tên app"
+    },
+    {
+      "key": "Assets",
+      "value": "[] (rỗng)",
+      "meaning": "Không có tài nguyên nào được localize, chỉ chữ"
+    },
+    {
+      "key": "Google_SpreadsheetName",
+      "value": "\"I2Loc Magic Sort\"",
+      "meaning": "Tên bảng tính nguồn dịch"
+    },
+    {
+      "key": "Google_WebServiceURL / Google_SpreadsheetKey",
+      "value": "(có giá trị trong asset — không chép vào tài liệu)",
+      "meaning": "Kênh live-sync bản dịch từ Google Sheets"
+    },
+    {
+      "key": "GoogleUpdateFrequency / GoogleInEditorCheckFrequency / GoogleUpdateSynchronization / GoogleUpdateDelay / GoogleLiveSyncIsUptoDate / Google_LastUpdatedVersion",
+      "value": "1 / 1 / 0 / 0 / 1 / 1787076417441",
+      "meaning": "Chu kỳ và trạng thái đồng bộ bản dịch"
+    },
+    {
+      "key": "Modules.Infrastructure.Localization.Language",
+      "value": "English=0, Turkish=1, Dutch=2, German=3, French=4, Italian=5, Portuguese=6, Spanish=7, Russian=8, Japanese=9, Korean=10",
+      "meaning": "Enum ngôn ngữ nội bộ của dự án"
+    },
+    {
+      "key": "LocalizationService.GetLanguage — bảng mã",
+      "value": "en, tr, nl, de, fr, it, pt, es, ru, ja, ko (mã lạ → English)",
+      "meaning": "Ánh xạ mã I2 sang enum Language"
+    },
+    {
+      "key": "LocalizationService.GetCultureCode — bảng culture",
+      "value": "en-US, tr-TR, nl-NL, de-DE, fr-FR, it-IT, pt-PT, es-ES, ru-RU, ja-JP, ko-KR",
+      "meaning": "CultureInfo dùng để định dạng số/tiền/ngày"
+    },
+    {
+      "key": "\"I2 Language\"",
+      "value": "PlayerPrefs string — tên ngôn ngữ đã chọn",
+      "meaning": "Ghi nhớ ngôn ngữ giữa các phiên"
+    },
+    {
+      "key": "LocalizationManager.LanguagesRTL",
+      "value": "ar, ar-AE, ar-BH, ar-DZ, ar-EG, ar-IQ, ar-JO, ar-KW, ar-LB, ar-LY, ar-MA, ar-OM, ar-QA, ar-SA, ar-SY, ar-TN, ar-YE, fa, he, ji, ur",
+      "meaning": "Mã ngôn ngữ viết phải-sang-trái"
+    },
+    {
+      "key": "LocalizationManager.GetVersion",
+      "value": "\"2.8.22 f6\"",
+      "meaning": "Phiên bản plugin I2 Localization"
+    },
+    {
+      "key": "Tên nguồn mặc định",
+      "value": "\"I2Languages\"",
+      "meaning": "Asset trong Resources được nạp tự động (GlobalSources)"
+    },
+    {
+      "key": "Cú pháp tham số I2",
+      "value": "\"{[\" … \"]}\" và tiền tố \"[i2p_\"",
+      "meaning": "Đánh dấu tham số động trong chuỗi dịch"
+    },
+    {
+      "key": "LanguageSourceData.CategorySeparators / EmptyCategory",
+      "value": "'/' làm dấu phân nhóm term",
+      "meaning": "Cho phép gom term theo danh mục"
+    },
+    {
+      "key": "Định dạng I2 CSV",
+      "value": "header \"Key[*]Type[*]Desc\", \"[*]\", \"[ln]\", \"[i2fb]\", \"[i2t]\"",
+      "meaning": "Định dạng trao đổi bản dịch riêng của I2"
+    }
+  ],
+  "tips": [
+    "Vì không có UI đổi ngôn ngữ, đường LocalizeAll khi đang chạy chủ yếu phục vụ khởi động và công cụ nội bộ.",
+    "Nhúng thẻ màu trực tiếp vào bản dịch cho phép mỗi ngôn ngữ tự chọn phần tô màu, ví dụ 'Beat <color=#FFC20F>{0} Levels!</color>'.",
+    "Không có tiếng Trung, Ả Rập hay Indonesia trong 11 ngôn ngữ, dù plugin vẫn còn mã xử lý riêng cho tiếng Trung.",
+    "Đồng bộ từ Google Sheets là con đường sửa chữ mà không phải phát hành bản mới.",
+    "Danh sách Assets rỗng nghĩa là mọi hình có chữ đều phải dùng chung cho mọi ngôn ngữ."
+  ],
+  "categories": [
+    "Meta",
+    "Live-ops"
+  ]
+}

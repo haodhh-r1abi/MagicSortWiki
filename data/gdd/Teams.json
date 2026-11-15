@@ -1,0 +1,2545 @@
+{
+  "id": "Teams",
+  "name": "Đội (Teams)",
+  "category": "Social",
+  "managers": [
+    "Modules.Contexts.Home.Teams.Scripts.UI.TeamsService",
+    "Modules.Contexts.Home.Teams.Scripts.UI.TeamsRemoteService",
+    "Modules.Contexts.Home.Teams.Scripts.UI.TeamsDataService",
+    "Modules.Contexts.Home.Teams.Scripts.UI.TeamChatService",
+    "Modules.Infrastructure.Network.Socketv2.WebSocketManager"
+  ],
+  "summary": "Teams là tính năng xã hội lõi của Magic Sort: người chơi tạo hoặc gia nhập một đội (tối đa TeamCapacity thành viên), trò chuyện thời gian thực qua WebSocket, xin/tặng mạng miễn phí (FreeLives), xin/tặng thẻ sưu tập (Collection card) và cùng nhau tham gia các sự kiện đồng đội (Team Arena, Team Quest, Magic Pass team gifts). Đội có tên, mô tả, huy hiệu (badge), quốc gia, yêu cầu level tối thiểu và kiểu Mở/Đóng (tự vào hay phải xin duyệt). Ba cấp vai trò: Leader, Co-Leader, Member (enum MemberRole) quyết định quyền sửa đội, duyệt đơn, kick, thăng/giáng chức. Toàn bộ dữ liệu đội nằm trên backend (HTTP + FlatBuffers schema magicsort.schemas.v1.team), client chỉ cache trạng thái nhỏ trong TeamsDataModel và đồng bộ qua ISyncable với tên 'TeamsSyncModel'. Giá trị thiết kế: tăng retention nhờ mạng miễn phí, tạo vòng lặp xã hội (giúp đỡ ↔ được thưởng coin) và làm nền cho các live event đồng đội.",
+  "unlock": "Cờ bật/tắt và mốc mở khoá đều lấy từ Firebase Remote Config key 'TeamsConfigModel': TeamsService.IsEnabled() trả về TeamsConfigModel.IsEnable; TeamsService.GetTeamsUnlockLevel() trả về TeamsConfigModel.UnlockLevel; TeamsService.IsTeamsUnlocked() so sánh level người chơi với mốc này. Khi chưa đủ level TeamsController hiển thị _lockedView với text localize 'TeamsUnlock' = \"Teams unlocks at level {0}!\"; khi IsEnable=false thì hiện _disabledView.",
+  "entry_points": [
+    "Nút Teams trên Home/Toolbar (TeamsLobbyButtonController)",
+    "Trang Teams trong SwipeMenu (TeamChatController.OnPageSelected(PageType))",
+    "Popup FreeLives từ thanh mạng (FreeLivesPopup, FreeLiveFactory)",
+    "Popup xin thẻ từ màn Collection (TeamsAskCardPopup; localize 'CollectionNeedJoinTeam')",
+    "Popup Team Arena / Team Quest yêu cầu vào đội (localize 'TeamArenaJoinInfoNoTeam', 'TeamQuestJoinInfoNoTeam')",
+    "Thông báo bị kick (TeamsService.ShouldShowUserKickedNotification / TeamNotificationController)"
+  ],
+  "flow": "Khi đăng nhập xong, TeamsService (ILateLoginService) gọi TryFetchCurrentState() → TeamsRemoteService.GetUserTeamSummary() lấy GetMyTeamResponse, đặt State = Initializing → Initialized (enum TeamServiceState: Unkown=0, Initializing=1, Initialized=2) và bắn OnTeamServiceStateUpdated. Nếu người chơi chưa có đội, TryFetchSuggestedTeams() nạp danh sách gợi ý (GetTeamSuggestions) và JoinView hiển thị; MinLevelDeltaStep dùng để nới dần khoảng level khi gợi ý. Người chơi có thể SearchTeam(keyword) (TeamsSearchRequestModel.keyword) hoặc CreateTeam(TeamCreateRequestModel) — tốn CreateCost coin. Với đội Mở, JoinTeam(teamId) vào ngay; với đội Đóng, SendJoinTeamRequest(teamDataId) tạo đơn chờ, Leader/Co-Leader xem qua GetJoinRequests() và ReplyJoinRequest(requestId, accepted). Sau khi vào đội, UserJoinedTeam(viewModel) lưu cờ và TeamsService.SetUserJoinedTeam(true); TeamChatService.Initialize() mở WebSocket (WebSocketManager.Start(uri)) tới kênh chat của đội, FetchChatHistory(TeamChatHistoryRequestModel{chat_id, user_public_id}) nạp lịch sử rồi InitializeChat(). Trong chat, người chơi gửi text (SendMessage), gửi yêu cầu trợ giúp mạng (RequestHelp), yêu cầu thẻ (SendCardRequest(cardId)) và tặng thẻ (SendCard). Đồng đội bấm giúp → SupportHelp(viewModel) làm HelpCount tăng đến RequiredHelpCount; người giúp nhận HelpSupportReward. Người xin nhận mạng qua GetUserFreeLives() → GetHelpsResponse, lưu TeamFreeLifeModel vào TeamsDataModel; ClaimFreeLive(messageId, userId) nhận mạng rồi SyncClaimedHelps() gửi ClaimHelpRequestModel{helps:[{helper_id, message_id}]} lên server và RemoveClaimedLives(). Cooldown: StartHelpCooldown() (DefaultHelpCooldown giây) và StartCardRequestCooldown() (86400 giây), RefreshRequestsCooldowns() đồng bộ lại với server khi vào lại. Rời đội: LeaveTeam() → TeamsWebResponse, dọn dữ liệu, đóng socket. Khi socket rớt, WebSocketManager.TryReconnect() thử lại mỗi ReconnectAttemptDelay=5s với trần MaxReconnectDelay=120s, TeamChatService.ReconnectToChat() nạp lại lịch sử; TeamsService.OnReconnected() làm mới dữ liệu đội.",
+  "use_cases": [
+    {
+      "id": "UC-01",
+      "title": "Nạp trạng thái đội sau đăng nhập",
+      "actor": "System",
+      "trigger": "Login hoàn tất (ILateLoginService)",
+      "precondition": "TeamsConfigModel.IsEnable = true",
+      "steps": [
+        "TeamsService.TryFetchCurrentState()",
+        "TeamsRemoteService.GetUserTeamSummary() → GetMyTeamResponse (FlatBuffers)",
+        "TeamsUtils.GetTeamViewModel(TeamSummary) dựng TeamViewModel",
+        "State = Initialized, bắn OnTeamServiceStateUpdated / OnUserTeamDataUpdated"
+      ],
+      "result": "UserTeamModel, UserRole, RequestCount, UserImageUrl được nạp; TeamsController.UpdateView() chọn view phù hợp",
+      "rules": "State theo enum TeamServiceState (Unkown/Initializing/Initialized). Nếu response lỗi → _noConnectionView",
+      "evidence": "TeamsService.TryFetchCurrentState; TeamsRemoteService.GetUserTeamSummary; TeamsUtils.GetTeamViewModel; TeamsController.UpdateView"
+    },
+    {
+      "id": "UC-02",
+      "title": "Xem danh sách đội gợi ý",
+      "actor": "System",
+      "trigger": "Người chơi chưa có đội mở tab Teams",
+      "precondition": "IsUserInTeam = false",
+      "steps": [
+        "TeamsService.TryFetchSuggestedTeams()",
+        "TeamsRemoteService.GetTeamSuggestions() → GetTeamsResponse",
+        "TeamsUtils.GetTeams(response) → List<TeamViewModel>",
+        "JoinView hiển thị, gửi analytics 'teams_join_available'"
+      ],
+      "result": "SuggestedTeams được set, người chơi thấy các đội phù hợp level/quốc gia",
+      "rules": "MinLevelDeltaStep nới dần khoảng level khi không đủ gợi ý (suy luận từ tên field)",
+      "evidence": "TeamsService.TryFetchSuggestedTeams; TeamsRemoteService.GetTeamSuggestions; TeamsUtils.GetTeams; JoinView"
+    },
+    {
+      "id": "UC-03",
+      "title": "Tìm đội theo từ khoá",
+      "actor": "Player",
+      "trigger": "Nhập từ khoá trong SearchView",
+      "precondition": "Đã mở khoá Teams",
+      "steps": [
+        "SearchView gọi TeamsService.SearchTeam(keyword)",
+        "TeamsRemoteService.SearchTeams(keyword) với TeamsSearchRequestModel{keyword}",
+        "Kết quả GetTeamsResponse → danh sách TeamViewModel (Name, Badge, MemberCount, CountryCode, IsOpen, HasPendingRequest)"
+      ],
+      "result": "Danh sách đội khớp hiển thị trong SearchView",
+      "rules": "Nếu không có kết quả, hiển thị gợi ý (localize 'TeamCheckSuggestions')",
+      "evidence": "TeamsService.SearchTeam; TeamsRemoteService.SearchTeams; SearchView"
+    },
+    {
+      "id": "UC-04",
+      "title": "Tạo đội mới",
+      "actor": "Player",
+      "trigger": "Bấm Create trong CreateView",
+      "precondition": "Chưa ở trong đội; đủ coin bằng GetTeamCreateCost()",
+      "steps": [
+        "Nhập tên (localize 'TeamNameEnter'), mô tả ('TeamDescriptionEnter'), chọn badge (BadgeSelectionView + TeamsBadgeConfig), chọn Team Type mở/đóng, đặt level requirement",
+        "Kiểm tra tên: rỗng → 'TeamNameCantBeEmpty'; ngắn hơn 3 ký tự → 'TeamNameCantBeShorterThan3'",
+        "CreateTeamCommand → TeamsService.CreateTeam(TeamCreateRequestModel{name, badge, description, level_requirement, is_open_team})",
+        "TeamsRemoteService.CreateTeam → GetTeamWithMembersResponse",
+        "TeamsService.UserJoinedTeam(viewModel), InventoryService trừ coin, analytics 'teams_created'"
+      ],
+      "result": "Người chơi trở thành Leader của đội mới, vào thẳng chat",
+      "rules": "Chi phí = TeamsConfigModel.CreateCost (server). Lỗi trùng tên → 'TeamsTeamExistsErrorMessage'; tên/mô tả không hợp lệ → 'TeamsTeamNameInvalidErrorMessage' / 'TeamsTeamDescriptionInvalidErrorMessage'",
+      "evidence": "TeamsService.CreateTeam; TeamsRemoteService.CreateTeam; CreateTeamCommand; CreateView; TeamsService.GetTeamCreateCost"
+    },
+    {
+      "id": "UC-05",
+      "title": "Vào đội Mở",
+      "actor": "Player",
+      "trigger": "Bấm Join trên một đội IsOpen = true",
+      "precondition": "Chưa thuộc đội nào",
+      "steps": [
+        "JoinTeamCommand → TeamsService.JoinTeam(teamId)",
+        "TeamsRemoteService.JoinTeam(TeamJoinRequestModel{team_id})",
+        "TeamsUtils.GetTeamDetailsViewModel(response) → TeamDetailsViewModel",
+        "UserJoinedTeam(viewModel): set UserTeamModel, UserRole = Member, SetUserJoinedTeam(true)",
+        "Analytics 'teams_joined'; hệ thống đăng tin nhắn TeamSystemMessageType.Joined = \"3\""
+      ],
+      "result": "Vào chat đội, bắt đầu nhận/gửi mạng miễn phí",
+      "rules": "Đội đầy → 'TeamFullErrorMessage'; level không đủ → 'TeamsLevelRequirementNotMet'; đội vừa đổi sang Đóng → 'TeamsTeamClosedErrorMessage'; đã có đội → 'TeamsUserAlreadyInTeamErrorMessage'; bị ban khỏi đội → 'TeamsUserBannedFromThisTeamErrorMessage' (TeamBanPopup)",
+      "evidence": "TeamsService.JoinTeam; TeamsRemoteService.JoinTeam; JoinTeamCommand; TeamsSystemMessageType.Joined; TeamBanPopup"
+    },
+    {
+      "id": "UC-06",
+      "title": "Xin vào đội Đóng và chờ duyệt",
+      "actor": "Player",
+      "trigger": "Bấm Join trên đội IsOpen = false",
+      "precondition": "Chưa thuộc đội nào",
+      "steps": [
+        "TeamsService.SendJoinTeamRequest(teamDataId)",
+        "TeamsRemoteService.SendJoinTeamRequest(TeamJoinRequestModel{team_id}) → TeamsWebResponse",
+        "TeamViewModel.HasPendingRequest = true, UI hiển thị 'TeamsPending'"
+      ],
+      "result": "Đơn nằm chờ, người chơi vẫn chưa vào đội",
+      "rules": "Đội chuyển sang Mở giữa chừng → 'TeamsTeamOpenErrorMessage' và phải thử lại",
+      "evidence": "TeamsService.SendJoinTeamRequest; TeamsRemoteService.SendJoinTeamRequest; TeamViewModel.HasPendingRequest"
+    },
+    {
+      "id": "UC-07",
+      "title": "Leader duyệt/từ chối đơn xin vào",
+      "actor": "Player (Leader/Co-Leader)",
+      "trigger": "Mở tab quản lý đơn (localize 'TeamsManageRequests')",
+      "precondition": "UserRole = Leader hoặc CoLeader",
+      "steps": [
+        "TeamsService.GetJoinRequests() → TeamsRemoteService.GetJoinRequests(TeamsGetJoinRequestModel{team_id})",
+        "TeamsUtils.GetJoinRequests(GetTeamRequestsResponse) → List<TeamJoinRequestInfo>",
+        "Bấm Accept ('TeamsAccept') hoặc Reject ('TeamsReject') → ReplyJoinRequestCommand → TeamsService.ReplyJoinRequest(requestId, accepted)",
+        "TeamsRemoteService.ReplyJoinRequest(TeamReplyJoinRequestModel{team_id, requester_id, is_accepted})",
+        "Bắn TeamRemoveJoinRequestSignal, cập nhật RequestCount (SetRequestCount) và badge số đơn trên nút chat"
+      ],
+      "result": "Người xin được thêm vào đội (system message Accepted=\"2\", localize 'TeamSystemMessageAccepted') hoặc bị loại",
+      "rules": "Chỉ Leader/Co-Leader mới thấy; sai vai trò → 'TeamsUserNotEligibleForOperation'",
+      "evidence": "TeamsService.GetJoinRequests; TeamsService.ReplyJoinRequest; TeamsRemoteService.ReplyJoinRequest; TeamJoinRequestsView; TeamsService.SetRequestCount"
+    },
+    {
+      "id": "UC-08",
+      "title": "Sửa thông tin đội",
+      "actor": "Player (Leader)",
+      "trigger": "Mở TeamEditPopup (localize 'TeamEdit')",
+      "precondition": "UserRole = Leader",
+      "steps": [
+        "Chỉnh badge/mô tả/level requirement/kiểu đội trong TeamEditPopup",
+        "EditTeamCommand → TeamsService.EditTeam(EditTeamRequestModel{team_id, name, badge, description, level_requirement, is_open_team})",
+        "TeamsRemoteService.EditTeam → TeamsWebResponse",
+        "Cập nhật UserTeamModel, TeamInfoPopup refresh"
+      ],
+      "result": "Thông tin đội đổi cho toàn bộ thành viên",
+      "rules": "Validate tên/mô tả như khi tạo; lỗi trả về theo TeamsWebResponse.custom_error",
+      "evidence": "TeamsService.EditTeam; TeamsRemoteService.EditTeam; EditTeamCommand; TeamEditPopup"
+    },
+    {
+      "id": "UC-09",
+      "title": "Thăng/giáng chức thành viên",
+      "actor": "Player (Leader)",
+      "trigger": "Bấm Make Co-leader / Demote trên thẻ thành viên",
+      "precondition": "UserRole = Leader; số Co-Leader hiện tại < GetMaxColeaderCount()",
+      "steps": [
+        "TeamUpdateMemberRolePopup xác nhận ('TeamPromoteSure' / 'TeamDemoteSure')",
+        "UpdateMemberRoleCommand → TeamsService.UpdateMemberRole(TeamUpdateMemberRoleRequestModel{team_id, user_public_id, role})",
+        "role dùng enum MemberRole (None=0, Leader=1, CoLeader=2, Member=3)",
+        "Server đăng system message Promoted=\"5\" / Demoted=\"6\"",
+        "Người bị đổi vai trò nhận TeamUserRoleUpdated → TeamsService.UserPromoted() / Demoted()"
+      ],
+      "result": "Quyền hạn thay đổi ngay trong phiên; UI hiện nhãn 'TeamsLeader'/'TeamsCoLeader'",
+      "rules": "MaxColeaderCount lấy từ TeamsConfigModel.MaxColeaderCount",
+      "evidence": "TeamsService.UpdateMemberRole; TeamsRemoteService.UpdateMemberRole; TeamsService.UserPromoted; TeamsService.Demoted; TeamUpdateMemberRolePopup; TeamsService.GetMaxColeaderCount"
+    },
+    {
+      "id": "UC-10",
+      "title": "Kick thành viên",
+      "actor": "Player (Leader/Co-Leader)",
+      "trigger": "Bấm Kick trên thẻ thành viên",
+      "precondition": "UserRole = Leader hoặc CoLeader",
+      "steps": [
+        "TeamKickPopup xác nhận ('TeamSureToKick', cảnh báo 'TeamUserWontAbleToJoinAgain')",
+        "KickUserFromTeamCommand → TeamsService.KickUser(TeamKickMemberRequestModel{team_id, user_public_id})",
+        "System message Kicked=\"4\" ('TeamSystemMessageKicked')",
+        "Người bị kick: UserKickedFromTeamSignal → TeamsService.UserKicked(); lần mở game sau ShouldShowUserKickedNotification() = true → hiện thông báo, sau đó SetKickNotificationSeen()",
+        "Analytics 'teams_kicked_out_from_team'"
+      ],
+      "result": "Thành viên rời đội và bị chặn quay lại đội đó",
+      "rules": "Người bị kick khi vào lại đội cũ nhận lỗi 'TeamsUserBannedFromThisTeamErrorMessage'",
+      "evidence": "TeamsService.KickUser; TeamsRemoteService.KickMember; TeamsService.UserKicked; TeamsService.ShouldShowUserKickedNotification; TeamsService.SetKickNotificationSeen; TeamKickPopup"
+    },
+    {
+      "id": "UC-11",
+      "title": "Rời đội",
+      "actor": "Player",
+      "trigger": "Bấm Leave trong TeamInfoPopup",
+      "precondition": "Đang ở trong đội",
+      "steps": [
+        "TeamLeavePopup xác nhận ('TeamsLeaveTeam', 'TeamsLeaveAreYouSure')",
+        "LeaveTeamCommand → TeamsService.LeaveTeam()",
+        "TeamsRemoteService.LeaveTeam(TeamLeaveRequestModel{team_id}) → TeamsWebResponse",
+        "Bắn UserLeftTeamSignal, TeamChatService.DisconnectFromChat(), xoá cache chat (ClearMessages)",
+        "System message Left=\"1\" ('TeamSystemMessageLeft'), analytics 'teams_left'"
+      ],
+      "result": "Về JoinView, mất quyền nhận mạng miễn phí và tham gia event đồng đội",
+      "rules": "Người chơi đang tham gia Team Arena/Quest sẽ mất phần thưởng đội ('TeamArenaWontAbleToJoinEvent')",
+      "evidence": "TeamsService.LeaveTeam; TeamsRemoteService.LeaveTeam; TeamChatService.DisconnectFromChat; UserLeftTeamSignal; TeamLeavePopup"
+    },
+    {
+      "id": "UC-12",
+      "title": "Đổi đội trực tiếp",
+      "actor": "Player",
+      "trigger": "Bấm Join một đội khác khi đang có đội",
+      "precondition": "Đang ở trong đội",
+      "steps": [
+        "TeamChangePopup xác nhận ('ChangeTeamTitle', 'ChangeTeamDescription')",
+        "TeamsService.ChangeTeam(newTeamId)",
+        "TeamsRemoteService.ChangeTeam(ChangeTeamRequestModel{current_team_id, changed_team_id})",
+        "Bắn UserChangedTeamSignal, analytics 'teams_changed'"
+      ],
+      "result": "Rời đội cũ và vào đội mới trong một lượt gọi",
+      "rules": "Vẫn chịu ràng buộc capacity/level/ban của đội mới",
+      "evidence": "TeamsService.ChangeTeam; TeamsRemoteService.ChangeTeam; TeamChangePopup; UserChangedTeamSignal"
+    },
+    {
+      "id": "UC-13",
+      "title": "Kết nối và nhắn tin trong chat đội",
+      "actor": "Player",
+      "trigger": "Mở tab chat đội",
+      "precondition": "Đã ở trong đội, socket mở được",
+      "steps": [
+        "TeamChatService.Initialize(): WebSocketManager.Start(uri) tới endpoint chat trong BackendEnvironmentConfig",
+        "TeamsRemoteService.FetchChatHistory(TeamChatHistoryRequestModel{chat_id, user_public_id}) → List<SocketMessage<TeamChatMessage>>",
+        "InitializeChat(history) dựng List<TeamsChatMessageViewModel>",
+        "Người chơi gõ trong TeamChatInputController → TeamChatService.SendMessage(content) → WebSocketManager.SendMessage(action, chatId, channel, content, order)",
+        "Tin nhắn đến qua WebSocketTeamChatMessageHandler → TeamChatMessageReceived → ProcessReceivedMessage → OnMessageReceived",
+        "TeamChatController.MoveToBottom() cuộn xuống"
+      ],
+      "result": "Chat realtime hiện tên, avatar (ProfileSpriteCacheService), khung (frame_id) và name style của người gửi",
+      "rules": "Tin nhắn chứa từ ngữ xấu bị chặn với thông báo 'TeamsInappropriateChat'. Bàn phím mở làm nội dung dịch lên (OnKeyboardHeightChanged). Analytics 'teams_message_sent' + 'teams_message_type'",
+      "evidence": "TeamChatService.Initialize; TeamChatService.SendMessage; WebSocketManager.SendMessage; TeamChatService.TeamChatMessageReceived; TeamChatController.MoveToBottom; WebSocketTeamChatMessageHandler"
+    },
+    {
+      "id": "UC-14",
+      "title": "Xin mạng trong chat và cooldown",
+      "actor": "Player",
+      "trigger": "Bấm nút xin trợ giúp trong TeamsChatHelpRequestController",
+      "precondition": "CanRequestHelp = true (hết cooldown)",
+      "steps": [
+        "TeamChatService.RequestHelp() gửi tin nhắn kiểu help lên socket",
+        "TeamsService.StartHelpCooldown() đặt _helpRequestActivationTime; HelpRequestRemainingTime đếm ngược GetHelpMaxCooldown() giây",
+        "Analytics 'teams_help_requested'",
+        "TeamsService.RefreshRequestsCooldowns() đồng bộ lại cooldown với GetMyTeamResponse khi mở lại app"
+      ],
+      "result": "Một tin nhắn xin mạng xuất hiện trong chat cho cả đội",
+      "rules": "Cooldown = TeamsConfigModel.DefaultHelpCooldown (server). CanRequestHelp chặn spam",
+      "evidence": "TeamChatService.RequestHelp; TeamsService.StartHelpCooldown; TeamsService.get_CanRequestHelp; TeamsService.get_HelpRequestRemainingTime; TeamsService.RefreshRequestsCooldowns"
+    },
+    {
+      "id": "UC-15",
+      "title": "Đồng đội tặng mạng và nhận thưởng",
+      "actor": "Team member",
+      "trigger": "Bấm Help trên tin nhắn xin mạng",
+      "precondition": "Chưa giúp tin nhắn này (TeamsDataService.HasHelpedMessage(messageId) = false)",
+      "steps": [
+        "TeamChatService.SupportHelp(viewModel) gửi lên socket",
+        "TeamsDataService.AddToHelpedMessages(messageId)",
+        "viewModel.IncreaseHelpCount(); khi HelpCount >= RequiredHelpCount thì HelpCompleted = true và TryRemoveHelpMessageIfMaxedOut() gỡ tin nhắn khỏi chat",
+        "Người giúp nhận GetHelpSupportReward() (HelpSupportRewardController + HelpSupportRewardView, PlayHelpSupportAnimationSignal)",
+        "Analytics 'teams_help_made'"
+      ],
+      "result": "Người xin có thêm mạng miễn phí; người giúp nhận thưởng",
+      "rules": "Đã giúp rồi → 'TeamsYouCantHelp'. Số lượt giúp tối đa mỗi tin nhắn = TeamsConfigModel.MaxHelpCount. Một người chỉ có 1 tin xin đang mở (RemoveHelpRequestFromSameUser)",
+      "evidence": "TeamChatService.SupportHelp; TeamsDataService.AddToHelpedMessages; TeamsDataService.HasHelpedMessage; TeamChatService.TryRemoveHelpMessageIfMaxedOut; TeamChatService.RemoveHelpRequestFromSameUser; TeamsService.GetHelpSupportReward"
+    },
+    {
+      "id": "UC-16",
+      "title": "Nhận mạng miễn phí trong FreeLivesPopup",
+      "actor": "Player",
+      "trigger": "Mở popup FreeLives từ thanh mạng",
+      "precondition": "Có TeamFreeLifeModel chưa claim",
+      "steps": [
+        "TeamsService.InitializeFreeLives(putDelay) → TeamsRemoteService.GetUserFreeLives() → GetHelpsResponse",
+        "TeamsUtils.GetTeamHelp(TeamHelp) → TeamHelpData (nick_name, helper_user_public_id, message_id, helper_image_id/url, helper_frame_id, helper_name_style)",
+        "TeamsDataService.AddFreeLife(TeamFreeLifeModel)",
+        "FreeLivesPopup liệt kê (localize 'TotalFreeLives'), người chơi bấm nhận → TeamsService.ClaimFreeLive(messageId, userId)",
+        "TeamsDataService.LifeClaimed(messageId, userId) đánh dấu Claimed",
+        "SyncClaimedHelps(localClaimedHelps, remoteLives) gửi ClaimHelpRequestModel{helps:[{helper_id, message_id}]} → TeamsRemoteService.ClaimHelps, sau đó RemoveClaimedLives()"
+      ],
+      "result": "Mạng được cộng vào InventoryService, danh sách rỗng dần; bắn OnFreeLivesUpdated / OnLifeClaimed",
+      "rules": "Cờ _freeLivesInitializing chống gọi trùng. Analytics 'teams_free_lives_popup_opened', 'teams_free_lives_popup_additional_life_add_button', 'teams_more_lives_popup_free_lives_button'",
+      "evidence": "TeamsService.InitializeFreeLives; TeamsService.ClaimFreeLive; TeamsService.SyncClaimedHelps; TeamsRemoteService.GetUserFreeLives; TeamsRemoteService.ClaimHelps; TeamsDataService.AddFreeLife; TeamsDataService.RemoveClaimedLives; FreeLivesPopup"
+    },
+    {
+      "id": "UC-17",
+      "title": "Xin thẻ sưu tập từ đồng đội",
+      "actor": "Player",
+      "trigger": "Bấm Ask Card ở Collection hoặc TeamsAskCardPopup",
+      "precondition": "Đang ở trong đội; CanRequestCard = true",
+      "steps": [
+        "TeamsAskCardPopup chọn thẻ (TeamsAskCardThemeView / TeamsAskCardThemeViewModel)",
+        "TeamChatService.SendCardRequest(cardId) đăng tin nhắn dạng card request lên chat",
+        "TeamsService.StartCardRequestCooldown() đặt CardRequestCooldownEndDate; CardRequestRemainingTime đếm ngược GetCardMaxCooldown() = 86400 giây (0x15180)",
+        "Analytics 'teams_card_requested'"
+      ],
+      "result": "Tin nhắn xin thẻ hiện trong chat (TeamsCardRequestMessageView)",
+      "rules": "Chưa vào đội → 'CollectionNeedJoinTeam'. Thẻ vàng không xin được ('TeamsAskingCardInfoGoldCardDescription'). Cooldown 24h giữa 2 lần xin",
+      "evidence": "TeamChatService.SendCardRequest; TeamsService.StartCardRequestCooldown; TeamsService.GetCardMaxCooldown; TeamsService.get_CanRequestCard; TeamsAskCardPopup"
+    },
+    {
+      "id": "UC-18",
+      "title": "Tặng thẻ và giới hạn 3 thẻ/ngày",
+      "actor": "Team member",
+      "trigger": "Bấm gửi thẻ trên tin nhắn xin thẻ",
+      "precondition": "Có thẻ trùng; chưa đạt giới hạn ngày",
+      "steps": [
+        "TeamChatService.SendCard(cardId, requestMessageId, receiverId)",
+        "TeamsService.IncreaseSentCardCount(); SentCardCount tăng",
+        "DailyCardSentLimitReached() so sánh GetDailySentCardsCount() với GetCardNumberUserCansSendPerDay() = 3",
+        "RemoveCardRequest(cardSent) gỡ tin nhắn đã hoàn tất",
+        "Analytics 'teams_card_sent'"
+      ],
+      "result": "Người xin nhận thẻ vào CollectionService; người tặng bị trừ 1 lượt/ngày",
+      "rules": "Tối đa 3 thẻ gửi mỗi ngày (hằng số trong TeamsService.GetCardNumberUserCansSendPerDay)",
+      "evidence": "TeamChatService.SendCard; TeamsService.IncreaseSentCardCount; TeamsService.DailyCardSentLimitReached; TeamsService.GetCardNumberUserCansSendPerDay; TeamChatService.RemoveCardRequest"
+    },
+    {
+      "id": "UC-19",
+      "title": "Bảng xếp hạng đội (quốc gia/toàn cầu)",
+      "actor": "System",
+      "trigger": "Mở TeamLeaderboardView hoặc _shouldUpdateLeaderboard = true",
+      "precondition": "Đang ở trong đội",
+      "steps": [
+        "TeamsService.UpdateLeaderboard() → TeamsRemoteService.GetTeamLeaderboard() → GetTeamLeaderboardResponse",
+        "TeamsDataService.SetGlobalLeaderboard / SetCountryLeaderboard lưu List<LeaderboardTeam> (Id, Name, MemberCount, TeamScore, BadgeId)",
+        "TeamsUtils.UpdateLeaderboardTeam(TeamLeaderboardSummary, LeaderboardTeam) cập nhật từng dòng",
+        "TeamLeaderboardViewAdapter render danh sách (localize 'TeamScore')"
+      ],
+      "result": "Người chơi thấy thứ hạng đội mình so với đội khác trong nước và toàn cầu",
+      "rules": "Dùng ObjectPool<LeaderboardTeam> để tái sử dụng dòng; TeamTypeToggleView chuyển Quốc gia ↔ Toàn cầu",
+      "evidence": "TeamsService.UpdateLeaderboard; TeamsRemoteService.GetTeamLeaderboard; TeamsDataService.SetGlobalLeaderboard; TeamsDataService.SetCountryLeaderboard; TeamsUtils.UpdateLeaderboardTeam"
+    },
+    {
+      "id": "UC-20",
+      "title": "Mất kết nối và tự kết nối lại",
+      "actor": "System",
+      "trigger": "Socket đóng hoặc app quay lại foreground",
+      "precondition": "Đang ở tab chat",
+      "steps": [
+        "WebSocketManager.OnSocketClosed(statusCode, message) → _reconnecting = true, bắn OnReconnecting",
+        "TeamChatController.OnSocketReconnecting() hiện _loadingIndicator",
+        "WebSocketManager.TryReconnect() thử lại sau ReconnectAttemptDelay = 5s, giãn dần tới MaxReconnectDelay = 120s",
+        "Khi mở lại: TeamChatService.OnSocketOpened() → ReconnectToChat() nạp lại lịch sử; TeamsService.OnReconnected() làm mới dữ liệu đội",
+        "TeamsController.OnApplicationFocus/OnApplicationPause quyết định CanRefreshTeams()"
+      ],
+      "result": "Chat khôi phục, tin nhắn bị lỡ được nạp lại; nếu vẫn hỏng thì hiện _noConnectionView",
+      "rules": "WebSocketHearthBeat giữ kết nối; Pause()/Unpause() tạm dừng reconnect khi app nền",
+      "evidence": "WebSocketManager.OnSocketClosed; WebSocketManager.TryReconnect; TeamChatService.ReconnectToChat; TeamChatService.OnSocketOpened; TeamsService.OnReconnected; TeamsController.OnApplicationFocus"
+    },
+    {
+      "id": "UC-21",
+      "title": "Tin nhắn gửi lỗi / sai thứ tự và gửi lại",
+      "actor": "System",
+      "trigger": "Không nhận được ACK trong 5 giây",
+      "precondition": "Đã gửi tin nhắn qua socket",
+      "steps": [
+        "TeamChatService.AddToPendingAcks(message) ghi vào _pendingAcks và _pendingMessageTimestamps",
+        "IntervalUpdate() so sánh với MessageAckTimeout = 5 giây",
+        "Phát hiện lệch thứ tự qua _sessionMessageOrder / _lastSentMessageOrder và _outOfOrderDetectionTime → RefreshChatAsync()",
+        "Nếu socket đứt khi đang gửi: CacheMessage(messageType, context) lưu TeamsMessageCacheModel; khi kết nối lại TrySendCachedMessage() gửi lại rồi ClearCachedMessage()"
+      ],
+      "result": "Không mất tin nhắn khi mạng chập chờn",
+      "rules": "MessageAckTimeout = 5 (const float trong TeamChatService)",
+      "evidence": "TeamChatService.AddToPendingAcks; TeamChatService.RemoveFromPendingAcks; TeamChatService.IntervalUpdate; TeamChatService.CacheMessage; TeamChatService.TrySendCachedMessage; TeamsDataService.CacheMessageSend; TeamsDataService.ClearCachedMessage"
+    },
+    {
+      "id": "UC-22",
+      "title": "Tin nhắn hệ thống khi trạng thái thành viên đổi",
+      "actor": "Server",
+      "trigger": "Có người vào/rời/bị kick/thăng/giáng chức",
+      "precondition": "Đang ở trong đội",
+      "steps": [
+        "Server đẩy TeamSystemChatMessage với mã TeamsSystemMessageType (Left=\"1\", Accepted=\"2\", Joined=\"3\", Kicked=\"4\", Promoted=\"5\", Demoted=\"6\")",
+        "TeamChatService.CheckSystemMessageForUserStateChange(viewModel) kiểm tra mã có liên quan tới chính người chơi",
+        "TeamsService.UserKicked/UserPromoted/Demoted cập nhật UserRole; TeamsService.UpdateUserTeamMemberCount(memberCount)"
+      ],
+      "result": "Chat hiện dòng thông báo hệ thống, UI vai trò cập nhật ngay",
+      "rules": "Text tương ứng: 'TeamSystemMessageLeft/Accepted/Joined/Kicked/Promoted/Demoted'",
+      "evidence": "TeamChatService.CheckSystemMessageForUserStateChange; TeamsSystemMessageType; TeamsService.UpdateUserTeamMemberCount; TeamSystemChatMessage"
+    },
+    {
+      "id": "UC-23",
+      "title": "Chia sẻ Magic Pass với đội",
+      "actor": "Player",
+      "trigger": "Kích hoạt Magic Pass",
+      "precondition": "Đang ở trong đội, MagicPassService bật",
+      "steps": [
+        "TeamChatService.SendMagicPassMessage() đăng tin nhắn quà vào chat ('MagicPassActivationTeamGifts', 'MagicPassTeamGotMagicPass')",
+        "Đồng đội bấm nhận vé → TeamChatService.MagicPassTicketClaimed(messageId)",
+        "GetClaimableMagicTicketCount() cho biết còn bao nhiêu vé nhận được"
+      ],
+      "result": "Cả đội nhận vé Magic Pass, tăng động lực mua pass",
+      "rules": "Tin nhắn lưu trong _magicPassMessages, chỉ nhận 1 lần mỗi messageId",
+      "evidence": "TeamChatService.SendMagicPassMessage; TeamChatService.MagicPassTicketClaimed; TeamChatService.GetClaimableMagicTicketCount"
+    },
+    {
+      "id": "UC-24",
+      "title": "Đồng bộ dữ liệu đội cục bộ với server",
+      "actor": "System",
+      "trigger": "SyncService chạy chu kỳ hoặc dữ liệu thay đổi",
+      "precondition": "-",
+      "steps": [
+        "TeamsDataService.MarkForLateUpdate(shouldSyncWithBackend) khi có thay đổi",
+        "LateUpdate() lưu qua ISaveLoad<TeamsDataModel>",
+        "SerializeModelForSync() / GetSyncName() = \"TeamsSyncModel\" gửi lên SyncService",
+        "OverwriteModelFromSync(data) ghi đè khi server trả dữ liệu mới (đăng nhập trên máy khác)"
+      ],
+      "result": "Cờ IsIntroduced, UserJoined, danh sách FreeLives, UserTeamInfoSent theo tài khoản chứ không theo thiết bị",
+      "rules": "IsDataChangedSinceLastSave() / DataSynced() quản lý cờ bẩn",
+      "evidence": "TeamsDataService.SerializeModelForSync; TeamsDataService.GetSyncName; TeamsDataService.OverwriteModelFromSync; TeamsDataService.MarkForLateUpdate; TeamsSyncModel"
+    },
+    {
+      "id": "UC-25",
+      "title": "Onboarding Teams lần đầu và gửi sự kiện mở khoá",
+      "actor": "System",
+      "trigger": "Người chơi đạt UnlockLevel",
+      "precondition": "GetTeamsIntroduced() = false",
+      "steps": [
+        "TryShowTeamsCommand kiểm tra IsTeamsUnlocked()",
+        "Hiển thị màn giới thiệu ('TeamJoinTitle' = \"Join a team to get free lives!\", 'TeamsActiveNow')",
+        "TeamsService.SetTeamsIntroduced(true) lưu vào TeamsSyncModel.IsIntroduced",
+        "Analytics 'teams_unlocked'; SendUserTeamInfoEvent() gửi một lần (GetUserTeamInfoSend/SetUserTeamInfoSend)"
+      ],
+      "result": "Người chơi được dẫn vào JoinView, chỉ hiện một lần",
+      "rules": "Sau khi vào đội, SetUserJoinedTeam(true) khoá luồng onboarding",
+      "evidence": "TeamsService.GetTeamsIntroduced; TeamsService.SetTeamsIntroduced; TeamsService.SendUserTeamInfoEvent; TeamsDataService.GetUserTeamInfoSend; TryShowTeamsCommand"
+    },
+    {
+      "id": "UC-26",
+      "title": "Thắng level làm mới dữ liệu đội",
+      "actor": "System",
+      "trigger": "Người chơi thắng một level",
+      "precondition": "Đang ở trong đội",
+      "steps": [
+        "TeamsService.OnLevelWin() đặt _needToRefresh / _shouldUpdateLeaderboard",
+        "IntervalUpdate() phát hiện cờ và gọi RefreshUserTeamData() / UpdateLeaderboard()"
+      ],
+      "result": "Điểm đóng góp và bảng xếp hạng đội được cập nhật sau mỗi màn thắng",
+      "rules": "Làm theo cơ chế cờ + IIntervalUpdate để tránh gọi mạng liên tục",
+      "evidence": "TeamsService.OnLevelWin; TeamsService.IntervalUpdate; TeamsService.RefreshUserTeamData; TeamsService.UpdateLeaderboard"
+    },
+    {
+      "id": "UC-27",
+      "title": "Lỗi server chung khi thao tác đội",
+      "actor": "System",
+      "trigger": "API trả về mã lỗi",
+      "precondition": "-",
+      "steps": [
+        "TeamsRemoteService.IsResponseValid<T>(ApiResponse<T>) kiểm tra; khi hỏng trả về chuỗi 'unknown_error'",
+        "TeamsUtils.GetErrorCode(BaseResponse) đọc mã lỗi",
+        "TeamsWarningPopup hiển thị thông điệp tương ứng TeamsWebResponse.custom_error / message"
+      ],
+      "result": "Người chơi thấy popup lỗi thay vì treo màn hình",
+      "rules": "Chuỗi mặc định: 'TeamsUnknownErrorMessage', 'TeamsUnexpectedErrorMessage'. TeamsWebResponse.UnkownFail là instance tĩnh dùng khi không parse được",
+      "evidence": "TeamsRemoteService.IsResponseValid; TeamsUtils.GetErrorCode; TeamsWebResponse; TeamsWarningPopup"
+    }
+  ],
+  "configs": [
+    {
+      "source": "Default/code0.0.3063 and historical caches20260910/20261010; per-snapshot source/hash in snapshot_values; not effective-runtime proof",
+      "key": "TeamsConfigModel.IsEnable",
+      "type": "bool",
+      "value": "default_0.0.3063: false; cache_20260910: false; cache_20261010: false; firebase_20260910: false",
+      "meaning": "Bật/tắt toàn bộ tính năng Teams [15/11: giá trị theo snapshot cụ thể; thiếu field khác với false/0. Không xác nhận assignment hoặc effective runtime.]",
+      "where": "Firebase Remote Config key 'TeamsConfigModel' (FirebaseRemoteConfigResolver) → TeamsService.IsEnabled()",
+      "previous_unresolved_value": "server",
+      "snapshot_values": [
+        {
+          "snapshot": "default_0.0.3063",
+          "model": "TeamsConfigModel",
+          "key": "IsEnable",
+          "value": false,
+          "type": "bool",
+          "source": "../com.grandgames.magicsort_Unity_20260909_112501/UnityExport/ExportedProject/Assets/Resources/defaultconfigs/TeamsConfigModel.json",
+          "value_type": "bool",
+          "source_sha256": "9b48472dcef39f9708fc3ff8540f8ed15c358eb255ea18228295f71fcf983953",
+          "field_present": true
+        },
+        {
+          "snapshot": "cache_20260910",
+          "model": "teamsConfigModel",
+          "key": "isEnable",
+          "value": false,
+          "type": "bool",
+          "source": "facts/runtime/server_configs/teamsConfigModel.json",
+          "value_type": "bool",
+          "source_sha256": "0333389a9dbfc6adbf0f1d8c2e07297107a484136a400aa9bcf7ef71ff140970",
+          "field_present": true
+        },
+        {
+          "snapshot": "cache_20261010",
+          "model": "teamsConfigModel",
+          "key": "isEnable",
+          "value": false,
+          "type": "bool",
+          "source": "facts/runtime/test_20261010/before/CachedRemoteConfigs",
+          "value_type": "bool",
+          "source_sha256": "433164d4877b2dee55d2bbd79ef2fe83d3fe9519492fe15e3cb0926daf216050",
+          "field_present": true
+        },
+        {
+          "snapshot": "firebase_20260910",
+          "model": "TeamsConfigModel",
+          "key": "IsEnable",
+          "value": false,
+          "type": "bool",
+          "source": "facts/runtime/decoded/firebase_rc.json",
+          "value_type": "bool",
+          "source_sha256": "e49f73c0e3854a98c0c27ffae86e6abc7897c767b5f3e82991004c48c4eb45d5",
+          "field_present": true
+        }
+      ],
+      "snapshot_review_id": "MS-CFG-Teams-0000"
+    },
+    {
+      "source": "Default/code0.0.3063 and historical caches20260910/20261010; per-snapshot source/hash in snapshot_values; not effective-runtime proof",
+      "key": "TeamsConfigModel.UnlockLevel",
+      "type": "int",
+      "value": "default_0.0.3063: 40; cache_20260910: 39; cache_20261010: 39; firebase_20260910: 39",
+      "meaning": "Level mở khoá Teams [15/11: giá trị theo snapshot cụ thể; thiếu field khác với false/0. Không xác nhận assignment hoặc effective runtime.]",
+      "where": "TeamsService.GetTeamsUnlockLevel / IsTeamsUnlocked",
+      "previous_unresolved_value": "server",
+      "snapshot_values": [
+        {
+          "snapshot": "default_0.0.3063",
+          "model": "TeamsConfigModel",
+          "key": "UnlockLevel",
+          "value": 40,
+          "type": "int",
+          "source": "../com.grandgames.magicsort_Unity_20260909_112501/UnityExport/ExportedProject/Assets/Resources/defaultconfigs/TeamsConfigModel.json",
+          "value_type": "int",
+          "source_sha256": "9b48472dcef39f9708fc3ff8540f8ed15c358eb255ea18228295f71fcf983953",
+          "field_present": true
+        },
+        {
+          "snapshot": "cache_20260910",
+          "model": "teamsConfigModel",
+          "key": "unlockLevel",
+          "value": 39,
+          "type": "int",
+          "source": "facts/runtime/server_configs/teamsConfigModel.json",
+          "value_type": "int",
+          "source_sha256": "0333389a9dbfc6adbf0f1d8c2e07297107a484136a400aa9bcf7ef71ff140970",
+          "field_present": true
+        },
+        {
+          "snapshot": "cache_20261010",
+          "model": "teamsConfigModel",
+          "key": "unlockLevel",
+          "value": 39,
+          "type": "int",
+          "source": "facts/runtime/test_20261010/before/CachedRemoteConfigs",
+          "value_type": "int",
+          "source_sha256": "433164d4877b2dee55d2bbd79ef2fe83d3fe9519492fe15e3cb0926daf216050",
+          "field_present": true
+        },
+        {
+          "snapshot": "firebase_20260910",
+          "model": "TeamsConfigModel",
+          "key": "UnlockLevel",
+          "value": 39,
+          "type": "int",
+          "source": "facts/runtime/decoded/firebase_rc.json",
+          "value_type": "int",
+          "source_sha256": "e49f73c0e3854a98c0c27ffae86e6abc7897c767b5f3e82991004c48c4eb45d5",
+          "field_present": true
+        }
+      ],
+      "snapshot_review_id": "MS-CFG-Teams-0001"
+    },
+    {
+      "source": "Default/code0.0.3063 and historical caches20260910/20261010; per-snapshot source/hash in snapshot_values; not effective-runtime proof",
+      "key": "TeamsConfigModel.TeamCapacity",
+      "type": "int",
+      "value": "default_0.0.3063: 50; cache_20260910: 50; cache_20261010: 50; firebase_20260910: 50",
+      "meaning": "Số thành viên tối đa của một đội [15/11: giá trị theo snapshot cụ thể; thiếu field khác với false/0. Không xác nhận assignment hoặc effective runtime.]",
+      "where": "TeamsService.GetTeamCapacity",
+      "previous_unresolved_value": "server",
+      "snapshot_values": [
+        {
+          "snapshot": "default_0.0.3063",
+          "model": "TeamsConfigModel",
+          "key": "TeamCapacity",
+          "value": 50,
+          "type": "int",
+          "source": "../com.grandgames.magicsort_Unity_20260909_112501/UnityExport/ExportedProject/Assets/Resources/defaultconfigs/TeamsConfigModel.json",
+          "value_type": "int",
+          "source_sha256": "9b48472dcef39f9708fc3ff8540f8ed15c358eb255ea18228295f71fcf983953",
+          "field_present": true
+        },
+        {
+          "snapshot": "cache_20260910",
+          "model": "teamsConfigModel",
+          "key": "teamCapacity",
+          "value": 50,
+          "type": "int",
+          "source": "facts/runtime/server_configs/teamsConfigModel.json",
+          "value_type": "int",
+          "source_sha256": "0333389a9dbfc6adbf0f1d8c2e07297107a484136a400aa9bcf7ef71ff140970",
+          "field_present": true
+        },
+        {
+          "snapshot": "cache_20261010",
+          "model": "teamsConfigModel",
+          "key": "teamCapacity",
+          "value": 50,
+          "type": "int",
+          "source": "facts/runtime/test_20261010/before/CachedRemoteConfigs",
+          "value_type": "int",
+          "source_sha256": "433164d4877b2dee55d2bbd79ef2fe83d3fe9519492fe15e3cb0926daf216050",
+          "field_present": true
+        },
+        {
+          "snapshot": "firebase_20260910",
+          "model": "TeamsConfigModel",
+          "key": "TeamCapacity",
+          "value": 50,
+          "type": "int",
+          "source": "facts/runtime/decoded/firebase_rc.json",
+          "value_type": "int",
+          "source_sha256": "e49f73c0e3854a98c0c27ffae86e6abc7897c767b5f3e82991004c48c4eb45d5",
+          "field_present": true
+        }
+      ],
+      "snapshot_review_id": "MS-CFG-Teams-0002"
+    },
+    {
+      "source": "Default/code0.0.3063 and historical caches20260910/20261010; per-snapshot source/hash in snapshot_values; not effective-runtime proof",
+      "key": "TeamsConfigModel.CreateCost",
+      "type": "int",
+      "value": "default_0.0.3063: 100; cache_20260910: 100; cache_20261010: 100; firebase_20260910: 100",
+      "meaning": "Chi phí coin để tạo đội [15/11: giá trị theo snapshot cụ thể; thiếu field khác với false/0. Không xác nhận assignment hoặc effective runtime.]",
+      "where": "TeamsService.GetTeamCreateCost",
+      "previous_unresolved_value": "server",
+      "snapshot_values": [
+        {
+          "snapshot": "default_0.0.3063",
+          "model": "TeamsConfigModel",
+          "key": "CreateCost",
+          "value": 100,
+          "type": "int",
+          "source": "../com.grandgames.magicsort_Unity_20260909_112501/UnityExport/ExportedProject/Assets/Resources/defaultconfigs/TeamsConfigModel.json",
+          "value_type": "int",
+          "source_sha256": "9b48472dcef39f9708fc3ff8540f8ed15c358eb255ea18228295f71fcf983953",
+          "field_present": true
+        },
+        {
+          "snapshot": "cache_20260910",
+          "model": "teamsConfigModel",
+          "key": "createCost",
+          "value": 100,
+          "type": "int",
+          "source": "facts/runtime/server_configs/teamsConfigModel.json",
+          "value_type": "int",
+          "source_sha256": "0333389a9dbfc6adbf0f1d8c2e07297107a484136a400aa9bcf7ef71ff140970",
+          "field_present": true
+        },
+        {
+          "snapshot": "cache_20261010",
+          "model": "teamsConfigModel",
+          "key": "createCost",
+          "value": 100,
+          "type": "int",
+          "source": "facts/runtime/test_20261010/before/CachedRemoteConfigs",
+          "value_type": "int",
+          "source_sha256": "433164d4877b2dee55d2bbd79ef2fe83d3fe9519492fe15e3cb0926daf216050",
+          "field_present": true
+        },
+        {
+          "snapshot": "firebase_20260910",
+          "model": "TeamsConfigModel",
+          "key": "CreateCost",
+          "value": 100,
+          "type": "int",
+          "source": "facts/runtime/decoded/firebase_rc.json",
+          "value_type": "int",
+          "source_sha256": "e49f73c0e3854a98c0c27ffae86e6abc7897c767b5f3e82991004c48c4eb45d5",
+          "field_present": true
+        }
+      ],
+      "snapshot_review_id": "MS-CFG-Teams-0003"
+    },
+    {
+      "source": "Default/code0.0.3063 and historical caches20260910/20261010; per-snapshot source/hash in snapshot_values; not effective-runtime proof",
+      "key": "TeamsConfigModel.MaxHelpCount",
+      "type": "int",
+      "value": "default_0.0.3063: 5; cache_20260910: 5; cache_20261010: 5; firebase_20260910: 5",
+      "meaning": "Số lượt giúp tối đa cho một tin nhắn xin mạng [15/11: giá trị theo snapshot cụ thể; thiếu field khác với false/0. Không xác nhận assignment hoặc effective runtime.]",
+      "where": "TeamsService.GetMaxHelpCount",
+      "previous_unresolved_value": "server",
+      "snapshot_values": [
+        {
+          "snapshot": "default_0.0.3063",
+          "model": "TeamsConfigModel",
+          "key": "MaxHelpCount",
+          "value": 5,
+          "type": "int",
+          "source": "../com.grandgames.magicsort_Unity_20260909_112501/UnityExport/ExportedProject/Assets/Resources/defaultconfigs/TeamsConfigModel.json",
+          "value_type": "int",
+          "source_sha256": "9b48472dcef39f9708fc3ff8540f8ed15c358eb255ea18228295f71fcf983953",
+          "field_present": true
+        },
+        {
+          "snapshot": "cache_20260910",
+          "model": "teamsConfigModel",
+          "key": "maxHelpCount",
+          "value": 5,
+          "type": "int",
+          "source": "facts/runtime/server_configs/teamsConfigModel.json",
+          "value_type": "int",
+          "source_sha256": "0333389a9dbfc6adbf0f1d8c2e07297107a484136a400aa9bcf7ef71ff140970",
+          "field_present": true
+        },
+        {
+          "snapshot": "cache_20261010",
+          "model": "teamsConfigModel",
+          "key": "maxHelpCount",
+          "value": 5,
+          "type": "int",
+          "source": "facts/runtime/test_20261010/before/CachedRemoteConfigs",
+          "value_type": "int",
+          "source_sha256": "433164d4877b2dee55d2bbd79ef2fe83d3fe9519492fe15e3cb0926daf216050",
+          "field_present": true
+        },
+        {
+          "snapshot": "firebase_20260910",
+          "model": "TeamsConfigModel",
+          "key": "MaxHelpCount",
+          "value": 5,
+          "type": "int",
+          "source": "facts/runtime/decoded/firebase_rc.json",
+          "value_type": "int",
+          "source_sha256": "e49f73c0e3854a98c0c27ffae86e6abc7897c767b5f3e82991004c48c4eb45d5",
+          "field_present": true
+        }
+      ],
+      "snapshot_review_id": "MS-CFG-Teams-0004"
+    },
+    {
+      "source": "Default/code0.0.3063 and historical caches20260910/20261010; per-snapshot source/hash in snapshot_values; not effective-runtime proof",
+      "key": "TeamsConfigModel.DefaultHelpCooldown",
+      "type": "int (giây)",
+      "value": "default_0.0.3063: 14400; cache_20260910: 14400; cache_20261010: 14400; firebase_20260910: 14400",
+      "meaning": "Cooldown giữa hai lần xin mạng [15/11: giá trị theo snapshot cụ thể; thiếu field khác với false/0. Không xác nhận assignment hoặc effective runtime.]",
+      "where": "TeamsService.GetHelpMaxCooldown / HelpRequestRemainingTime",
+      "previous_unresolved_value": "server",
+      "snapshot_values": [
+        {
+          "snapshot": "default_0.0.3063",
+          "model": "TeamsConfigModel",
+          "key": "DefaultHelpCooldown",
+          "value": 14400,
+          "type": "int",
+          "source": "../com.grandgames.magicsort_Unity_20260909_112501/UnityExport/ExportedProject/Assets/Resources/defaultconfigs/TeamsConfigModel.json",
+          "value_type": "int",
+          "source_sha256": "9b48472dcef39f9708fc3ff8540f8ed15c358eb255ea18228295f71fcf983953",
+          "field_present": true
+        },
+        {
+          "snapshot": "cache_20260910",
+          "model": "teamsConfigModel",
+          "key": "defaultHelpCooldown",
+          "value": 14400,
+          "type": "int",
+          "source": "facts/runtime/server_configs/teamsConfigModel.json",
+          "value_type": "int",
+          "source_sha256": "0333389a9dbfc6adbf0f1d8c2e07297107a484136a400aa9bcf7ef71ff140970",
+          "field_present": true
+        },
+        {
+          "snapshot": "cache_20261010",
+          "model": "teamsConfigModel",
+          "key": "defaultHelpCooldown",
+          "value": 14400,
+          "type": "int",
+          "source": "facts/runtime/test_20261010/before/CachedRemoteConfigs",
+          "value_type": "int",
+          "source_sha256": "433164d4877b2dee55d2bbd79ef2fe83d3fe9519492fe15e3cb0926daf216050",
+          "field_present": true
+        },
+        {
+          "snapshot": "firebase_20260910",
+          "model": "TeamsConfigModel",
+          "key": "DefaultHelpCooldown",
+          "value": 14400,
+          "type": "int",
+          "source": "facts/runtime/decoded/firebase_rc.json",
+          "value_type": "int",
+          "source_sha256": "e49f73c0e3854a98c0c27ffae86e6abc7897c767b5f3e82991004c48c4eb45d5",
+          "field_present": true
+        }
+      ],
+      "snapshot_review_id": "MS-CFG-Teams-0005"
+    },
+    {
+      "source": "Default/code0.0.3063 and historical caches20260910/20261010; per-snapshot source/hash in snapshot_values; not effective-runtime proof",
+      "key": "TeamsConfigModel.HelpSupportReward",
+      "type": "int",
+      "value": "default_0.0.3063: 5; cache_20260910: 5; cache_20261010: 5; firebase_20260910: 5",
+      "meaning": "Phần thưởng cho người bấm giúp đồng đội [15/11: giá trị theo snapshot cụ thể; thiếu field khác với false/0. Không xác nhận assignment hoặc effective runtime.]",
+      "where": "TeamsService.GetHelpSupportReward / HelpSupportRewardController",
+      "previous_unresolved_value": "server",
+      "snapshot_values": [
+        {
+          "snapshot": "default_0.0.3063",
+          "model": "TeamsConfigModel",
+          "key": "HelpSupportReward",
+          "value": 5,
+          "type": "int",
+          "source": "../com.grandgames.magicsort_Unity_20260909_112501/UnityExport/ExportedProject/Assets/Resources/defaultconfigs/TeamsConfigModel.json",
+          "value_type": "int",
+          "source_sha256": "9b48472dcef39f9708fc3ff8540f8ed15c358eb255ea18228295f71fcf983953",
+          "field_present": true
+        },
+        {
+          "snapshot": "cache_20260910",
+          "model": "teamsConfigModel",
+          "key": "helpSupportReward",
+          "value": 5,
+          "type": "int",
+          "source": "facts/runtime/server_configs/teamsConfigModel.json",
+          "value_type": "int",
+          "source_sha256": "0333389a9dbfc6adbf0f1d8c2e07297107a484136a400aa9bcf7ef71ff140970",
+          "field_present": true
+        },
+        {
+          "snapshot": "cache_20261010",
+          "model": "teamsConfigModel",
+          "key": "helpSupportReward",
+          "value": 5,
+          "type": "int",
+          "source": "facts/runtime/test_20261010/before/CachedRemoteConfigs",
+          "value_type": "int",
+          "source_sha256": "433164d4877b2dee55d2bbd79ef2fe83d3fe9519492fe15e3cb0926daf216050",
+          "field_present": true
+        },
+        {
+          "snapshot": "firebase_20260910",
+          "model": "TeamsConfigModel",
+          "key": "HelpSupportReward",
+          "value": 5,
+          "type": "int",
+          "source": "facts/runtime/decoded/firebase_rc.json",
+          "value_type": "int",
+          "source_sha256": "e49f73c0e3854a98c0c27ffae86e6abc7897c767b5f3e82991004c48c4eb45d5",
+          "field_present": true
+        }
+      ],
+      "snapshot_review_id": "MS-CFG-Teams-0006"
+    },
+    {
+      "source": "Default/code0.0.3063 and historical caches20260910/20261010; per-snapshot source/hash in snapshot_values; not effective-runtime proof",
+      "key": "TeamsConfigModel.MaxColeaderCount",
+      "type": "int",
+      "value": "default_0.0.3063: 3; cache_20260910: 3; cache_20261010: 3; firebase_20260910: 3",
+      "meaning": "Số Co-Leader tối đa mỗi đội [15/11: giá trị theo snapshot cụ thể; thiếu field khác với false/0. Không xác nhận assignment hoặc effective runtime.]",
+      "where": "TeamsService.GetMaxColeaderCount",
+      "previous_unresolved_value": "server",
+      "snapshot_values": [
+        {
+          "snapshot": "default_0.0.3063",
+          "model": "TeamsConfigModel",
+          "key": "MaxColeaderCount",
+          "value": 3,
+          "type": "int",
+          "source": "../com.grandgames.magicsort_Unity_20260909_112501/UnityExport/ExportedProject/Assets/Resources/defaultconfigs/TeamsConfigModel.json",
+          "value_type": "int",
+          "source_sha256": "9b48472dcef39f9708fc3ff8540f8ed15c358eb255ea18228295f71fcf983953",
+          "field_present": true
+        },
+        {
+          "snapshot": "cache_20260910",
+          "model": "teamsConfigModel",
+          "key": "maxColeaderCount",
+          "value": 3,
+          "type": "int",
+          "source": "facts/runtime/server_configs/teamsConfigModel.json",
+          "value_type": "int",
+          "source_sha256": "0333389a9dbfc6adbf0f1d8c2e07297107a484136a400aa9bcf7ef71ff140970",
+          "field_present": true
+        },
+        {
+          "snapshot": "cache_20261010",
+          "model": "teamsConfigModel",
+          "key": "maxColeaderCount",
+          "value": 3,
+          "type": "int",
+          "source": "facts/runtime/test_20261010/before/CachedRemoteConfigs",
+          "value_type": "int",
+          "source_sha256": "433164d4877b2dee55d2bbd79ef2fe83d3fe9519492fe15e3cb0926daf216050",
+          "field_present": true
+        },
+        {
+          "snapshot": "firebase_20260910",
+          "model": "TeamsConfigModel",
+          "key": "MaxColeaderCount",
+          "value": 3,
+          "type": "int",
+          "source": "facts/runtime/decoded/firebase_rc.json",
+          "value_type": "int",
+          "source_sha256": "e49f73c0e3854a98c0c27ffae86e6abc7897c767b5f3e82991004c48c4eb45d5",
+          "field_present": true
+        }
+      ],
+      "snapshot_review_id": "MS-CFG-Teams-0007"
+    },
+    {
+      "source": "code const",
+      "key": "GetCardMaxCooldown",
+      "type": "long (giây)",
+      "value": "86400 (0x15180)",
+      "meaning": "Cooldown 24 giờ giữa hai lần xin thẻ",
+      "where": "TeamsService.GetCardMaxCooldown (hằng số cứng trong client)"
+    },
+    {
+      "source": "code const",
+      "key": "GetCardNumberUserCansSendPerDay",
+      "type": "long",
+      "value": "3",
+      "meaning": "Số thẻ tối đa một người tặng mỗi ngày",
+      "where": "TeamsService.GetCardNumberUserCansSendPerDay (client default)"
+    },
+    {
+      "source": "code const",
+      "key": "TeamChatService.MessageAckTimeout",
+      "type": "float (giây)",
+      "value": "5",
+      "meaning": "Thời gian chờ ACK tin nhắn socket trước khi coi là lỗi",
+      "where": "TeamChatService (const)"
+    },
+    {
+      "source": "code const",
+      "key": "WebSocketManager.ReconnectAttemptDelay",
+      "type": "float (giây)",
+      "value": "5",
+      "meaning": "Khoảng chờ giữa các lần thử kết nối lại",
+      "where": "WebSocketManager (const)"
+    },
+    {
+      "source": "code const",
+      "key": "WebSocketManager.MaxReconnectDelay",
+      "type": "float (giây)",
+      "value": "120",
+      "meaning": "Trần thời gian chờ kết nối lại",
+      "where": "WebSocketManager (const)"
+    },
+    {
+      "source": "code const",
+      "key": "TeamsSystemMessageType",
+      "type": "string const",
+      "value": "Left=\"1\", Accepted=\"2\", Joined=\"3\", Kicked=\"4\", Promoted=\"5\", Demoted=\"6\"",
+      "meaning": "Mã tin nhắn hệ thống trong chat đội",
+      "where": "TeamsSystemMessageType"
+    },
+    {
+      "source": "code enum",
+      "key": "MemberRole",
+      "type": "enum int",
+      "value": "None=0, Leader=1, CoLeader=2, Member=3",
+      "meaning": "Vai trò thành viên, quyết định quyền thao tác",
+      "where": "Modules.Contexts.Home.Teams.Scripts.UI.MemberRole"
+    },
+    {
+      "source": "code enum",
+      "key": "TeamServiceState",
+      "type": "enum int",
+      "value": "Unkown=0, Initializing=1, Initialized=2",
+      "meaning": "Trạng thái nạp dữ liệu đội",
+      "where": "TeamServiceState"
+    },
+    {
+      "source": "asset",
+      "key": "TeamBadgeConfig.asset (TeamsBadgeConfig)",
+      "type": "ScriptableObject",
+      "value": "_configs: BadgeConfig[], _sprite: Sprite[]",
+      "meaning": "Bộ huy hiệu chọn khi tạo/sửa đội; TryGetBadgeSprite(id) và GetBadgeCount()",
+      "where": "Assets/MonoBehaviour/TeamBadgeConfig.asset; menuName 'Configs/TeamsBadgeConfig'"
+    },
+    {
+      "source": "asset",
+      "key": "TeamChatMessageViewFactory.asset / TeamSummaryViewFactory.asset / UserSummaryViewFactory.asset / RequestViewFactory.asset / BadgeContainerViewFactory.asset / TeamLeaderboardViewFactory.asset / FreeLiveFactory.asset / HelpSupportRewardViewFactory.asset / TeamsAskCardThemeViewFactory.asset",
+      "type": "ScriptableObject",
+      "value": "-",
+      "meaning": "Factory prefab cho từng loại dòng UI của Teams",
+      "where": "Assets/MonoBehaviour/"
+    },
+    {
+      "source": "asset",
+      "key": "TeamChatTextMessageViewAnimationConfig.asset",
+      "type": "ScriptableObject",
+      "value": "-",
+      "meaning": "Cấu hình animation xuất hiện của bong bóng chat",
+      "where": "Assets/MonoBehaviour/"
+    },
+    {
+      "source": "storage key",
+      "key": "TeamsSyncModel",
+      "type": "sync name",
+      "value": "\"TeamsSyncModel\"",
+      "meaning": "Tên khối dữ liệu Teams trong SyncService (IsIntroduced, UserJoined, FreeLives, UserTeamInfoSent)",
+      "where": "TeamsDataService.GetSyncName"
+    },
+    {
+      "source": "code field",
+      "key": "TeamsDataModel",
+      "type": "class",
+      "value": "SyncModel, CountryLeaderboard, GlobalLeaderboard, CountryCode, IsUserBelongsToTeam, HelpedMessages, MessageCache",
+      "meaning": "Toàn bộ dữ liệu Teams lưu cục bộ qua ISaveLoad<TeamsDataModel>",
+      "where": "TeamsDataModel"
+    },
+    {
+      "source": "code field",
+      "key": "TeamFreeLifeModel",
+      "type": "class",
+      "value": "Claimed, MessageId, SenderId, UserName, AvatarId, FrameId, NameStyleId",
+      "meaning": "Một mạng miễn phí chờ nhận",
+      "where": "TeamFreeLifeModel"
+    },
+    {
+      "source": "code field",
+      "key": "TeamViewModel",
+      "type": "class",
+      "value": "Name, Badge, Description, CountryCode, Id, MemberCount, Activity, IsOpen, HasPendingRequest",
+      "meaning": "Model hiển thị một đội trong search/gợi ý/leaderboard",
+      "where": "TeamViewModel"
+    },
+    {
+      "source": "code field",
+      "key": "LeaderboardTeam",
+      "type": "class",
+      "value": "Id, Name, MemberCount, TeamScore, BadgeId",
+      "meaning": "Một dòng bảng xếp hạng đội",
+      "where": "LeaderboardTeam"
+    },
+    {
+      "source": "config class",
+      "key": "BackendEnvironmentConfig",
+      "type": "ScriptableObject",
+      "value": "testEnvironmentSettings / productionEnvironmentSettings, CurrentSettings",
+      "meaning": "Chọn môi trường backend (test/production) cho HTTP và WebSocket chat",
+      "where": "Assets/MonoBehaviour/BackendEnvironmentConfig.asset (không chép URL/khoá)"
+    },
+    {
+      "source": "asset",
+      "key": "BackendEnvironmentConfig – endpoint Teams (chỉ path)",
+      "type": "string",
+      "value": "WebSocket chat: wss .../ws; /v2/get-chat-history, /v2/get-my-team, /v2/get-team-with-details, /v2/create-team, /v2/join-team, /v1/join-with-request, /v2/get-suggested-teams, /v2/search-teams, /v2/get-team-requests, /v1/edit-team, /v1/answer-request, /v1/kick-member, /v1/leave-team, /v1/change-user-role, /v2/get-helps, /v1/claim-help-list, /v2/get-team-leaderboard, /v2/change-team, /v2/get-card-helps",
+      "meaning": "Đường dẫn API của Teams (host nằm trong asset, không chép)",
+      "where": "Assets/MonoBehaviour/BackendEnvironmentConfig.asset"
+    },
+    {
+      "source": "json default",
+      "key": "TeamsConfigModel.json: IsEnable",
+      "type": "",
+      "value": "false",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/TeamsConfigModel.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "TeamsConfigModel.json: UnlockLevel",
+      "type": "",
+      "value": "40",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/TeamsConfigModel.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "TeamsConfigModel.json: TeamCapacity",
+      "type": "",
+      "value": "50",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/TeamsConfigModel.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "TeamsConfigModel.json: CreateCost",
+      "type": "",
+      "value": "100",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/TeamsConfigModel.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "TeamsConfigModel.json: MaxHelpCount",
+      "type": "",
+      "value": "5",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/TeamsConfigModel.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "TeamsConfigModel.json: DefaultHelpCooldown",
+      "type": "",
+      "value": "14400",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/TeamsConfigModel.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "TeamsConfigModel.json: HelpSupportReward",
+      "type": "",
+      "value": "5",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/TeamsConfigModel.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "TeamsConfigModel.json: MaxColeaderCount",
+      "type": "",
+      "value": "3",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/TeamsConfigModel.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "server cache (historical)",
+      "key": "TeamsConfigModel (live) = default?",
+      "type": "",
+      "value": "7/8 key trùng default, 1 key khác/thêm",
+      "meaning": "Đối chiếu config server thật (CachedRemoteConfigs) với TeamsConfigModel.json",
+      "where": "Configs/CachedRemoteConfigs + Firebase RC template 3197 — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server cache (historical)",
+      "key": "TeamsConfigModel: unlockLevel",
+      "type": "",
+      "value": "39",
+      "meaning": "server ghi đè (default = 40)",
+      "where": "Configs/CachedRemoteConfigs + Firebase RC template 3197 — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server instance (historical)",
+      "key": "TeamsModel (instance)",
+      "type": "",
+      "value": "9556 key, xem facts/runtime/event_instances/TeamsModel.json",
+      "meaning": "Dữ liệu phiên event đang chạy (ngày, mốc, thưởng, đối thủ)",
+      "where": "PlayerPrefs TeamsModel (instance event đang chạy) — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server instance (historical)",
+      "key": "TeamsModel: syncModel.isIntroduced",
+      "type": "",
+      "value": "false",
+      "meaning": "",
+      "where": "PlayerPrefs TeamsModel (instance event đang chạy) — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server instance (historical)",
+      "key": "TeamsModel: syncModel.userJoined",
+      "type": "",
+      "value": "false",
+      "meaning": "",
+      "where": "PlayerPrefs TeamsModel (instance event đang chạy) — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server instance (historical)",
+      "key": "TeamsModel: syncModel.freeLives",
+      "type": "",
+      "value": "[]",
+      "meaning": "",
+      "where": "PlayerPrefs TeamsModel (instance event đang chạy) — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server instance (historical)",
+      "key": "TeamsModel: syncModel.userTeamInfoSent",
+      "type": "",
+      "value": "false",
+      "meaning": "",
+      "where": "PlayerPrefs TeamsModel (instance event đang chạy) — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server instance (historical)",
+      "key": "TeamsModel: countryLeaderboard[0].id",
+      "type": "",
+      "value": "551debf3-99b3-41e1-96a4-faa0739a5324",
+      "meaning": "",
+      "where": "PlayerPrefs TeamsModel (instance event đang chạy) — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server instance (historical)",
+      "key": "TeamsModel: countryLeaderboard[0].name",
+      "type": "",
+      "value": "Hanoioi",
+      "meaning": "",
+      "where": "PlayerPrefs TeamsModel (instance event đang chạy) — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server instance (historical)",
+      "key": "TeamsModel: countryLeaderboard[0].memberCount",
+      "type": "",
+      "value": "50",
+      "meaning": "",
+      "where": "PlayerPrefs TeamsModel (instance event đang chạy) — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server instance (historical)",
+      "key": "TeamsModel: countryLeaderboard[0].teamScore",
+      "type": "",
+      "value": "279413",
+      "meaning": "",
+      "where": "PlayerPrefs TeamsModel (instance event đang chạy) — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server instance (historical)",
+      "key": "TeamsModel: countryLeaderboard[0].badgeId",
+      "type": "",
+      "value": "136",
+      "meaning": "",
+      "where": "PlayerPrefs TeamsModel (instance event đang chạy) — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server instance (historical)",
+      "key": "TeamsModel: countryLeaderboard[1].id",
+      "type": "",
+      "value": "2dc2f540-6dbb-49d3-87e1-5a6c025b7227",
+      "meaning": "",
+      "where": "PlayerPrefs TeamsModel (instance event đang chạy) — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server instance (historical)",
+      "key": "TeamsModel: countryLeaderboard[1].name",
+      "type": "",
+      "value": "VINABIDA",
+      "meaning": "",
+      "where": "PlayerPrefs TeamsModel (instance event đang chạy) — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server instance (historical)",
+      "key": "TeamsModel: countryLeaderboard[1].memberCount",
+      "type": "",
+      "value": "50",
+      "meaning": "",
+      "where": "PlayerPrefs TeamsModel (instance event đang chạy) — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server instance (historical)",
+      "key": "TeamsModel: countryLeaderboard[1].teamScore",
+      "type": "",
+      "value": "273354",
+      "meaning": "",
+      "where": "PlayerPrefs TeamsModel (instance event đang chạy) — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server instance (historical)",
+      "key": "TeamsModel: countryLeaderboard[1].badgeId",
+      "type": "",
+      "value": "52",
+      "meaning": "",
+      "where": "PlayerPrefs TeamsModel (instance event đang chạy) — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server instance (historical)",
+      "key": "TeamsModel: countryLeaderboard[2].id",
+      "type": "",
+      "value": "f7d576c2-b224-48df-90ce-24d56cb8ec80",
+      "meaning": "",
+      "where": "PlayerPrefs TeamsModel (instance event đang chạy) — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server instance (historical)",
+      "key": "TeamsModel: countryLeaderboard[2].name",
+      "type": "",
+      "value": "VIETNAM",
+      "meaning": "",
+      "where": "PlayerPrefs TeamsModel (instance event đang chạy) — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server instance (historical)",
+      "key": "TeamsModel: countryLeaderboard[2].memberCount",
+      "type": "",
+      "value": "45",
+      "meaning": "",
+      "where": "PlayerPrefs TeamsModel (instance event đang chạy) — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server instance (historical)",
+      "key": "TeamsModel: countryLeaderboard[2].teamScore",
+      "type": "",
+      "value": "255724",
+      "meaning": "",
+      "where": "PlayerPrefs TeamsModel (instance event đang chạy) — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server instance (historical)",
+      "key": "TeamsModel: countryLeaderboard[2].badgeId",
+      "type": "",
+      "value": "136",
+      "meaning": "",
+      "where": "PlayerPrefs TeamsModel (instance event đang chạy) — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server instance (historical)",
+      "key": "TeamsModel: countryLeaderboard[3].id",
+      "type": "",
+      "value": "bf9dc9d9-bc0a-4fcf-9e83-6dee6aeafb8b",
+      "meaning": "",
+      "where": "PlayerPrefs TeamsModel (instance event đang chạy) — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server instance (historical)",
+      "key": "TeamsModel: countryLeaderboard[3].name",
+      "type": "",
+      "value": "GiaLaiVN",
+      "meaning": "",
+      "where": "PlayerPrefs TeamsModel (instance event đang chạy) — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server instance (historical)",
+      "key": "TeamsModel: countryLeaderboard[3].memberCount",
+      "type": "",
+      "value": "50",
+      "meaning": "",
+      "where": "PlayerPrefs TeamsModel (instance event đang chạy) — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server instance (historical)",
+      "key": "TeamsModel: countryLeaderboard[3].teamScore",
+      "type": "",
+      "value": "186171",
+      "meaning": "",
+      "where": "PlayerPrefs TeamsModel (instance event đang chạy) — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server instance (historical)",
+      "key": "TeamsModel: countryLeaderboard[3].badgeId",
+      "type": "",
+      "value": "136",
+      "meaning": "",
+      "where": "PlayerPrefs TeamsModel (instance event đang chạy) — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server instance (historical)",
+      "key": "TeamsModel: countryLeaderboard[4].id",
+      "type": "",
+      "value": "70698106-5635-4e9e-ac67-fedc2c3922fe",
+      "meaning": "",
+      "where": "PlayerPrefs TeamsModel (instance event đang chạy) — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server instance (historical)",
+      "key": "TeamsModel: countryLeaderboard[4].name",
+      "type": "",
+      "value": "Chill",
+      "meaning": "",
+      "where": "PlayerPrefs TeamsModel (instance event đang chạy) — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server instance (historical)",
+      "key": "TeamsModel: countryLeaderboard[4].memberCount",
+      "type": "",
+      "value": "50",
+      "meaning": "",
+      "where": "PlayerPrefs TeamsModel (instance event đang chạy) — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server instance (historical)",
+      "key": "TeamsModel: countryLeaderboard[4].teamScore",
+      "type": "",
+      "value": "177349",
+      "meaning": "",
+      "where": "PlayerPrefs TeamsModel (instance event đang chạy) — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server instance (historical)",
+      "key": "TeamsModel: countryLeaderboard[4].badgeId",
+      "type": "",
+      "value": "17",
+      "meaning": "",
+      "where": "PlayerPrefs TeamsModel (instance event đang chạy) — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server instance (historical)",
+      "key": "TeamsModel: countryLeaderboard[5].id",
+      "type": "",
+      "value": "c39e5600-3a1b-473a-b3a2-12fef37ec5b4",
+      "meaning": "",
+      "where": "PlayerPrefs TeamsModel (instance event đang chạy) — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server instance (historical)",
+      "key": "TeamsModel: countryLeaderboard[5].name",
+      "type": "",
+      "value": "VN Legend",
+      "meaning": "",
+      "where": "PlayerPrefs TeamsModel (instance event đang chạy) — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server instance (historical)",
+      "key": "TeamsModel: countryLeaderboard[5].memberCount",
+      "type": "",
+      "value": "50",
+      "meaning": "",
+      "where": "PlayerPrefs TeamsModel (instance event đang chạy) — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server instance (historical)",
+      "key": "TeamsModel: countryLeaderboard[5].teamScore",
+      "type": "",
+      "value": "151811",
+      "meaning": "",
+      "where": "PlayerPrefs TeamsModel (instance event đang chạy) — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server instance (historical)",
+      "key": "TeamsModel: countryLeaderboard[5].badgeId",
+      "type": "",
+      "value": "57",
+      "meaning": "",
+      "where": "PlayerPrefs TeamsModel (instance event đang chạy) — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server instance (historical)",
+      "key": "TeamsModel: countryLeaderboard[6].id",
+      "type": "",
+      "value": "3bf47611-5fb6-4fec-85b5-366ca66803d0",
+      "meaning": "",
+      "where": "PlayerPrefs TeamsModel (instance event đang chạy) — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server instance (historical)",
+      "key": "TeamsModel: countryLeaderboard[6].name",
+      "type": "",
+      "value": "Friendship",
+      "meaning": "",
+      "where": "PlayerPrefs TeamsModel (instance event đang chạy) — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server instance (historical)",
+      "key": "TeamsModel: countryLeaderboard[6].memberCount",
+      "type": "",
+      "value": "50",
+      "meaning": "",
+      "where": "PlayerPrefs TeamsModel (instance event đang chạy) — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server instance (historical)",
+      "key": "TeamsModel: countryLeaderboard[6].teamScore",
+      "type": "",
+      "value": "116349",
+      "meaning": "",
+      "where": "PlayerPrefs TeamsModel (instance event đang chạy) — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server instance (historical)",
+      "key": "TeamsModel: countryLeaderboard[6].badgeId",
+      "type": "",
+      "value": "17",
+      "meaning": "",
+      "where": "PlayerPrefs TeamsModel (instance event đang chạy) — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server instance (historical)",
+      "key": "TeamsModel: countryLeaderboard[7].id",
+      "type": "",
+      "value": "abe5ae51-03f3-4dd7-bf9f-009a2688cb5d",
+      "meaning": "",
+      "where": "PlayerPrefs TeamsModel (instance event đang chạy) — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server instance (historical)",
+      "key": "TeamsModel: countryLeaderboard[7].name",
+      "type": "",
+      "value": "Café",
+      "meaning": "",
+      "where": "PlayerPrefs TeamsModel (instance event đang chạy) — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server instance (historical)",
+      "key": "TeamsModel: countryLeaderboard[7].memberCount",
+      "type": "",
+      "value": "50",
+      "meaning": "",
+      "where": "PlayerPrefs TeamsModel (instance event đang chạy) — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server instance (historical)",
+      "key": "TeamsModel: countryLeaderboard[7].teamScore",
+      "type": "",
+      "value": "105576",
+      "meaning": "",
+      "where": "PlayerPrefs TeamsModel (instance event đang chạy) — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server instance (historical)",
+      "key": "TeamsModel: countryLeaderboard[7].badgeId",
+      "type": "",
+      "value": "63",
+      "meaning": "",
+      "where": "PlayerPrefs TeamsModel (instance event đang chạy) — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server instance (historical)",
+      "key": "TeamsModel: countryLeaderboard[8].id",
+      "type": "",
+      "value": "c66ff4ee-e4ac-4364-95ce-dd9a4af2d9d1",
+      "meaning": "",
+      "where": "PlayerPrefs TeamsModel (instance event đang chạy) — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server instance (historical)",
+      "key": "TeamsModel: countryLeaderboard[8].name",
+      "type": "",
+      "value": "Minhi",
+      "meaning": "",
+      "where": "PlayerPrefs TeamsModel (instance event đang chạy) — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server instance (historical)",
+      "key": "TeamsModel: countryLeaderboard[8].memberCount",
+      "type": "",
+      "value": "50",
+      "meaning": "",
+      "where": "PlayerPrefs TeamsModel (instance event đang chạy) — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server instance (historical)",
+      "key": "TeamsModel: countryLeaderboard[8].teamScore",
+      "type": "",
+      "value": "84485",
+      "meaning": "",
+      "where": "PlayerPrefs TeamsModel (instance event đang chạy) — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server instance (historical)",
+      "key": "TeamsModel: countryLeaderboard[8].badgeId",
+      "type": "",
+      "value": "136",
+      "meaning": "",
+      "where": "PlayerPrefs TeamsModel (instance event đang chạy) — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server instance (historical)",
+      "key": "TeamsModel: countryLeaderboard[9].id",
+      "type": "",
+      "value": "aed2a88b-6c94-4b42-a1c8-b2858bd27f4a",
+      "meaning": "",
+      "where": "PlayerPrefs TeamsModel (instance event đang chạy) — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server instance (historical)",
+      "key": "TeamsModel: countryLeaderboard[9].name",
+      "type": "",
+      "value": "Love Viet Nam",
+      "meaning": "",
+      "where": "PlayerPrefs TeamsModel (instance event đang chạy) — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server instance (historical)",
+      "key": "TeamsModel: countryLeaderboard[9].memberCount",
+      "type": "",
+      "value": "50",
+      "meaning": "",
+      "where": "PlayerPrefs TeamsModel (instance event đang chạy) — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server instance (historical)",
+      "key": "TeamsModel: countryLeaderboard[9].teamScore",
+      "type": "",
+      "value": "81564",
+      "meaning": "",
+      "where": "PlayerPrefs TeamsModel (instance event đang chạy) — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server instance (historical)",
+      "key": "TeamsModel: countryLeaderboard[9].badgeId",
+      "type": "",
+      "value": "136",
+      "meaning": "",
+      "where": "PlayerPrefs TeamsModel (instance event đang chạy) — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server instance (historical)",
+      "key": "TeamsModel: countryLeaderboard[10].id",
+      "type": "",
+      "value": "e4598270-f0ad-4078-ac54-8e86dc157078",
+      "meaning": "",
+      "where": "PlayerPrefs TeamsModel (instance event đang chạy) — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server instance (historical)",
+      "key": "TeamsModel: countryLeaderboard[10].name",
+      "type": "",
+      "value": "hgfhjjbggg",
+      "meaning": "",
+      "where": "PlayerPrefs TeamsModel (instance event đang chạy) — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server instance (historical)",
+      "key": "TeamsModel: countryLeaderboard[10].memberCount",
+      "type": "",
+      "value": "50",
+      "meaning": "",
+      "where": "PlayerPrefs TeamsModel (instance event đang chạy) — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server instance (historical)",
+      "key": "TeamsModel: countryLeaderboard[10].teamScore",
+      "type": "",
+      "value": "78789",
+      "meaning": "",
+      "where": "PlayerPrefs TeamsModel (instance event đang chạy) — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server instance (historical)",
+      "key": "TeamsModel: countryLeaderboard[10].badgeId",
+      "type": "",
+      "value": "136",
+      "meaning": "",
+      "where": "PlayerPrefs TeamsModel (instance event đang chạy) — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server instance (historical)",
+      "key": "TeamsModel: countryLeaderboard[11].id",
+      "type": "",
+      "value": "ad92fe4c-1a5c-4f9a-9c6f-1f649f2e1627",
+      "meaning": "",
+      "where": "PlayerPrefs TeamsModel (instance event đang chạy) — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server instance (historical)",
+      "key": "TeamsModel: countryLeaderboard[11].name",
+      "type": "",
+      "value": "Ammy",
+      "meaning": "",
+      "where": "PlayerPrefs TeamsModel (instance event đang chạy) — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server instance (historical)",
+      "key": "TeamsModel: countryLeaderboard[11].memberCount",
+      "type": "",
+      "value": "50",
+      "meaning": "",
+      "where": "PlayerPrefs TeamsModel (instance event đang chạy) — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server instance (historical)",
+      "key": "TeamsModel: countryLeaderboard[11].teamScore",
+      "type": "",
+      "value": "75366",
+      "meaning": "",
+      "where": "PlayerPrefs TeamsModel (instance event đang chạy) — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server instance (historical)",
+      "key": "TeamsModel: countryLeaderboard[11].badgeId",
+      "type": "",
+      "value": "136",
+      "meaning": "",
+      "where": "PlayerPrefs TeamsModel (instance event đang chạy) — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server instance (historical)",
+      "key": "TeamsModel: countryLeaderboard[12].id",
+      "type": "",
+      "value": "93a76d42-59d3-4779-a73d-b99af3c26f0b",
+      "meaning": "",
+      "where": "PlayerPrefs TeamsModel (instance event đang chạy) — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server instance (historical)",
+      "key": "TeamsModel: countryLeaderboard[12].name",
+      "type": "",
+      "value": "Queen",
+      "meaning": "",
+      "where": "PlayerPrefs TeamsModel (instance event đang chạy) — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server instance (historical)",
+      "key": "TeamsModel: countryLeaderboard[12].memberCount",
+      "type": "",
+      "value": "50",
+      "meaning": "",
+      "where": "PlayerPrefs TeamsModel (instance event đang chạy) — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server instance (historical)",
+      "key": "TeamsModel: countryLeaderboard[12].teamScore",
+      "type": "",
+      "value": "74429",
+      "meaning": "",
+      "where": "PlayerPrefs TeamsModel (instance event đang chạy) — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server instance (historical)",
+      "key": "TeamsModel: countryLeaderboard[12].badgeId",
+      "type": "",
+      "value": "19",
+      "meaning": "",
+      "where": "PlayerPrefs TeamsModel (instance event đang chạy) — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server instance (historical)",
+      "key": "TeamsModel: countryLeaderboard[13].id",
+      "type": "",
+      "value": "6f8af6c0-0b11-43f0-b389-48b8809731c8",
+      "meaning": "",
+      "where": "PlayerPrefs TeamsModel (instance event đang chạy) — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server instance (historical)",
+      "key": "TeamsModel: countryLeaderboard[13].name",
+      "type": "",
+      "value": "VN Muôn Năm",
+      "meaning": "",
+      "where": "PlayerPrefs TeamsModel (instance event đang chạy) — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server instance (historical)",
+      "key": "TeamsModel: countryLeaderboard[13].memberCount",
+      "type": "",
+      "value": "50",
+      "meaning": "",
+      "where": "PlayerPrefs TeamsModel (instance event đang chạy) — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server instance (historical)",
+      "key": "TeamsModel: countryLeaderboard[13].teamScore",
+      "type": "",
+      "value": "72287",
+      "meaning": "",
+      "where": "PlayerPrefs TeamsModel (instance event đang chạy) — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server instance (historical)",
+      "key": "TeamsModel: countryLeaderboard[13].badgeId",
+      "type": "",
+      "value": "136",
+      "meaning": "",
+      "where": "PlayerPrefs TeamsModel (instance event đang chạy) — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server instance (historical)",
+      "key": "TeamsModel: countryLeaderboard[14].id",
+      "type": "",
+      "value": "0d5c48e8-190c-4b5c-bdff-6315ded2aa0d",
+      "meaning": "",
+      "where": "PlayerPrefs TeamsModel (instance event đang chạy) — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server instance (historical)",
+      "key": "TeamsModel: countryLeaderboard[14].name",
+      "type": "",
+      "value": "Linh",
+      "meaning": "",
+      "where": "PlayerPrefs TeamsModel (instance event đang chạy) — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server instance (historical)",
+      "key": "TeamsModel: countryLeaderboard[14].memberCount",
+      "type": "",
+      "value": "50",
+      "meaning": "",
+      "where": "PlayerPrefs TeamsModel (instance event đang chạy) — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server instance (historical)",
+      "key": "TeamsModel: countryLeaderboard[14].teamScore",
+      "type": "",
+      "value": "71137",
+      "meaning": "",
+      "where": "PlayerPrefs TeamsModel (instance event đang chạy) — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server instance (historical)",
+      "key": "TeamsModel: countryLeaderboard[14].badgeId",
+      "type": "",
+      "value": "65",
+      "meaning": "",
+      "where": "PlayerPrefs TeamsModel (instance event đang chạy) — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server instance (historical)",
+      "key": "TeamsModel: countryLeaderboard[15].id",
+      "type": "",
+      "value": "5c93bc44-381b-4389-a536-a5efbbc756a6",
+      "meaning": "",
+      "where": "PlayerPrefs TeamsModel (instance event đang chạy) — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server instance (historical)",
+      "key": "TeamsModel: countryLeaderboard[15].name",
+      "type": "",
+      "value": "Nina",
+      "meaning": "",
+      "where": "PlayerPrefs TeamsModel (instance event đang chạy) — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server instance (historical)",
+      "key": "TeamsModel: countryLeaderboard[15].memberCount",
+      "type": "",
+      "value": "50",
+      "meaning": "",
+      "where": "PlayerPrefs TeamsModel (instance event đang chạy) — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server instance (historical)",
+      "key": "TeamsModel: countryLeaderboard[15].teamScore",
+      "type": "",
+      "value": "60264",
+      "meaning": "",
+      "where": "PlayerPrefs TeamsModel (instance event đang chạy) — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server instance (historical)",
+      "key": "TeamsModel: countryLeaderboard[15].badgeId",
+      "type": "",
+      "value": "65",
+      "meaning": "",
+      "where": "PlayerPrefs TeamsModel (instance event đang chạy) — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server instance (historical)",
+      "key": "TeamsModel: countryLeaderboard[16].id",
+      "type": "",
+      "value": "38e7a856-9093-4230-995a-f9b172b044fd",
+      "meaning": "",
+      "where": "PlayerPrefs TeamsModel (instance event đang chạy) — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server instance (historical)",
+      "key": "TeamsModel: countryLeaderboard[16].name",
+      "type": "",
+      "value": "VietNam",
+      "meaning": "",
+      "where": "PlayerPrefs TeamsModel (instance event đang chạy) — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server instance (historical)",
+      "key": "TeamsModel: countryLeaderboard[16].memberCount",
+      "type": "",
+      "value": "50",
+      "meaning": "",
+      "where": "PlayerPrefs TeamsModel (instance event đang chạy) — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server instance (historical)",
+      "key": "TeamsModel: countryLeaderboard[16].teamScore",
+      "type": "",
+      "value": "60009",
+      "meaning": "",
+      "where": "PlayerPrefs TeamsModel (instance event đang chạy) — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server instance (historical)",
+      "key": "TeamsModel: countryLeaderboard[16].badgeId",
+      "type": "",
+      "value": "136",
+      "meaning": "",
+      "where": "PlayerPrefs TeamsModel (instance event đang chạy) — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server instance (historical)",
+      "key": "TeamsModel: countryLeaderboard[17].id",
+      "type": "",
+      "value": "663f5575-c232-449f-9ac1-aef617175252",
+      "meaning": "",
+      "where": "PlayerPrefs TeamsModel (instance event đang chạy) — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server instance (historical)",
+      "key": "TeamsModel: countryLeaderboard[17].name",
+      "type": "",
+      "value": "băng tra sua",
+      "meaning": "",
+      "where": "PlayerPrefs TeamsModel (instance event đang chạy) — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server instance (historical)",
+      "key": "TeamsModel: countryLeaderboard[17].memberCount",
+      "type": "",
+      "value": "50",
+      "meaning": "",
+      "where": "PlayerPrefs TeamsModel (instance event đang chạy) — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server instance (historical)",
+      "key": "TeamsModel: countryLeaderboard[17].teamScore",
+      "type": "",
+      "value": "59010",
+      "meaning": "",
+      "where": "PlayerPrefs TeamsModel (instance event đang chạy) — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server instance (historical)",
+      "key": "TeamsModel: countryLeaderboard[17].badgeId",
+      "type": "",
+      "value": "33",
+      "meaning": "",
+      "where": "PlayerPrefs TeamsModel (instance event đang chạy) — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server instance (historical)",
+      "key": "TeamsModel: countryLeaderboard[18].id",
+      "type": "",
+      "value": "18b03ab8-c6af-4eea-b719-819bca7a8c65",
+      "meaning": "",
+      "where": "PlayerPrefs TeamsModel (instance event đang chạy) — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server instance (historical)",
+      "key": "TeamsModel: countryLeaderboard[18].name",
+      "type": "",
+      "value": "Sever King",
+      "meaning": "",
+      "where": "PlayerPrefs TeamsModel (instance event đang chạy) — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server instance (historical)",
+      "key": "TeamsModel: countryLeaderboard[18].memberCount",
+      "type": "",
+      "value": "50",
+      "meaning": "",
+      "where": "PlayerPrefs TeamsModel (instance event đang chạy) — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server instance (historical)",
+      "key": "TeamsModel: countryLeaderboard[18].teamScore",
+      "type": "",
+      "value": "57240",
+      "meaning": "",
+      "where": "PlayerPrefs TeamsModel (instance event đang chạy) — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server instance (historical)",
+      "key": "TeamsModel: countryLeaderboard[18].badgeId",
+      "type": "",
+      "value": "136",
+      "meaning": "",
+      "where": "PlayerPrefs TeamsModel (instance event đang chạy) — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server instance (historical)",
+      "key": "TeamsModel: countryLeaderboard[19].id",
+      "type": "",
+      "value": "7e6a972b-5813-4dfd-a06d-f701da9b87fa",
+      "meaning": "",
+      "where": "PlayerPrefs TeamsModel (instance event đang chạy) — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server instance (historical)",
+      "key": "TeamsModel …",
+      "type": "",
+      "value": "còn 9456 key",
+      "meaning": "xem facts/runtime/event_instances/TeamsModel.json",
+      "where": ""
+    },
+    {
+      "source": "server instance (historical)",
+      "key": "TeamsModel.countryLeaderboard",
+      "type": "",
+      "value": "910 đội (VN) — top: Hanoioi (50 tv, 279413 đ); VINABIDA (50 tv, 273354 đ); VIETNAM (45 tv, 255724 đ)",
+      "meaning": "Bảng đội quốc gia server trả về dù Teams tắt cho segment",
+      "where": "PlayerPrefs TeamsModel (instance event đang chạy) — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server instance (historical)",
+      "key": "TeamsModel.globalLeaderboard",
+      "type": "",
+      "value": "1000 đội — top: USA Players (49 tv, 1634869 đ); Team America (48 tv, 1368911 đ); Wrecking Crew (49 tv, 1026023 đ)",
+      "meaning": "Bảng đội toàn cầu",
+      "where": "PlayerPrefs TeamsModel (instance event đang chạy) — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server instance (historical)",
+      "key": "TeamsModel.syncModel",
+      "type": "",
+      "value": "{\"isIntroduced\": false, \"userJoined\": false, \"freeLives\": [], \"userTeamInfoSent\": false}",
+      "meaning": "userJoined=false: tài khoản chưa vào đội",
+      "where": "PlayerPrefs TeamsModel (instance event đang chạy) — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    }
+  ],
+  "rewards": [
+    {
+      "context": "Giúp đồng đội xin mạng",
+      "reward": "HelpSupportReward (giá trị từ TeamsConfigModel)",
+      "evidence": "TeamsService.GetHelpSupportReward; HelpSupportRewardController"
+    },
+    {
+      "context": "Nhận mạng miễn phí từ đồng đội",
+      "reward": "1 mạng mỗi TeamFreeLifeModel được claim",
+      "evidence": "TeamsService.ClaimFreeLive; FreeLivesPopup"
+    },
+    {
+      "context": "Nhận thẻ sưu tập từ đồng đội",
+      "reward": "1 thẻ Collection (không phải Golden Card)",
+      "evidence": "TeamChatService.SendCard; CollectionService"
+    },
+    {
+      "context": "Magic Pass chia sẻ cho đội",
+      "reward": "Vé Magic Pass",
+      "evidence": "TeamChatService.SendMagicPassMessage; TeamChatService.MagicPassTicketClaimed"
+    }
+  ],
+  "backend": [
+    {
+      "command": "GetUserTeamSummary → GetMyTeamResponse",
+      "direction": "client→server (HTTP GET)",
+      "purpose": "lấy tóm tắt đội hiện tại, cooldown, số đơn chờ"
+    },
+    {
+      "command": "GetTeamDetails(teamId) → GetTeamWithMembersResponse",
+      "direction": "client→server",
+      "purpose": "chi tiết đội + danh sách thành viên"
+    },
+    {
+      "command": "CreateTeam(TeamCreateRequestModel{name, badge, description, level_requirement, is_open_team})",
+      "direction": "client→server",
+      "purpose": "tạo đội mới"
+    },
+    {
+      "command": "JoinTeam(TeamJoinRequestModel{team_id})",
+      "direction": "client→server",
+      "purpose": "vào đội mở"
+    },
+    {
+      "command": "SendJoinTeamRequest(TeamJoinRequestModel{team_id})",
+      "direction": "client→server",
+      "purpose": "gửi đơn xin vào đội đóng"
+    },
+    {
+      "command": "ChangeTeam(ChangeTeamRequestModel{current_team_id, changed_team_id})",
+      "direction": "client→server",
+      "purpose": "đổi đội trong một bước"
+    },
+    {
+      "command": "SearchTeams(TeamsSearchRequestModel{keyword}) → GetTeamsResponse",
+      "direction": "client→server",
+      "purpose": "tìm đội theo tên"
+    },
+    {
+      "command": "GetTeamSuggestions → GetTeamsResponse",
+      "direction": "client→server",
+      "purpose": "gợi ý đội phù hợp"
+    },
+    {
+      "command": "GetTeamLeaderboard → GetTeamLeaderboardResponse",
+      "direction": "client→server",
+      "purpose": "bảng xếp hạng đội quốc gia/toàn cầu"
+    },
+    {
+      "command": "EditTeam(EditTeamRequestModel{team_id, name, badge, description, level_requirement, is_open_team})",
+      "direction": "client→server",
+      "purpose": "sửa thông tin đội"
+    },
+    {
+      "command": "GetJoinRequests(TeamsGetJoinRequestModel{team_id}) → GetTeamRequestsResponse",
+      "direction": "client→server",
+      "purpose": "lấy danh sách đơn xin vào"
+    },
+    {
+      "command": "ReplyJoinRequest(TeamReplyJoinRequestModel{team_id, requester_id, is_accepted})",
+      "direction": "client→server",
+      "purpose": "duyệt/từ chối đơn"
+    },
+    {
+      "command": "KickMember(TeamKickMemberRequestModel{team_id, user_public_id})",
+      "direction": "client→server",
+      "purpose": "kick thành viên"
+    },
+    {
+      "command": "LeaveTeam(TeamLeaveRequestModel{team_id})",
+      "direction": "client→server",
+      "purpose": "rời đội"
+    },
+    {
+      "command": "UpdateMemberRole(TeamUpdateMemberRoleRequestModel{team_id, user_public_id, role})",
+      "direction": "client→server",
+      "purpose": "thăng/giáng chức"
+    },
+    {
+      "command": "GetUserFreeLives → GetHelpsResponse",
+      "direction": "client→server",
+      "purpose": "lấy danh sách mạng đồng đội đã tặng"
+    },
+    {
+      "command": "ClaimHelps(ClaimHelpRequestModel{helps:[{helper_id, message_id}]})",
+      "direction": "client→server",
+      "purpose": "xác nhận đã nhận mạng"
+    },
+    {
+      "command": "FetchChatHistory(TeamChatHistoryRequestModel{chat_id, user_public_id}) → List<SocketMessage<TeamChatMessage>>",
+      "direction": "client→server",
+      "purpose": "nạp lịch sử chat"
+    },
+    {
+      "command": "WebSocket SendMessage(action, chatId, channel, content, order) với TeamChatMessage{user_id, message_type, message_text, user_name, general_badge_id, image_url, frame_id, name_style}",
+      "direction": "client↔server (WebSocket)",
+      "purpose": "chat realtime, xin/tặng mạng, xin/tặng thẻ, quà Magic Pass"
+    },
+    {
+      "command": "Schema FlatBuffers magicsort.schemas.v1.team (TeamSummary, GetTeamsResponse, TeamLeaderboardSummary, TeamRequest, TeamHelp, BaseResponse)",
+      "direction": "server→client",
+      "purpose": "định dạng dữ liệu đội"
+    }
+  ],
+  "ui": [
+    {
+      "element": "Màn Teams tổng",
+      "class": "Modules.Contexts.Home.Teams.Scripts.UI.TeamsController",
+      "purpose": "điều phối _disabledView/_lockedView/_navigationView/_loadingView/_noConnectionView/_teamChatView/_joinView"
+    },
+    {
+      "element": "Tab điều hướng (Search/Create)",
+      "class": "TeamsNavigationController, SearchView, CreateView",
+      "purpose": "tìm và tạo đội"
+    },
+    {
+      "element": "Chat đội",
+      "class": "TeamChatController, TeamChatInputController, TeamChatScrollViewAdapter, TeamTextChatMessageView, TeamHelpChatMessageView, TeamsCardRequestMessageView, TeamMessageView, TeamEmptyMessageView",
+      "purpose": "hiển thị và gửi tin nhắn"
+    },
+    {
+      "element": "Popup thông tin đội",
+      "class": "TeamInfoPopup, TeamInfoTooltip, TeamSummaryView, UserSummaryView",
+      "purpose": "xem thành viên, vai trò, thao tác quản trị"
+    },
+    {
+      "element": "Popup sửa/rời/kick/đổi đội",
+      "class": "TeamEditPopup, TeamLeavePopup, TeamKickPopup, TeamChangePopup, TeamUpdateMemberRolePopup, TeamBanPopup, TeamsWarningPopup",
+      "purpose": "xác nhận các hành động quản trị"
+    },
+    {
+      "element": "Popup mạng miễn phí",
+      "class": "Modules.Contexts.Home.Teams.Scripts.UI.FreeLives.FreeLivesPopup, FreeLiveView, FreeLiveViewAdapter",
+      "purpose": "nhận mạng đồng đội tặng"
+    },
+    {
+      "element": "Popup xin thẻ",
+      "class": "TeamsAskCardPopup, TeamsAskCardInfoPopup, TeamsAskCardThemeView, TeamsAskCardViewButton",
+      "purpose": "chọn và xin thẻ sưu tập"
+    },
+    {
+      "element": "Bảng xếp hạng đội",
+      "class": "TeamLeaderboardView, TeamLeaderboardViewAdapter, TeamTypeToggleView",
+      "purpose": "xếp hạng quốc gia/toàn cầu"
+    },
+    {
+      "element": "Nút Teams ở Home",
+      "class": "TeamsLobbyButtonController",
+      "purpose": "vào tab Teams, hiện badge số đơn/tin mới"
+    },
+    {
+      "element": "Chọn huy hiệu",
+      "class": "BadgeSelectionView, BadgeContainerView, BadgeView",
+      "purpose": "chọn logo đội (TeamsBadgeConfig)"
+    },
+    {
+      "element": "Thưởng khi giúp",
+      "class": "HelpSupportRewardController, HelpSupportRewardView, PlayHelpSupportAnimationSignal",
+      "purpose": "animation nhận thưởng hỗ trợ"
+    }
+  ],
+  "analytics": [
+    {
+      "event": "teams_unlocked",
+      "params": "-",
+      "when": "Teams mở khoá lần đầu"
+    },
+    {
+      "event": "teams_created",
+      "params": "team_id",
+      "when": "tạo đội"
+    },
+    {
+      "event": "teams_joined",
+      "params": "team_id",
+      "when": "vào đội"
+    },
+    {
+      "event": "teams_join_available",
+      "params": "-",
+      "when": "hiện danh sách đội có thể vào (JoinView)"
+    },
+    {
+      "event": "teams_changed",
+      "params": "team_id",
+      "when": "đổi đội"
+    },
+    {
+      "event": "teams_left",
+      "params": "team_id",
+      "when": "rời đội"
+    },
+    {
+      "event": "teams_kicked_out_from_team",
+      "params": "team_id",
+      "when": "bị kick"
+    },
+    {
+      "event": "teams_message_sent",
+      "params": "teams_message_type",
+      "when": "gửi tin nhắn chat"
+    },
+    {
+      "event": "teams_help_requested",
+      "params": "-",
+      "when": "xin mạng"
+    },
+    {
+      "event": "teams_help_made",
+      "params": "-",
+      "when": "giúp đồng đội"
+    },
+    {
+      "event": "teams_card_requested",
+      "params": "-",
+      "when": "xin thẻ"
+    },
+    {
+      "event": "teams_card_sent",
+      "params": "-",
+      "when": "tặng thẻ"
+    },
+    {
+      "event": "teams_free_lives_popup_opened",
+      "params": "-",
+      "when": "mở popup mạng miễn phí"
+    },
+    {
+      "event": "teams_free_lives_popup_additional_life_add_button",
+      "params": "-",
+      "when": "bấm thêm mạng trong popup"
+    },
+    {
+      "event": "teams_more_lives_popup_free_lives_button",
+      "params": "-",
+      "when": "bấm sang mạng miễn phí từ popup More Lives"
+    }
+  ],
+  "storage_keys": [
+    "TeamsSyncModel (SyncService)",
+    "TeamsDataModel (ISaveLoad, gồm HelpedMessages, MessageCache, CountryLeaderboard, GlobalLeaderboard, CountryCode, IsUserBelongsToTeam)"
+  ],
+  "related_features": [
+    "Inventory",
+    "Leaderboards",
+    "Profile",
+    "Account",
+    "HomeUI",
+    "Notifications"
+  ],
+  "gaps": [
+    "15/11 — resolved_historical_snapshot: Đã trích toàn bộ field/value của TeamsConfigModel từ default0.0.3063 và cache lịch sử hiện có. Nhận định không có giá trị trong client đã được đối chiếu bằng file thật; không xác nhận effective runtime. Còn lại: Kiểm chứng effective config/asset và nhánh runtime trên đúng build nếu cần.",
+    "URL HTTP và WebSocket nằm trong BackendEnvironmentConfig.asset — không chép vào tài liệu.",
+    "15/11 — partial_static_code_unresolved: TeamChatService.SendMessage(string) tạo Type1; RequestHelp tạoType2; SendCardRequest tạoType5; SendCard tạoType6. Đây là producer semantics được viết trongbody, không chỉ đoán từview. Còn type khác như MagicPass/system và receive dispatch chưa đầy đủ; không tự gán0/3/4. Còn lại: Map RequestHelp2/CardRequest5/CardSend6 bằng các body cùngfile, rồi audit receive/view switch và systempayload; bảng producerpartial chưa là toànenum.",
+    "15/11 — resolved_static_snapshot: TeamBadgeConfig có 136 record; xuất toàn bộ Id/GUID/path/hash sprite. Không suy ra sprite do server cấp thêm. Còn lại: Kiểm chứng effective config/asset và nhánh runtime trên đúng build nếu cần.",
+    "[Runtime 2026-09-10] Config server LIVE đã đọc trực tiếp từ cache máy (không cần request); các hàng 'server live' là giá trị server ghi đè/thêm so với default.",
+    "[Runtime 2026-09-10] Instance phiên event đang chạy đã đọc (TeamsModel); phần từng ghi 'do server gửi' nay có giá trị thật trong các hàng 'server instance'.",
+    "[Runtime 2026-09-10] Leaderboard đội (country 910 + global 1000) đã đọc từ TeamsModel sau khi thắng 1 level."
+  ],
+  "sources": [
+    "Il2CppDumper/dump.cs: TeamsService, TeamsRemoteService, TeamsDataService, TeamChatService, TeamChatController, TeamsController, WebSocketManager, TeamsConfigModel, TeamsSystemMessageType, MemberRole, TeamServiceState, các *RequestModel",
+    "RecoveredNative/PseudoC/Assembly-CSharp/Modules/Contexts/Home/Teams/Scripts/UI/*.c",
+    "RecoveredNative/strings-by-type.tsv (EventSender teams_*, FirebaseRemoteConfigResolver)",
+    "GameDesign/appendix/localization.tsv (Team*, Teams*)",
+    "Assets/MonoBehaviour/TeamBadgeConfig.asset, BackendEnvironmentConfig.asset"
+  ],
+  "audit_provenance": {
+    "review_date": "2026-11-15",
+    "mode": "offline_existing_files",
+    "code_build": "0.0.3063 ARMv7",
+    "runtime_build_observed_historically": "0.0.3129 ARM64 (audit 2026-10-18); not rechecked 2026-11-15",
+    "new_playtests": 1,
+    "uc_status": "See facts/audit_20261115/uc_registry.json; image reference is not pass",
+    "workbook_status": "Existing XLSX is historical; JSON and local web include 2026-11-15 corrections",
+    "static_review": "facts/local_code_gap_results_20261115.json; facts/local_asset_gap_results_20261115.json; facts/final_data_gap_decisions_20261115.json; facts/core_body_gap_decisions_20261115.json; facts/remaining_asset_gap_decisions_20261115.json"
+  },
+  "runtime_review_20261115": [
+    {
+      "id": "MS-R15-SOC01",
+      "feature": "Teams",
+      "uc": [],
+      "title": "TabTeams chưa mởtrong môi trường",
+      "precondition": "0.0.3129 ARM64, level351, UID offline; save fixture có sẵn và instance tháng10.",
+      "steps": [
+        "Chọn Teams từHome"
+      ],
+      "expected": "Ghi trạngthái entrypoint.",
+      "actual": "Teams hiện Coming Soon!, không có danh sách/tạođội/chat.",
+      "status": "blocked_feature_gate",
+      "limitations": "Không suy ra trạngthái toànproduction; haiaccount/backend/flag được bật là dependency.",
+      "images": [
+        "SOC01_teams"
+      ],
+      "before": "SOC01_teams",
+      "after": "SOC01_teams",
+      "currency_unchanged": true,
+      "build": "0.0.3129 ARM64",
+      "mode": "offline_existing_fixture",
+      "date": "2026-11-15",
+      "ledger": {
+        "before": "SOC01_teams.json",
+        "after": "SOC01_teams.json"
+      },
+      "related_uc": [
+        "UC-01",
+        "UC-25"
+      ],
+      "uc_scope_note": "related_uc chỉ context/dependency: gate, chưa vào UC, khác subsystem hoặc teardown nội bộ chưa đo; không tính vào executed branch coverage."
+    }
+  ],
+  "static_review_20261115": {
+    "date": "2026-11-15",
+    "scope": "Historical code/assets 0.0.3063, dated caches, device 0.0.3129 cached bundles and explicitly scoped runtime evidence. Not full runtime pass.",
+    "findings": [
+      {
+        "kind": "final_data",
+        "source_report": "facts/final_data_gap_decisions_20261115.json",
+        "id": "MS-FDG-023",
+        "gap_ids": [
+          "MS-Teams-G001"
+        ],
+        "title": "Giá trị thật của TeamsConfigModel (UnlockLevel, TeamCapacity, CreateCost, MaxHelpCount, DefaultHelpCooldown, HelpSupportReward, MaxColeaderCount) do Firebase Re",
+        "status": "resolved_historical_snapshot",
+        "conclusion": "Đã trích toàn bộ field/value của TeamsConfigModel từ default0.0.3063 và cache lịch sử hiện có. Nhận định không có giá trị trong client đã được đối chiếu bằng file thật; không xác nhận effective runtime.",
+        "evidence": [
+          "facts/local_asset_review_20261115/config_catalog.json"
+        ],
+        "remaining": "Full historical data answered; current effective selection and full runtime remain unverified.",
+        "next_action": "Kiểm chứng effective config/asset và nhánh runtime trên đúng build nếu cần.",
+        "scope": "question-specific source/observed branch only; no full-UC or production claim",
+        "source_records": [
+          {
+            "snapshot": "default0.0.3063",
+            "model": "TeamsConfigModel",
+            "source": "Resources\\defaultconfigs\\TeamsConfigModel.json",
+            "root": "UnityExport Assets 0.0.3063",
+            "sha256": "9b48472dcef39f9708fc3ff8540f8ed15c358eb255ea18228295f71fcf983953",
+            "line": 1,
+            "build": "0.0.3063 ARMv7"
+          },
+          {
+            "snapshot": "cache20260910",
+            "model": "TeamsConfigModel",
+            "source": "facts\\runtime\\server_configs\\teamsConfigModel.json",
+            "root": "GameDesign",
+            "sha256": "0333389a9dbfc6adbf0f1d8c2e07297107a484136a400aa9bcf7ef71ff140970",
+            "line": 1,
+            "build": "snapshot provenance at path"
+          },
+          {
+            "snapshot": "cache20261010",
+            "model": "TeamsConfigModel",
+            "source": "facts\\runtime\\test_20261010\\before\\CachedRemoteConfigs",
+            "root": "GameDesign",
+            "sha256": "433164d4877b2dee55d2bbd79ef2fe83d3fe9519492fe15e3cb0926daf216050",
+            "line": 1,
+            "build": "snapshot provenance at path"
+          }
+        ]
+      },
+      {
+        "kind": "code",
+        "source_report": "facts/local_code_gap_results_20261115.json",
+        "id": "MS-CODE-68",
+        "gap_ids": [
+          "MS-Teams-G003"
+        ],
+        "title": "Team message type có producer mapping cụ thể",
+        "status": "partial_static_code",
+        "conclusion": "TeamChatService.SendMessage(string) tạo Type1; RequestHelp tạoType2; SendCardRequest tạoType5; SendCard tạoType6. Đây là producer semantics được viết trongbody, không chỉ đoán từview. Còn type khác như MagicPass/system và receive dispatch chưa đầy đủ; không tự gán0/3/4.",
+        "evidence": [
+          {
+            "file": "../com.grandgames.magicsort_Unity_20260909_112501/RecoveredNative/PseudoC/Assembly-CSharp/Modules/Contexts/Home/Teams/Scripts/UI/TeamChatService.c",
+            "line": 1619,
+            "end_line": 1897,
+            "method": "// ===== TeamChatService :: public void SendMessage(string content)",
+            "sha256": "32581e7ee3261c20879038c739dce34ccd6b29164f88ca4064afca2a0dd93428",
+            "body_checked": true,
+            "build": "0.0.3063 ARMv7",
+            "required_body_tokens": [
+              ".Type = 1"
+            ]
+          }
+        ],
+        "remaining": "Map RequestHelp2/CardRequest5/CardSend6 bằng các body cùngfile, rồi audit receive/view switch và systempayload; bảng producerpartial chưa là toànenum.",
+        "scope": "recovered_native_0.0.3063_only",
+        "runtime_verified": false
+      },
+      {
+        "kind": "asset",
+        "source_report": "facts/local_asset_gap_results_20261115.json",
+        "id": "MS-Teams-G001",
+        "status": "resolved_static_snapshot",
+        "conclusion": "Đã trích toàn bộ field/value của TeamsConfigModel từ default0.0.3063 và cache lịch sử hiện có. Nhận định không có giá trị trong client đã được đối chiếu bằng file thật; không xác nhận effective runtime.",
+        "evidence": [
+          {
+            "snapshot": "default0.0.3063",
+            "model": "TeamsConfigModel",
+            "source": "Resources\\defaultconfigs\\TeamsConfigModel.json",
+            "root": "UnityExport Assets 0.0.3063",
+            "sha256": "9b48472dcef39f9708fc3ff8540f8ed15c358eb255ea18228295f71fcf983953",
+            "line": 1,
+            "build": "0.0.3063 ARMv7"
+          },
+          {
+            "snapshot": "cache20260910",
+            "model": "TeamsConfigModel",
+            "source": "facts\\runtime\\server_configs\\teamsConfigModel.json",
+            "root": "GameDesign",
+            "sha256": "0333389a9dbfc6adbf0f1d8c2e07297107a484136a400aa9bcf7ef71ff140970",
+            "line": 1,
+            "build": "snapshot provenance at path"
+          },
+          {
+            "snapshot": "cache20261010",
+            "model": "TeamsConfigModel",
+            "source": "facts\\runtime\\test_20261010\\before\\CachedRemoteConfigs",
+            "root": "GameDesign",
+            "sha256": "433164d4877b2dee55d2bbd79ef2fe83d3fe9519492fe15e3cb0926daf216050",
+            "line": 1,
+            "build": "snapshot provenance at path"
+          }
+        ],
+        "data": "config_catalog.json",
+        "scope": "static_export0.0.3063_or_historical_cache_not_runtime_pass",
+        "reviewed": "2026-11-15",
+        "next_action": "Kiểm chứng effective config/asset và nhánh runtime trên đúng build nếu cần.",
+        "superseded_or_refined_by": "MS-FDG-023"
+      },
+      {
+        "kind": "asset",
+        "source_report": "facts/local_asset_gap_results_20261115.json",
+        "id": "MS-Teams-G004",
+        "status": "resolved_static_snapshot",
+        "conclusion": "TeamBadgeConfig có 136 record; xuất toàn bộ Id/GUID/path/hash sprite. Không suy ra sprite do server cấp thêm.",
+        "evidence": [
+          {
+            "source": "MonoBehaviour\\TeamBadgeConfig.asset",
+            "root": "UnityExport Assets 0.0.3063",
+            "sha256": "fbe34e5c8c23c9e74d427ffc59c0a9688fe200bd9d17bfd94b3b9c3138b83ceb",
+            "line": 1,
+            "build": "0.0.3063 ARMv7"
+          }
+        ],
+        "data": "team_badges.json",
+        "scope": "static_export0.0.3063_or_historical_cache_not_runtime_pass",
+        "reviewed": "2026-11-15",
+        "next_action": "Kiểm chứng effective config/asset và nhánh runtime trên đúng build nếu cần."
+      }
+    ]
+  },
+  "acceptance_review_20261115": {
+    "source": "facts/feature_acceptance_20261115.json",
+    "feature_id": "Teams",
+    "scope": "All eleven dossier dimensions reviewed; full_feature_verified is not implied; read per-dimension gaps and actual runtime evidence."
+  },
+  "segment_ab_review_20261115": {
+    "status": "not_identified_in_sources",
+    "segment_ids": [],
+    "matching_basis": "explicit_gd_config_map_or_exact_model_token_in_gdd_configs_where_key_sources; rootfieldscoped",
+    "rows": [],
+    "classifications": {},
+    "assignment_verified": false,
+    "uplift_verified": false,
+    "note": "No matchingrow does not prove no segmentation/AB. Rewardbucketfalsepositives remain explicitly classified."
+  },
+  "continuation_review_20261116": {
+    "date": "2026-11-16",
+    "build": "0.0.3129 ARM64 host APK",
+    "build_scope": "Host APK version3129 matches LAST observed installed version15/11 only; installed bytes/live device16/11 not verified.",
+    "runtime_status": "device_unavailable",
+    "runtime_case_ids": [],
+    "current_apk_model_links": {
+      "feature": "Teams",
+      "models": [
+        {
+          "model": "TeamsConfigModel",
+          "current_default_file": "facts/review_20261116/public_current_config_3129/defaults/TeamsConfigModel.json",
+          "resource_path": "defaultconfigs/teamsconfigmodel",
+          "sha256": "9b48472dcef39f9708fc3ff8540f8ed15c358eb255ea18228295f71fcf983953",
+          "matching_basis": [
+            "gdd/Teams.json#/configs",
+            "gdd/Teams.json#/sources"
+          ],
+          "scope": "Packaged default3129, not effective server config.",
+          "site_data_path": "data/current_config_3129/defaults/TeamsConfigModel.json",
+          "original_source_sha256": "9b48472dcef39f9708fc3ff8540f8ed15c358eb255ea18228295f71fcf983953",
+          "public_artifact_sha256": "966d847eb34f4b69cbc3b03b8f07e4ed5c9656a160aeb59cd1a9e11754e3fb13",
+          "sha256_scope": "sha256 is original raw model; public_artifact_sha256 is the sanitized download"
+        }
+      ],
+      "status": "exact_model_source_association",
+      "distribution": "sanitized_public",
+      "public_mapping_pending": false
+    },
+    "current_packaged_defaults": [
+      {
+        "model": "TeamsConfigModel",
+        "source": "facts/review_20261116/public_current_config_3129/defaults/TeamsConfigModel.json",
+        "site_data_path": "data/current_config_3129/defaults/TeamsConfigModel.json",
+        "public_artifact_sha256": "966d847eb34f4b69cbc3b03b8f07e4ed5c9656a160aeb59cd1a9e11754e3fb13",
+        "original_source_sha256": "9b48472dcef39f9708fc3ff8540f8ed15c358eb255ea18228295f71fcf983953",
+        "source_class": "static_asset",
+        "build": "0.0.3129 host APK",
+        "scope": "Sanitized packaged default fullvalues only; not effective remote/selected config or runtime.",
+        "values": {
+          "IsEnable": false,
+          "UnlockLevel": 40,
+          "TeamCapacity": 50,
+          "CreateCost": 100,
+          "MaxHelpCount": 5,
+          "DefaultHelpCooldown": 14400,
+          "HelpSupportReward": 5,
+          "MaxColeaderCount": 3
+        }
+      }
+    ],
+    "native_finding_ids": [],
+    "documentation_source_coverage": {
+      "dossier_present": true,
+      "use_case_catalog_count": 27,
+      "config_catalog_rows": 141,
+      "current_apk_default_model_links": 1,
+      "current_native_findings": 0,
+      "scope": "Documentation/source coverage only; not complete runtime verification."
+    },
+    "runtime_completion": {
+      "date": "2026-11-16",
+      "status": "device_unavailable",
+      "executed_case_count": 0,
+      "full_feature_runtime_verified": false
+    },
+    "planned_branch": "Nếu Teams mở được ở lượt mới, xem Search/Create form, validation rỗng và cancel; nếu vẫn unavailable ghi exact gate text.",
+    "target_uc_ids": [
+      "UC-02",
+      "UC-03",
+      "UC-04",
+      "UC-27"
+    ],
+    "execution_phase": "noncore_first",
+    "core_or_levels_last": false,
+    "actionability_full_json": "facts/continuation_20261116/current/feature_actionability.json",
+    "actionability_site_data_path": "data/continuation_20261116/feature_actionability.json",
+    "source_classes": [
+      "static_asset"
+    ],
+    "full_feature_verified": false
+  }
+}

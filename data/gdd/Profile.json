@@ -1,0 +1,927 @@
+{
+  "id": "Profile",
+  "name": "Hồ sơ (Profile)",
+  "category": "Social",
+  "managers": [
+    "Modules.Contexts.Home.Profile.Scripts.ProfileSpriteService",
+    "Modules.Contexts.Application.Player.Scripts.PlayerService",
+    "Modules.Contexts.Home.MagicStreakTournament.Scripts.ProfileSpriteCacheService",
+    "Modules.Contexts.Home.MagicStreakTournament.Scripts.ProfileSpritePersistenceService"
+  ],
+  "summary": "Profile là danh tính công khai của người chơi: tên hiển thị, ảnh đại diện (8 avatar dựng sẵn + ảnh Facebook), token trang trí (huy hiệu bộ sưu tập), khung viền (frame) và kiểu chữ tên (name style) — trong đó frame/name style có thể có hạn dùng theo thời gian (Magic Pass). Hồ sơ hiện ở khắp nơi: chat đội, bảng xếp hạng, danh sách bạn bè; bấm vào một người chơi khác sẽ mở OtherUserProfilePopup với thống kê thành tích của họ. Tên bị kiểm duyệt bằng bộ lọc từ xấu (Crosstales BadWordFilter/BadWordManager) và phải dài ít nhất 3 ký tự hợp lệ. Ảnh đại diện của người chơi khác được tải qua HTTP và cache 2 tầng (bộ nhớ + file trên đĩa với catalog và hạn theo số phiên) để giảm băng thông. Game có luồng bắt buộc đặt tên (force name change) chạy trong chuỗi lệnh về Home.",
+  "unlock": "Có từ đầu game. Luồng bắt buộc nhập tên bật bằng remote config 'IsForcedNamePopupEnabled' (FirebaseRemoteConfigResolver) và được thực thi bởi TryShowForceNameChangeCommand (thuộc IHomeWelcomingSequenceCommand / IReturnToHomeSequenceCommand) với thuộc tính ShouldShowForce. Frame và name style chỉ mở khi người chơi sở hữu (PlayerService.GetProfileFrames / GetProfileNameStyles, ví dụ 'magic_pass_frame' từ Magic Pass).",
+  "entry_points": [
+    "Nút hồ sơ ở Home (ProfileButton, OpenEditProfilePopupButton)",
+    "Popup chỉnh hồ sơ EditProfilePopup (localize 'EditProfilePopupTitle' = Edit Profile)",
+    "Popup nhập tên ProfileEnterNamePopup (bắt buộc hoặc tự nguyện)",
+    "Bấm vào avatar người chơi khác (ShowUserProfileButton → ShowUserProfileCommand)",
+    "Popup hồ sơ người khác OtherUserProfilePopup từ 10 nguồn (ShowProfileCommandSource)",
+    "Popup gắn token ProfileTokenEquipPopUp khi hoàn thành bộ sưu tập"
+  ],
+  "flow": "ProfileSpriteService nhận ProfileSpriteConfig (ScriptableObject) chứa danh sách avatar dựng sẵn, token, frames và nameStyles. GetActiveProfileId()/GetActiveSprite() đọc PlayerService.GetProfileInfo() (ProfileInfo{imageId, userName, tokenId, frameInfo, nameStyleInfo}). Nếu người chơi liên kết Facebook, TryLoadFacebookPhoto() tải ảnh qua FacebookLoginService (URL dạng '/picture?type=large&access_token=') và SocialProfilePhotoManager.SaveProfilePhoto(texture) lưu vào PlayerPrefs khoá 'facebook_profile_photo'; ảnh này ứng với ProfileSprite id 'fb'. Người chơi chỉnh hồ sơ trong EditProfilePopup gồm 4 tab: Avatar, Token, Frame, Name; SaveProfileButtonHandler.OnButtonClick() kiểm tra IsNameInputValid(name) (dùng khoá cảnh báo 'ProfileNameWarning' và 'ProfilePictureWarning') rồi lưu ProfileInfo qua PlayerService.SetProfileInfo và đẩy lên server bằng SyncService. Đổi tên riêng lẻ dùng ProfileEnterNamePopup với hai chế độ: nhập lần đầu ('Profile Enter Name', 'Profile What is your name') và đổi tên ('Profile Change Name', 'Profile Enter your new name'); khi _isForceEnter thì nút đóng bị ẩn (UpdateCloseButtonVisibility) và cả hai popup đều kiểm tra HasInternetConnection(). Xem hồ sơ người khác: ShowUserProfileCommand(userPublicId, source, canShowAddFriend).ExecuteAsync() → FetchUserProfile() gửi GetUserProfileRequestModel{UserId} (schema magicsort.schemas.v1.profile.GetUserProfileResponse) trả UserProfileModel với đầy đủ thống kê, rồi ShowOtherUserProfilePopup(profile). Avatar của người khác đi qua ProfileSpriteCacheService.RequestCacheSprite(imageId, imageUrl, publicId): mỗi yêu cầu là một ProfileSpriteCacheRequest, AssignProviderTypeTo() chọn nguồn (ProfileSpritePersistenceProvider đọc file cache, hoặc ProfileSpriteHttpProvider tải HTTP với cooldown tăng dần khi lỗi); thành công thì OnProfileSpriteLoadSuccess() ghi vào _profileSpriteDictionary và lưu file; thất bại thì OnProfileSpriteLoadFail() đẩy sang danh sách retry. ProfileSpritePersistenceService quản lý thư mục 'ProfileSpriteCache' + file catalog, mỗi mục có ExpirationSession và bị xoá sau CacheExpirationSessionCount = 5 phiên.",
+  "use_cases": [
+    {
+      "id": "UC-01",
+      "title": "Bắt buộc đặt tên lần đầu",
+      "actor": "System",
+      "trigger": "Về Home trong chuỗi welcoming/return",
+      "precondition": "Chưa có userName và cờ IsForcedNamePopupEnabled bật",
+      "steps": [
+        "TryShowForceNameChangeCommand.Initialize(cancellationToken) rồi ExecuteAsync()",
+        "ShouldShowForce = true → Open() mở ProfileEnterNamePopup với _isForceEnter = true, _isFirstForce = true",
+        "Nút đóng bị ẩn (UpdateCloseButtonVisibility), người chơi buộc nhập tên hợp lệ",
+        "IsNameInputValid(name) kiểm tra độ dài và từ xấu",
+        "Lưu qua PlayerService.UpdateUserName(userName) + SetProfileInfo",
+        "IsShowed = true để không lặp lại"
+      ],
+      "result": "Người chơi có tên hiển thị trước khi vào các tính năng xã hội",
+      "rules": "Tên phải >= 3 ký tự hợp lệ ('ProfileNameWarning' = \"Name should be at least 3 valid characters!\"). Lệnh khai báo IsSkippable() và ShouldTerminateTheFlow() để phối hợp với chuỗi popup Home",
+      "evidence": "TryShowForceNameChangeCommand.ExecuteAsync; TryShowForceNameChangeCommand.Open; TryShowForceNameChangeCommand.get_ShouldShowForce; ProfileEnterNamePopup.UpdateCloseButtonVisibility; PlayerService.UpdateUserName"
+    },
+    {
+      "id": "UC-02",
+      "title": "Đổi tên hiển thị",
+      "actor": "Player",
+      "trigger": "Bấm Edit Name trong EditProfilePopup (EditNameProfileButton)",
+      "precondition": "Có kết nối mạng",
+      "steps": [
+        "ProfileEnterNamePopup mở ở chế độ đổi tên ('Profile Change Name', 'Profile Enter your new name')",
+        "UpdateContinueButtonVisual(name) đổi giữa _greenButton và _grayButton theo tính hợp lệ",
+        "IsNameInputValid(name) lọc từ xấu bằng BadWordManager/BadWordFilter",
+        "Lưu và đồng bộ; nếu server từ chối thì OnProfileInfoSaveFailed() đặt _savingNameFailed = true"
+      ],
+      "result": "Tên mới hiển thị ở mọi nơi (UserProfileView.SetUserName)",
+      "rules": "HasInternetConnection() chặn khi offline. Bộ lọc BadWordFilter còn xử lý leetspeak (replaceLeetAdvancedToText) nên né bằng ký tự thay thế không hiệu quả",
+      "evidence": "ProfileEnterNamePopup.IsNameInputValid; ProfileEnterNamePopup.UpdateContinueButtonVisual; ProfileEnterNamePopup.OnProfileInfoSaveFailed; ProfileEnterNamePopup.HasInternetConnection; BadWordManager"
+    },
+    {
+      "id": "UC-03",
+      "title": "Chọn ảnh đại diện dựng sẵn",
+      "actor": "Player",
+      "trigger": "Tab Avatar trong EditProfilePopup",
+      "precondition": "-",
+      "steps": [
+        "EditProfilePopup.OnAvatarTabSelected() → ActivateTab(_avatarTabParent)",
+        "ProfileSpriteSelectionContainer liệt kê ProfileSpriteService.GetAllSprites() (ProfileSpriteConfig.images)",
+        "Chọn → OnProfileSpriteSelected(id) và SetSaveButtonActive(true)",
+        "SaveProfileButtonHandler.OnButtonClick() lưu ProfileInfo.imageId"
+      ],
+      "result": "Avatar mới áp dụng cho mọi màn hình xã hội",
+      "rules": "Asset ProfileSpriteConfig.asset có 8 avatar id \"1\"–\"8\"; DefaultSprite = id \"1\"; chưa chọn ảnh → cảnh báo 'ProfilePictureWarning'",
+      "evidence": "EditProfilePopup.OnAvatarTabSelected; EditProfilePopup.OnProfileSpriteSelected; ProfileSpriteService.GetAllSprites; SaveProfileButtonHandler.OnButtonClick; ProfileSpriteConfig.images"
+    },
+    {
+      "id": "UC-04",
+      "title": "Dùng ảnh Facebook làm avatar",
+      "actor": "Player",
+      "trigger": "Đăng nhập Facebook (ProfileFacebookLoginButton)",
+      "precondition": "FacebookLoginService đăng nhập thành công",
+      "steps": [
+        "ProfileSpriteService.TryLoadFacebookPhoto() tải ảnh từ Graph API ('/picture?type=large&access_token=')",
+        "SocialProfilePhotoManager.SaveProfilePhoto(texture) lưu vào PlayerPrefs khoá 'facebook_profile_photo'",
+        "LoadProfilePhoto()/ConvertTextureToSprite dựng Sprite",
+        "GetFacebookProfile() trả ProfileSprite id \"fb\" (FacebookSpriteId)"
+      ],
+      "result": "Avatar là ảnh Facebook thật; nếu tải hỏng dùng FacebookDefaultSprite",
+      "rules": "DeleteProfilePhoto() xoá khi đăng xuất Facebook. ProfileSpriteConfig có riêng FacebookSprite (id 'fb') và FacebookDefaultSprite (id rỗng)",
+      "evidence": "ProfileSpriteService.TryLoadFacebookPhoto; ProfileSpriteService.LoadProfilePhoto; ProfileSpriteService.DeleteProfilePhoto; SocialProfilePhotoManager.SaveProfilePhoto; SocialProfilePhotoManager.FACEBOOK_PROFILE_PHOTO_KEY"
+    },
+    {
+      "id": "UC-05",
+      "title": "Gắn token bộ sưu tập lên hồ sơ",
+      "actor": "Player",
+      "trigger": "Tab Token trong EditProfilePopup hoặc ProfileTokenEquipPopUp sau khi hoàn thành bộ sưu tập",
+      "precondition": "PlayerService.GetProfileTokens() có token",
+      "steps": [
+        "EditProfilePopup.OnTokenTabSelected() → ProfileTokenSelectionContainer liệt kê ProfileSpriteService.GetAllTokens()",
+        "Chọn token → lưu ProfileInfo.tokenId",
+        "UserProfileView.SetTokenImage(token) hiển thị; ProfileSpriteConfig.InstantiateAndGetTokenUIPart(tokenId, parent) dựng phần UI động"
+      ],
+      "result": "Huy hiệu bộ sưu tập xuất hiện cạnh tên người chơi",
+      "rules": "Asset có 10 token: collection_1_token … collection_5_token và bản _gold tương ứng. PlayerService.AddProfileToken(tokenId) cấp khi hoàn thành bộ sưu tập, ClearProfileTokens() dọn khi cần",
+      "evidence": "EditProfilePopup.OnTokenTabSelected; ProfileSpriteService.GetAllTokens; ProfileSpriteConfig.InstantiateAndGetTokenUIPart; PlayerService.AddProfileToken; UserProfileView.SetTokenImage"
+    },
+    {
+      "id": "UC-06",
+      "title": "Chọn khung viền (frame)",
+      "actor": "Player",
+      "trigger": "Tab Frame trong EditProfilePopup",
+      "precondition": "PlayerService.GetProfileFrames() có ProfileFrameInfo hợp lệ",
+      "steps": [
+        "EditProfilePopup.OnFrameTabSelected() → ProfileFrameSelectionContainer liệt kê ProfileSpriteService.GetAllFrames()",
+        "Kiểm tra ProfileFrameInfo.IsValid và IsTimeBased/ExpireTime",
+        "Lưu ProfileInfo.frameInfo; UserProfileView.SetFrameView(frameId) render qua ProfileFrameView"
+      ],
+      "result": "Khung viền quanh avatar ở mọi nơi",
+      "rules": "Asset ProfileSpriteConfig.frames = [\"\" (mặc định), \"magic_pass_frame\"]. Frame Magic Pass có hạn (ExpireTime), hết hạn thì ProfileFrameInfo.Default được dùng",
+      "evidence": "EditProfilePopup.OnFrameTabSelected; ProfileSpriteService.GetAllFrames; ProfileSpriteService.GetActiveFrameInfo; ProfileFrameInfo.IsValid; ProfileFrameInfo.IsTimeBased; ProfileSpriteConfig.frames"
+    },
+    {
+      "id": "UC-07",
+      "title": "Chọn kiểu chữ tên (name style)",
+      "actor": "Player",
+      "trigger": "Tab Name trong EditProfilePopup",
+      "precondition": "PlayerService.GetProfileNameStyles() có ProfileNameStyleInfo hợp lệ",
+      "steps": [
+        "EditProfilePopup.OnNameTabSelected() → ProfileNameStyleSelectionContainer liệt kê ProfileSpriteService.GetAllNameStyles()",
+        "Lưu ProfileInfo.nameStyleInfo",
+        "UserProfileView.SetNameStyleView(nameStyleId, userName) render qua ProfileNameStyleView"
+      ],
+      "result": "Tên hiển thị với hiệu ứng riêng",
+      "rules": "Asset ProfileSpriteConfig.nameStyles = [\"\" (mặc định), \"magic_pass_name_style\"]; localize 'MagicPassTooltipActivateName' quảng bá kiểu chữ này",
+      "evidence": "EditProfilePopup.OnNameTabSelected; ProfileSpriteService.GetAllNameStyles; ProfileSpriteService.GetActiveNameStyleInfo; ProfileNameStyleInfo; ProfileSpriteConfig.nameStyles"
+    },
+    {
+      "id": "UC-08",
+      "title": "Xem hồ sơ người chơi khác",
+      "actor": "Player",
+      "trigger": "Bấm vào avatar/tên trong chat đội, bảng xếp hạng, danh sách bạn",
+      "precondition": "Có publicId",
+      "steps": [
+        "ShowUserProfileButton → ShowUserProfileCommand(userPublicId, source, canShowAddFriend)",
+        "ExecuteAsync() → FetchUserProfile() gửi GetUserProfileRequestModel{UserId}",
+        "Nhận UserProfileModel rồi ShowOtherUserProfilePopup(profile)",
+        "OtherUserProfilePopup.UpdateViews() đổ Level, thống kê thắng, tên/badge đội (TeamsBadgeConfig, _noTeamBadgeSprite khi không có đội)",
+        "FriendProfileController hiện nút Add/Accept/Remove nếu CanShowAddFriend"
+      ],
+      "result": "Popup hồ sơ đầy đủ, có lối kết bạn và nút xem đội (_teamsButton)",
+      "rules": "ShowProfileCommandSource: TeamsInfo=1, TeamsChat=2, PlayerLeaderboard=3, WeeklyLeaderboard=4, ChampionsLeagueLeaderboard=5, Jetpack=6, DuckFestivalLeaderboard=7, TeamArena=8, TeamQuestLeaderboard=9, FriendsLeaderboard=10",
+      "evidence": "ShowUserProfileCommand.ExecuteAsync; ShowUserProfileCommand.FetchUserProfile; ShowUserProfileCommand.ShowOtherUserProfilePopup; OtherUserProfilePopup.UpdateViews; ShowProfileCommandSource"
+    },
+    {
+      "id": "UC-09",
+      "title": "Xem thống kê thành tích của mình",
+      "actor": "Player",
+      "trigger": "Mở ProfilePopup",
+      "precondition": "-",
+      "steps": [
+        "ProfilePopup.Show(PopUpArguments) chạy animation theo ProfilePopupAnimationConfig",
+        "ProfilePopupGeneralStatsView đổ các chỉ số (localize 'ProfilePopupHeader' = General Stats)",
+        "ProfilePopupChampionsLeague hiện thống kê giải Master League ('ChampionsLeagueProfilePopupHeader')"
+      ],
+      "result": "Người chơi xem được số trận thắng theo từng sự kiện",
+      "rules": "Nhãn: 'ProfilePopupFirstTry', 'ProfilePopupWeeklyCup', 'ProfilePopupMagicStreak', 'ProfilePopupBroomStreak', 'ProfilePopupJetpackRace', 'ProfilePopupSkyJump', 'ProfilePopupDuckFest', 'ProfilePopupTop3Wins', 'ProfilePopupHelpsMade', 'ProfilePopupCollectionFinished', 'ProfilePopupCurrentLeague', 'ProfilePopupMergeBakeryWins', 'ProfilePopupBoatRushWins'",
+      "evidence": "ProfilePopup.Show; ProfilePopupGeneralStatsView; ProfilePopupChampionsLeague; UserProfileModel"
+    },
+    {
+      "id": "UC-10",
+      "title": "Tải và cache avatar của người chơi khác",
+      "actor": "System",
+      "trigger": "Render danh sách có avatar từ URL",
+      "precondition": "Có imageUrl",
+      "steps": [
+        "ProfileSpriteCacheService.RequestCacheSprite(imageId, imageUrl, publicId) tạo ProfileSpriteCacheRequest, chống trùng bằng _profileSpriteCacheRequestsPublicIds",
+        "AssignProviderTypeTo(cacheRequest) chọn ProfileSpritePersistenceProvider (nếu IsCacheExists) hoặc ProfileSpriteHttpProvider",
+        "ProfileSpriteHttpProvider.LoadImageDataHttpAsync(url) tải qua HttpProxy",
+        "OnProfileSpriteLoadSuccess(request, texture, data) đưa Sprite vào _profileSpriteDictionary và ProfileSpritePersistenceService.Add(request, data)",
+        "GetSprite(profileId, pictureId) trả sprite cho UI"
+      ],
+      "result": "Ảnh hiện nhanh ở lần sau, tiết kiệm băng thông",
+      "rules": "RequestCacheSprites(List<...>) nạp hàng loạt cho leaderboard; _isRequestListChanged và FrameUpdate() xử lý theo khung hình để không giật",
+      "evidence": "ProfileSpriteCacheService.RequestCacheSprite; ProfileSpriteCacheService.AssignProviderTypeTo; ProfileSpriteCacheService.OnProfileSpriteLoadSuccess; ProfileSpriteCacheService.GetSprite; ProfileSpriteHttpProvider.LoadImageDataHttpAsync"
+    },
+    {
+      "id": "UC-11",
+      "title": "Tải avatar thất bại và thử lại có cooldown",
+      "actor": "System",
+      "trigger": "HTTP lỗi hoặc URL hỏng",
+      "precondition": "-",
+      "steps": [
+        "ProfileSpriteHttpProvider đặt _isAnyRequestFailed = true và tăng _coolDownDurationAsSeconds tới trần _maxCoolDownDurationAsSeconds, đặt _coolDownEndTime",
+        "ProfileSpriteCacheService.OnProfileSpriteLoadFail(request) tăng request.Retries và đẩy vào _retryProfileSpriteCacheRequests",
+        "CheckProfileSpriteCacheRequests() thử lại sau khi hết cooldown"
+      ],
+      "result": "Không spam server khi mạng kém; UI dùng ảnh mặc định trong lúc chờ",
+      "rules": "_coolDownDurationBetweenDownloadAsSeconds giãn cách giữa hai lần tải liên tiếp",
+      "evidence": "ProfileSpriteCacheService.OnProfileSpriteLoadFail; ProfileSpriteCacheService.CheckProfileSpriteCacheRequests; ProfileSpriteHttpProvider (các trường cooldown); ProfileSpriteCacheRequest.Retries"
+    },
+    {
+      "id": "UC-12",
+      "title": "Quản lý cache ảnh trên đĩa và dọn theo phiên",
+      "actor": "System",
+      "trigger": "Khởi động app / định kỳ",
+      "precondition": "-",
+      "steps": [
+        "ProfileSpritePersistenceService.InitializeFileSystem() tạo thư mục 'ProfileSpriteCache' và file 'catalog'",
+        "LoadCatalog() đọc từng dòng thành ProfileSpritePersistenceCatalogItem{ImageUrl, ExpirationSession}",
+        "_activeSessionCount tăng mỗi phiên; mục quá GetCacheExpirationSessionCount() = 5 phiên bị DeleteItemsFromCatalog + DeleteFiles",
+        "RequestSaveCatalog() gom yêu cầu lưu, TrySaveCatalog() ghi tối đa mỗi CatalogSaveIntervalSeconds = 3 giây, ghi qua file tạm rồi đổi tên (WriteFile(tempPath, filePath, data))"
+      ],
+      "result": "Cache ổn định, không phình vô hạn, an toàn khi app bị kill giữa lúc ghi",
+      "rules": "CacheExpirationSessionCount = 5; CatalogSaveIntervalSeconds = 3; CacheFolder = \"ProfileSpriteCache\"; đường dẫn file dạng '{cacheFolder}/{0}'",
+      "evidence": "ProfileSpritePersistenceService.InitializeFileSystem; ProfileSpritePersistenceService.LoadCatalog; ProfileSpritePersistenceService.TrySaveCatalog; ProfileSpritePersistenceService.DeleteItemsFromCatalog; ProfileSpritePersistenceService.GetCacheFilePathFromUrl"
+    },
+    {
+      "id": "UC-13",
+      "title": "Hiển thị hồ sơ rút gọn trong danh sách",
+      "actor": "System",
+      "trigger": "Render dòng chat/leaderboard/bạn bè",
+      "precondition": "-",
+      "steps": [
+        "UserProfileView.Initialize(isMe, userId, isClickable)",
+        "UpdateView() đặt avatar (SetProfileImage), tên (SetUserName), tên đội (SetTeamName), token, frame, name style",
+        "Chiều rộng text tên điều chỉnh theo có/không token (_nameTextTokenActiveWidth vs _nameTextTokenDefaultWidth) và theo có/không đội (_nameTextYPositionInTeam)",
+        "OnProfileInfoUpdated / OnUserTeamDataUpdated làm mới khi dữ liệu đổi"
+      ],
+      "result": "Một component dùng lại cho mọi màn hình xã hội",
+      "rules": "isClickable = true gắn ShowUserProfileButton để mở hồ sơ đầy đủ",
+      "evidence": "UserProfileView.Initialize; UserProfileView.UpdateView; UserProfileView.OnProfileInfoUpdated; ShowUserProfileButton"
+    },
+    {
+      "id": "UC-14",
+      "title": "Lưu và đồng bộ hồ sơ theo tài khoản",
+      "actor": "System",
+      "trigger": "Lưu thay đổi hồ sơ",
+      "precondition": "-",
+      "steps": [
+        "PlayerService.SetProfileInfo(profileInfo) đổi PlayerModel.ProfileInfo và MarkDataForLateUpdate()",
+        "LateUpdate() lưu qua ISaveLoad<PlayerModel>",
+        "SerializeModelForSync()/GetSyncName() đẩy lên SyncService",
+        "OverwriteModelFromSync(data) ghi đè khi đăng nhập máy khác",
+        "DeleteData() xoá khi xoá tài khoản"
+      ],
+      "result": "Tên, avatar, token, frame, name style theo tài khoản chứ không theo máy",
+      "rules": "PlayerModel còn giữ Tokens, FrameInfos, NameStyleInfos — danh sách vật phẩm hồ sơ đã sở hữu",
+      "evidence": "PlayerService.SetProfileInfo; PlayerService.SerializeModelForSync; PlayerService.OverwriteModelFromSync; PlayerService.DeleteData; PlayerModel.ProfileInfo"
+    },
+    {
+      "id": "UC-15",
+      "title": "Chặn chỉnh hồ sơ khi offline",
+      "actor": "System",
+      "trigger": "Mở popup chỉnh hồ sơ/nhập tên khi mất mạng",
+      "precondition": "-",
+      "steps": [
+        "EditProfilePopup.HasInternetConnection() / ProfileEnterNamePopup.HasInternetConnection() trả false",
+        "Nút lưu bị vô hiệu (SetSaveButtonActive(false) / _grayButton)"
+      ],
+      "result": "Không tạo trạng thái lệch giữa client và server",
+      "rules": "-",
+      "evidence": "EditProfilePopup.HasInternetConnection; ProfileEnterNamePopup.HasInternetConnection; EditProfilePopup.SetSaveButtonActive"
+    },
+    {
+      "id": "UC-16",
+      "title": "Lọc từ ngữ xấu trong tên và chat",
+      "actor": "System",
+      "trigger": "Nhập tên hoặc gửi tin nhắn",
+      "precondition": "-",
+      "steps": [
+        "BadWordManager (Crosstales.BWF.Manager) gọi BadWordFilter kiểm tra chuỗi",
+        "BadWordFilter.replaceLeetAdvancedToText(input) quy đổi leetspeak (ví dụ '/\\\\/', ']-[' về chữ cái) trước khi so khớp",
+        "Có từ xấu → tên bị từ chối ('ProfileNameWarning') hoặc tin nhắn bị chặn ('TeamsInappropriateChat')"
+      ],
+      "result": "Nội dung do người dùng tạo được kiểm duyệt phía client trước khi gửi",
+      "rules": "BadWordManager có tham số replaceChars, ReplaceMode, removeSpaces, maxTextLength, simpleCheck",
+      "evidence": "BadWordManager; BadWordFilter.replaceLeetAdvancedToText; SaveProfileButtonHandler.IsNameInputValid"
+    },
+    {
+      "id": "UC-17",
+      "title": "Nhắc người chơi hoàn thiện hồ sơ",
+      "actor": "System",
+      "trigger": "Hồ sơ thiếu tên/ảnh",
+      "precondition": "-",
+      "steps": [
+        "ProfileAlertView bật dấu chấm cảnh báo trên nút hồ sơ",
+        "ProfileFingerView chỉ dẫn ngón tay vào nút",
+        "ProfileForceNameChangeArrowPopup hiển thị mũi tên hướng dẫn khi bắt buộc đổi tên"
+      ],
+      "result": "Tăng tỉ lệ người chơi đặt tên/ảnh, giúp các tính năng xã hội có danh tính",
+      "rules": "-",
+      "evidence": "ProfileAlertView; ProfileFingerView; ProfileForceNameChangeArrowPopup"
+    }
+  ],
+  "configs": [
+    {
+      "source": "asset",
+      "key": "ProfileSpriteConfig.images",
+      "type": "List<ProfileSprite>",
+      "value": "8 avatar với Id = \"1\",\"2\",\"3\",\"4\",\"5\",\"6\",\"7\",\"8\"",
+      "meaning": "Bộ ảnh đại diện dựng sẵn",
+      "where": "Assets/MonoBehaviour/ProfileSpriteConfig.asset"
+    },
+    {
+      "source": "asset",
+      "key": "ProfileSpriteConfig.FacebookSprite / FacebookDefaultSprite / DefaultSprite",
+      "type": "ProfileSprite",
+      "value": "Id = \"fb\" / Id rỗng / Id = \"1\"",
+      "meaning": "Ảnh Facebook, ảnh Facebook dự phòng và ảnh mặc định",
+      "where": "ProfileSpriteConfig.asset"
+    },
+    {
+      "source": "asset",
+      "key": "ProfileSpriteConfig.tokens",
+      "type": "List<ProfileTokenSprite>",
+      "value": "collection_1_token, collection_1_token_gold, collection_2_token, collection_2_token_gold, collection_3_token, collection_3_token_gold, collection_4_token, collection_4_token_gold, collection_5_token, collection_5_token_gold (10 token)",
+      "meaning": "Huy hiệu bộ sưu tập gắn cạnh tên",
+      "where": "ProfileSpriteConfig.asset"
+    },
+    {
+      "source": "asset",
+      "key": "ProfileSpriteConfig.frames",
+      "type": "List<string>",
+      "value": "[\"\" (mặc định), \"magic_pass_frame\"]",
+      "meaning": "Khung viền avatar",
+      "where": "ProfileSpriteConfig.asset"
+    },
+    {
+      "source": "asset",
+      "key": "ProfileSpriteConfig.nameStyles",
+      "type": "List<string>",
+      "value": "[\"\" (mặc định), \"magic_pass_name_style\"]",
+      "meaning": "Kiểu chữ tên",
+      "where": "ProfileSpriteConfig.asset"
+    },
+    {
+      "source": "asset",
+      "key": "ProfilePopupAnimationConfig.asset",
+      "type": "ScriptableObject",
+      "value": "-",
+      "meaning": "Animation mở/đóng popup hồ sơ",
+      "where": "Assets/MonoBehaviour/ProfilePopupAnimationConfig.asset"
+    },
+    {
+      "source": "code const",
+      "key": "ProfileSpritePersistenceService.CacheExpirationSessionCount",
+      "type": "int",
+      "value": "5",
+      "meaning": "Số phiên giữ file ảnh cache trước khi xoá",
+      "where": "ProfileSpritePersistenceService (const)"
+    },
+    {
+      "source": "code const",
+      "key": "ProfileSpritePersistenceService.CatalogSaveIntervalSeconds",
+      "type": "int",
+      "value": "3",
+      "meaning": "Giãn cách tối thiểu giữa hai lần ghi catalog",
+      "where": "ProfileSpritePersistenceService (const)"
+    },
+    {
+      "source": "code const",
+      "key": "ProfileSpritePersistenceService.CacheFolder",
+      "type": "string",
+      "value": "\"ProfileSpriteCache\"",
+      "meaning": "Thư mục cache ảnh hồ sơ trên đĩa",
+      "where": "ProfileSpritePersistenceService (const)"
+    },
+    {
+      "source": "storage key",
+      "key": "SocialProfilePhotoManager.FACEBOOK_PROFILE_PHOTO_KEY",
+      "type": "PlayerPrefs key",
+      "value": "\"facebook_profile_photo\"",
+      "meaning": "Ảnh Facebook đã tải lưu cục bộ",
+      "where": "SocialProfilePhotoManager (const)"
+    },
+    {
+      "source": "code const",
+      "key": "SaveProfileButtonHandler.profile_name_warning_localization_term",
+      "type": "string",
+      "value": "\"ProfileNameWarning\"",
+      "meaning": "Khoá cảnh báo tên không hợp lệ (\"Name should be at least 3 valid characters!\")",
+      "where": "SaveProfileButtonHandler (const)"
+    },
+    {
+      "source": "code const",
+      "key": "SaveProfileButtonHandler.profile_picture_warning_localization_term",
+      "type": "string",
+      "value": "\"ProfilePictureWarning\"",
+      "meaning": "Khoá cảnh báo chưa chọn ảnh (\"Select a profile picture!\")",
+      "where": "SaveProfileButtonHandler (const)"
+    },
+    {
+      "source": "code enum",
+      "key": "ShowProfileCommandSource",
+      "type": "enum int",
+      "value": "TeamsInfo=1, TeamsChat=2, PlayerLeaderboard=3, WeeklyLeaderboard=4, ChampionsLeagueLeaderboard=5, Jetpack=6, DuckFestivalLeaderboard=7, TeamArena=8, TeamQuestLeaderboard=9, FriendsLeaderboard=10",
+      "meaning": "Nguồn mở popup hồ sơ, dùng cho analytics",
+      "where": "Modules.Contexts.Home.Profile.Commands.ShowProfileCommandSource"
+    },
+    {
+      "source": "remote config",
+      "key": "IsForcedNamePopupEnabled",
+      "type": "bool",
+      "value": "server",
+      "meaning": "Bật luồng bắt buộc đặt tên",
+      "where": "FirebaseRemoteConfigResolver → TryShowForceNameChangeCommand"
+    },
+    {
+      "source": "code field",
+      "key": "ProfileInfo",
+      "type": "class",
+      "value": "imageId, userName, tokenId, frameInfo (ProfileFrameInfo), nameStyleInfo (ProfileNameStyleInfo), frameId, nameStyleId",
+      "meaning": "Toàn bộ danh tính hiển thị của người chơi",
+      "where": "Modules.Contexts.Application.Player.Scripts.ProfileInfo"
+    },
+    {
+      "source": "code field",
+      "key": "ProfileFrameInfo / ProfileNameStyleInfo",
+      "type": "class",
+      "value": "FrameId|NameStyleId, ExpireTime (long), IsValid, IsTimeBased, Default (static)",
+      "meaning": "Vật phẩm hồ sơ có thể có hạn dùng",
+      "where": "Modules.Contexts.Application.Player.Scripts"
+    },
+    {
+      "source": "code field",
+      "key": "UserProfileModel",
+      "type": "class",
+      "value": "UserPublicId, UserName, AvatarId, AvatarUrl, Level, FirstTryWinCount, WeeklyWinCount, MagicStreakWinCount, BroomMaxWinStreak, JetpackWinCount, SkyJumpWinCount, ChampionsSilverWins, ChampionsBronzeWins, ChampionsGoldWins, ChampionsEmeraldWins, ChampionsDiamondWins, CurrentTeamId, CurrentTeamName, CurrentTeamBadgeId, TokenId, FrameId, NameStyleId, CanShowAddFriend",
+      "meaning": "Hồ sơ công khai của người chơi khác",
+      "where": "Modules.Contexts.Home.Profile.Commands.UserProfileModel"
+    },
+    {
+      "source": "code field",
+      "key": "ProfileSpriteCacheRequest",
+      "type": "class",
+      "value": "ImageId, ImageUrl, PublicId, RequestInProcess, IsLoaded, IsFailed, Retries, ProviderType",
+      "meaning": "Một yêu cầu tải ảnh hồ sơ",
+      "where": "ProfileSpriteCacheRequest"
+    },
+    {
+      "source": "code field",
+      "key": "ProfileSpritePersistenceCatalogItem",
+      "type": "class",
+      "value": "ImageUrl, ExpirationSession",
+      "meaning": "Một dòng trong file catalog cache ảnh",
+      "where": "ProfileSpritePersistenceCatalogItem"
+    },
+    {
+      "source": "code field",
+      "key": "PlayerModel (phần hồ sơ)",
+      "type": "class",
+      "value": "ProfileInfo, Tokens (List<string>), FrameInfos (List<ProfileFrameInfo>), NameStyleInfos (List<ProfileNameStyleInfo>)",
+      "meaning": "Dữ liệu hồ sơ lưu và đồng bộ theo tài khoản",
+      "where": "PlayerModel"
+    },
+    {
+      "source": "asset",
+      "key": "BackendEnvironmentConfig – endpoint Profile (chỉ path)",
+      "type": "string",
+      "value": "/v2/get-profile (hồ sơ người khác), /v1/change-profile (đổi hồ sơ của mình)",
+      "meaning": "Đường dẫn API của Profile",
+      "where": "Assets/MonoBehaviour/BackendEnvironmentConfig.asset"
+    },
+    {
+      "source": "AB test",
+      "key": "Firebase RC: IsForcedNamePopupEnabled",
+      "type": "",
+      "value": "true",
+      "meaning": "cờ AB/tinh chỉnh server-only (giá trị nhánh máy này)",
+      "where": "Configs/CachedRemoteConfigs + Firebase RC template 3197 — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    }
+  ],
+  "rewards": [
+    {
+      "context": "Hoàn thành bộ sưu tập",
+      "reward": "Token hồ sơ (collection_N_token / collection_N_token_gold)",
+      "evidence": "PlayerService.AddProfileToken; ProfileTokenEquipPopUp"
+    },
+    {
+      "context": "Kích hoạt Magic Pass",
+      "reward": "Frame 'magic_pass_frame' và name style 'magic_pass_name_style' (có hạn theo ExpireTime)",
+      "evidence": "PlayerService.AddProfileFrame; PlayerService.AddProfileNameStyle; localize 'MagicPassActivationName'"
+    }
+  ],
+  "backend": [
+    {
+      "command": "GetUserProfileRequestModel{UserId} → GetUserProfileResponse (FlatBuffers)",
+      "direction": "client→server",
+      "purpose": "lấy hồ sơ công khai của người chơi khác"
+    },
+    {
+      "command": "Đồng bộ ProfileInfo qua SyncService (PlayerService.SerializeModelForSync)",
+      "direction": "client↔server",
+      "purpose": "lưu tên/avatar/token/frame/name style theo tài khoản"
+    },
+    {
+      "command": "Tải ảnh hồ sơ qua HttpProxy (ProfileSpriteHttpProvider.LoadImageDataHttpAsync)",
+      "direction": "client→CDN",
+      "purpose": "ảnh đại diện của người chơi khác"
+    },
+    {
+      "command": "Facebook Graph '/picture?type=large&access_token=' ",
+      "direction": "client→Facebook",
+      "purpose": "ảnh đại diện Facebook (không ghi token vào tài liệu)"
+    },
+    {
+      "command": "Schema magicsort.schemas.v1.profile.GetUserProfileResponse và common.Profile",
+      "direction": "server→client",
+      "purpose": "định dạng hồ sơ"
+    }
+  ],
+  "ui": [
+    {
+      "element": "Popup hồ sơ của mình",
+      "class": "Modules.Contexts.Home.UI.Profile.Scripts.ProfilePopup, ProfilePopupGeneralStatsView, ProfilePopupChampionsLeague",
+      "purpose": "xem thống kê cá nhân"
+    },
+    {
+      "element": "Popup chỉnh hồ sơ",
+      "class": "Modules.Contexts.Home.UI.Profile.Scripts.EditProfilePopup + ProfileSpriteSelectionContainer / ProfileTokenSelectionContainer / ProfileFrameSelectionContainer / ProfileNameStyleSelectionContainer",
+      "purpose": "4 tab Avatar/Token/Frame/Name"
+    },
+    {
+      "element": "Popup nhập/đổi tên",
+      "class": "ProfileEnterNamePopup, EditProfileNamePlaceHolder, EditNameProfileButton",
+      "purpose": "đặt tên lần đầu hoặc đổi tên"
+    },
+    {
+      "element": "Popup hồ sơ người khác",
+      "class": "Modules.Contexts.Home.Profile.Scripts.OtherUserProfilePopup + FriendProfileController",
+      "purpose": "xem thành tích và kết bạn"
+    },
+    {
+      "element": "Hồ sơ rút gọn dùng lại",
+      "class": "Modules.Contexts.Home.UI.Common.Scripts.UserProfileView, ProfileImageView, ProfileFrameView, ProfileNameStyleView, UserProfileImageView",
+      "purpose": "hiển thị trong chat/leaderboard/danh sách bạn"
+    },
+    {
+      "element": "Popup gắn token",
+      "class": "ProfileTokenEquipPopUp, ProfileTokenSpriteSelectionFrame",
+      "purpose": "gắn huy hiệu bộ sưu tập"
+    },
+    {
+      "element": "Nhắc hoàn thiện hồ sơ",
+      "class": "ProfileAlertView, ProfileFingerView, ProfileForceNameChangeArrowPopup",
+      "purpose": "hướng dẫn người chơi đặt tên/ảnh"
+    },
+    {
+      "element": "Đăng nhập Facebook trong hồ sơ",
+      "class": "ProfileFacebookLoginButton",
+      "purpose": "dùng ảnh Facebook + đồng bộ bạn bè"
+    }
+  ],
+  "analytics": [
+    {
+      "event": "profile_{0}",
+      "params": "nguồn mở hồ sơ (ShowProfileCommandSource)",
+      "when": "mở popup hồ sơ người khác"
+    },
+    {
+      "event": "friend_interaction",
+      "params": "action, directory='profile'",
+      "when": "kết bạn từ popup hồ sơ"
+    }
+  ],
+  "storage_keys": [
+    "facebook_profile_photo (PlayerPrefs)",
+    "ProfileSpriteCache/ (thư mục file) + catalog",
+    "PlayerModel.ProfileInfo (ISaveLoad + SyncService)"
+  ],
+  "related_features": [
+    "Friends",
+    "Teams",
+    "Leaderboards",
+    "Account",
+    "Inventory"
+  ],
+  "gaps": [
+    "15/11 — resolved_historical_snapshot: ProfileSpriteConfig đóng gói 8 avatar, 10 token, 2 mục frame và 2 mục name style, cùng các tham chiếu Facebook. Đã xuất GUID, đường dẫn và hash của tài nguyên. Không công khai ProfileSpriteCache hoặc ảnh đại diện từ xa của người dùng. Còn lại: Giữ rõ build và phiên bản cache của nguồn; kiểm nhánh runtime riêng khi cần.",
+    "Bộ từ điển từ xấu của BadWordFilter nằm trong resource riêng, không liệt kê ở đây.",
+    "15/11 — resolved_static_code_historical_build: TryShowForceNameChangeCommand.ShouldShowForce getter trả true; không phải gate eligibility. Initialize đặt _isSkippable = !SyncService.ShouldShowForceProfileNameChange. Sync method yêu cầu RootLevelConfigModel.IsForcedNamePopupEnabled, !IsNameChanged, PlayerPrefs ProfileNameChangeForceCount<2 và GetLevel()%50==36. IsNameChanged true khi tên không rỗng và không chứa player_. Do đó ví dụ level36/86/136 là gate mã cũ, không phải chỉ thiếu tên hoặc server yêu cầu tùy ý. Còn lại: Cần đối chiếu method/consumer trên app0.0.3129 ARM64; chưa là runtime pass.",
+    "15/11 — resolved_static_code_historical_build: ProfileSpriteHttpProvider.Initialize gán download-spacing0.1s, retry cooldown10s và maxcooldown200s. Các field nằm ở HTTP provider dưới namespace MagicStreakTournament, không ở ProfileSpriteCacheService constructor. Đây là timer init; success/retry/cancel runtime cần ledger/network fixture riêng. Còn lại: Cần đối chiếu method/consumer trên app0.0.3129 ARM64; chưa là runtime pass.",
+    "[Runtime 2026-09-10] Cờ AB/tinh chỉnh server-only đọc từ Firebase Remote Config (template 3197)."
+  ],
+  "sources": [
+    "Il2CppDumper/dump.cs: ProfileSpriteService, ProfileSpriteConfig, ProfileSprite, ProfileTokenSprite, ProfileFrameInfo, ProfileNameStyleInfo, ProfileInfo, PlayerService, PlayerModel, ProfileSpriteCacheService, ProfileSpritePersistenceService, ProfileSpriteHttpProvider, EditProfilePopup, ProfileEnterNamePopup, SaveProfileButtonHandler, ShowUserProfileCommand, ShowProfileCommandSource, OtherUserProfilePopup, UserProfileView, UserProfileModel, SocialProfilePhotoManager, BadWordManager",
+    "Assets/MonoBehaviour/ProfileSpriteConfig.asset (giá trị thật của images/tokens/frames/nameStyles)",
+    "RecoveredNative/PseudoC/Assembly-CSharp/Modules/Contexts/Home/UI/Profile/**, Home/Profile/**",
+    "RecoveredNative/strings-by-type.tsv (ProfileSpritePersistenceService, FacebookLoginService, BadWordFilter)",
+    "GameDesign/appendix/localization.tsv (Profile*, ProfilePopup*)"
+  ],
+  "audit_provenance": {
+    "review_date": "2026-11-15",
+    "mode": "offline_existing_files",
+    "code_build": "0.0.3063 ARMv7",
+    "runtime_build_observed_historically": "0.0.3129 ARM64 (audit 2026-10-18); not rechecked 2026-11-15",
+    "new_playtests": 4,
+    "uc_status": "See facts/audit_20261115/uc_registry.json; image reference is not pass",
+    "workbook_status": "Existing XLSX is historical; JSON and local web include 2026-11-15 corrections",
+    "static_review": "facts/local_code_gap_results_20261115.json; facts/local_asset_gap_results_20261115.json; facts/final_data_gap_decisions_20261115.json; facts/core_body_gap_decisions_20261115.json; facts/remaining_asset_gap_decisions_20261115.json"
+  },
+  "static_review_20261115": {
+    "date": "2026-11-15",
+    "scope": "Historical code/assets 0.0.3063, dated caches, device 0.0.3129 cached bundles and explicitly scoped runtime evidence. Not full runtime pass.",
+    "findings": [
+      {
+        "kind": "remaining_asset",
+        "source_report": "facts/remaining_asset_gap_decisions_20261115.json",
+        "id": "MS-RA-018",
+        "gap_ids": [
+          "MS-Profile-G001"
+        ],
+        "title": "Danh sách avatar/token trong asset là bản đóng gói; server có thể cấp thêm id không có sprite (khi đó FindSpriteById trả null).",
+        "status": "resolved_historical_snapshot",
+        "conclusion": "ProfileSpriteConfig đóng gói 8 avatar, 10 token, 2 mục frame và 2 mục name style, cùng các tham chiếu Facebook. Đã xuất GUID, đường dẫn và hash của tài nguyên. Không công khai ProfileSpriteCache hoặc ảnh đại diện từ xa của người dùng.",
+        "evidence": [
+          "facts/remaining_asset_review_20261115/profile_references.json",
+          "facts/remaining_asset_review_20261115/asset_catalog.json"
+        ],
+        "remaining": "",
+        "next_action": "Giữ rõ build và phiên bản cache của nguồn; kiểm nhánh runtime riêng khi cần.",
+        "scope": "Asset/native export 0.0.3063 và cache UnityFS đọc ngày 15/11 từ app 0.0.3129 được giữ riêng; ảnh render asset không phải ảnh chụp playtest.",
+        "reviewed": "2026-11-15",
+        "full_uc_pass": false
+      },
+      {
+        "kind": "code",
+        "source_report": "facts/local_code_gap_results_20261115.json",
+        "id": "MS-CODE-11",
+        "gap_ids": [
+          "MS-Profile-G003"
+        ],
+        "title": "Force name gate có flag, counter và modulo level",
+        "status": "resolved_static_code",
+        "conclusion": "TryShowForceNameChangeCommand.ShouldShowForce getter trả true; không phải gate eligibility. Initialize đặt _isSkippable = !SyncService.ShouldShowForceProfileNameChange. Sync method yêu cầu RootLevelConfigModel.IsForcedNamePopupEnabled, !IsNameChanged, PlayerPrefs ProfileNameChangeForceCount<2 và GetLevel()%50==36. IsNameChanged true khi tên không rỗng và không chứa player_. Do đó ví dụ level36/86/136 là gate mã cũ, không phải chỉ thiếu tên hoặc server yêu cầu tùy ý.",
+        "evidence": [
+          {
+            "file": "../com.grandgames.magicsort_Unity_20260909_112501/RecoveredNative/PseudoC/Assembly-CSharp/Modules/Contexts/Home/Profile/Scripts/TryShowForceNameChangeCommand.c",
+            "line": 567,
+            "end_line": 579,
+            "method": "// ===== TryShowForceNameChangeCommand :: public bool get_ShouldShowForce()",
+            "sha256": "2b8d7fa44e48ea651f4f45ba5648c8af0c3d5626e6d3cfb0d6bd9531f6afdc48",
+            "body_checked": true,
+            "build": "0.0.3063 ARMv7",
+            "required_body_tokens": [
+              "return true;"
+            ]
+          },
+          {
+            "file": "../com.grandgames.magicsort_Unity_20260909_112501/RecoveredNative/PseudoC/Assembly-CSharp/Modules/Contexts/Home/Profile/Scripts/TryShowForceNameChangeCommand.c",
+            "line": 679,
+            "end_line": 735,
+            "method": "// ===== TryShowForceNameChangeCommand :: public void Initialize(CancellationToken cancellationToken)",
+            "sha256": "2b8d7fa44e48ea651f4f45ba5648c8af0c3d5626e6d3cfb0d6bd9531f6afdc48",
+            "body_checked": true,
+            "build": "0.0.3063 ARMv7",
+            "required_body_tokens": [
+              "SyncService__ShouldShowForceProfileNameChange",
+              "_isSkippable = !bVar1"
+            ]
+          },
+          {
+            "file": "../com.grandgames.magicsort_Unity_20260909_112501/RecoveredNative/PseudoC/Assembly-CSharp/Modules/Contexts/Application/ServerCommunication/Scripts/SyncService.c",
+            "line": 4791,
+            "end_line": 4879,
+            "method": "// ===== SyncService :: public bool ShouldShowForceProfileNameChange()",
+            "sha256": "7c562291820dad32fb9f3119f0bc899113306b772d96cd23ee19525c413bd679",
+            "body_checked": true,
+            "build": "0.0.3063 ARMv7",
+            "required_body_tokens": [
+              "_IsForcedNamePopupEnabled_k__BackingField",
+              "iVar2 < 2",
+              "iVar5 % 0x32 == 0x24"
+            ]
+          },
+          {
+            "file": "../com.grandgames.magicsort_Unity_20260909_112501/RecoveredNative/PseudoC/Assembly-CSharp/Modules/Contexts/Application/ServerCommunication/Scripts/SyncService.c",
+            "line": 4880,
+            "end_line": 4947,
+            "method": "// ===== SyncService :: private bool IsNameChanged()",
+            "sha256": "7c562291820dad32fb9f3119f0bc899113306b772d96cd23ee19525c413bd679",
+            "body_checked": true,
+            "build": "0.0.3063 ARMv7",
+            "required_body_tokens": [
+              "\"player_\"",
+              "System_String__IsNullOrEmpty",
+              "System_String__Contains"
+            ]
+          }
+        ],
+        "remaining": "Cần đối chiếu method/consumer trên app0.0.3129 ARM64; chưa là runtime pass.",
+        "scope": "recovered_native_0.0.3063_only",
+        "runtime_verified": false
+      },
+      {
+        "kind": "code",
+        "source_report": "facts/local_code_gap_results_20261115.json",
+        "id": "MS-CODE-18",
+        "gap_ids": [
+          "MS-Profile-G004"
+        ],
+        "title": "Avatar HTTP có cooldown cụ thể",
+        "status": "resolved_static_code",
+        "conclusion": "ProfileSpriteHttpProvider.Initialize gán download-spacing0.1s, retry cooldown10s và maxcooldown200s. Các field nằm ở HTTP provider dưới namespace MagicStreakTournament, không ở ProfileSpriteCacheService constructor. Đây là timer init; success/retry/cancel runtime cần ledger/network fixture riêng.",
+        "evidence": [
+          {
+            "file": "../com.grandgames.magicsort_Unity_20260909_112501/RecoveredNative/PseudoC/Assembly-CSharp/Modules/Contexts/Home/MagicStreakTournament/Scripts/ProfileSpriteHttpProvider.c",
+            "line": 648,
+            "end_line": 687,
+            "method": "// ===== ProfileSpriteHttpProvider :: public void Initialize(ProfileSpriteCacheService",
+            "sha256": "26088694b82108d427a460bc8ff4bd49dda898857d0bed35eb7944ebddeb16a3",
+            "body_checked": true,
+            "build": "0.0.3063 ARMv7",
+            "required_body_tokens": [
+              "_coolDownDurationBetweenDownloadAsSeconds = 0.1",
+              "_coolDownDurationAsSeconds = 10.0",
+              "_maxCoolDownDurationAsSeconds = 200.0"
+            ]
+          }
+        ],
+        "remaining": "Cần đối chiếu method/consumer trên app0.0.3129 ARM64; chưa là runtime pass.",
+        "scope": "recovered_native_0.0.3063_only",
+        "runtime_verified": false
+      }
+    ]
+  },
+  "runtime_review_20261115": [
+    {
+      "id": "MS-R15-META04",
+      "feature": "Profile",
+      "uc": [
+        "UC-09"
+      ],
+      "title": "Thống kê Profile sau level351",
+      "precondition": "0.0.3129 ARM64; level352, UID MagicSort offline, save fixture có sẵn. Code/asset0.0.3063 là nguồn lịch sử riêng.",
+      "steps": [
+        "Mở Profile từ Home"
+      ],
+      "expected": "Đối chiếu thống kê được hiển thị.",
+      "actual": "Profile hiện level352, First Try Wins5, Broom Max Streak4; các mục league/cup/streak khác đang dấu gạch.",
+      "limitations": "Chỉ UI từ save/cache; không xác minh tính đúng toàn bộ lịch sử thống kê hoặc cập nhật server.",
+      "status": "observed_partial",
+      "before": "MORE04_profile",
+      "after": "MORE04_profile",
+      "images": [
+        "MORE04_profile"
+      ],
+      "build": "0.0.3129 ARM64",
+      "mode": "offline_existing_fixture",
+      "date": "2026-11-15",
+      "currency_unchanged": true,
+      "ledger": {
+        "before": "MORE04_profile.json",
+        "after": "MORE04_profile.json"
+      }
+    },
+    {
+      "id": "MS-R15-META05",
+      "feature": "Profile",
+      "uc": [
+        "UC-03",
+        "UC-15"
+      ],
+      "title": "Chọn avatar và Save khi offline",
+      "precondition": "0.0.3129 ARM64; level352, UID MagicSort offline, save fixture có sẵn. Code/asset0.0.3063 là nguồn lịch sử riêng.",
+      "steps": [
+        "Mở Edit Profile",
+        "Chọn avatar thứ2",
+        "Bấm Save",
+        "Đóng editor và mở lại Profile"
+      ],
+      "expected": "Ghi selection UI và kết quả lưu offline.",
+      "actual": "Editor có8avatar. Chọn avatar thứ2 hiện checkmark; Save báo No Internet Connection. Sau đóng editor, Profile vẫn tên và avatar ban đầu.",
+      "limitations": "Không xác minh lưu thành công/đồng bộ; selection checkmark không được coi là avatar đã lưu. Không suy ra cache avatar người khác.",
+      "status": "verified_observed_branch",
+      "before": "MORE05_profile_edit",
+      "after": "MORE16_profile_cancelled",
+      "images": [
+        "MORE05_profile_edit",
+        "MORE06_avatar_selected",
+        "MORE07_avatar_save",
+        "MORE16_profile_cancelled"
+      ],
+      "build": "0.0.3129 ARM64",
+      "mode": "offline_existing_fixture",
+      "date": "2026-11-15",
+      "uc_scope": {
+        "UC-03": "selection_ui_only_save_failed",
+        "UC-15": "offline_save_error_observed"
+      },
+      "currency_unchanged": true,
+      "ledger": {
+        "before": "MORE05_profile_edit.json",
+        "after": "MORE16_profile_cancelled.json"
+      }
+    },
+    {
+      "id": "MS-R15-META06",
+      "feature": "Profile",
+      "uc": [
+        "UC-05",
+        "UC-06",
+        "UC-07"
+      ],
+      "title": "Frame, Name style và Token bị khóa",
+      "precondition": "0.0.3129 ARM64; level352, UID MagicSort offline, save fixture có sẵn. Code/asset0.0.3063 là nguồn lịch sử riêng.",
+      "steps": [
+        "Chọn Frame",
+        "Chọn Name",
+        "Chọn Token",
+        "Tap token Wonderland"
+      ],
+      "expected": "Ghi các tùy chọn có sẵn và gate equip.",
+      "actual": "Frame và Name chỉ hiện lựa chọn mặc định. Token Wonderland có khóa; popup Wonderland Badge! có nút Equip màu xám.",
+      "limitations": "Chỉ UI/gate; chưa sở hữu token, equip thành công, unlock hoặc dùng style khác. MORE12_name_edit thực tế vẫn token popup nên không đưa vào gallery.",
+      "status": "observed_partial",
+      "before": "MORE08_frames",
+      "after": "MORE11_token_locked",
+      "images": [
+        "MORE08_frames",
+        "MORE09_name_styles",
+        "MORE10_tokens",
+        "MORE11_token_locked"
+      ],
+      "build": "0.0.3129 ARM64",
+      "mode": "offline_existing_fixture",
+      "date": "2026-11-15",
+      "currency_unchanged": true,
+      "ledger": {
+        "before": "MORE08_frames.json",
+        "after": "MORE11_token_locked.json"
+      }
+    },
+    {
+      "id": "MS-R15-META07",
+      "feature": "Profile",
+      "uc": [
+        "UC-02"
+      ],
+      "title": "Tên hai ký tự bị chặn, hủy giữ tên cũ",
+      "precondition": "0.0.3129 ARM64; level352, UID MagicSort offline, save fixture có sẵn. Code/asset0.0.3063 là nguồn lịch sử riêng.",
+      "steps": [
+        "Mở Change Name",
+        "Nhập AB",
+        "Quan sát Continue",
+        "Hủy và đóng editor"
+      ],
+      "expected": "Tên dưới minimum không được gửi/lưu.",
+      "actual": "Nhập AB làm Continue xám và hiện Name should be at least3 valid characters! Sau hủy, Profile giữ tên ban đầu.",
+      "limitations": "Chưa kiểm tra đúng3ký tự, maximum, Unicode, profanity, rename thành công hoặc phí. Không ghi AB thành tên đã lưu.",
+      "status": "verified_observed_branch",
+      "before": "MORE13_rename_popup",
+      "after": "MORE16_profile_cancelled",
+      "images": [
+        "MORE13_rename_popup",
+        "MORE14_short_name",
+        "MORE15_name_cancel",
+        "MORE16_profile_cancelled"
+      ],
+      "build": "0.0.3129 ARM64",
+      "mode": "offline_existing_fixture",
+      "date": "2026-11-15",
+      "currency_unchanged": true,
+      "ledger": {
+        "before": "MORE13_rename_popup.json",
+        "after": "MORE16_profile_cancelled.json"
+      }
+    }
+  ],
+  "acceptance_review_20261115": {
+    "source": "facts/feature_acceptance_20261115.json",
+    "feature_id": "Profile",
+    "scope": "All eleven dossier dimensions reviewed; full_feature_verified is not implied; read per-dimension gaps and actual runtime evidence."
+  },
+  "segment_ab_review_20261115": {
+    "status": "not_identified_in_sources",
+    "segment_ids": [],
+    "matching_basis": "explicit_gd_config_map_or_exact_model_token_in_gdd_configs_where_key_sources; rootfieldscoped",
+    "rows": [],
+    "classifications": {},
+    "assignment_verified": false,
+    "uplift_verified": false,
+    "note": "No matchingrow does not prove no segmentation/AB. Rewardbucketfalsepositives remain explicitly classified."
+  },
+  "continuation_review_20261116": {
+    "date": "2026-11-16",
+    "build": "0.0.3129 ARM64 host APK",
+    "build_scope": "Host APK version3129 matches LAST observed installed version15/11 only; installed bytes/live device16/11 not verified.",
+    "runtime_status": "device_unavailable",
+    "runtime_case_ids": [],
+    "current_apk_model_links": {
+      "feature": "Profile",
+      "models": [],
+      "status": "no_exact_model_token_identified",
+      "distribution": "sanitized_public",
+      "public_mapping_pending": false
+    },
+    "current_packaged_defaults": [],
+    "native_finding_ids": [],
+    "documentation_source_coverage": {
+      "dossier_present": true,
+      "use_case_catalog_count": 17,
+      "config_catalog_rows": 22,
+      "current_apk_default_model_links": 0,
+      "current_native_findings": 0,
+      "scope": "Documentation/source coverage only; not complete runtime verification."
+    },
+    "runtime_completion": {
+      "date": "2026-11-16",
+      "status": "device_unavailable",
+      "executed_case_count": 0,
+      "full_feature_runtime_verified": false
+    },
+    "planned_branch": "Trong rename thử khoảng trắng và giới hạn dài nếu ô cho phép, cancel; thử mở hồ sơ từ một hàng leaderboard cached và chụp thống kê đã che tên/ID.",
+    "target_uc_ids": [
+      "UC-02",
+      "UC-08",
+      "UC-09",
+      "UC-16"
+    ],
+    "execution_phase": "noncore_first",
+    "core_or_levels_last": false,
+    "actionability_full_json": "facts/continuation_20261116/current/feature_actionability.json",
+    "actionability_site_data_path": "data/continuation_20261116/feature_actionability.json",
+    "source_classes": [
+      "external_dependency"
+    ],
+    "full_feature_verified": false
+  }
+}

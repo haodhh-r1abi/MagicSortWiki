@@ -1,0 +1,1950 @@
+{
+  "id": "TowerWinStreak",
+  "name": "Tháp chuỗi thắng (Tower)",
+  "category": "Event",
+  "managers": [
+    "Modules.Contexts.Home.TowerWinStreak.Scripts.TowerWinStreakService",
+    "Modules.Contexts.Home.TowerWinStreak.Scripts.TowerWinStreakDataService",
+    "Modules.Contexts.Home.TowerWinStreak.Scripts.TowerWinStreakStateService",
+    "Modules.Contexts.Home.TowerWinStreak.Scripts.TowerWinStreakRemoteService",
+    "Modules.Contexts.Home.TowerWinStreak.Scripts.TowerWinStreakConfigModel"
+  ],
+  "summary": "Tower Win Streak (trong analytics gọi là 'broom streak' bản v1) là sự kiện chuỗi thắng: mỗi level thắng liên tiếp đưa con mèo/chổi leo lên một bậc của tòa tháp; thua hoặc bỏ level sẽ rơi xuống (TowerActionState.Fall) và chuỗi bị reset về 0. Các mốc chính (main step) 3/6/11/16/22/30/40 trả thưởng dạng rương (CurrencyType.Chest) chứa coin, booster, life vô hạn theo thời gian. Người chơi giữ hai kỷ lục: MaxWinCount (trong sự kiện hiện tại) và MaxWinCountRecord (mọi thời đại). Sự kiện chạy theo khung thời gian server (startTime/finishTime từ /v1/get-winstreak-tournament); hết giờ thì claim và chờ sự kiện kế. Thiết kế nhắm vào việc giữ người chơi chơi liên tục và tạo áp lực 'không được thua' — thể hiện rõ qua màn hình Are You Sure riêng (TowerWinStreakAreYouSureContainer) và nút Try Again (TowerWinStreakTryAgainCommand).",
+  "unlock": "TowerWinStreakStateService.GetEventState(): trả Disable(7) nếu TowerWinStreakConfigModel.IsEnabled == false; InsufficientLevel(6) nếu level < FirstLevelToShow; NoCachedEvent(0) nếu chưa fetch được sự kiện. Client default: IsEnabled = false, FirstLevelToShow = 50, EventType = 1 (Resources/defaultconfigs/TowerWinStreakConfigModel.json). Ngoài ra IsBroomStreakEnabled() được dùng để tránh chạy song song với sự kiện BroomStreak (bản v2) — nếu BroomStreak bật thì Tower nhường chỗ.",
+  "entry_points": [
+    "TowerWinStreakLobbyButton ở lobby (IsLobbyIconVisible)",
+    "TowerWinStreakBannerView — banner tháp hiển thị trên lobby (ShouldShowTowerWinStreakBanner)",
+    "Icon trong màn chơi khi ShouldShowInLevelIcon = true (ShouldShowInLevelStreakView)",
+    "TowerWinStreakPopUp mở tự động khi về lobby / mở app (ShouldOpenAutomaticallyOnLobbyReturn / ShouldOpenAutomaticallyOnSessionStart, trả kèm TowerWinStreakSource)",
+    "TowerWinStreakHomeWelcomingCommand — chèn vào chuỗi welcome ở Home (ShouldShowForceHomeWelcoming)",
+    "TowerWinStreakAreYouSureContainer — hiện tháp trên popup 'bạn có chắc muốn thoát?' (ShouldShowOnAreYouSure)",
+    "TowerWinStreakTryAgainCommand — nút chơi lại sau khi thua (source TryAgain)",
+    "TowerWinStreakInfoPopup — nút info"
+  ],
+  "flow": "Initialize/InitializeData → nếu TowerWinStreakStateService.ShouldFetchCurrentEvent() thì TryFetchCurrentEvent() → FetchCurrentEvent() gọi TowerWinStreakRemoteService.GetEventInfo(eventType) tới towerWinStreakEventInfoUrl (/v1/get-winstreak-tournament) với TowerWinStreakEventInfoRequestModel{tournamentType}. Response TowerWinStreakEventInfoResponse{tournamentID, tournamentType, startTime, finishTime}. TryStartNewEvent so EventId với cache; nếu mới → TowerWinStreakDataService.StartNewEvent(response, TowerWinStreakConfigModel) tạo TowerWinStreakCache{EventId, StartTime, FinishTime, IsEventIntroduced, IsClaimed, TowerWinStreakConfigModel = bản sao Steps} và gửi analytics broom_streak_joined (params tournament_id, start_time, remaining_duration, progress, max_step_streak). Lưu ý: bảng mốc thưởng được chụp lại (cache) vào thời điểm bắt đầu sự kiện nên đổi remote config giữa chừng không ảnh hưởng người chơi đang chơi. Trong phiên: WinState → TowerWinStreakService.TryIncreaseWinStreak(); nếu StateService.CanIncreaseScore() thì TowerWinStreakDataService.IncreaseWinCount() (WinCount+1, cập nhật MaxWinCount và MaxWinCountRecord), phát TowerWinStreakCountChangedSignal. LoseState/QuitState → TryResetWinStreak(): chỉ reset khi state == InProgress(2); lưu LastSeenWinCountBeforeReset = WinCount rồi ResetWinStreak() đưa WinCount về 0 (mèo rơi — TowerActionState.Fall), IsPlayerFallDown() dùng cho animation. Về lobby: GiveRewardsAndCacheLastSeenWinCount() → GiveRewardsBetweenLastSeenAndCurrentWinCount() duyệt Steps (đã sort theo Step) trong khoảng (LastSeenWinCount, WinCount], với mỗi mốc gọi RewardService.Give(EarnReason 10, rewards) và EventSender.SendTowerWinStreakClaimReward(JsonConvert.SerializeObject(rewards)); sau đó SetLastSeenWinCount(WinCount). GetMainStepFillRatio/GetCachedLastSeenCircleProgressBarFillRatio điều khiển vòng tròn tiến độ trên nút lobby (hoạt ảnh từ mốc trước tới mốc hiện tại). Hết giờ: GetRemainingSeconds()/GetEndDate() → state TimeIsUp(3); ClaimEvent() đặt IsClaimed → Claimed(4)/ClaimedAndTimeIsUp(5); EventSender.SendTowerWinStreakFinished (broom_streak_finished).",
+  "use_cases": [
+    {
+      "id": "UC-01",
+      "title": "Kiểm tra điều kiện bật sự kiện tháp",
+      "actor": "System",
+      "trigger": "Vào Home / IntervalUpdate",
+      "precondition": "RemoteConfigs sẵn sàng",
+      "steps": [
+        "TowerWinStreakStateService.GetConfig() lấy TowerWinStreakConfigModel",
+        "GetEventState(): Disable(7) nếu !IsEnabled; InsufficientLevel(6) nếu level < FirstLevelToShow; NoCachedEvent(0) nếu chưa có cache",
+        "IsBroomStreakEnabled() — nếu sự kiện BroomStreak (v2) đang bật thì không chạy Tower",
+        "IsLobbyIconVisible() / IsLobbyIconVisibleAndNotIntroduced()"
+      ],
+      "result": "Nút lobby + banner tháp xuất hiện hoặc bị ẩn hoàn toàn",
+      "rules": "Client default: IsEnabled=false, FirstLevelToShow=50, EventType=1",
+      "evidence": "TowerWinStreakStateService.GetEventState; TowerWinStreakStateService.IsBroomStreakEnabled; TowerWinStreakStateService.IsLobbyIconVisible; TowerWinStreakStateService.IsLobbyIconVisibleAndNotIntroduced"
+    },
+    {
+      "id": "UC-02",
+      "title": "Fetch sự kiện và bắt đầu tháp mới",
+      "actor": "Server",
+      "trigger": "InitializeData / IntervalUpdate khi ShouldFetchCurrentEvent()",
+      "precondition": "Sự kiện được bật",
+      "steps": [
+        "TowerWinStreakService.TryFetchCurrentEvent() → FetchCurrentEvent()",
+        "TowerWinStreakRemoteService.GetEventInfo(eventType) → towerWinStreakEventInfoUrl (/v1/get-winstreak-tournament), payload TowerWinStreakEventInfoRequestModel{tournamentType}",
+        "TryStartNewEvent(response) so tournamentID với TowerWinStreakDataService.GetEventId()",
+        "TowerWinStreakDataService.StartNewEvent(response, config) chụp bảng Steps vào TowerWinStreakConfigModelCache",
+        "EventSender.SendEvent 'broom_streak_joined'"
+      ],
+      "result": "TowerWinStreakCache mới; WinCount tiếp tục hoặc bắt đầu từ 0 tùy dữ liệu lưu",
+      "rules": "TowerWinStreakStateService.ShouldStartNewEvent() quyết định thời điểm; bảng mốc thưởng bị 'đóng băng' theo sự kiện",
+      "evidence": "TowerWinStreakService.TryFetchCurrentEvent; TowerWinStreakService.FetchCurrentEvent; TowerWinStreakRemoteService.GetEventInfo; TowerWinStreakService.TryStartNewEvent; TowerWinStreakDataService.StartNewEvent; TowerWinStreakStateService.ShouldFetchCurrentEvent; TowerWinStreakStateService.ShouldStartNewEvent"
+    },
+    {
+      "id": "UC-03",
+      "title": "Thắng level → chuỗi +1, mèo leo lên bậc",
+      "actor": "Player",
+      "trigger": "Hoàn thành level (WinState)",
+      "precondition": "TowerWinStreakStateService.CanIncreaseScore() == true (state InProgress)",
+      "steps": [
+        "WinState gọi TowerWinStreakService.TryIncreaseWinStreak()",
+        "TowerWinStreakDataService.IncreaseWinCount(): WinCount+1; cập nhật MaxWinCount và MaxWinCountRecord nếu vượt",
+        "Đánh dấu _isMarkedForLateUpdate/_isDataChangedSinceLastSave → lưu ở LateUpdate",
+        "Phát TowerWinStreakCountChangedSignal; TowerView chạy TowerActionState.Rise"
+      ],
+      "result": "Chuỗi thắng tăng, banner/nút lobby cập nhật vòng tròn tiến độ",
+      "rules": "IsWinStreakIncreasedSinceLastSeen() / IsMainStepIncreasedSinceLastSeen() điều khiển animation và chấm đỏ",
+      "evidence": "TowerWinStreakService.TryIncreaseWinStreak; TowerWinStreakStateService.CanIncreaseScore; TowerWinStreakDataService.IncreaseWinCount; TowerWinStreakService.IsWinStreakIncreasedSinceLastSeen; TowerWinStreakService.IsMainStepIncreasedSinceLastSeen"
+    },
+    {
+      "id": "UC-04",
+      "title": "Thua hoặc bỏ level → chuỗi về 0, mèo rơi",
+      "actor": "Player",
+      "trigger": "LoseState hoặc QuitState",
+      "precondition": "State == InProgress(2)",
+      "steps": [
+        "LoseState/QuitState gọi TowerWinStreakService.TryResetWinStreak()",
+        "Pseudo-C: chỉ thực hiện khi GetEventState() == 2 (`return iVar2 == 2;`)",
+        "TowerWinStreakDataService.ResetWinStreak(): lưu LastSeenWinCountBeforeReset = WinCount rồi WinCount = 0; đồng thời LastSeenWinCount = WinCount",
+        "IsPlayerFallDown() = true cho lần về lobby kế tiếp",
+        "SetLastSeenCircleProgressBarFillRatioToPrevious() đưa vòng tiến độ về mốc trước để chạy animation rơi"
+      ],
+      "result": "Tháp reset, mèo rơi xuống (TowerActionState.Fall); các mốc chưa đạt bị mất",
+      "rules": "TowerWinStreakStateService.CanResetScore() bảo vệ thêm; GetLastSeenWinCountBeforeReset() dùng để hiển thị 'bạn đã có N thắng'",
+      "evidence": "TowerWinStreakService.TryResetWinStreak; TowerWinStreakDataService.ResetWinStreak; TowerWinStreakService.IsPlayerFallDown; TowerWinStreakService.GetLastSeenWinCountBeforeReset; TowerWinStreakStateService.CanResetScore; TowerWinStreakService.SetLastSeenCircleProgressBarFillRatioToPrevious"
+    },
+    {
+      "id": "UC-05",
+      "title": "Cảnh báo giữ chuỗi khi định thoát level",
+      "actor": "Player",
+      "trigger": "Bấm thoát / hết lượt trong level",
+      "precondition": "Đang có chuỗi thắng",
+      "steps": [
+        "TowerWinStreakStateService.ShouldShowOnAreYouSure()",
+        "TowerWinStreakAreYouSureContainer hiển thị tháp + số chuỗi sắp mất",
+        "Animation theo TowerWinStreakAreYouSureAnimationConfig (bản thường và bản '-Quit')"
+      ],
+      "result": "Tăng tỉ lệ người chơi mua booster/chơi tiếp thay vì bỏ",
+      "rules": "-",
+      "evidence": "TowerWinStreakStateService.ShouldShowOnAreYouSure; TowerWinStreakAreYouSureContainer; TowerWinStreakAreYouSureAnimation"
+    },
+    {
+      "id": "UC-06",
+      "title": "Chơi lại ngay sau khi thua để giữ nhịp",
+      "actor": "Player",
+      "trigger": "Bấm Try Again ở màn thua",
+      "precondition": "-",
+      "steps": [
+        "TowerWinStreakTryAgainCommand (ITryAgainCommand) chạy",
+        "Mở TowerWinStreakPopUp với TowerWinStreakSource.TryAgain(5)",
+        "EventSender.SendTowerWinStreakImpression(source)"
+      ],
+      "result": "Người chơi thấy tháp và động lực chơi lại",
+      "rules": "-",
+      "evidence": "TowerWinStreakTryAgainCommand; TowerWinStreakStateService.ShouldOpenAutomaticallyOnLobbyReturn; EventSender.SendTowerWinStreakImpression"
+    },
+    {
+      "id": "UC-07",
+      "title": "Nhận thưởng của các mốc đã vượt qua",
+      "actor": "Player",
+      "trigger": "Về lobby / mở TowerWinStreakPopUp",
+      "precondition": "WinCount > LastSeenWinCount",
+      "steps": [
+        "TowerWinStreakService.GiveRewardsAndCacheLastSeenWinCount()",
+        "GiveRewardsBetweenLastSeenAndCurrentWinCount(): sort Steps theo Step rồi duyệt, điều kiện `LastSeen <= Step && Step < Current` (pseudo-C so sánh 2 biên)",
+        "Với mỗi mốc: RewardService.Give(EarnReason = 10, rewards) và EventSender.SendTowerWinStreakClaimReward(JsonConvert.SerializeObject(rewards))",
+        "TowerWinStreakDataService.SetLastSeenWinCount(WinCount)",
+        "TowerWinStreakClaimButton hiển thị nút nhận"
+      ],
+      "result": "Rương mở, phần thưởng vào túi; analytics broom_streak_reward_claim",
+      "rules": "Mốc 0 không có RewardModel nên không trả gì. EarnReason = 10.",
+      "evidence": "TowerWinStreakService.GiveRewardsAndCacheLastSeenWinCount; TowerWinStreakService.GiveRewardsBetweenLastSeenAndCurrentWinCount; TowerWinStreakDataService.SetLastSeenWinCount; EventSender.SendTowerWinStreakClaimReward"
+    },
+    {
+      "id": "UC-08",
+      "title": "Vòng tròn tiến độ trên nút lobby",
+      "actor": "System",
+      "trigger": "Về lobby sau khi chuỗi thay đổi",
+      "precondition": "-",
+      "steps": [
+        "GetCurrentMainStepFillRatio() = GetMainStepFillRatio(WinCount) — tỉ lệ giữa mốc trước và mốc kế",
+        "GetCachedLastSeenCircleProgressBarFillRatio() lấy giá trị đã hiển thị lần trước",
+        "Chạy animation từ giá trị cũ tới mới theo TowerWinStreakLobbyButtonAnimationConfig (_circleProgressBarAnimationDuration = 1, delay = 0.7)",
+        "MarkShowedCurrentCircleProgressBarFillRatio() / MarkShowedCurrentCircleProgressBarFillRatioAndOpenedPopUp() lưu lại (SetCircleProgressBarFillRatio)"
+      ],
+      "result": "Vòng tròn chạy mượt, con chổi 'punch' theo BroomPunch* config",
+      "rules": "GetNextMainStep() trả mốc kế; GetNextMainStepButReturnMaxIfPlayerReached() trả mốc lớn nhất nếu đã đạt hết",
+      "evidence": "TowerWinStreakService.GetCurrentMainStepFillRatio; TowerWinStreakService.GetMainStepFillRatio; TowerWinStreakService.GetCachedLastSeenCircleProgressBarFillRatio; TowerWinStreakService.MarkShowedCurrentCircleProgressBarFillRatio; TowerWinStreakDataService.SetCircleProgressBarFillRatio; TowerWinStreakService.GetNextMainStep"
+    },
+    {
+      "id": "UC-09",
+      "title": "Popup tháp tự mở theo ngữ cảnh",
+      "actor": "System",
+      "trigger": "Về lobby hoặc mở app",
+      "precondition": "State cho phép",
+      "steps": [
+        "TowerWinStreakStateService.ShouldOpenAutomaticallyOnLobbyReturn(out source) / ShouldOpenAutomaticallyOnSessionStart(out source)",
+        "GetPopUpState() trả TowerWinStreakPopUpState: FirstShowEver(0), FirstShow(1), InProgress(2), Result(3)",
+        "TowerWinStreakPopUp mở với TowerWinStreakPopUpArguments; nguồn TowerWinStreakSource: None(0), LobbyIcon(1), EventStart(2), EventFinish(3), EventClaimRewards(4), TryAgain(5)",
+        "EventSender.SendTowerWinStreakImpression(source) với params impression_source, current_streak, max_streak_current_tower, progress, tournament_id, remaining_duration",
+        "MarkEventIntroduced() / MarkEventIntroducedEverInLifeTime()"
+      ],
+      "result": "Người chơi được giới thiệu sự kiện đúng thời điểm, không lặp lại",
+      "rules": "ShouldShowForceHomeWelcoming() ép chèn vào chuỗi welcome ở Home",
+      "evidence": "TowerWinStreakStateService.ShouldOpenAutomaticallyOnLobbyReturn; TowerWinStreakStateService.ShouldOpenAutomaticallyOnSessionStart; TowerWinStreakStateService.GetPopUpState; TowerWinStreakService.MarkEventIntroduced; TowerWinStreakDataService.MarkEventIntroducedEverInLifeTime; TowerWinStreakStateService.ShouldShowForceHomeWelcoming"
+    },
+    {
+      "id": "UC-10",
+      "title": "Hoạt ảnh chổi/mèo khi quay về lobby",
+      "actor": "System",
+      "trigger": "Kết thúc level và về lobby",
+      "precondition": "Chuỗi thay đổi",
+      "steps": [
+        "TowerWinStreakStateService.ShouldShowBroomAnimationOnLobbyReturn()",
+        "TowerWinStreakBannerView dựng các bậc bằng TowerWinStreakBannerMainStep / TowerWinStreakBannerIntermediateStep (ITowerStepView)",
+        "Tham số hoạt ảnh lấy từ TowerWinStreakBannerConfig"
+      ],
+      "result": "Mèo di chuyển lên/xuống tháp, bậc chính đổi sprite locked→unlocked",
+      "rules": "DistanceBetweenMainSteps = 7.5; RevealMainStepTime = 0.6; MainStepEnlargeScale = 1.25",
+      "evidence": "TowerWinStreakStateService.ShouldShowBroomAnimationOnLobbyReturn; TowerWinStreakBannerView; TowerWinStreakBannerMainStep; TowerWinStreakBannerIntermediateStep"
+    },
+    {
+      "id": "UC-11",
+      "title": "Đạt mốc tối đa của tháp",
+      "actor": "Player",
+      "trigger": "WinCount đạt mốc cuối (mặc định 40)",
+      "precondition": "-",
+      "steps": [
+        "TowerWinStreakService.IsReachedMaxWinCount()",
+        "GetNextMainStepButReturnMaxIfPlayerReached() trả mốc lớn nhất",
+        "UI hiển thị tháp đã hoàn thành; GetMaxWinCount() / GetMaxWinCountRecord() dùng cho khoe kỷ lục"
+      ],
+      "result": "Không còn mốc thưởng mới; chuỗi vẫn tiếp tục đếm cho kỷ lục",
+      "rules": "MaxWinCountRecord là kỷ lục xuyên sự kiện (không reset khi thua)",
+      "evidence": "TowerWinStreakService.IsReachedMaxWinCount; TowerWinStreakService.GetMaxWinCount; TowerWinStreakService.GetMaxWinCountRecord; TowerWinStreakDataService.GetMaxWinCountRecord"
+    },
+    {
+      "id": "UC-12",
+      "title": "Hết hạn sự kiện và claim",
+      "actor": "System",
+      "trigger": "Thời gian vượt finishTime",
+      "precondition": "Sự kiện chưa claim",
+      "steps": [
+        "GetRemainingSeconds() / GetEndDate() (ConvertToUtc(FinishTime)); TowerWinStreakTimer hiển thị đếm ngược",
+        "GetEventState() → TimeIsUp(3)",
+        "TowerWinStreakService.ClaimEvent() → TowerWinStreakDataService.ClaimEvent() đặt IsClaimed = true",
+        "EventSender.SendTowerWinStreakFinished (broom_streak_finished) với current_streak, max_streak_current_tower, progress, tournament_id, tournament_start_time, remaining_duration",
+        "State → Claimed(4) / ClaimedAndTimeIsUp(5); phát TowerWinStreakEventStateChangedSignal"
+      ],
+      "result": "Sự kiện đóng, chờ sự kiện kế tiếp từ server",
+      "rules": "Popup mở với source EventFinish(3) hoặc EventClaimRewards(4)",
+      "evidence": "TowerWinStreakService.GetRemainingSeconds; TowerWinStreakService.GetEndDate; TowerWinStreakService.ClaimEvent; TowerWinStreakDataService.ClaimEvent; TowerWinStreakDataService.IsClaimed; EventSender.SendTowerWinStreakFinished"
+    },
+    {
+      "id": "UC-13",
+      "title": "Đồng bộ và khôi phục dữ liệu",
+      "actor": "Server",
+      "trigger": "Sync / đổi thiết bị",
+      "precondition": "ISyncable",
+      "steps": [
+        "TowerWinStreakDataService.GetSyncName() = 'TowerWinStreakModel'",
+        "SerializeModelForSync() gửi TowerWinStreakModel (MaxWinCountRecord, MaxWinCount, WinCount, LastSeenWinCount, LastSeenWinCountBeforeReset, IsEventIntroducedEverInLifeTime, TowerWinStreakCache, CircleProgressBarFillRatio)",
+        "OverwriteModelFromSync(data); DataSynced()",
+        "PreBootstrapHomeContextCommand khởi tạo service khi vào Home"
+      ],
+      "result": "Chuỗi thắng và kỷ lục giữ nguyên khi đổi máy",
+      "rules": "DeleteData() xoá toàn bộ khi reset tài khoản",
+      "evidence": "TowerWinStreakDataService.GetSyncName; TowerWinStreakDataService.SerializeModelForSync; TowerWinStreakDataService.OverwriteModelFromSync; TowerWinStreakDataService.DataSynced; TowerWinStreakDataService.DeleteData"
+    },
+    {
+      "id": "UC-14",
+      "title": "Offline / lỗi fetch sự kiện",
+      "actor": "System",
+      "trigger": "GetEventInfo lỗi hoặc chưa có mạng",
+      "precondition": "-",
+      "steps": [
+        "TowerWinStreakDataService.IsEventCached() == false → GetEventState() trả NoCachedEvent(0)",
+        "TryFetchCurrentEvent() thử lại ở IntervalUpdate kế tiếp",
+        "Nếu đã có cache, chuỗi vẫn tăng/giảm bình thường vì toàn bộ tính toán ở client"
+      ],
+      "result": "Không mất tiến độ; UI ẩn khi hoàn toàn không có cache",
+      "rules": "-",
+      "evidence": "TowerWinStreakDataService.IsEventCached; TowerWinStreakService.TryFetchCurrentEvent; TowerWinStreakService.IntervalUpdate"
+    },
+    {
+      "id": "UC-15",
+      "title": "Hiển thị bảng mốc thưởng trong popup",
+      "actor": "Player",
+      "trigger": "Mở TowerWinStreakPopUp / TowerWinStreakInfoPopup",
+      "precondition": "-",
+      "steps": [
+        "TowerWinStreakService.GetLastSeenViewModels() dựng List<TowerWinStreakStepViewModel> từ Steps đã cache",
+        "IsCurrentWinCountHasChest() cho biết mốc hiện tại có rương hay không",
+        "EventSender.SendTowerWinStreakInfoImpression (broom_streak_info_impression)"
+      ],
+      "result": "Người chơi thấy toàn bộ lộ trình 3→40 và phần thưởng từng mốc",
+      "rules": "-",
+      "evidence": "TowerWinStreakService.GetLastSeenViewModels; TowerWinStreakService.IsCurrentWinCountHasChest; EventSender.SendTowerWinStreakInfoImpression"
+    }
+  ],
+  "configs": [
+    {
+      "source": "json default",
+      "key": "IsEnabled",
+      "type": "bool",
+      "value": "false",
+      "meaning": "Bật/tắt sự kiện tháp",
+      "where": "Resources/defaultconfigs/TowerWinStreakConfigModel.json"
+    },
+    {
+      "source": "json default",
+      "key": "FirstLevelToShow",
+      "type": "int",
+      "value": "50",
+      "meaning": "Level tối thiểu",
+      "where": "TowerWinStreakConfigModel.json"
+    },
+    {
+      "source": "json default",
+      "key": "EventType",
+      "type": "int",
+      "value": "1",
+      "meaning": "tournamentType gửi lên backend",
+      "where": "TowerWinStreakConfigModel.json"
+    },
+    {
+      "source": "json default",
+      "key": "ShouldShowInLevelIcon",
+      "type": "bool",
+      "value": "true",
+      "meaning": "Hiện icon tháp trong màn chơi",
+      "where": "TowerWinStreakConfigModel.json"
+    },
+    {
+      "source": "json default",
+      "key": "Steps[0].Step",
+      "type": "int",
+      "value": "0 (không có RewardModel)",
+      "meaning": "Mốc gốc, không thưởng",
+      "where": "TowerWinStreakConfigModel.json"
+    },
+    {
+      "source": "json default",
+      "key": "Steps[1] Step 3",
+      "type": "reward",
+      "value": "Chest(13) x1 chứa: 30 Coin(1)",
+      "meaning": "Thưởng chuỗi 3 thắng",
+      "where": "TowerWinStreakConfigModel.json"
+    },
+    {
+      "source": "json default",
+      "key": "Steps[2] Step 6",
+      "type": "reward",
+      "value": "Chest(13) x1 chứa: Life(2) vô hạn 00:15:00",
+      "meaning": "Thưởng chuỗi 6 thắng",
+      "where": "TowerWinStreakConfigModel.json"
+    },
+    {
+      "source": "json default",
+      "key": "Steps[3] Step 11",
+      "type": "reward",
+      "value": "Chest(13) x1 chứa: 300 Coin(1)",
+      "meaning": "Thưởng chuỗi 11 thắng",
+      "where": "TowerWinStreakConfigModel.json"
+    },
+    {
+      "source": "json default",
+      "key": "Steps[4] Step 16",
+      "type": "reward",
+      "value": "Chest(13) x1 chứa: 1 Undo(4)",
+      "meaning": "Thưởng chuỗi 16 thắng",
+      "where": "TowerWinStreakConfigModel.json"
+    },
+    {
+      "source": "json default",
+      "key": "Steps[5] Step 22",
+      "type": "reward",
+      "value": "Chest(13) x1 chứa: 1 ExtraBottle(6) + 1 Shuffle(5)",
+      "meaning": "Thưởng chuỗi 22 thắng",
+      "where": "TowerWinStreakConfigModel.json"
+    },
+    {
+      "source": "json default",
+      "key": "Steps[6] Step 30",
+      "type": "reward",
+      "value": "Chest(13) x1 chứa: 1000 Coin(1) + 1 Undo(4)",
+      "meaning": "Thưởng chuỗi 30 thắng",
+      "where": "TowerWinStreakConfigModel.json"
+    },
+    {
+      "source": "json default",
+      "key": "Steps[7] Step 40",
+      "type": "reward",
+      "value": "Chest(13) x1 chứa: 2000 Coin(1) + 1 ExtraBottle(6) + 1 Undo(4) + 1 Shuffle(5) + Life(2) vô hạn 02:00:00",
+      "meaning": "Mốc cuối, thưởng lớn nhất",
+      "where": "TowerWinStreakConfigModel.json"
+    },
+    {
+      "source": "code const",
+      "key": "EarnReason khi trả thưởng mốc",
+      "type": "int",
+      "value": "10",
+      "meaning": "Mã lý do nhận thưởng gửi RewardService",
+      "where": "TowerWinStreakService.GiveRewardsBetweenLastSeenAndCurrentWinCount (pseudo-C `(__this_00,10,rewards)`)"
+    },
+    {
+      "source": "code const",
+      "key": "Điều kiện reset chuỗi",
+      "type": "int",
+      "value": "GetEventState() == 2 (InProgress)",
+      "meaning": "Chỉ reset khi sự kiện đang chạy",
+      "where": "TowerWinStreakService.TryResetWinStreak"
+    },
+    {
+      "source": "code enum",
+      "key": "TowerWinStreakStateType",
+      "type": "enum",
+      "value": "NoCachedEvent=0, NotIntroduced=1, InProgress=2, TimeIsUp=3, Claimed=4, ClaimedAndTimeIsUp=5, InsufficientLevel=6, Disable=7",
+      "meaning": "Trạng thái sự kiện",
+      "where": "dump.cs TypeDefIndex 1865"
+    },
+    {
+      "source": "code enum",
+      "key": "TowerWinStreakSource",
+      "type": "enum",
+      "value": "None=0, LobbyIcon=1, EventStart=2, EventFinish=3, EventClaimRewards=4, TryAgain=5",
+      "meaning": "Nguồn mở popup (impression_source)",
+      "where": "dump.cs TypeDefIndex 1863"
+    },
+    {
+      "source": "code enum",
+      "key": "TowerWinStreakPopUpState",
+      "type": "enum",
+      "value": "FirstShowEver=0, FirstShow=1, InProgress=2, Result=3",
+      "meaning": "Layout popup",
+      "where": "dump.cs TypeDefIndex 1864"
+    },
+    {
+      "source": "code enum",
+      "key": "TowerActionState",
+      "type": "enum",
+      "value": "Rise=0, Idle=1, Fall=2",
+      "meaning": "Hoạt ảnh mèo leo/đứng/rơi",
+      "where": "dump.cs TypeDefIndex 1879"
+    },
+    {
+      "source": "server info",
+      "key": "TowerWinStreakEventInfoResponse",
+      "type": "object",
+      "value": "tournamentID, tournamentType, startTime, finishTime",
+      "meaning": "Khung thời gian sự kiện (server)",
+      "where": "dump.cs TypeDefIndex 1856"
+    },
+    {
+      "source": "server info",
+      "key": "TowerWinStreakEventInfoRequestModel",
+      "type": "object",
+      "value": "tournamentType",
+      "meaning": "Payload request",
+      "where": "dump.cs TypeDefIndex 1857"
+    },
+    {
+      "source": "storage key",
+      "key": "TowerWinStreakModel",
+      "type": "string",
+      "value": "-",
+      "meaning": "Tên khối sync và tên model lưu local",
+      "where": "TowerWinStreakDataService.GetSyncName"
+    },
+    {
+      "source": "storage key",
+      "key": "TowerWinStreakModel.{MaxWinCountRecord, MaxWinCount, WinCount, LastSeenWinCount, LastSeenWinCountBeforeReset, IsEventIntroducedEverInLifeTime, CircleProgressBarFillRatio}",
+      "type": "object",
+      "value": "-",
+      "meaning": "Trạng thái chuỗi thắng",
+      "where": "TowerWinStreakModel"
+    },
+    {
+      "source": "storage key",
+      "key": "TowerWinStreakCache.{EventId, StartTime, FinishTime, IsEventIntroduced, IsClaimed, TowerWinStreakConfigModel}",
+      "type": "object",
+      "value": "-",
+      "meaning": "Ảnh chụp sự kiện + bảng mốc thưởng",
+      "where": "TowerWinStreakCache / TowerWinStreakConfigModelCache"
+    },
+    {
+      "source": "asset",
+      "key": "TowerWinStreakBannerConfig.DistanceBetweenMainSteps",
+      "type": "float",
+      "value": "7.5",
+      "meaning": "Khoảng cách giữa 2 mốc chính trên banner",
+      "where": "Assets/MonoBehaviour/TowerWinStreakBannerConfig.asset"
+    },
+    {
+      "source": "asset",
+      "key": "TowerWinStreakBannerConfig.CatMoveDuration / CatPrepareDuration / CatTiltRotationZ",
+      "type": "float",
+      "value": "0.7 / 0.25 / -22",
+      "meaning": "Hoạt ảnh mèo leo tháp",
+      "where": "TowerWinStreakBannerConfig.asset"
+    },
+    {
+      "source": "asset",
+      "key": "TowerWinStreakBannerConfig.RevealMainStepTime / TickScaleDuration / TickStartTime",
+      "type": "float",
+      "value": "0.6 / 0.4 / 0.65",
+      "meaning": "Hoạt ảnh mở khoá mốc",
+      "where": "TowerWinStreakBannerConfig.asset"
+    },
+    {
+      "source": "asset",
+      "key": "TowerWinStreakBannerConfig.MainStepEnlargeScale / MainStepEnlargeStartTime / MainStepEnlargeDuration / MainStepShrinkDuration",
+      "type": "vec3/float",
+      "value": "(1.25,1.25,0) / 0.35 / 0.2 / 0.2",
+      "meaning": "Nhấn mạnh mốc chính khi đạt",
+      "where": "TowerWinStreakBannerConfig.asset"
+    },
+    {
+      "source": "asset",
+      "key": "TowerWinStreakBannerConfig.ContainerMoveDuration / IncreaseAnimDelay / ParticlePlayTime / SpriteSwapTime",
+      "type": "float",
+      "value": "1.25 / 0.35 / 0.55 / 0.35",
+      "meaning": "Nhịp hoạt ảnh banner",
+      "where": "TowerWinStreakBannerConfig.asset"
+    },
+    {
+      "source": "asset",
+      "key": "TowerWinStreakLobbyButtonAnimationConfig._circleProgressBarAnimationDuration / _circleProgressBarAnimationDelay",
+      "type": "float",
+      "value": "1 / 0.7",
+      "meaning": "Animation vòng tròn tiến độ nút lobby",
+      "where": "Assets/MonoBehaviour/TowerWinStreakLobbyButtonAnimationConfig.asset"
+    },
+    {
+      "source": "asset",
+      "key": "TowerWinStreakLobbyButtonAnimationConfig.BroomPunchDelay / Duration / Vibrato / Elasticity / PunchRotation / BroomSitPosition",
+      "type": "float/vec3",
+      "value": "0.8 / 0.3 / 3 / 15 / (0,0,8) / (0.329,-0.205,0)",
+      "meaning": "Hiệu ứng cây chổi trên nút lobby",
+      "where": "TowerWinStreakLobbyButtonAnimationConfig.asset"
+    },
+    {
+      "source": "asset",
+      "key": "TowerWinStreakAreYouSureAnimationConfig / TowerWinStreakAreYouSureAnimationConfig-Quit",
+      "type": "asset",
+      "value": "2 biến thể",
+      "meaning": "Hoạt ảnh tháp trên popup xác nhận thoát",
+      "where": "Assets/MonoBehaviour/"
+    },
+    {
+      "source": "json default",
+      "key": "TowerWinStreakConfigModel.json: Steps[1].Step",
+      "type": "",
+      "value": "3",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/TowerWinStreakConfigModel.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "TowerWinStreakConfigModel.json: Steps[1].RewardModel.CurrencyType",
+      "type": "",
+      "value": "13",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/TowerWinStreakConfigModel.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "TowerWinStreakConfigModel.json: Steps[1].RewardModel.Amount",
+      "type": "",
+      "value": "1",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/TowerWinStreakConfigModel.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "TowerWinStreakConfigModel.json: Steps[1].RewardModel.Rewards[0].CurrencyType",
+      "type": "",
+      "value": "1",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/TowerWinStreakConfigModel.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "TowerWinStreakConfigModel.json: Steps[1].RewardModel.Rewards[0].Amount",
+      "type": "",
+      "value": "30",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/TowerWinStreakConfigModel.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "TowerWinStreakConfigModel.json: Steps[2].Step",
+      "type": "",
+      "value": "6",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/TowerWinStreakConfigModel.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "TowerWinStreakConfigModel.json: Steps[2].RewardModel.CurrencyType",
+      "type": "",
+      "value": "13",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/TowerWinStreakConfigModel.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "TowerWinStreakConfigModel.json: Steps[2].RewardModel.Amount",
+      "type": "",
+      "value": "1",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/TowerWinStreakConfigModel.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "TowerWinStreakConfigModel.json: Steps[2].RewardModel.Rewards[0].currencyType",
+      "type": "",
+      "value": "2",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/TowerWinStreakConfigModel.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "TowerWinStreakConfigModel.json: Steps[2].RewardModel.Rewards[0].amount",
+      "type": "",
+      "value": "0",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/TowerWinStreakConfigModel.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "TowerWinStreakConfigModel.json: Steps[2].RewardModel.Rewards[0].timeSpan",
+      "type": "",
+      "value": "00:15:00",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/TowerWinStreakConfigModel.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "TowerWinStreakConfigModel.json: Steps[3].Step",
+      "type": "",
+      "value": "11",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/TowerWinStreakConfigModel.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "TowerWinStreakConfigModel.json: Steps[3].RewardModel.CurrencyType",
+      "type": "",
+      "value": "13",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/TowerWinStreakConfigModel.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "TowerWinStreakConfigModel.json: Steps[3].RewardModel.Amount",
+      "type": "",
+      "value": "1",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/TowerWinStreakConfigModel.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "TowerWinStreakConfigModel.json: Steps[3].RewardModel.Rewards[0].CurrencyType",
+      "type": "",
+      "value": "1",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/TowerWinStreakConfigModel.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "TowerWinStreakConfigModel.json: Steps[3].RewardModel.Rewards[0].Amount",
+      "type": "",
+      "value": "300",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/TowerWinStreakConfigModel.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "TowerWinStreakConfigModel.json: Steps[4].Step",
+      "type": "",
+      "value": "16",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/TowerWinStreakConfigModel.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "TowerWinStreakConfigModel.json: Steps[4].RewardModel.CurrencyType",
+      "type": "",
+      "value": "13",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/TowerWinStreakConfigModel.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "TowerWinStreakConfigModel.json: Steps[4].RewardModel.Amount",
+      "type": "",
+      "value": "1",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/TowerWinStreakConfigModel.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "TowerWinStreakConfigModel.json: Steps[4].RewardModel.Rewards[0].CurrencyType",
+      "type": "",
+      "value": "4",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/TowerWinStreakConfigModel.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "TowerWinStreakConfigModel.json: Steps[4].RewardModel.Rewards[0].Amount",
+      "type": "",
+      "value": "1",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/TowerWinStreakConfigModel.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "TowerWinStreakConfigModel.json: Steps[5].Step",
+      "type": "",
+      "value": "22",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/TowerWinStreakConfigModel.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "TowerWinStreakConfigModel.json: Steps[5].RewardModel.CurrencyType",
+      "type": "",
+      "value": "13",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/TowerWinStreakConfigModel.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "TowerWinStreakConfigModel.json: Steps[5].RewardModel.Amount",
+      "type": "",
+      "value": "1",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/TowerWinStreakConfigModel.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "TowerWinStreakConfigModel.json: Steps[5].RewardModel.Rewards[0].CurrencyType",
+      "type": "",
+      "value": "6",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/TowerWinStreakConfigModel.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "TowerWinStreakConfigModel.json: Steps[5].RewardModel.Rewards[0].Amount",
+      "type": "",
+      "value": "1",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/TowerWinStreakConfigModel.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "TowerWinStreakConfigModel.json: Steps[5].RewardModel.Rewards[1].CurrencyType",
+      "type": "",
+      "value": "5",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/TowerWinStreakConfigModel.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "TowerWinStreakConfigModel.json: Steps[5].RewardModel.Rewards[1].Amount",
+      "type": "",
+      "value": "1",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/TowerWinStreakConfigModel.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "TowerWinStreakConfigModel.json: Steps[6].Step",
+      "type": "",
+      "value": "30",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/TowerWinStreakConfigModel.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "TowerWinStreakConfigModel.json: Steps[6].RewardModel.CurrencyType",
+      "type": "",
+      "value": "13",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/TowerWinStreakConfigModel.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "TowerWinStreakConfigModel.json: Steps[6].RewardModel.Amount",
+      "type": "",
+      "value": "1",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/TowerWinStreakConfigModel.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "TowerWinStreakConfigModel.json: Steps[6].RewardModel.Rewards[0].CurrencyType",
+      "type": "",
+      "value": "1",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/TowerWinStreakConfigModel.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "TowerWinStreakConfigModel.json: Steps[6].RewardModel.Rewards[0].Amount",
+      "type": "",
+      "value": "1000",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/TowerWinStreakConfigModel.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "TowerWinStreakConfigModel.json: Steps[6].RewardModel.Rewards[1].CurrencyType",
+      "type": "",
+      "value": "4",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/TowerWinStreakConfigModel.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "TowerWinStreakConfigModel.json: Steps[6].RewardModel.Rewards[1].Amount",
+      "type": "",
+      "value": "1",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/TowerWinStreakConfigModel.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "TowerWinStreakConfigModel.json: Steps[7].Step",
+      "type": "",
+      "value": "40",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/TowerWinStreakConfigModel.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "TowerWinStreakConfigModel.json: Steps[7].RewardModel.CurrencyType",
+      "type": "",
+      "value": "13",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/TowerWinStreakConfigModel.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "TowerWinStreakConfigModel.json: Steps[7].RewardModel.Amount",
+      "type": "",
+      "value": "1",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/TowerWinStreakConfigModel.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "TowerWinStreakConfigModel.json: Steps[7].RewardModel.Rewards[0].CurrencyType",
+      "type": "",
+      "value": "1",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/TowerWinStreakConfigModel.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "TowerWinStreakConfigModel.json: Steps[7].RewardModel.Rewards[0].Amount",
+      "type": "",
+      "value": "2000",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/TowerWinStreakConfigModel.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "TowerWinStreakConfigModel.json: Steps[7].RewardModel.Rewards[1].CurrencyType",
+      "type": "",
+      "value": "6",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/TowerWinStreakConfigModel.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "TowerWinStreakConfigModel.json: Steps[7].RewardModel.Rewards[1].Amount",
+      "type": "",
+      "value": "1",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/TowerWinStreakConfigModel.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "TowerWinStreakConfigModel.json: Steps[7].RewardModel.Rewards[2].CurrencyType",
+      "type": "",
+      "value": "4",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/TowerWinStreakConfigModel.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "TowerWinStreakConfigModel.json: Steps[7].RewardModel.Rewards[2].Amount",
+      "type": "",
+      "value": "1",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/TowerWinStreakConfigModel.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "TowerWinStreakConfigModel.json: Steps[7].RewardModel.Rewards[3].CurrencyType",
+      "type": "",
+      "value": "5",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/TowerWinStreakConfigModel.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "TowerWinStreakConfigModel.json: Steps[7].RewardModel.Rewards[3].Amount",
+      "type": "",
+      "value": "1",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/TowerWinStreakConfigModel.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "TowerWinStreakConfigModel.json: Steps[7].RewardModel.Rewards[4].currencyType",
+      "type": "",
+      "value": "2",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/TowerWinStreakConfigModel.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "TowerWinStreakConfigModel.json: Steps[7].RewardModel.Rewards[4].amount",
+      "type": "",
+      "value": "0",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/TowerWinStreakConfigModel.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "TowerWinStreakConfigModel.json: Steps[7].RewardModel.Rewards[4].timeSpan",
+      "type": "",
+      "value": "02:00:00",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/TowerWinStreakConfigModel.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "server cache (historical)",
+      "key": "TowerWinStreakConfigModel (live) = default?",
+      "type": "",
+      "value": "49/122 key trùng default, 73 key khác/thêm",
+      "meaning": "Đối chiếu config server thật (CachedRemoteConfigs) với TowerWinStreakConfigModel.json",
+      "where": "Configs/CachedRemoteConfigs + Firebase RC template 3197 — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server cache (historical)",
+      "key": "TowerWinStreakConfigModel: steps[1].rewardModel.timeSpan",
+      "type": "",
+      "value": "00:00:00",
+      "meaning": "server-only (không có trong default)",
+      "where": "Configs/CachedRemoteConfigs + Firebase RC template 3197 — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server cache (historical)",
+      "key": "TowerWinStreakConfigModel: steps[1].rewardModel.rewards[0].timeSpan",
+      "type": "",
+      "value": "00:00:00",
+      "meaning": "server-only (không có trong default)",
+      "where": "Configs/CachedRemoteConfigs + Firebase RC template 3197 — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server cache (historical)",
+      "key": "TowerWinStreakConfigModel: steps[1].rewardModel.rewards[0].chestType",
+      "type": "",
+      "value": "0",
+      "meaning": "server-only (không có trong default)",
+      "where": "Configs/CachedRemoteConfigs + Firebase RC template 3197 — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server cache (historical)",
+      "key": "TowerWinStreakConfigModel: steps[1].rewardModel.rewards[0].collectionPackType",
+      "type": "",
+      "value": "0",
+      "meaning": "server-only (không có trong default)",
+      "where": "Configs/CachedRemoteConfigs + Firebase RC template 3197 — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server cache (historical)",
+      "key": "TowerWinStreakConfigModel: steps[1].rewardModel.chestType",
+      "type": "",
+      "value": "0",
+      "meaning": "server-only (không có trong default)",
+      "where": "Configs/CachedRemoteConfigs + Firebase RC template 3197 — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server cache (historical)",
+      "key": "TowerWinStreakConfigModel: steps[1].rewardModel.collectionPackType",
+      "type": "",
+      "value": "0",
+      "meaning": "server-only (không có trong default)",
+      "where": "Configs/CachedRemoteConfigs + Firebase RC template 3197 — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server cache (historical)",
+      "key": "TowerWinStreakConfigModel: steps[2].rewardModel.timeSpan",
+      "type": "",
+      "value": "00:00:00",
+      "meaning": "server-only (không có trong default)",
+      "where": "Configs/CachedRemoteConfigs + Firebase RC template 3197 — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server cache (historical)",
+      "key": "TowerWinStreakConfigModel: steps[2].rewardModel.rewards[0].chestType",
+      "type": "",
+      "value": "0",
+      "meaning": "server-only (không có trong default)",
+      "where": "Configs/CachedRemoteConfigs + Firebase RC template 3197 — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server cache (historical)",
+      "key": "TowerWinStreakConfigModel: steps[2].rewardModel.rewards[0].collectionPackType",
+      "type": "",
+      "value": "0",
+      "meaning": "server-only (không có trong default)",
+      "where": "Configs/CachedRemoteConfigs + Firebase RC template 3197 — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server cache (historical)",
+      "key": "TowerWinStreakConfigModel: steps[2].rewardModel.chestType",
+      "type": "",
+      "value": "0",
+      "meaning": "server-only (không có trong default)",
+      "where": "Configs/CachedRemoteConfigs + Firebase RC template 3197 — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server cache (historical)",
+      "key": "TowerWinStreakConfigModel: steps[2].rewardModel.collectionPackType",
+      "type": "",
+      "value": "0",
+      "meaning": "server-only (không có trong default)",
+      "where": "Configs/CachedRemoteConfigs + Firebase RC template 3197 — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server cache (historical)",
+      "key": "TowerWinStreakConfigModel: steps[3].rewardModel.timeSpan",
+      "type": "",
+      "value": "00:00:00",
+      "meaning": "server-only (không có trong default)",
+      "where": "Configs/CachedRemoteConfigs + Firebase RC template 3197 — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server cache (historical)",
+      "key": "TowerWinStreakConfigModel: steps[3].rewardModel.rewards[0].timeSpan",
+      "type": "",
+      "value": "00:00:00",
+      "meaning": "server-only (không có trong default)",
+      "where": "Configs/CachedRemoteConfigs + Firebase RC template 3197 — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server cache (historical)",
+      "key": "TowerWinStreakConfigModel: steps[3].rewardModel.rewards[0].chestType",
+      "type": "",
+      "value": "0",
+      "meaning": "server-only (không có trong default)",
+      "where": "Configs/CachedRemoteConfigs + Firebase RC template 3197 — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server cache (historical)",
+      "key": "TowerWinStreakConfigModel: steps[3].rewardModel.rewards[0].collectionPackType",
+      "type": "",
+      "value": "0",
+      "meaning": "server-only (không có trong default)",
+      "where": "Configs/CachedRemoteConfigs + Firebase RC template 3197 — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server cache (historical)",
+      "key": "TowerWinStreakConfigModel: steps[3].rewardModel.chestType",
+      "type": "",
+      "value": "0",
+      "meaning": "server-only (không có trong default)",
+      "where": "Configs/CachedRemoteConfigs + Firebase RC template 3197 — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server cache (historical)",
+      "key": "TowerWinStreakConfigModel: steps[3].rewardModel.collectionPackType",
+      "type": "",
+      "value": "0",
+      "meaning": "server-only (không có trong default)",
+      "where": "Configs/CachedRemoteConfigs + Firebase RC template 3197 — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server cache (historical)",
+      "key": "TowerWinStreakConfigModel: steps[4].rewardModel.timeSpan",
+      "type": "",
+      "value": "00:00:00",
+      "meaning": "server-only (không có trong default)",
+      "where": "Configs/CachedRemoteConfigs + Firebase RC template 3197 — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server cache (historical)",
+      "key": "TowerWinStreakConfigModel: steps[4].rewardModel.rewards[0].timeSpan",
+      "type": "",
+      "value": "00:00:00",
+      "meaning": "server-only (không có trong default)",
+      "where": "Configs/CachedRemoteConfigs + Firebase RC template 3197 — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server cache (historical)",
+      "key": "TowerWinStreakConfigModel: steps[4].rewardModel.rewards[0].chestType",
+      "type": "",
+      "value": "0",
+      "meaning": "server-only (không có trong default)",
+      "where": "Configs/CachedRemoteConfigs + Firebase RC template 3197 — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server cache (historical)",
+      "key": "TowerWinStreakConfigModel: steps[4].rewardModel.rewards[0].collectionPackType",
+      "type": "",
+      "value": "0",
+      "meaning": "server-only (không có trong default)",
+      "where": "Configs/CachedRemoteConfigs + Firebase RC template 3197 — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server cache (historical)",
+      "key": "TowerWinStreakConfigModel: steps[4].rewardModel.rewards[1].currencyType",
+      "type": "",
+      "value": "5",
+      "meaning": "server-only (không có trong default)",
+      "where": "Configs/CachedRemoteConfigs + Firebase RC template 3197 — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server cache (historical)",
+      "key": "TowerWinStreakConfigModel: steps[4].rewardModel.rewards[1].amount",
+      "type": "",
+      "value": "1",
+      "meaning": "server-only (không có trong default)",
+      "where": "Configs/CachedRemoteConfigs + Firebase RC template 3197 — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server cache (historical)",
+      "key": "TowerWinStreakConfigModel: steps[4].rewardModel.rewards[1].timeSpan",
+      "type": "",
+      "value": "00:00:00",
+      "meaning": "server-only (không có trong default)",
+      "where": "Configs/CachedRemoteConfigs + Firebase RC template 3197 — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server cache (historical)",
+      "key": "TowerWinStreakConfigModel: steps[4].rewardModel.rewards[1].chestType",
+      "type": "",
+      "value": "0",
+      "meaning": "server-only (không có trong default)",
+      "where": "Configs/CachedRemoteConfigs + Firebase RC template 3197 — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server cache (historical)",
+      "key": "TowerWinStreakConfigModel: steps[4].rewardModel.rewards[1].collectionPackType",
+      "type": "",
+      "value": "0",
+      "meaning": "server-only (không có trong default)",
+      "where": "Configs/CachedRemoteConfigs + Firebase RC template 3197 — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server cache (historical)",
+      "key": "TowerWinStreakConfigModel: steps[4].rewardModel.chestType",
+      "type": "",
+      "value": "0",
+      "meaning": "server-only (không có trong default)",
+      "where": "Configs/CachedRemoteConfigs + Firebase RC template 3197 — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server cache (historical)",
+      "key": "TowerWinStreakConfigModel: steps[4].rewardModel.collectionPackType",
+      "type": "",
+      "value": "0",
+      "meaning": "server-only (không có trong default)",
+      "where": "Configs/CachedRemoteConfigs + Firebase RC template 3197 — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server cache (historical)",
+      "key": "TowerWinStreakConfigModel: steps[5].rewardModel.timeSpan",
+      "type": "",
+      "value": "00:00:00",
+      "meaning": "server-only (không có trong default)",
+      "where": "Configs/CachedRemoteConfigs + Firebase RC template 3197 — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server cache (historical)",
+      "key": "TowerWinStreakConfigModel: steps[5].rewardModel.rewards[0].currencyType",
+      "type": "",
+      "value": "1",
+      "meaning": "server ghi đè (default = 6)",
+      "where": "Configs/CachedRemoteConfigs + Firebase RC template 3197 — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server cache (historical)",
+      "key": "TowerWinStreakConfigModel: steps[5].rewardModel.rewards[0].amount",
+      "type": "",
+      "value": "600",
+      "meaning": "server ghi đè (default = 1)",
+      "where": "Configs/CachedRemoteConfigs + Firebase RC template 3197 — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server cache (historical)",
+      "key": "TowerWinStreakConfigModel: steps[5].rewardModel.rewards[0].timeSpan",
+      "type": "",
+      "value": "00:00:00",
+      "meaning": "server-only (không có trong default)",
+      "where": "Configs/CachedRemoteConfigs + Firebase RC template 3197 — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server cache (historical)",
+      "key": "TowerWinStreakConfigModel: steps[5].rewardModel.rewards[0].chestType",
+      "type": "",
+      "value": "0",
+      "meaning": "server-only (không có trong default)",
+      "where": "Configs/CachedRemoteConfigs + Firebase RC template 3197 — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server cache (historical)",
+      "key": "TowerWinStreakConfigModel: steps[5].rewardModel.rewards[0].collectionPackType",
+      "type": "",
+      "value": "0",
+      "meaning": "server-only (không có trong default)",
+      "where": "Configs/CachedRemoteConfigs + Firebase RC template 3197 — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server cache (historical)",
+      "key": "TowerWinStreakConfigModel: steps[5].rewardModel.rewards[1].currencyType",
+      "type": "",
+      "value": "6",
+      "meaning": "server ghi đè (default = 5)",
+      "where": "Configs/CachedRemoteConfigs + Firebase RC template 3197 — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server cache (historical)",
+      "key": "TowerWinStreakConfigModel: steps[5].rewardModel.rewards[1].timeSpan",
+      "type": "",
+      "value": "00:00:00",
+      "meaning": "server-only (không có trong default)",
+      "where": "Configs/CachedRemoteConfigs + Firebase RC template 3197 — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server cache (historical)",
+      "key": "TowerWinStreakConfigModel: steps[5].rewardModel.rewards[1].chestType",
+      "type": "",
+      "value": "0",
+      "meaning": "server-only (không có trong default)",
+      "where": "Configs/CachedRemoteConfigs + Firebase RC template 3197 — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server cache (historical)",
+      "key": "TowerWinStreakConfigModel: steps[5].rewardModel.rewards[1].collectionPackType",
+      "type": "",
+      "value": "0",
+      "meaning": "server-only (không có trong default)",
+      "where": "Configs/CachedRemoteConfigs + Firebase RC template 3197 — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server cache (historical)",
+      "key": "TowerWinStreakConfigModel: steps[5].rewardModel.chestType",
+      "type": "",
+      "value": "0",
+      "meaning": "server-only (không có trong default)",
+      "where": "Configs/CachedRemoteConfigs + Firebase RC template 3197 — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server cache (historical)",
+      "key": "TowerWinStreakConfigModel: steps[5].rewardModel.collectionPackType",
+      "type": "",
+      "value": "0",
+      "meaning": "server-only (không có trong default)",
+      "where": "Configs/CachedRemoteConfigs + Firebase RC template 3197 — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server cache (historical)",
+      "key": "TowerWinStreakConfigModel: steps[6].rewardModel.timeSpan",
+      "type": "",
+      "value": "00:00:00",
+      "meaning": "server-only (không có trong default)",
+      "where": "Configs/CachedRemoteConfigs + Firebase RC template 3197 — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server cache (historical)",
+      "key": "TowerWinStreakConfigModel: steps[6].rewardModel.rewards[0].currencyType",
+      "type": "",
+      "value": "6",
+      "meaning": "server ghi đè (default = 1)",
+      "where": "Configs/CachedRemoteConfigs + Firebase RC template 3197 — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server cache (historical)",
+      "key": "TowerWinStreakConfigModel: steps[6].rewardModel.rewards[0].amount",
+      "type": "",
+      "value": "1",
+      "meaning": "server ghi đè (default = 1000)",
+      "where": "Configs/CachedRemoteConfigs + Firebase RC template 3197 — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server cache (historical)",
+      "key": "TowerWinStreakConfigModel: steps[6].rewardModel.rewards[0].timeSpan",
+      "type": "",
+      "value": "00:00:00",
+      "meaning": "server-only (không có trong default)",
+      "where": "Configs/CachedRemoteConfigs + Firebase RC template 3197 — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server cache (historical)",
+      "key": "TowerWinStreakConfigModel: steps[6].rewardModel.rewards[0].chestType",
+      "type": "",
+      "value": "0",
+      "meaning": "server-only (không có trong default)",
+      "where": "Configs/CachedRemoteConfigs + Firebase RC template 3197 — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server cache (historical)",
+      "key": "TowerWinStreakConfigModel: steps[6].rewardModel.rewards[0].collectionPackType",
+      "type": "",
+      "value": "0",
+      "meaning": "server-only (không có trong default)",
+      "where": "Configs/CachedRemoteConfigs + Firebase RC template 3197 — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server cache (historical)",
+      "key": "TowerWinStreakConfigModel: steps[6].rewardModel.rewards[1].timeSpan",
+      "type": "",
+      "value": "00:00:00",
+      "meaning": "server-only (không có trong default)",
+      "where": "Configs/CachedRemoteConfigs + Firebase RC template 3197 — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server cache (historical)",
+      "key": "TowerWinStreakConfigModel: steps[6].rewardModel.rewards[1].chestType",
+      "type": "",
+      "value": "0",
+      "meaning": "server-only (không có trong default)",
+      "where": "Configs/CachedRemoteConfigs + Firebase RC template 3197 — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server cache (historical)",
+      "key": "TowerWinStreakConfigModel: steps[6].rewardModel.rewards[1].collectionPackType",
+      "type": "",
+      "value": "0",
+      "meaning": "server-only (không có trong default)",
+      "where": "Configs/CachedRemoteConfigs + Firebase RC template 3197 — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server cache (historical)",
+      "key": "TowerWinStreakConfigModel: steps[6].rewardModel.rewards[2].currencyType",
+      "type": "",
+      "value": "5",
+      "meaning": "server-only (không có trong default)",
+      "where": "Configs/CachedRemoteConfigs + Firebase RC template 3197 — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server cache (historical)",
+      "key": "TowerWinStreakConfigModel: steps[6].rewardModel.rewards[2].amount",
+      "type": "",
+      "value": "1",
+      "meaning": "server-only (không có trong default)",
+      "where": "Configs/CachedRemoteConfigs + Firebase RC template 3197 — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server cache (historical)",
+      "key": "TowerWinStreakConfigModel: steps[6].rewardModel.rewards[2].timeSpan",
+      "type": "",
+      "value": "00:00:00",
+      "meaning": "server-only (không có trong default)",
+      "where": "Configs/CachedRemoteConfigs + Firebase RC template 3197 — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server cache (historical)",
+      "key": "TowerWinStreakConfigModel: steps[6].rewardModel.rewards[2].chestType",
+      "type": "",
+      "value": "0",
+      "meaning": "server-only (không có trong default)",
+      "where": "Configs/CachedRemoteConfigs + Firebase RC template 3197 — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server cache (historical)",
+      "key": "TowerWinStreakConfigModel: steps[6].rewardModel.rewards[2].collectionPackType",
+      "type": "",
+      "value": "0",
+      "meaning": "server-only (không có trong default)",
+      "where": "Configs/CachedRemoteConfigs + Firebase RC template 3197 — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server cache (historical)",
+      "key": "TowerWinStreakConfigModel: steps[6].rewardModel.chestType",
+      "type": "",
+      "value": "0",
+      "meaning": "server-only (không có trong default)",
+      "where": "Configs/CachedRemoteConfigs + Firebase RC template 3197 — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server cache (historical)",
+      "key": "TowerWinStreakConfigModel: steps[6].rewardModel.collectionPackType",
+      "type": "",
+      "value": "0",
+      "meaning": "server-only (không có trong default)",
+      "where": "Configs/CachedRemoteConfigs + Firebase RC template 3197 — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server cache (historical)",
+      "key": "TowerWinStreakConfigModel: steps[7].rewardModel.timeSpan",
+      "type": "",
+      "value": "00:00:00",
+      "meaning": "server-only (không có trong default)",
+      "where": "Configs/CachedRemoteConfigs + Firebase RC template 3197 — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server cache (historical)",
+      "key": "TowerWinStreakConfigModel: steps[7].rewardModel.rewards[0].timeSpan",
+      "type": "",
+      "value": "00:00:00",
+      "meaning": "server-only (không có trong default)",
+      "where": "Configs/CachedRemoteConfigs + Firebase RC template 3197 — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server cache (historical)",
+      "key": "TowerWinStreakConfigModel: steps[7].rewardModel.rewards[0].chestType",
+      "type": "",
+      "value": "0",
+      "meaning": "server-only (không có trong default)",
+      "where": "Configs/CachedRemoteConfigs + Firebase RC template 3197 — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server cache (historical)",
+      "key": "TowerWinStreakConfigModel: steps[7].rewardModel.rewards[0].collectionPackType",
+      "type": "",
+      "value": "0",
+      "meaning": "server-only (không có trong default)",
+      "where": "Configs/CachedRemoteConfigs + Firebase RC template 3197 — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server cache (historical)",
+      "key": "TowerWinStreakConfigModel: steps[7].rewardModel.rewards[1].timeSpan",
+      "type": "",
+      "value": "00:00:00",
+      "meaning": "server-only (không có trong default)",
+      "where": "Configs/CachedRemoteConfigs + Firebase RC template 3197 — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server cache (historical)",
+      "key": "TowerWinStreakConfigModel: steps[7].rewardModel.rewards[1].chestType",
+      "type": "",
+      "value": "0",
+      "meaning": "server-only (không có trong default)",
+      "where": "Configs/CachedRemoteConfigs + Firebase RC template 3197 — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server cache (historical)",
+      "key": "TowerWinStreakConfigModel: steps[7].rewardModel.rewards[1].collectionPackType",
+      "type": "",
+      "value": "0",
+      "meaning": "server-only (không có trong default)",
+      "where": "Configs/CachedRemoteConfigs + Firebase RC template 3197 — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server cache (historical)",
+      "key": "TowerWinStreakConfigModel: steps[7].rewardModel.rewards[2].timeSpan",
+      "type": "",
+      "value": "00:00:00",
+      "meaning": "server-only (không có trong default)",
+      "where": "Configs/CachedRemoteConfigs + Firebase RC template 3197 — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server cache (historical)",
+      "key": "TowerWinStreakConfigModel: steps[7].rewardModel.rewards[2].chestType",
+      "type": "",
+      "value": "0",
+      "meaning": "server-only (không có trong default)",
+      "where": "Configs/CachedRemoteConfigs + Firebase RC template 3197 — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server cache (historical)",
+      "key": "TowerWinStreakConfigModel: steps[7].rewardModel.rewards[2].collectionPackType",
+      "type": "",
+      "value": "0",
+      "meaning": "server-only (không có trong default)",
+      "where": "Configs/CachedRemoteConfigs + Firebase RC template 3197 — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server cache (historical)",
+      "key": "TowerWinStreakConfigModel: steps[7].rewardModel.rewards[3].timeSpan",
+      "type": "",
+      "value": "00:00:00",
+      "meaning": "server-only (không có trong default)",
+      "where": "Configs/CachedRemoteConfigs + Firebase RC template 3197 — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server cache (historical)",
+      "key": "TowerWinStreakConfigModel: steps[7].rewardModel.rewards[3].chestType",
+      "type": "",
+      "value": "0",
+      "meaning": "server-only (không có trong default)",
+      "where": "Configs/CachedRemoteConfigs + Firebase RC template 3197 — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server cache (historical)",
+      "key": "TowerWinStreakConfigModel: steps[7].rewardModel.rewards[3].collectionPackType",
+      "type": "",
+      "value": "0",
+      "meaning": "server-only (không có trong default)",
+      "where": "Configs/CachedRemoteConfigs + Firebase RC template 3197 — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server cache (historical)",
+      "key": "TowerWinStreakConfigModel: steps[7].rewardModel.rewards[4].chestType",
+      "type": "",
+      "value": "0",
+      "meaning": "server-only (không có trong default)",
+      "where": "Configs/CachedRemoteConfigs + Firebase RC template 3197 — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server cache (historical)",
+      "key": "TowerWinStreakConfigModel: steps[7].rewardModel.rewards[4].collectionPackType",
+      "type": "",
+      "value": "0",
+      "meaning": "server-only (không có trong default)",
+      "where": "Configs/CachedRemoteConfigs + Firebase RC template 3197 — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server cache (historical)",
+      "key": "TowerWinStreakConfigModel: steps[7].rewardModel.chestType",
+      "type": "",
+      "value": "0",
+      "meaning": "server-only (không có trong default)",
+      "where": "Configs/CachedRemoteConfigs + Firebase RC template 3197 — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server cache (historical)",
+      "key": "TowerWinStreakConfigModel: steps[7].rewardModel.collectionPackType",
+      "type": "",
+      "value": "0",
+      "meaning": "server-only (không có trong default)",
+      "where": "Configs/CachedRemoteConfigs + Firebase RC template 3197 — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    }
+  ],
+  "rewards": [
+    {
+      "context": "Chuỗi 3 thắng",
+      "reward": "Rương: 30 Coin",
+      "evidence": "TowerWinStreakConfigModel.json Steps[1]"
+    },
+    {
+      "context": "Chuỗi 6 thắng",
+      "reward": "Rương: Unlimited Life 15 phút",
+      "evidence": "TowerWinStreakConfigModel.json Steps[2]"
+    },
+    {
+      "context": "Chuỗi 11 thắng",
+      "reward": "Rương: 300 Coin",
+      "evidence": "TowerWinStreakConfigModel.json Steps[3]"
+    },
+    {
+      "context": "Chuỗi 16 thắng",
+      "reward": "Rương: 1 Undo",
+      "evidence": "TowerWinStreakConfigModel.json Steps[4]"
+    },
+    {
+      "context": "Chuỗi 22 thắng",
+      "reward": "Rương: 1 ExtraBottle + 1 Shuffle",
+      "evidence": "TowerWinStreakConfigModel.json Steps[5]"
+    },
+    {
+      "context": "Chuỗi 30 thắng",
+      "reward": "Rương: 1000 Coin + 1 Undo",
+      "evidence": "TowerWinStreakConfigModel.json Steps[6]"
+    },
+    {
+      "context": "Chuỗi 40 thắng (mốc cuối)",
+      "reward": "Rương: 2000 Coin + 1 ExtraBottle + 1 Undo + 1 Shuffle + Unlimited Life 2 giờ",
+      "evidence": "TowerWinStreakConfigModel.json Steps[7]"
+    }
+  ],
+  "backend": [
+    {
+      "command": "towerWinStreakEventInfoUrl = {base}/v1/get-winstreak-tournament",
+      "direction": "client→server",
+      "purpose": "Lấy khung thời gian sự kiện (TowerWinStreakEventInfoRequestModel{tournamentType})"
+    },
+    {
+      "command": "Sync block 'TowerWinStreakModel'",
+      "direction": "client↔server",
+      "purpose": "Đồng bộ chuỗi thắng, kỷ lục, cache sự kiện"
+    },
+    {
+      "command": "FlatBuffer schema magicsort.schemas.v1.liveops.win_streak",
+      "direction": "server→client",
+      "purpose": "Biến thể nhị phân của dữ liệu win streak (có trong build)"
+    }
+  ],
+  "ui": [
+    {
+      "element": "Popup chính",
+      "class": "Modules.Contexts.Home.TowerWinStreak.Scripts.UI.TowerWinStreakPopUp / TowerWinStreakPopUpArguments",
+      "purpose": "Xem tháp, bảng mốc, nhận thưởng"
+    },
+    {
+      "element": "Banner tháp",
+      "class": "TowerWinStreakBannerView / TowerWinStreakBannerMainStep / TowerWinStreakBannerIntermediateStep (ITowerStepView)",
+      "purpose": "Tháp hiển thị ở lobby"
+    },
+    {
+      "element": "Nút lobby",
+      "class": "TowerWinStreakLobbyButton + TowerWinStreakLobbyButtonAnimationConfig",
+      "purpose": "Icon + vòng tròn tiến độ"
+    },
+    {
+      "element": "Nút nhận",
+      "class": "TowerWinStreakClaimButton",
+      "purpose": "Nhận rương của mốc"
+    },
+    {
+      "element": "Đồng hồ",
+      "class": "TowerWinStreakTimer",
+      "purpose": "Đếm ngược tới finishTime"
+    },
+    {
+      "element": "Popup thông tin",
+      "class": "TowerWinStreakInfoPopup",
+      "purpose": "Luật chơi"
+    },
+    {
+      "element": "Are You Sure",
+      "class": "TowerWinStreakAreYouSureContainer / TowerWinStreakAreYouSureAnimation / TowerWinStreakAreYouSureAnimationConfig",
+      "purpose": "Cảnh báo mất chuỗi khi thoát"
+    },
+    {
+      "element": "Command",
+      "class": "TowerWinStreakHomeWelcomingCommand / TowerWinStreakTryAgainCommand",
+      "purpose": "Chèn popup vào chuỗi Home và nút chơi lại"
+    },
+    {
+      "element": "Signals",
+      "class": "TowerWinStreakEventStateChangedSignal / TowerWinStreakCountChangedSignal",
+      "purpose": "Đồng bộ UI"
+    },
+    {
+      "element": "ViewModel",
+      "class": "TowerWinStreakStepViewModel",
+      "purpose": "Một mốc trên tháp"
+    }
+  ],
+  "analytics": [
+    {
+      "event": "broom_streak_joined",
+      "params": "tournament_id, start_time, remaining_duration, progress, max_step_streak",
+      "when": "TowerWinStreakService.TryStartNewEvent — sự kiện mới bắt đầu"
+    },
+    {
+      "event": "broom_streak_impression",
+      "params": "impression_source, current_streak, max_streak_current_tower, progress, tournament_id, remaining_duration",
+      "when": "EventSender.SendTowerWinStreakImpression(TowerWinStreakSource)"
+    },
+    {
+      "event": "broom_streak_info_impression",
+      "params": "current_streak, progress, ...",
+      "when": "EventSender.SendTowerWinStreakInfoImpression khi mở info popup"
+    },
+    {
+      "event": "broom_streak_reward_claim",
+      "params": "step_rewards (JSON), current_streak, progress, tournament_id, tournament_start_time, remaining_duration",
+      "when": "EventSender.SendTowerWinStreakClaimReward mỗi mốc nhận thưởng"
+    },
+    {
+      "event": "broom_streak_finished",
+      "params": "current_streak, max_streak_current_tower, progress, tournament_id, tournament_start_time, remaining_duration",
+      "when": "EventSender.SendTowerWinStreakFinished khi sự kiện kết thúc"
+    }
+  ],
+  "storage_keys": [
+    "TowerWinStreakModel",
+    "TowerWinStreakModel.MaxWinCountRecord",
+    "TowerWinStreakModel.MaxWinCount",
+    "TowerWinStreakModel.WinCount",
+    "TowerWinStreakModel.LastSeenWinCount",
+    "TowerWinStreakModel.LastSeenWinCountBeforeReset",
+    "TowerWinStreakModel.IsEventIntroducedEverInLifeTime",
+    "TowerWinStreakModel.CircleProgressBarFillRatio",
+    "TowerWinStreakCache.EventId",
+    "TowerWinStreakCache.IsClaimed"
+  ],
+  "related_features": [
+    "BroomStreak",
+    "MagicStreak",
+    "WheelOfFortune",
+    "EventsFramework",
+    "Inventory"
+  ],
+  "gaps": [
+    "Không có hằng số về độ dài sự kiện — startTime/finishTime hoàn toàn do server.",
+    "15/11 — resolved_static_code_historical_build: TowerWinStreakStateService.GetEventState bắt đầu iVar9=7; chỉ vào nhánh eligibility tiếp khi Tower.IsEnabled=true VÀ Broom.IsEnabled=false. Vì vậy khi cả hai bật, Tower không đi tiếp nhánh active của method này. Đây là ưu tiên/config suppression của Tower; chưa khẳng định Broom tự active bất kể unlock/instance của nó. Còn lại: Cần đối chiếu method/consumer trên app0.0.3129 ARM64; chưa là runtime pass.",
+    "Analytics dùng tên 'broom_streak_*' cho Tower (v1) trong khi BroomStreak dùng hậu tố '_v2' — dễ nhầm khi phân tích dữ liệu.",
+    "[Runtime 2026-09-10] Config server LIVE đã đọc trực tiếp từ cache máy (không cần request); các hàng 'server live' là giá trị server ghi đè/thêm so với default."
+  ],
+  "sources": [
+    "GameDesign/features/TowerWinStreakService.md",
+    "GameDesign/features/TowerWinStreakStateService.md",
+    "GameDesign/features/TowerWinStreakDataService.md",
+    "GameDesign/features/TowerWinStreakConfigModel.md",
+    "GameDesign/features/TowerWinStreakStepConfigModel.md",
+    "RecoveredNative/PseudoC/Assembly-CSharp/Modules/Contexts/Home/TowerWinStreak/Scripts/*.c",
+    "RecoveredNative/Il2CppDumper/dump.cs (TypeDefIndex 1846-1905)",
+    "UnityExport/ExportedProject/Assets/Resources/defaultconfigs/TowerWinStreakConfigModel.json",
+    "UnityExport/ExportedProject/Assets/MonoBehaviour/TowerWinStreakBannerConfig.asset",
+    "UnityExport/ExportedProject/Assets/MonoBehaviour/TowerWinStreakLobbyButtonAnimationConfig.asset",
+    "UnityExport/ExportedProject/Assets/MonoBehaviour/BackendEnvironmentConfig.asset",
+    "RecoveredNative/strings-by-type.tsv (EventSender.SendTowerWinStreak*)"
+  ],
+  "related_feature_aliases": [
+    {
+      "original": "WheelOfFortune (task WinStreak=14)",
+      "feature": "WheelOfFortune"
+    },
+    {
+      "original": "LobbyEventsService",
+      "feature": "EventsFramework"
+    },
+    {
+      "original": "RewardService",
+      "feature": "Inventory"
+    }
+  ],
+  "audit_provenance": {
+    "review_date": "2026-11-15",
+    "mode": "offline_existing_files",
+    "code_build": "0.0.3063 ARMv7",
+    "runtime_build_observed_historically": "0.0.3129 ARM64 (audit 2026-10-18); not rechecked 2026-11-15",
+    "new_playtests": 0,
+    "uc_status": "See facts/audit_20261115/uc_registry.json; image reference is not pass",
+    "workbook_status": "Existing XLSX is historical; JSON and local web include 2026-11-15 corrections",
+    "static_review": "facts/local_code_gap_results_20261115.json; facts/local_asset_gap_results_20261115.json; facts/final_data_gap_decisions_20261115.json; facts/core_body_gap_decisions_20261115.json; facts/remaining_asset_gap_decisions_20261115.json"
+  },
+  "static_review_20261115": {
+    "date": "2026-11-15",
+    "scope": "Historical code/assets 0.0.3063, dated caches, device 0.0.3129 cached bundles and explicitly scoped runtime evidence. Not full runtime pass.",
+    "findings": [
+      {
+        "kind": "code",
+        "source_report": "facts/local_code_gap_results_20261115.json",
+        "id": "MS-CODE-13",
+        "gap_ids": [
+          "MS-BroomStreak-G002",
+          "MS-TowerWinStreak-G002"
+        ],
+        "title": "Broom enabled chặn nhánh Tower",
+        "status": "resolved_static_code",
+        "conclusion": "TowerWinStreakStateService.GetEventState bắt đầu iVar9=7; chỉ vào nhánh eligibility tiếp khi Tower.IsEnabled=true VÀ Broom.IsEnabled=false. Vì vậy khi cả hai bật, Tower không đi tiếp nhánh active của method này. Đây là ưu tiên/config suppression của Tower; chưa khẳng định Broom tự active bất kể unlock/instance của nó.",
+        "evidence": [
+          {
+            "file": "../com.grandgames.magicsort_Unity_20260909_112501/RecoveredNative/PseudoC/Assembly-CSharp/Modules/Contexts/Home/TowerWinStreak/Scripts/TowerWinStreakStateService.c",
+            "line": 171,
+            "end_line": 416,
+            "method": "// ===== TowerWinStreakStateService :: public TowerWinStreakStateType GetEventState()",
+            "sha256": "1e0c8d8ddfae27896c127e94a03d3d2cba1f1e55be53ac6eff39b2ac6ceb5395",
+            "body_checked": true,
+            "build": "0.0.3063 ARMv7",
+            "required_body_tokens": [
+              "iVar9 = 7",
+              "_IsEnabled_k__BackingField != false",
+              "_BroomStreakConfigModel_k__BackingField",
+              "_IsEnabled_k__BackingField == false"
+            ]
+          }
+        ],
+        "remaining": "Cần đối chiếu method/consumer trên app0.0.3129 ARM64; chưa là runtime pass.",
+        "scope": "recovered_native_0.0.3063_only",
+        "runtime_verified": false
+      }
+    ]
+  },
+  "acceptance_review_20261115": {
+    "source": "facts/feature_acceptance_20261115.json",
+    "feature_id": "TowerWinStreak",
+    "scope": "All eleven dossier dimensions reviewed; full_feature_verified is not implied; read per-dimension gaps and actual runtime evidence."
+  },
+  "segment_ab_review_20261115": {
+    "status": "not_identified_in_sources",
+    "segment_ids": [],
+    "matching_basis": "explicit_gd_config_map_or_exact_model_token_in_gdd_configs_where_key_sources; rootfieldscoped",
+    "rows": [],
+    "classifications": {},
+    "assignment_verified": false,
+    "uplift_verified": false,
+    "note": "No matchingrow does not prove no segmentation/AB. Rewardbucketfalsepositives remain explicitly classified."
+  },
+  "continuation_review_20261116": {
+    "date": "2026-11-16",
+    "build": "0.0.3129 ARM64 host APK",
+    "build_scope": "Host APK version3129 matches LAST observed installed version15/11 only; installed bytes/live device16/11 not verified.",
+    "runtime_status": "device_unavailable",
+    "runtime_case_ids": [],
+    "current_apk_model_links": {
+      "feature": "TowerWinStreak",
+      "models": [
+        {
+          "model": "TowerWinStreakConfigModel",
+          "current_default_file": "facts/review_20261116/public_current_config_3129/defaults/TowerWinStreakConfigModel.json",
+          "resource_path": "defaultconfigs/towerwinstreakconfigmodel",
+          "sha256": "79b6f2098d7c8281f26e6d2629c0ef2b13274da3cfe2d34a2e629dd12cae1f08",
+          "matching_basis": [
+            "gdd/TowerWinStreak.json#/configs",
+            "gdd/TowerWinStreak.json#/sources",
+            "gdd/TowerWinStreak.json#/flow",
+            "gdd/TowerWinStreak.json#/managers"
+          ],
+          "scope": "Packaged default3129, not effective server config.",
+          "site_data_path": "data/current_config_3129/defaults/TowerWinStreakConfigModel.json",
+          "original_source_sha256": "79b6f2098d7c8281f26e6d2629c0ef2b13274da3cfe2d34a2e629dd12cae1f08",
+          "public_artifact_sha256": "31272b21c8df92506e7d7e408c36b0fbea9c9c1fcc0422018c7c0eeaee460a00",
+          "sha256_scope": "sha256 is original raw model; public_artifact_sha256 is the sanitized download"
+        }
+      ],
+      "status": "exact_model_source_association",
+      "distribution": "sanitized_public",
+      "public_mapping_pending": false
+    },
+    "current_packaged_defaults": [
+      {
+        "model": "TowerWinStreakConfigModel",
+        "source": "facts/review_20261116/public_current_config_3129/defaults/TowerWinStreakConfigModel.json",
+        "site_data_path": "data/current_config_3129/defaults/TowerWinStreakConfigModel.json",
+        "public_artifact_sha256": "31272b21c8df92506e7d7e408c36b0fbea9c9c1fcc0422018c7c0eeaee460a00",
+        "original_source_sha256": "79b6f2098d7c8281f26e6d2629c0ef2b13274da3cfe2d34a2e629dd12cae1f08",
+        "source_class": "static_asset",
+        "build": "0.0.3129 host APK",
+        "scope": "Sanitized packaged default fullvalues only; not effective remote/selected config or runtime.",
+        "values": {
+          "IsEnabled": false,
+          "FirstLevelToShow": 50,
+          "EventType": 1,
+          "ShouldShowInLevelIcon": true,
+          "Steps": [
+            {
+              "Step": 0
+            },
+            {
+              "Step": 3,
+              "RewardModel": {
+                "CurrencyType": 13,
+                "Amount": 1,
+                "Rewards": [
+                  {
+                    "CurrencyType": 1,
+                    "Amount": 30
+                  }
+                ]
+              }
+            },
+            {
+              "Step": 6,
+              "RewardModel": {
+                "CurrencyType": 13,
+                "Amount": 1,
+                "Rewards": [
+                  {
+                    "currencyType": 2,
+                    "amount": 0,
+                    "timeSpan": "00:15:00"
+                  }
+                ]
+              }
+            },
+            {
+              "Step": 11,
+              "RewardModel": {
+                "CurrencyType": 13,
+                "Amount": 1,
+                "Rewards": [
+                  {
+                    "CurrencyType": 1,
+                    "Amount": 300
+                  }
+                ]
+              }
+            },
+            {
+              "Step": 16,
+              "RewardModel": {
+                "CurrencyType": 13,
+                "Amount": 1,
+                "Rewards": [
+                  {
+                    "CurrencyType": 4,
+                    "Amount": 1
+                  }
+                ]
+              }
+            },
+            {
+              "Step": 22,
+              "RewardModel": {
+                "CurrencyType": 13,
+                "Amount": 1,
+                "Rewards": [
+                  {
+                    "CurrencyType": 6,
+                    "Amount": 1
+                  },
+                  {
+                    "CurrencyType": 5,
+                    "Amount": 1
+                  }
+                ]
+              }
+            },
+            {
+              "Step": 30,
+              "RewardModel": {
+                "CurrencyType": 13,
+                "Amount": 1,
+                "Rewards": [
+                  {
+                    "CurrencyType": 1,
+                    "Amount": 1000
+                  },
+                  {
+                    "CurrencyType": 4,
+                    "Amount": 1
+                  }
+                ]
+              }
+            },
+            {
+              "Step": 40,
+              "RewardModel": {
+                "CurrencyType": 13,
+                "Amount": 1,
+                "Rewards": [
+                  {
+                    "CurrencyType": 1,
+                    "Amount": 2000
+                  },
+                  {
+                    "CurrencyType": 6,
+                    "Amount": 1
+                  },
+                  {
+                    "CurrencyType": 4,
+                    "Amount": 1
+                  },
+                  {
+                    "CurrencyType": 5,
+                    "Amount": 1
+                  },
+                  {
+                    "currencyType": 2,
+                    "amount": 0,
+                    "timeSpan": "02:00:00"
+                  }
+                ]
+              }
+            }
+          ]
+        }
+      }
+    ],
+    "native_finding_ids": [],
+    "documentation_source_coverage": {
+      "dossier_present": true,
+      "use_case_catalog_count": 15,
+      "config_catalog_rows": 154,
+      "current_apk_default_model_links": 1,
+      "current_native_findings": 0,
+      "scope": "Documentation/source coverage only; not complete runtime verification."
+    },
+    "runtime_completion": {
+      "date": "2026-11-16",
+      "status": "device_unavailable",
+      "executed_case_count": 0,
+      "full_feature_runtime_verified": false
+    },
+    "planned_branch": "Tìm tower icon, mở bảng mốc/reward tooltip và checkpoint information nếu có; chụp icon progress.",
+    "target_uc_ids": [
+      "UC-01",
+      "UC-08",
+      "UC-15"
+    ],
+    "execution_phase": "noncore_first",
+    "core_or_levels_last": false,
+    "actionability_full_json": "facts/continuation_20261116/current/feature_actionability.json",
+    "actionability_site_data_path": "data/continuation_20261116/feature_actionability.json",
+    "source_classes": [
+      "static_asset"
+    ],
+    "full_feature_verified": false
+  }
+}

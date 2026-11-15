@@ -1,0 +1,135 @@
+{
+  "id": "Account",
+  "title": "Tài khoản & đồng bộ (Account)",
+  "tagline": "Tài khoản ẩn danh gắn thiết bị, liên kết Facebook/Apple, đồng bộ toàn bộ tiến độ lên server.",
+  "infobox": [
+    ["Loại", "Meta"],
+    ["Mở khóa", "Có từ lần mở game đầu tiên"],
+    ["Chu kỳ / lịch", "Đồng bộ theo ServerCommunicationModel.CommunicationIntervalInSeconds (server)"],
+    ["Tham gia", "Cá nhân"],
+    ["Điều kiện / phụ thuộc", "Remote config: AccountDeleteEnabled, IsAppleSignInEnabled, IsGameCenterEnabled, IsAndroidIapVerificationEnabled, RestorePurchaseEnabled, IsFlatBuffer"],
+    ["Manager", "LoginService, SyncService, TokenService, UserIdService, PlayerService, AccountDeleteService, BanService"]
+  ],
+  "description": [
+    "Tài khoản Magic Sort là tài khoản ẩn danh gắn với thiết bị: id lưu trong PlayerPrefs 'GrandUserId' (và biến thể 'GrandUserId_').",
+    "Mỗi lần mở game, client gọi /v1/login và nhận LoginResponse gồm UserId, UserPublicId, UserName, Token, Progress, ForceFetch, CountryCode, DeleteStatus.",
+    "Token phiên được TokenService giữ và HttpProxy tự gắn vào mọi request về sau qua GetAuthHeaders.",
+    "Mọi dịch vụ triển khai ISyncable (Teams, Friends, Referral, Player, AccountDelete, các sự kiện) gom thành một gói JSON đẩy lên /v1/sync-data.",
+    "Khi server bật cờ ForceFetch hoặc tiến độ máy thấp hơn tiến độ server, client tải /v1/get-data và ghi đè toàn bộ dữ liệu cục bộ.",
+    "Liên kết Facebook xin quyền 'public_profile' và 'user_friends', lấy dữ liệu qua Graph API v19.0 rồi gọi /v1/fb-login.",
+    "Liên kết Apple lưu 'apple_user_authentication_data' và 'apple_user_identification_data' trong PlayerPrefs rồi gọi /v1/apple-login.",
+    "Xóa tài khoản là quy trình hai bước: đọc cảnh báo, gõ đúng chuỗi \"delete my account\", sau đó có thời gian chờ và có thể hủy.",
+    "Trên Android, thiết bị được xác thực bằng Google Play Integrity; token gửi tới /v1/validate-play-integrity.",
+    "BanService định kỳ hỏi /v1/get-user-banned-status; trạng thái Banned bật BanPopup chặn chơi."
+  ],
+  "notes": [
+    "Lưu ý: id tài khoản đọc PlayerPrefs một lần duy nhất — UserIdService dùng biến static (_isCached, _userId, _changed, _wasNull).",
+    "Lưu ý: khi ghi đè dữ liệu từ server, client gọi AckForceFetched (/v1/force-fetched) rồi RestartGame() khởi động lại vòng đời dịch vụ.",
+    "Lưu ý: ngắt liên kết Facebook chỉ xóa ảnh hồ sơ cục bộ; dữ liệu trên server vẫn giữ, đăng nhập lại là khôi phục được.",
+    "Lưu ý: popup xóa tài khoản ghi rõ mất level, coin, booster và mọi giao dịch; quy trình hoàn tất trong 15 ngày.",
+    "Lưu ý: gõ sai câu xác nhận hiện thông báo 'DeleteConfirmationFailedText' (\"Wrong Text\") và không gửi yêu cầu.",
+    "Lưu ý: game ép người chơi đổi tên khi tên còn tiền tố mặc định 'player_'; số lần ép đếm bằng PlayerPrefs 'ProfileNameChangeForceCount'.",
+    "Lưu ý: luật xử lý xung đột dữ liệu do server nắm, client chỉ so sánh trường Progress (gap).",
+    "Lưu ý: cờ ByPassRemoteTimeCheck cho phép bỏ qua kiểm tra giờ chuẩn (dùng nội bộ/debug)."
+  ],
+  "how_it_works": [
+    "Khởi động: UserIdService.CacheUserId() đọc PlayerPrefs 'GrandUserId'; chưa có thì sinh mới từ GetUniqueDeviceID()/GetUniqueDeviceIDForAndroid(), đánh dấu WasNull() và PlayerService.SetNewUserId() lưu vào PlayerModel.",
+    "LoginService.TryLoginUserAsync() gọi /v1/login với timeout 3 giây (LoginRemoteService._timeout).",
+    "Thất bại: StartLoginRetryIfNeeded() và RetryLogin() tăng dần cooldown tới trần _maxCoolDownDurationAsSeconds (giá trị chưa xác định); không mạng thì hiện popup 'NoInternetConnection!'.",
+    "Thành công: TokenService.SetToken(token) lưu AccessToken; PlayerService nhận UserPublicId và CountryCode qua UpdateServiceData().",
+    "Splash giữ tối thiểu _splashShowDurationMs; nếu người chơi rảnh tay thì chờ thêm _idleEndWaitDurationMs (HomeIdleDetectionManager).",
+    "ShouldOverwriteData() so Progress của server với tiến độ máy và cờ ForceFetch để quyết định hướng ghi đè.",
+    "Nếu cần tải về: TryLoadDataFromRemote() gọi /v1/get-data, OverwriteDataFromRemote() gọi ISyncable.OverwriteModelFromSync theo GetSyncName() cho từng dịch vụ.",
+    "Sau khi ghi đè, AckForceFetched() báo /v1/force-fetched rồi LoginService.RestartGame() khởi động lại vòng đời.",
+    "Trong lúc chơi, SyncService.TrySyncAllData(shouldFetchSegment) gom mọi ISyncable đang IsDataChangedSinceLastSave() theo chu kỳ CommunicationIntervalInSeconds (server).",
+    "StartSyncFlow() dựng SyncRequestModel{Progress, Data (JRaw)} gửi /v1/sync-data, xong thì MarkDataAsSynced(); shouldFetchSegment = true thì SegmentService lấy lại phân khúc.",
+    "Liên kết Facebook: SignIn() xin FBPermissions, gọi Graph 'me?fields=id,email,first_name' và 'me/friends?fields=id,name', rồi SyncFacebookAsync() tới /v1/fb-login.",
+    "Liên kết Apple: PerformLoginUsingSavedAuthentication() → PerformQuickLogin() → PerformFullLogin(); GetTokenData() và IsTokenExpired() kiểm hạn rồi SyncAppleAsync() tới /v1/apple-login.",
+    "Xóa tài khoản: gõ đúng \"delete my account\" → CreateDeleteRequestAsync() tới /v1/delete-request, đặt AccountDeleteStatus.InProgress (=1).",
+    "Đăng nhập lại khi đang InProgress: popup 'AccountDeletionInProgressText' cho hủy bằng /v1/cancel-delete-request; khi server báo Deleted (=2) thì ClearLocalAndAckServer() gọi mọi IDeletable.DeleteData().",
+    "Song song: BanService.SecondUpdate() hỏi /v1/get-user-banned-status, RemoteTimeService gọi /v1/get-time lấy giờ chuẩn, PlayIntegrityManager gửi token tới /v1/validate-play-integrity."
+  ],
+  "reward_tables": [
+    {
+      "title": "THÀNH TÍCH GAME CENTER (iOS)",
+      "columns": ["Mốc", "Điều kiện", "Phần thưởng"],
+      "rows": [
+        ["Thành tích 1", "Đạt level 50 (achievement_min_level = 50)", "Mở thành tích 'achievement_level_' trên Game Center"],
+        ["Thành tích 2", "Đạt level 150 (bước 100, suy luận)", "Mở thành tích Game Center"],
+        ["Thành tích 3", "Đạt level 250 (bước 100, suy luận)", "Mở thành tích Game Center"],
+        ["Các mốc sau", "Mỗi 100 level tiếp theo (achievement_level_interval = 100, suy luận)", "Mở thành tích Game Center"],
+        ["Bảng xếp hạng", "Mỗi lần thắng level (OnLevelWin → UpdateLeaderboard)", "Cập nhật điểm trên 'leaderboard_level'"]
+      ]
+    },
+    {
+      "title": "TRẠNG THÁI TÀI KHOẢN (enum)",
+      "columns": ["Mốc", "Điều kiện", "Phần thưởng"],
+      "rows": [
+        ["AccountDeleteStatus.None", "Giá trị 0", "Tài khoản bình thường"],
+        ["AccountDeleteStatus.InProgress", "Giá trị 1", "Đang chờ xóa, còn hủy được"],
+        ["AccountDeleteStatus.Deleted", "Giá trị 2", "Đã xóa, phải cài lại game để tạo tài khoản mới"],
+        ["BanState.Unkown", "Giá trị 0", "Chưa biết trạng thái"],
+        ["BanState.Banned", "Giá trị 1", "BanPopup chặn chơi"],
+        ["BanState.Free", "Giá trị 2", "Không bị khóa"],
+        ["AppleLoginResult / FacebookLoginResult", "Success=0, Cancel=1, Fail=2", "Quyết định popup kết quả hiển thị"]
+      ]
+    }
+  ],
+  "key_numbers": [
+    {"label": "Timeout request đăng nhập", "value": "3 giây", "source": "LoginRemoteService._timeout"},
+    {"label": "Timeout mặc định HTTP", "value": "5 giây", "source": "HttpProxy.timeoutInSeconds"},
+    {"label": "Timeout kết nối HTTP", "value": "2 giây", "source": "HttpProxy.connectionTimeOutInSeconds"},
+    {"label": "Số lần thử lại HTTP mặc định", "value": "0", "source": "HttpProxy.retryCount"},
+    {"label": "Giới hạn độ dài log", "value": "90 ký tự", "source": "HttpProxy.LimitLength maxLength"},
+    {"label": "Chặn request khi chưa xác thực", "value": "true", "source": "HttpProxy.preventRequestIfNotAuthorized"},
+    {"label": "Gắn header thông tin thiết bị", "value": "false (mặc định)", "source": "HttpProxy.addDeviceInfoHeaders"},
+    {"label": "Level đầu tiên có thành tích Game Center", "value": "50", "source": "AppleGameCenterService.achievement_min_level"},
+    {"label": "Khoảng cách level giữa hai thành tích", "value": "100", "source": "AppleGameCenterService.achievement_level_interval"},
+    {"label": "Id bảng xếp hạng Game Center", "value": "leaderboard_level", "source": "AppleGameCenterService.leaderboard_id"},
+    {"label": "Tiền tố id thành tích", "value": "achievement_level_", "source": "AppleGameCenterService.achievement_id_prefix"},
+    {"label": "Câu xác nhận xóa tài khoản", "value": "\"delete my account\"", "source": "AccountDeleteConfirmationPopup._deleteText"},
+    {"label": "Thời hạn hoàn tất xóa tài khoản", "value": "15 ngày", "source": "DeleteAccountDescriptionText"},
+    {"label": "Phiên bản Facebook Graph API", "value": "v19.0", "source": "FacebookLoginService"},
+    {"label": "Quyền Facebook xin cấp", "value": "public_profile, user_friends", "source": "FacebookLoginService.FBPermissions"},
+    {"label": "Tiền tố tên mặc định", "value": "player_", "source": "SyncService.IsNameChanged"},
+    {"label": "Chu kỳ đồng bộ dữ liệu", "value": "(server)", "source": "ServerCommunicationModel.CommunicationIntervalInSeconds"},
+    {"label": "Trần cooldown thử lại đăng nhập", "value": "(chưa xác định, đặt trong constructor)", "source": "LoginService._maxCoolDownDurationAsSeconds"},
+    {"label": "Thời gian giữ splash tối thiểu", "value": "(chưa xác định)", "source": "LoginService._splashShowDurationMs"},
+    {"label": "Thời gian chờ người chơi rảnh tay", "value": "(chưa xác định)", "source": "LoginService._idleEndWaitDurationMs"},
+    {"label": "Số endpoint nhóm tài khoản", "value": "14 đường dẫn (/v1/login … /v2/get-profile)", "source": "BackendEnvironmentConfig.asset"}
+  ],
+  "config_highlights": [
+    {"key": "GrandUserId (PlayerPrefs)", "value": "chuỗi id thiết bị", "meaning": "Định danh tài khoản ẩn danh trên máy, có biến thể 'GrandUserId_'"},
+    {"key": "apple_user_authentication_data (PlayerPrefs)", "value": "dữ liệu xác thực Apple", "meaning": "Cho phép đăng nhập nhanh lần sau"},
+    {"key": "apple_user_identification_data (PlayerPrefs)", "value": "định danh người dùng Apple", "meaning": "Lưu userId/tên từ Apple"},
+    {"key": "ProfileNameChangeClicked (PlayerPrefs)", "value": "bool", "meaning": "Người chơi đã mở màn đổi tên hay chưa"},
+    {"key": "ProfileNameChangeForceCount (PlayerPrefs)", "value": "int", "meaning": "Số lần đã ép người chơi đổi tên"},
+    {"key": "ServerCommunicationModel.CommunicationIntervalInSeconds", "value": "(server)", "meaning": "Chu kỳ đồng bộ dữ liệu lên server"},
+    {"key": "AccountDeleteEnabled", "value": "(server)", "meaning": "Bật chức năng xóa tài khoản"},
+    {"key": "IsAppleSignInEnabled / IsGameCenterEnabled", "value": "(server)", "meaning": "Bật đăng nhập Apple và Game Center"},
+    {"key": "IsAndroidIapVerificationEnabled / RestorePurchaseEnabled", "value": "(server)", "meaning": "Kiểm chứng mua hàng Android và khôi phục giao dịch"},
+    {"key": "IsFlatBuffer", "value": "(server)", "meaning": "Dùng FlatBuffers thay JSON cho một số API (login, leaderboard)"},
+    {"key": "HttpConfig.UsePermanentLeaderboardV2", "value": "(server)", "meaning": "Chuyển endpoint bảng xếp hạng sang V2"},
+    {"key": "BackendEnvironmentConfig.CurrentSettings", "value": "testEnvironmentSettings | productionEnvironmentSettings", "meaning": "Chọn bộ URL môi trường backend"},
+    {"key": "LoginResponse", "value": "UserId, UserPublicId, UserName, Token, Progress, ForceFetch, CountryCode, DeleteStatus", "meaning": "Phản hồi đăng nhập"},
+    {"key": "magicsort.schemas.v1.login.LoginResponse (FlatBuffers)", "value": "user_id, user_public_id, user_name, token, progress (long), force_fetch (bool)", "meaning": "Bản FlatBuffers của phản hồi đăng nhập"},
+    {"key": "SyncRequestModel", "value": "Progress (int), Data (JRaw)", "meaning": "Gói dữ liệu đẩy lên /v1/sync-data"},
+    {"key": "GetDataResponse", "value": "Data (JRaw)", "meaning": "Gói dữ liệu tải về từ /v1/get-data"},
+    {"key": "ChangeProfileRequestModel", "value": "UserName, ImageId, TokenId, FrameId, NameStyleId, FrameIdExpireTime, NameStyleIdExpireTime", "meaning": "Cập nhật hồ sơ lên server; hai trường ExpireTime dành cho vật phẩm có hạn (Magic Pass)"},
+    {"key": "FacebookSyncRequestModel", "value": "FacebookId, FacebookImageUrl, FacebookName, FriendsList", "meaning": "Liên kết Facebook và gửi danh sách bạn"},
+    {"key": "AppleSyncRequestModel", "value": "AppleId", "meaning": "Liên kết Apple ID"},
+    {"key": "PlayerModel (phần tài khoản)", "value": "UserId, Level, SessionCount, FirstInstallApplicationVersion, FirstInstallVersion753OrEarlier, FirstOpenTime, AdjustAttributionModel, FirstCpmAsDollar, LastCpmAsDollar", "meaning": "Dữ liệu tài khoản/analytics lưu cục bộ"},
+    {"key": "AccountDeleteDataModel.DeletionStatus", "value": "None (mặc định)", "meaning": "Trạng thái xóa lưu cục bộ và đồng bộ, sync name 'AccountDeleteDataModel'"},
+    {"key": "PlayIntegrityHelper JNI", "value": "com.grandgames.integrity.PlayIntegrityUtil, setActivity, requestToken", "meaning": "Lớp Java xin token Play Integrity (chỉ Android)"},
+    {"key": "Facebook Graph endpoints", "value": "me?fields=id,email,first_name; me/friends?fields=id,name; /picture?type=large", "meaning": "Các lời gọi Graph API lấy thông tin và bạn bè"},
+    {"key": "Endpoint nhóm tài khoản", "value": "/v1/login, /v1/sync-data, /v1/get-data, /v1/change-profile, /v1/fb-login, /v1/apple-login, /v1/delete-user, /v1/force-fetched, /v1/get-time, /v1/get-user-banned-status, /v1/validate-play-integrity, /v1/delete-request, /v1/cancel-delete-request, /v2/get-profile", "meaning": "Toàn bộ đường dẫn API của module (host nằm trong asset)"},
+    {"key": "Sự kiện analytics", "value": "facebook_disconnected, apple_disconnected (kèm game_state)", "meaning": "Ghi nhận khi người chơi ngắt liên kết mạng xã hội"}
+  ],
+  "tips": [
+    "Đăng nhập có timeout rất ngắn (3 giây) nên game vào được Home cả khi mạng kém, rồi thử lại nền.",
+    "Việc restart game sau ForceFetch được hoãn tới lúc người chơi rảnh tay để tránh cắt ngang trải nghiệm.",
+    "Xóa tài khoản thiết kế nhiều lớp ma sát (đọc cảnh báo, gõ câu xác nhận, thời gian chờ 15 ngày, cho hủy) để giảm mất người chơi do bốc đồng.",
+    "Ép đổi tên có giới hạn đếm lần thay vì ép vô hạn, tránh làm phiền người chơi không muốn đặt tên."
+  ],
+  "categories": ["Meta", "Xã hội", "Live-ops"]
+}

@@ -1,0 +1,401 @@
+[
+  {
+    "id": "MS-CURRENT-20261116-01",
+    "title": "Nguồn current-build có sẵn trên host",
+    "gap_ids": [],
+    "status": "verified_host_build_source",
+    "conclusion": "MagicSort_export/apk base+arm64 split có manifest versionCode3129,versionName0.0.3129,packagecom.grandgames.magicsort. Bộ MagicSort_work là3162 và không dùng làm current. Metadata và lib3129 đã trích nguyên byte từ ZIP, có SHA256. Không khẳng định hostAPK byte-identical với installed APK nếu chưa hash installed.",
+    "remaining": "Đối chiếu installed APK hash bằng read-only device API khi root có phiên phù hợp; không control desktop.",
+    "build": "0.0.3129 ARM64",
+    "runtime_verified": false,
+    "evidence": [
+      {
+        "file": "facts/review_20261116/host_apk_inventory.json",
+        "sha256": "ce2f577874428ef72013e1c086d67a75f30db9a158e9413910a215f2dc03bf75",
+        "kind": "binary_AXML_manifest_and_ZIP_entry_inventory"
+      }
+    ]
+  },
+  {
+    "id": "MS-CURRENT-20261116-02",
+    "title": "SessionTimeout30phút đúng build3129",
+    "gap_ids": [
+      "MS-Analytics-G004"
+    ],
+    "status": "resolved_static_code_current_build",
+    "conclusion": "Constructor SessionTracker ởVA0x38FE248: FMOV D0,#30.0 tại0x38FE2C0; BL System.TimeSpan.FromMinutes tại0x38FE2C8; STR X0,[X19,#0x28] tại0x38FE2CC. Metadata current đặt SessionTimeout ở0x28. Chốt hằng constructor30phút, giải missing scalar; không gọi session thực luôn đúng30phút vì còn focus/time comparison.",
+    "remaining": "Runtime clock/focus/session emission vẫn cần case riêng; không phải runtime pass.",
+    "build": "0.0.3129 ARM64",
+    "runtime_verified": false,
+    "evidence": [
+      {
+        "file": "facts/review_20261116/current_build_dump/dump.cs",
+        "line": 210332,
+        "end_line": 210377,
+        "sha256": "47edf53b3a3e0e82dd81316c145d0cebde72ad2bc5d2dfe3a35492e9cfbd2df2",
+        "text": "public class SessionTracker : MonoBehaviour // TypeDefIndex: 4964\n{\n\t// Fields\n\tprivate float _sessionDuration; // 0x18\n\tprivate int _session; // 0x1C\n\tprivate DateTime _lastQuitTime; // 0x20\n\tprivate const string LastApplicationQuitTimeKey = \"last_application_quit\";\n\tprivate const string LastSessionDurationKey = \"last_session_duration\";\n\tprivate readonly TimeSpan SessionTimeout; // 0x28\n\tprivate const string SessionCounterKey = \"grand_session_counter\";\n\n\t// Methods\n\n\t// RVA: 0x38FDD78 Offset: 0x38FDD78 VA: 0x38FDD78\n\tprivate void Awake() { }\n\n\t// RVA: 0x38FDF04 Offset: 0x38FDF04 VA: 0x38FDF04\n\tpublic void Update() { }\n\n\t// RVA: 0x38FDF30 Offset: 0x38FDF30 VA: 0x38FDF30\n\tprivate void OnApplicationFocus(bool hasFocus) { }\n\n\t// RVA: 0x38FE17C Offset: 0x38FE17C VA: 0x38FE17C\n\tprivate void OnApplicationQuit() { }\n\n\t// RVA: 0x38FDF88 Offset: 0x38FDF88 VA: 0x38FDF88\n\tprivate void CheckAndStartSession() { }\n\n\t// RVA: 0x38FE180 Offset: 0x38FE180 VA: 0x38FE180\n\tprivate void StartNewSession() { }\n\n\t// RVA: 0x38FE088 Offset: 0x38FE088 VA: 0x38FE088\n\tprivate void SaveLastData() { }\n\n\t// RVA: 0x38FDDEC Offset: 0x38FDDEC VA: 0x38FDDEC\n\tprivate void LoadLastData() { }\n\n\t// RVA: 0x38FE220 Offset: 0x38FE220 VA: 0x38FE220\n\tpublic int GetSessionDurationInSeconds() { }\n\n\t// RVA: 0x38FE240 Offset: 0x38FE240 VA: 0x38FE240\n\tpublic int GetSession() { }\n\n\t// RVA: 0x38FE248 Offset: 0x38FE248 VA: 0x38FE248\n\tpublic void .ctor() { }\n}",
+        "build": "0.0.3129 ARM64",
+        "kind": "metadata_declaration_not_method_body"
+      },
+      {
+        "file": "facts/review_20261116/current_build_inputs/libil2cpp.so",
+        "sha256": "d901f86380bdecae3a8ec5cf9a9b60acc5132d50dfcf7ec1f606de807e22b2d5",
+        "build": "0.0.3129 ARM64",
+        "kind": "native_instruction_bytes",
+        "start_va": "0x38fe248",
+        "end_va_exclusive": "0x38fe2e4",
+        "file_offset": "0x38fe248",
+        "bytes_sha256": "a168770cc15a1033f5fcdffc98666002becbd4dc261a64dab092e4e8db67b57c"
+      }
+    ]
+  },
+  {
+    "id": "MS-CURRENT-20261116-03",
+    "title": "HttpProxyFactoryParams defaults3/50/50 đúng3129",
+    "gap_ids": [
+      "MS-LiveOps-G004"
+    ],
+    "status": "partial_static_code_current_build",
+    "conclusion": "Constructor VA0x38C782C: literal pair int32[3,50] tạiVA0x3D94C18 được LDR D0 rồi STR D0 vào self+0x10 (RetryCount3,TimeOut50); MOV W8,#50 rồi STR W8 vào+0x18(GlobalTimeOut50). Metadata current xác nhận offsets. Đây là defaults của parameter object, chưa phải mọi request effective hoặc đơn vị timeout đã trace qua consumer.",
+    "remaining": "Còn CreateForLogin/Create caller overrides và Get policy units/context; không thay một request default5s/2s bằng factory50 một cách toàn cục.",
+    "build": "0.0.3129 ARM64",
+    "runtime_verified": false,
+    "evidence": [
+      {
+        "file": "facts/review_20261116/current_build_dump/dump.cs",
+        "line": 15061,
+        "end_line": 15116,
+        "sha256": "47edf53b3a3e0e82dd81316c145d0cebde72ad2bc5d2dfe3a35492e9cfbd2df2",
+        "text": "public class HttpProxyFactoryParams // TypeDefIndex: 421\n{\n\t// Fields\n\t[CompilerGenerated]\n\tprivate int <RetryCount>k__BackingField; // 0x10\n\t[CompilerGenerated]\n\tprivate int <TimeOut>k__BackingField; // 0x14\n\t[CompilerGenerated]\n\tprivate int <GlobalTimeOut>k__BackingField; // 0x18\n\t[CompilerGenerated]\n\tprivate JsonSerializerSettings <JsonSerializerSettings>k__BackingField; // 0x20\n\tpublic TokenService TokenService; // 0x28\n\n\t// Properties\n\tpublic int RetryCount { get; set; }\n\tpublic int TimeOut { get; set; }\n\tpublic int GlobalTimeOut { get; set; }\n\tpublic JsonSerializerSettings JsonSerializerSettings { get; set; }\n\n\t// Methods\n\n\t[CompilerGenerated]\n\t// RVA: 0x38C77EC Offset: 0x38C77EC VA: 0x38C77EC\n\tpublic int get_RetryCount() { }\n\n\t[CompilerGenerated]\n\t// RVA: 0x38C77F4 Offset: 0x38C77F4 VA: 0x38C77F4\n\tpublic void set_RetryCount(int value) { }\n\n\t[CompilerGenerated]\n\t// RVA: 0x38C77FC Offset: 0x38C77FC VA: 0x38C77FC\n\tpublic int get_TimeOut() { }\n\n\t[CompilerGenerated]\n\t// RVA: 0x38C7804 Offset: 0x38C7804 VA: 0x38C7804\n\tpublic void set_TimeOut(int value) { }\n\n\t[CompilerGenerated]\n\t// RVA: 0x38C780C Offset: 0x38C780C VA: 0x38C780C\n\tpublic int get_GlobalTimeOut() { }\n\n\t[CompilerGenerated]\n\t// RVA: 0x38C7814 Offset: 0x38C7814 VA: 0x38C7814\n\tpublic void set_GlobalTimeOut(int value) { }\n\n\t[CompilerGenerated]\n\t// RVA: 0x38C781C Offset: 0x38C781C VA: 0x38C781C\n\tpublic JsonSerializerSettings get_JsonSerializerSettings() { }\n\n\t[CompilerGenerated]\n\t// RVA: 0x38C7824 Offset: 0x38C7824 VA: 0x38C7824\n\tpublic void set_JsonSerializerSettings(JsonSerializerSettings value) { }\n\n\t// RVA: 0x38C782C Offset: 0x38C782C VA: 0x38C782C\n\tpublic void .ctor() { }\n}",
+        "build": "0.0.3129 ARM64",
+        "kind": "metadata_declaration_not_method_body"
+      },
+      {
+        "file": "facts/review_20261116/current_build_inputs/libil2cpp.so",
+        "sha256": "d901f86380bdecae3a8ec5cf9a9b60acc5132d50dfcf7ec1f606de807e22b2d5",
+        "build": "0.0.3129 ARM64",
+        "kind": "native_instruction_bytes",
+        "start_va": "0x38c782c",
+        "end_va_exclusive": "0x38c7848",
+        "file_offset": "0x38c782c",
+        "bytes_sha256": "07d1e0fecca938b24026859d6f160f4c18e617da8d43338b381c37207bae76e8"
+      },
+      {
+        "file": "facts/review_20261116/current_build_inputs/libil2cpp.so",
+        "sha256": "d901f86380bdecae3a8ec5cf9a9b60acc5132d50dfcf7ec1f606de807e22b2d5",
+        "build": "0.0.3129 ARM64",
+        "kind": "native_instruction_bytes",
+        "start_va": "0x3d94c18",
+        "end_va_exclusive": "0x3d94c20",
+        "file_offset": "0x3d94c18",
+        "bytes_sha256": "e7a282d897df827f145713dac7693e466127bfae4a6cbdd9a23aa32f25ade3a9"
+      }
+    ]
+  },
+  {
+    "id": "MS-CURRENT-20261116-04",
+    "title": "Compensation enum current có tên0/1",
+    "gap_ids": [
+      "MS-Compensation-G001"
+    ],
+    "status": "partial_static_code_current_build",
+    "conclusion": "Metadata0.0.3129 định nghĩa CompensationStateService.CompensationState: AllClaimed=0,ShouldClaim=1. Giải exact symbolic labels còn thiếu; metadata không chứng minh grant/ack backend hoặc current GetState behavior.",
+    "remaining": "Current GetState/claim transport và runtime ack vẫn chưa review; chỉ giải phần tên enum, không blanket-close full lifecycle.",
+    "build": "0.0.3129 ARM64",
+    "runtime_verified": false,
+    "evidence": [
+      {
+        "file": "facts/review_20261116/current_build_dump/dump.cs",
+        "line": 126403,
+        "end_line": 126409,
+        "sha256": "47edf53b3a3e0e82dd81316c145d0cebde72ad2bc5d2dfe3a35492e9cfbd2df2",
+        "text": "private enum CompensationStateService.CompensationState // TypeDefIndex: 3150\n{\n\t// Fields\n\tpublic int value__; // 0x0\n\tpublic const CompensationStateService.CompensationState AllClaimed = 0;\n\tpublic const CompensationStateService.CompensationState ShouldClaim = 1;\n}",
+        "build": "0.0.3129 ARM64",
+        "kind": "metadata_declaration_not_method_body"
+      }
+    ]
+  },
+  {
+    "id": "MS-CURRENT-20261116-05",
+    "title": "PawTouch current enums đủ5+2states",
+    "gap_ids": [
+      "MS-PawTouchOffer-G001"
+    ],
+    "status": "partial_static_code_current_build",
+    "conclusion": "Metadata0.0.3129: PawTouchOfferState Disabled0,Active1,Claimed2,WaitForInvalidation3,InvalidEvent4; PawTouchOfferContainerState NotVisible0,Visible1. Đây là symbolic mapping thực, không đặt tên suy đoán từ old raw branch.",
+    "remaining": "Current eligibility/transition/gating body và event instance vẫn cần đối chiếu; không dùng enum declaration thành state-machine runtime pass.",
+    "build": "0.0.3129 ARM64",
+    "runtime_verified": false,
+    "evidence": [
+      {
+        "file": "facts/review_20261116/current_build_dump/dump.cs",
+        "line": 125635,
+        "end_line": 125644,
+        "sha256": "47edf53b3a3e0e82dd81316c145d0cebde72ad2bc5d2dfe3a35492e9cfbd2df2",
+        "text": "private enum PawTouchOfferStateService.PawTouchOfferState // TypeDefIndex: 3127\n{\n\t// Fields\n\tpublic int value__; // 0x0\n\tpublic const PawTouchOfferStateService.PawTouchOfferState Disabled = 0;\n\tpublic const PawTouchOfferStateService.PawTouchOfferState Active = 1;\n\tpublic const PawTouchOfferStateService.PawTouchOfferState Claimed = 2;\n\tpublic const PawTouchOfferStateService.PawTouchOfferState WaitForInvalidation = 3;\n\tpublic const PawTouchOfferStateService.PawTouchOfferState InvalidEvent = 4;\n}",
+        "build": "0.0.3129 ARM64",
+        "kind": "metadata_declaration_not_method_body"
+      },
+      {
+        "file": "facts/review_20261116/current_build_dump/dump.cs",
+        "line": 125647,
+        "end_line": 125653,
+        "sha256": "47edf53b3a3e0e82dd81316c145d0cebde72ad2bc5d2dfe3a35492e9cfbd2df2",
+        "text": "private enum PawTouchOfferStateService.PawTouchOfferContainerState // TypeDefIndex: 3128\n{\n\t// Fields\n\tpublic int value__; // 0x0\n\tpublic const PawTouchOfferStateService.PawTouchOfferContainerState NotVisible = 0;\n\tpublic const PawTouchOfferStateService.PawTouchOfferContainerState Visible = 1;\n}",
+        "build": "0.0.3129 ARM64",
+        "kind": "metadata_declaration_not_method_body"
+      }
+    ]
+  },
+  {
+    "id": "MS-CURRENT-20261116-06",
+    "title": "Policy scalar và backoff đã giải trên3129",
+    "gap_ids": [
+      "MS-LiveOps-G003"
+    ],
+    "status": "partial_static_code_current_build",
+    "conclusion": "ProxyFactoryParams constructor0x38C7B94 ghi packed64bit0x40A0000000000003 vào self+0x18: Retry3 và float TimeOut5.0(+0x1C). PolicyGet đọc TimeOut, gọi TimeSpan.FromSeconds→TimeoutAsync; Retry>=1 vào WaitAndRetryAsync, nhỏ hơn dùng NoOp. Retry lambda0x38C7FA4 đổi sleepduration(int) sang float, nhân FMOV S1,#0.75, đổi double và gọi FromSeconds: delay=0.75*n giây. Outer timeout tạo double50.0 qua MOVZ X8,#0x4049,LSL48 rồi FromSeconds/TimeoutAsync; không phải global scalar mất ABI nữa. Những hằng này chỉ thuộc policy method đã chỉ định.",
+    "remaining": "Scalar/units/backoff đã giải. Exception/result predicate và mọi caller override/selectedrequest runtime còn cần review; không gọi full network policy matrix runtime pass.",
+    "build": "0.0.3129 ARM64",
+    "runtime_verified": false,
+    "evidence": [
+      {
+        "file": "facts/review_20261116/current_build_dump/dump.cs",
+        "line": 15140,
+        "end_line": 15183,
+        "sha256": "47edf53b3a3e0e82dd81316c145d0cebde72ad2bc5d2dfe3a35492e9cfbd2df2",
+        "text": "public class ProxyFactoryParams // TypeDefIndex: 423\n{\n\t// Fields\n\t[CompilerGenerated]\n\tprivate AsyncTimeoutPolicy<HTTPResponse> <TimeoutPolicy>k__BackingField; // 0x10\n\t[CompilerGenerated]\n\tprivate int <Retry>k__BackingField; // 0x18\n\t[CompilerGenerated]\n\tprivate float <TimeOut>k__BackingField; // 0x1C\n\n\t// Properties\n\tpublic AsyncTimeoutPolicy<HTTPResponse> TimeoutPolicy { get; set; }\n\tpublic int Retry { get; set; }\n\tpublic float TimeOut { get; set; }\n\n\t// Methods\n\n\t[CompilerGenerated]\n\t// RVA: 0x38C7B64 Offset: 0x38C7B64 VA: 0x38C7B64\n\tpublic AsyncTimeoutPolicy<HTTPResponse> get_TimeoutPolicy() { }\n\n\t[CompilerGenerated]\n\t// RVA: 0x38C7B6C Offset: 0x38C7B6C VA: 0x38C7B6C\n\tpublic void set_TimeoutPolicy(AsyncTimeoutPolicy<HTTPResponse> value) { }\n\n\t[CompilerGenerated]\n\t// RVA: 0x38C7B74 Offset: 0x38C7B74 VA: 0x38C7B74\n\tpublic int get_Retry() { }\n\n\t[CompilerGenerated]\n\t// RVA: 0x38C7B7C Offset: 0x38C7B7C VA: 0x38C7B7C\n\tpublic void set_Retry(int value) { }\n\n\t[CompilerGenerated]\n\t// RVA: 0x38C7B84 Offset: 0x38C7B84 VA: 0x38C7B84\n\tpublic float get_TimeOut() { }\n\n\t[CompilerGenerated]\n\t// RVA: 0x38C7B8C Offset: 0x38C7B8C VA: 0x38C7B8C\n\tpublic void set_TimeOut(float value) { }\n\n\t// RVA: 0x38C7B94 Offset: 0x38C7B94 VA: 0x38C7B94\n\tpublic void .ctor() { }\n}",
+        "build": "0.0.3129 ARM64",
+        "kind": "metadata_declaration_not_method_body"
+      },
+      {
+        "file": "facts/review_20261116/current_build_dump/dump.cs",
+        "line": 15211,
+        "end_line": 15217,
+        "sha256": "47edf53b3a3e0e82dd81316c145d0cebde72ad2bc5d2dfe3a35492e9cfbd2df2",
+        "text": "public static class HttpRequestPolicyFactory // TypeDefIndex: 425\n{\n\t// Methods\n\n\t// RVA: 0x38C7BA8 Offset: 0x38C7BA8 VA: 0x38C7BA8\n\tpublic static IAsyncPolicy<HTTPResponse> Get(ProxyFactoryParams proxyFactoryParams) { }\n}",
+        "build": "0.0.3129 ARM64",
+        "kind": "metadata_declaration_not_method_body"
+      },
+      {
+        "file": "facts/review_20261116/current_build_inputs/libil2cpp.so",
+        "sha256": "d901f86380bdecae3a8ec5cf9a9b60acc5132d50dfcf7ec1f606de807e22b2d5",
+        "build": "0.0.3129 ARM64",
+        "kind": "native_instruction_bytes",
+        "start_va": "0x38c7b94",
+        "end_va_exclusive": "0x38c7ba8",
+        "file_offset": "0x38c7b94",
+        "bytes_sha256": "ce915129499aa9bf0b99b571b92b3e533105af1f7f526eab42564fc51d021c9b"
+      },
+      {
+        "file": "facts/review_20261116/current_build_inputs/libil2cpp.so",
+        "sha256": "d901f86380bdecae3a8ec5cf9a9b60acc5132d50dfcf7ec1f606de807e22b2d5",
+        "build": "0.0.3129 ARM64",
+        "kind": "native_instruction_bytes",
+        "start_va": "0x38c7ba8",
+        "end_va_exclusive": "0x38c7f0c",
+        "file_offset": "0x38c7ba8",
+        "bytes_sha256": "96f5818f30f94ded37a9438a036f6deb83779fb9315f0a658e2d10f12d625674"
+      },
+      {
+        "file": "facts/review_20261116/current_build_inputs/libil2cpp.so",
+        "sha256": "d901f86380bdecae3a8ec5cf9a9b60acc5132d50dfcf7ec1f606de807e22b2d5",
+        "build": "0.0.3129 ARM64",
+        "kind": "native_instruction_bytes",
+        "start_va": "0x38c7fa4",
+        "end_va_exclusive": "0x38c8008",
+        "file_offset": "0x38c7fa4",
+        "bytes_sha256": "73062ada8c768c58ea099a39857bdcfe2c1958ddeb242838431e7a559ada3c2f"
+      }
+    ]
+  },
+  {
+    "id": "MS-CURRENT-20261116-07",
+    "title": "D1delay90000giây và WelcomeBack truyền delaycaller3129",
+    "gap_ids": [
+      "MS-Notifications-G001",
+      "MS-WelcomeBack-G003"
+    ],
+    "status": "partial_static_code_current_build",
+    "conclusion": "SendD1RetNotification0x3A6A6F0 lấy _ret1NotificationConfig(+0x28), MOVZ W2,#24464/MOVK W2,#1,LSL16 tạo90000 và tailcall SendNotification. SendNotification dùng DateTime.Now.AddSeconds(delay) rồi GameNotificationsPlatform.ScheduleNotification; do đó90000giây=25giờ, không phải24giờ/86400. SendWelcomeBackNotification0x3A6A78C lấy config+0x60, chuyển W1(delaycaller) sangW2 rồi tailcall cùngsender; không có hằng welcome-delay riêng ở thunk.",
+    "remaining": "D1 và delegate-delay được chứng minh đúng3129; còn ledger các caller khác, notification asset text/IDs, WelcomeBack caller delay effective, OS permission/delivery runtime. Agent config đang extract assets; không giả định schedule=delivered.",
+    "build": "0.0.3129 ARM64",
+    "runtime_verified": false,
+    "evidence": [
+      {
+        "file": "facts/review_20261116/current_build_dump/dump.cs",
+        "line": 202335,
+        "end_line": 202438,
+        "sha256": "47edf53b3a3e0e82dd81316c145d0cebde72ad2bc5d2dfe3a35492e9cfbd2df2",
+        "text": "public class NotificationService : IRestartableService, IService, IInitializable, IDisposable // TypeDefIndex: 4833\n{\n\t// Fields\n\tprivate ISaveLoad<NotificationModel> _saveLoad; // 0x10\n\tprivate NotificationModel _model; // 0x18\n\tprivate LocalNotificationSo _lifeNotificationConfig; // 0x20\n\tprivate LocalNotificationSo _ret1NotificationConfig; // 0x28\n\tprivate LocalNotificationSo _streakTournamentEndNotificationConfig; // 0x30\n\tprivate LocalNotificationSo _weeklyTournamentEndNotificationConfig; // 0x38\n\tprivate LocalNotificationSo _jetpackRaceNotificationSo; // 0x40\n\tprivate LocalNotificationSo _skyJumpStartedAfterWinNotificationSo; // 0x48\n\tprivate LocalNotificationSo _skyJumpStartedAfterLoseNotificationSo; // 0x50\n\tprivate LocalNotificationSo _dailyStartedNotificationSo; // 0x58\n\tprivate LocalNotificationSo _welcomeBackNotificationSo; // 0x60\n\tprivate LocalNotificationSo _wheelOfFortuneSpinReminderNotificationSo; // 0x68\n\tprivate IPlayerService _playerService; // 0x70\n\tprivate GameNotificationsPlatform _gameNotificationsPlatform; // 0x78\n\tprivate bool _initializeStarted; // 0x80\n\tprivate bool _initialized; // 0x81\n\n\t// Methods\n\n\t// RVA: 0x3A69F54 Offset: 0x3A69F54 VA: 0x3A69F54\n\tpublic void .ctor(LocalNotificationSo lifeNotificationConfig, LocalNotificationSo ret1NotificationConfig, LocalNotificationSo streakTournamentEndNotificationConfig, LocalNotificationSo weeklyTournamentEndNotificationConfig, LocalNotificationSo jetpackRaceNotificationSo, LocalNotificationSo skyJumpStartedAfterWinNotificationSo, LocalNotificationSo skyJumpStartedAfterLoseNotificationSo, LocalNotificationSo dailyStartedNotificationSo, LocalNotificationSo welcomeBackNotificationSo, LocalNotificationSo wheelOfFortuneSpinReminderNotificationSo, IPlayerService playerService) { }\n\n\t// RVA: 0x3A6A074 Offset: 0x3A6A074 VA: 0x3A6A074 Slot: 4\n\tpublic void Initialize() { }\n\n\t[AsyncStateMachine(typeof(NotificationService.<RequestPermission>d__18))]\n\t// RVA: 0x3A6A294 Offset: 0x3A6A294 VA: 0x3A6A294\n\tpublic Task RequestPermission() { }\n\n\t// RVA: 0x3A6A384 Offset: 0x3A6A384 VA: 0x3A6A384\n\tprivate void SendNotification(LocalNotificationSo localNotificationSo, int delayAsSeconds) { }\n\n\t// RVA: 0x3A6A520 Offset: 0x3A6A520 VA: 0x3A6A520\n\tprivate void Cancel(int id) { }\n\n\t// RVA: 0x3A6A570 Offset: 0x3A6A570 VA: 0x3A6A570\n\tprivate void OnNotificationPreferenceChanged(bool isOn) { }\n\n\t// RVA: 0x3A6A554 Offset: 0x3A6A554 VA: 0x3A6A554\n\tpublic bool GetNotificationPreference() { }\n\n\t// RVA: 0x3A6A6F0 Offset: 0x3A6A6F0 VA: 0x3A6A6F0\n\tpublic void SendD1RetNotification() { }\n\n\t// RVA: 0x3A6A700 Offset: 0x3A6A700 VA: 0x3A6A700\n\tpublic void SendLifeNotification(int delayAsSeconds) { }\n\n\t// RVA: 0x3A6A710 Offset: 0x3A6A710 VA: 0x3A6A710\n\tpublic void SendStreakTournamentEndNotification(int delayAsSeconds) { }\n\n\t// RVA: 0x3A6A720 Offset: 0x3A6A720 VA: 0x3A6A720\n\tpublic void SendWeeklyTournamentEndNotification(int delayAsSeconds) { }\n\n\t// RVA: 0x3A6A730 Offset: 0x3A6A730 VA: 0x3A6A730\n\tpublic void SendJetpackRaceEndNotification(int delayAsSeconds) { }\n\n\t// RVA: 0x3A6A740 Offset: 0x3A6A740 VA: 0x3A6A740\n\tpublic void SendSkyJumpStartedAfterWinNotification(int delayAsSeconds) { }\n\n\t// RVA: 0x3A6A750 Offset: 0x3A6A750 VA: 0x3A6A750\n\tpublic void CancelSkyJumpStartedAfterWinNotification() { }\n\n\t// RVA: 0x3A6A76C Offset: 0x3A6A76C VA: 0x3A6A76C\n\tpublic void SendSkyJumpStartedAfterLoseNotification(int delayAsSeconds) { }\n\n\t// RVA: 0x3A6A77C Offset: 0x3A6A77C VA: 0x3A6A77C\n\tpublic void SendDailyStartedNotification(int delayAsSeconds) { }\n\n\t// RVA: 0x3A6A78C Offset: 0x3A6A78C VA: 0x3A6A78C\n\tpublic void SendWelcomeBackNotification(int delayAsSeconds) { }\n\n\t// RVA: 0x3A6A79C Offset: 0x3A6A79C VA: 0x3A6A79C\n\tpublic void CancelDailyNotification() { }\n\n\t// RVA: 0x3A6A7B8 Offset: 0x3A6A7B8 VA: 0x3A6A7B8\n\tpublic void CancelSkyJumpStartedAfterLoseNotification() { }\n\n\t// RVA: 0x3A6A7D4 Offset: 0x3A6A7D4 VA: 0x3A6A7D4\n\tpublic void CancelJetpackRaceNotification() { }\n\n\t// RVA: 0x3A6A7F0 Offset: 0x3A6A7F0 VA: 0x3A6A7F0\n\tpublic void CancelStreakTournamentNotification() { }\n\n\t// RVA: 0x3A6A80C Offset: 0x3A6A80C VA: 0x3A6A80C\n\tpublic void CancelLifeNotification() { }\n\n\t// RVA: 0x3A6A828 Offset: 0x3A6A828 VA: 0x3A6A828 Slot: 5\n\tpublic void Dispose() { }\n\n\t// RVA: 0x3A6A90C Offset: 0x3A6A90C VA: 0x3A6A90C\n\tpublic void SendSkyJumpWithStageStartedAfterLoseNotification(int delayAsSeconds) { }\n\n\t// RVA: 0x3A6A91C Offset: 0x3A6A91C VA: 0x3A6A91C\n\tpublic void CancelSkyJumpWithStageStartedAfterLoseNotification() { }\n\n\t// RVA: 0x3A6A920 Offset: 0x3A6A920 VA: 0x3A6A920\n\tpublic void SendWheelOfFortuneSpinReminderNotification(int amount, int delayAsSeconds) { }\n\n\t// RVA: 0x3A6AA00 Offset: 0x3A6AA00 VA: 0x3A6AA00\n\tpublic void CancelWheelOfFortuneSpinReminderNotification() { }\n}",
+        "build": "0.0.3129 ARM64",
+        "kind": "metadata_declaration_not_method_body"
+      },
+      {
+        "file": "facts/review_20261116/current_build_inputs/libil2cpp.so",
+        "sha256": "d901f86380bdecae3a8ec5cf9a9b60acc5132d50dfcf7ec1f606de807e22b2d5",
+        "build": "0.0.3129 ARM64",
+        "kind": "native_instruction_bytes",
+        "start_va": "0x3a6a384",
+        "end_va_exclusive": "0x3a6a520",
+        "file_offset": "0x3a6a384",
+        "bytes_sha256": "ed2612310d3163500a00e8c53b16d7c553ad275f8f122f98c0870895cf2b8792"
+      },
+      {
+        "file": "facts/review_20261116/current_build_inputs/libil2cpp.so",
+        "sha256": "d901f86380bdecae3a8ec5cf9a9b60acc5132d50dfcf7ec1f606de807e22b2d5",
+        "build": "0.0.3129 ARM64",
+        "kind": "native_instruction_bytes",
+        "start_va": "0x3a6a6f0",
+        "end_va_exclusive": "0x3a6a700",
+        "file_offset": "0x3a6a6f0",
+        "bytes_sha256": "ae65706eec5686cdb15a7b641c6b3b68c26f827627da147b019239b34565760b"
+      },
+      {
+        "file": "facts/review_20261116/current_build_inputs/libil2cpp.so",
+        "sha256": "d901f86380bdecae3a8ec5cf9a9b60acc5132d50dfcf7ec1f606de807e22b2d5",
+        "build": "0.0.3129 ARM64",
+        "kind": "native_instruction_bytes",
+        "start_va": "0x3a6a78c",
+        "end_va_exclusive": "0x3a6a79c",
+        "file_offset": "0x3a6a78c",
+        "bytes_sha256": "0b97ad39af2d593fef18ff885a658afd6baec45844b5418125df409aacd36a63"
+      }
+    ]
+  },
+  {
+    "id": "MS-CURRENT-20261116-08",
+    "title": "WindQuest vẫn không có exactnamedtype/method ở3129",
+    "gap_ids": [],
+    "status": "verified_current_named_symbol_absence",
+    "conclusion": "Case-insensitive WindQuest search toàn bộ dump.cs current và ScriptMethod names đều0hit. Đây là kiểm tra mới trên3129, thay vì dựa vào build3063. Không suy ra feature bị xoá/tắt, không có alias hoặc backend contract; remote config keys là nguồn độc lập do config agent audit.",
+    "remaining": "Giữ historical/remote-config dossier và feature unknown; cần instance/asset alias/server evidence, không đánh dấu removed.",
+    "build": "0.0.3129 ARM64",
+    "runtime_verified": false,
+    "evidence": [
+      {
+        "file": "facts/review_20261116/current_symbol_presence.json",
+        "sha256": "6496ec99dd3e7320274ed176df292703ed9724e8e283afda37b016a2b87f11cf",
+        "kind": "exhaustive_named_symbol_query",
+        "build": "0.0.3129 ARM64"
+      }
+    ]
+  },
+  {
+    "id": "MS-CURRENT-20261116-09",
+    "title": "Sáu adapter failure retry bodies khớp2^min(6,n)",
+    "gap_ids": [
+      "MS-Ads-G006"
+    ],
+    "status": "partial_static_code_current_build",
+    "conclusion": "Đã đọc native failure callback của Interstitial,NeftaInterstitial,MeticaInterstitial,Rewarded,NeftaRewarded,MeticaRewarded trên3129. Cả6: load retry counter, increment1/store; Math.Min(6,newcount); FMOV D0,#2.0 + Math.Pow; convert result sangfloat và CustomUpdater.AddDelayedAction. Delay numerical sequence2,4,8,16,32,64 rồi cap64; không phải6lần retry rồi dừng. Counter offsets0x10 cho4base/Nefta adapters,0x18 cho2Metica adapters. Đây là cùng formula thực ở6body, không gộp provider chỉ vì interface chung.",
+    "remaining": "Đã giải failure retry formula/cap theo provider. Còn reset counter on success, SDK init/show timeout/cancel lambdas, AddDelayedAction timing khi app pause và runtime adfill; không đánh dấu full adapter timeout matrix pass.",
+    "build": "0.0.3129 ARM64",
+    "runtime_verified": false,
+    "evidence": [
+      {
+        "file": "facts/review_20261116/current_build_inputs/libil2cpp.so",
+        "sha256": "d901f86380bdecae3a8ec5cf9a9b60acc5132d50dfcf7ec1f606de807e22b2d5",
+        "build": "0.0.3129 ARM64",
+        "kind": "native_instruction_bytes",
+        "start_va": "0x37f3814",
+        "end_va_exclusive": "0x37f3904",
+        "file_offset": "0x37f3814",
+        "bytes_sha256": "6c36f73b63e12acd55ee05982e914db5aa328c3a6609570cc7715d64d9785bda"
+      },
+      {
+        "file": "facts/review_20261116/current_build_inputs/libil2cpp.so",
+        "sha256": "d901f86380bdecae3a8ec5cf9a9b60acc5132d50dfcf7ec1f606de807e22b2d5",
+        "build": "0.0.3129 ARM64",
+        "kind": "native_instruction_bytes",
+        "start_va": "0x37f5188",
+        "end_va_exclusive": "0x37f5278",
+        "file_offset": "0x37f5188",
+        "bytes_sha256": "ab812af9b5362c3919f84399622ef7616cabd32b191e9d0efa4ec2d91ca43552"
+      },
+      {
+        "file": "facts/review_20261116/current_build_inputs/libil2cpp.so",
+        "sha256": "d901f86380bdecae3a8ec5cf9a9b60acc5132d50dfcf7ec1f606de807e22b2d5",
+        "build": "0.0.3129 ARM64",
+        "kind": "native_instruction_bytes",
+        "start_va": "0x37fa840",
+        "end_va_exclusive": "0x37fa930",
+        "file_offset": "0x37fa840",
+        "bytes_sha256": "289042c54ce9b4309ea5f7d7018a75b133b65702b9ff896db769e79d60acc430"
+      },
+      {
+        "file": "facts/review_20261116/current_build_inputs/libil2cpp.so",
+        "sha256": "d901f86380bdecae3a8ec5cf9a9b60acc5132d50dfcf7ec1f606de807e22b2d5",
+        "build": "0.0.3129 ARM64",
+        "kind": "native_instruction_bytes",
+        "start_va": "0x37f6884",
+        "end_va_exclusive": "0x37f6974",
+        "file_offset": "0x37f6884",
+        "bytes_sha256": "55f177c3e616bc3b441a0e115874d0d68a51890c944a3ff03d56ebe97086262e"
+      },
+      {
+        "file": "facts/review_20261116/current_build_inputs/libil2cpp.so",
+        "sha256": "d901f86380bdecae3a8ec5cf9a9b60acc5132d50dfcf7ec1f606de807e22b2d5",
+        "build": "0.0.3129 ARM64",
+        "kind": "native_instruction_bytes",
+        "start_va": "0x37f8eb4",
+        "end_va_exclusive": "0x37f8fa4",
+        "file_offset": "0x37f8eb4",
+        "bytes_sha256": "53e5d95f99ca81985dec125181aa35b23d906976826621af9d4937efa8f3293d"
+      },
+      {
+        "file": "facts/review_20261116/current_build_inputs/libil2cpp.so",
+        "sha256": "d901f86380bdecae3a8ec5cf9a9b60acc5132d50dfcf7ec1f606de807e22b2d5",
+        "build": "0.0.3129 ARM64",
+        "kind": "native_instruction_bytes",
+        "start_va": "0x122767c",
+        "end_va_exclusive": "0x122776c",
+        "file_offset": "0x122767c",
+        "bytes_sha256": "f5ba6e718a65fb0f0d718e41c49e5606cf204e0999636f5ec5b716b51d474ad0"
+      }
+    ]
+  },
+  {
+    "id": "MS-CURRENT-20261116-10",
+    "title": "RemoteTime init10/0/300 đã đối chiếu3129",
+    "gap_ids": [
+      "MS-EventsFramework-G004"
+    ],
+    "status": "resolved_static_code_current_build",
+    "conclusion": "RemoteTimeService.Initialize3129: STRB WZR vào+0x3C (ByPassRemoteTimeCheck=false); load literal packed int32[10,0] và STR D0 vào+0x30→coolDown10,elapsed0; MOV W9,#300 và STR W9 vào+0x38→maxCoolDown300. Metadata current khớp offsets0x30/0x34/0x38/0x3C. Sau đó gọi GetAndSetRemoteTime và đăng ký AddSecondUpdate. Đây là init thực, không server time đã hợp lệ hoặc một request retry đã quan sát.",
+    "remaining": "Giữ scope constructor/init constants; remote response và cooldown progression runtime chưa được kiểm16/11.",
+    "build": "0.0.3129 ARM64",
+    "runtime_verified": false,
+    "evidence": [
+      {
+        "file": "facts/review_20261116/current_build_dump/dump.cs",
+        "line": 198139,
+        "end_line": 198197,
+        "sha256": "47edf53b3a3e0e82dd81316c145d0cebde72ad2bc5d2dfe3a35492e9cfbd2df2",
+        "text": "public class RemoteTimeService : IService, IInitializable, IDisposable, ISecondUpdate // TypeDefIndex: 4718\n{\n\t// Fields\n\tprivate HttpProxy _httpProxy; // 0x10\n\tprivate BackendEnvironmentConfig _backendEnvironmentConfig; // 0x18\n\tprivate CustomUpdater _customUpdater; // 0x20\n\t[CompilerGenerated]\n\tprivate DateTime <RemoteTime>k__BackingField; // 0x28\n\tprivate int _coolDownDurationAsSeconds; // 0x30\n\tprivate int _elapsedCoolDown; // 0x34\n\tprivate int _maxCoolDownDurationAsSeconds; // 0x38\n\t[CompilerGenerated]\n\tprivate bool <ByPassRemoteTimeCheck>k__BackingField; // 0x3C\n\n\t// Properties\n\tpublic DateTime RemoteTime { get; set; }\n\tpublic bool ByPassRemoteTimeCheck { get; set; }\n\n\t// Methods\n\n\t[CompilerGenerated]\n\t// RVA: 0x357FA94 Offset: 0x357FA94 VA: 0x357FA94\n\tpublic DateTime get_RemoteTime() { }\n\n\t[CompilerGenerated]\n\t// RVA: 0x357FA9C Offset: 0x357FA9C VA: 0x357FA9C\n\tprivate void set_RemoteTime(DateTime value) { }\n\n\t[CompilerGenerated]\n\t// RVA: 0x357FAA4 Offset: 0x357FAA4 VA: 0x357FAA4\n\tpublic bool get_ByPassRemoteTimeCheck() { }\n\n\t[CompilerGenerated]\n\t// RVA: 0x357FAAC Offset: 0x357FAAC VA: 0x357FAAC\n\tpublic void set_ByPassRemoteTimeCheck(bool value) { }\n\n\t// RVA: 0x357FAB8 Offset: 0x357FAB8 VA: 0x357FAB8\n\tpublic void .ctor(HttpProxy httpProxy, BackendEnvironmentConfig backendEnvironmentConfig, CustomUpdater customUpdater) { }\n\n\t// RVA: 0x357FB18 Offset: 0x357FB18 VA: 0x357FB18 Slot: 4\n\tpublic void Initialize() { }\n\n\t// RVA: 0x357FC64 Offset: 0x357FC64 VA: 0x357FC64 Slot: 5\n\tpublic void Dispose() { }\n\n\t// RVA: 0x357FC84 Offset: 0x357FC84 VA: 0x357FC84 Slot: 6\n\tpublic void SecondUpdate() { }\n\n\t// RVA: 0x3572F80 Offset: 0x3572F80 VA: 0x3572F80\n\tpublic bool IsRemoteDaySameWithLocalDay() { }\n\n\t[AsyncStateMachine(typeof(RemoteTimeService.<GetAndSetRemoteTime>d__19))]\n\t// RVA: 0x357FBAC Offset: 0x357FBAC VA: 0x357FBAC\n\tprivate void GetAndSetRemoteTime() { }\n\n\t[AsyncStateMachine(typeof(RemoteTimeService.<GetRemoteTime>d__20))]\n\t// RVA: 0x357FCD0 Offset: 0x357FCD0 VA: 0x357FCD0\n\tprivate Task<ApiResponse<RemoteTimeResponse>> GetRemoteTime() { }\n}",
+        "build": "0.0.3129 ARM64",
+        "kind": "metadata_declaration_not_method_body"
+      },
+      {
+        "file": "facts/review_20261116/current_build_inputs/libil2cpp.so",
+        "sha256": "d901f86380bdecae3a8ec5cf9a9b60acc5132d50dfcf7ec1f606de807e22b2d5",
+        "build": "0.0.3129 ARM64",
+        "kind": "native_instruction_bytes",
+        "start_va": "0x357fb18",
+        "end_va_exclusive": "0x357fba8",
+        "file_offset": "0x357fb18",
+        "bytes_sha256": "8fd5f2b720ba103efa22f267aeb47b7441eff66a90856e14b6655b4ef038a935"
+      },
+      {
+        "file": "facts/review_20261116/current_build_inputs/libil2cpp.so",
+        "sha256": "d901f86380bdecae3a8ec5cf9a9b60acc5132d50dfcf7ec1f606de807e22b2d5",
+        "build": "0.0.3129 ARM64",
+        "kind": "native_instruction_bytes",
+        "start_va": "0x3d4de60",
+        "end_va_exclusive": "0x3d4de68",
+        "file_offset": "0x3d4de60",
+        "bytes_sha256": "a111f275cc2e7588000001d300a31e76336d15b9d314cd1a1d8f3d3556975eed"
+      }
+    ]
+  }
+]

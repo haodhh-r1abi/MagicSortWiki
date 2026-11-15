@@ -1,0 +1,705 @@
+{
+  "id": "DuckFestival",
+  "title": "Lễ hội Vịt (Duck Festival)",
+  "tagline": "Giải cứu vịt trong nhà vịt ngay trong màn chơi để leo thanh 20 mốc thưởng và đua bảng xếp hạng 10 hạng.",
+  "infobox": [
+    [
+      "Loại",
+      "Sự kiện solo"
+    ],
+    [
+      "Mở khóa",
+      "Level 110 (DuckFestivalConfigModel.json: EventOpenLevel)"
+    ],
+    [
+      "Thời lượng",
+      "Theo startTime / finishTime của giải, kèm joinWindowEndEpoch chặn tham gia muộn (server)"
+    ],
+    [
+      "Chu kỳ / lịch",
+      "Sự kiện giải đấu lặp lại, mỗi giải một tournamentID (server)"
+    ],
+    [
+      "Tham gia",
+      "Cá nhân, ghép bảng theo Elo, mỗi bảng có cả người thật và bot"
+    ],
+    [
+      "Vật phẩm thu thập",
+      "Vịt trong nhà vịt (DuckHouse), 6 màu DuckType Blue/Orange/Wine/Green/Red/Yellow"
+    ],
+    [
+      "Tiền tệ",
+      "Điểm vịt (Progress); vật phẩm Duck Multiplier là CurrencyType 16"
+    ],
+    [
+      "Thưởng chính",
+      "Tối đa 750 coin ở mốc cuối; hạng 1 nhận rương ChestType 13 gồm 1000 coin, 1 Undo, 1 Shuffle, 1 Extra Bottle"
+    ],
+    [
+      "Điều kiện / phụ thuộc",
+      "DuckFestivalConfigModel.IsEventEnabled = true; phải vượt preJoinScore để được ghép bảng"
+    ],
+    [
+      "Manager",
+      "DuckFestivalService"
+    ]
+  ],
+  "description": [
+    "Duck Festival là sự kiện thu thập gắn thẳng vào gameplay: nhà vịt (DuckHouse) xuất hiện như vật cản trong level và chứa vịt màu.",
+    "Mỗi con vịt giải cứu được cộng điểm sự kiện; số điểm mỗi con phụ thuộc độ khó level chứ không phụ thuộc màu vịt.",
+    "Điểm nuôi hai hệ thống song song: thanh tiến độ 20 mốc phần thưởng và bảng xếp hạng 10 hạng thưởng.",
+    "Trước khi được ghép bảng, người chơi phải qua giai đoạn pre-join: đạt mốc preJoinScore do server gửi về.",
+    "Việc ghép bảng dùng hệ Elo; mỗi bảng có capacity gồm cả người thật (realUserCount) và bot (botCount).",
+    "Vật phẩm Duck Multiplier (CurrencyType 16) được trao theo thời hạn và nhân đôi điểm vịt trong khoảng thời gian đó.",
+    "Có biến thể bảng thưởng riêng khi sự kiện Collection đang chạy, chèn gói thẻ vào cả mốc tiến độ lẫn thưởng hạng.",
+    "Thắng level trong Duck Festival còn tính vào nhiệm vụ WheelOfFortuneTaskType.DuckFestivalWin (5).",
+    "Trạng thái sự kiện chạy qua mười bước từ Disable tới Claim, quyết định icon lobby và loại popup hiển thị."
+  ],
+  "notes": [
+    "Lưu ý: NeededDuckCount của mỗi mốc là số vịt cộng thêm, không phải tổng tích lũy; tổng bảng mặc định là 232 vịt.",
+    "Lưu ý: bảng GaeRewardStepsWithCollection có tổng 272 vịt vì đổi cả phần thưởng lẫn nhiều ngưỡng NeededDuckCount.",
+    "Lưu ý: popup bị ép mở khi số mốc chưa nhận đạt MinimumClaimCountForForcePopUp = 4.",
+    "Lưu ý: HTTP status 425 (NotActiveStatusCode) dùng để phân biệt sự kiện không hoạt động với lỗi mạng thường.",
+    "Lưu ý: LastClaimedStep là Nullable<int>, giá trị null nghĩa là chưa nhận mốc nào.",
+    "Lưu ý: Initialize trong mã0.0.3063 dựng scoreByLevelDifficultyMap raw0→1,1→3,2→5 (Regular/Hard/SuperHard). Chưa xác minh từng difficulty trên runtime0.0.3129.",
+    "Lưu ý: ChestType 9, 11, 12, 13 chỉ là số trong config, client không có enum tương ứng (gaps).",
+    "Lưu ý: số vịt trong mỗi nhà vịt và tỉ lệ xuất hiện nhà vịt nằm ở dữ liệu level, không ở config sự kiện (gaps)."
+  ],
+  "how_it_works": [
+    "Sự kiện chỉ chạy khi IsEventEnabled = true (json default false) và level người chơi đạt EventOpenLevel = 110, nếu không trạng thái là Disable (0) hoặc ProgressNotEnough (1).",
+    "Client dựng _scoreByLevelDifficultyMap để biết mỗi vịt đáng bao nhiêu điểm theo độ khó level (Initialize).",
+    "Bước pre-join: client gửi tournamentType = 1 tới /v1/pre-join-duck-festival và nhận preJoinScore, trạng thái chuyển PreJoin (4).",
+    "Người chơi giải cứu vịt cho tới khi đạt preJoinScore, trạng thái chuyển PreJoinCompleted (5) (IsPreJoinProgressCompleted).",
+    "Client gửi /v1/join-duck-festival kèm progress; server ghép bảng theo Elo và trả leaderboardID, players, capacity, avgProgress, elo, previousElo.",
+    "Analytics duck_festival_joined ghi entrance_rank, elo, total_users, real_user_count, bot_count, avg_progress; joinWindowEndEpoch chặn tham gia muộn.",
+    "Trong màn chơi, mỗi nhà vịt bị phá sẽ giải phóng vịt (DuckType Blue=1 … Yellow=6); điểm được cộng theo độ khó level (OnDuckCollects, TryIncreaseScore).",
+    "Nếu đang có Duck Multiplier còn hiệu lực, điểm mỗi vịt được nhân và analytics duck_collected ghi is_x2_active cùng x2_remaining_time.",
+    "Mỗi lần vượt một mốc trên thanh 20 bậc, analytics duck_festival_stage_completed gửi reward_stage, rewards, progress, segment (OnStepComplete).",
+    "Thưởng mốc không tự cộng ngay: GetUnclaimCount() đếm mốc chưa nhận và GetGaeRewardsToGive() trả danh sách cần trao khi mở popup.",
+    "Khi số mốc chưa nhận đạt 4, popup bị ép mở (ShouldShowForcePopUp); nguồn mở popup ghi lại là FirstImpression (0), Force (1) hoặc LobbyButton (2).",
+    "Điểm được đẩy lên server qua /v1/get-duck-festival-leaderboard kèm score, đồng thời lấy lại danh sách xếp hạng gồm cả bot (IsBot).",
+    "Nút lobby chạy animation tiến độ chưa xem, so LastSeenLeaderboardRank và LastSeenLeaderboardProgress với giá trị hiện tại.",
+    "Nếu mất mạng, trạng thái giữ NoCache (2) hoặc popup NoInternetConnection (1); điểm vẫn tích local rồi đẩy kèm request kế tiếp.",
+    "Hết giờ, trạng thái chuyển LocalEnd (7), RemoteEnd (8) rồi Claim (9); thưởng hạng chọn theo GetRewardOfRank(playerRank).",
+    "Client gửi /v1/claim-duck-festival để nhận rương, rồi FinishEvent() bắn duck_festival_finished với rank, previous_rank, elo, previous_elo, stage_completed, total_users, real_user_count, bot_count."
+  ],
+  "reward_tables": [
+    {
+      "title": "PHẦN THƯỞNG 20 MỐC THANH TIẾN ĐỘ (GaeRewardSteps)",
+      "columns": [
+        "Mốc",
+        "Số vịt cần",
+        "Phần thưởng"
+      ],
+      "rows": [
+        [
+          "Mốc 1",
+          "1 vịt (cộng dồn 1)",
+          "30 phút Unlimited Lives"
+        ],
+        [
+          "Mốc 2",
+          "5 vịt (cộng dồn 6)",
+          "1 Undo"
+        ],
+        [
+          "Mốc 3",
+          "4 vịt (cộng dồn 10)",
+          "1 phút Duck Multiplier"
+        ],
+        [
+          "Mốc 4",
+          "5 vịt (cộng dồn 15)",
+          "30 phút Unlimited Lives"
+        ],
+        [
+          "Mốc 5",
+          "10 vịt (cộng dồn 25)",
+          "1 Shuffle"
+        ],
+        [
+          "Mốc 6",
+          "5 vịt (cộng dồn 30)",
+          "30 phút Unlimited Lives"
+        ],
+        [
+          "Mốc 7",
+          "10 vịt (cộng dồn 40)",
+          "100 coin"
+        ],
+        [
+          "Mốc 8",
+          "10 vịt (cộng dồn 50)",
+          "1 giờ Unlimited Lives"
+        ],
+        [
+          "Mốc 9",
+          "4 vịt (cộng dồn 54)",
+          "1 phút Duck Multiplier"
+        ],
+        [
+          "Mốc 10",
+          "15 vịt (cộng dồn 69)",
+          "150 coin"
+        ],
+        [
+          "Mốc 11",
+          "10 vịt (cộng dồn 79)",
+          "2 giờ Unlimited Lives"
+        ],
+        [
+          "Mốc 12",
+          "20 vịt (cộng dồn 99)",
+          "2 Undo"
+        ],
+        [
+          "Mốc 13",
+          "4 vịt (cộng dồn 103)",
+          "10 phút Duck Multiplier"
+        ],
+        [
+          "Mốc 14",
+          "5 vịt (cộng dồn 108)",
+          "1 Undo"
+        ],
+        [
+          "Mốc 15",
+          "15 vịt (cộng dồn 123)",
+          "200 coin"
+        ],
+        [
+          "Mốc 16",
+          "25 vịt (cộng dồn 148)",
+          "1 Extra Bottle"
+        ],
+        [
+          "Mốc 17",
+          "10 vịt (cộng dồn 158)",
+          "1 giờ Unlimited Lives"
+        ],
+        [
+          "Mốc 18",
+          "10 vịt (cộng dồn 168)",
+          "100 coin"
+        ],
+        [
+          "Mốc 19",
+          "4 vịt (cộng dồn 172)",
+          "1 giờ Duck Multiplier"
+        ],
+        [
+          "Mốc 20",
+          "60 vịt (cộng dồn 232)",
+          "750 coin"
+        ]
+      ]
+    },
+    {
+      "title": "PHẦN THƯỞNG 20 MỐC KHI COLLECTION BẬT (GaeRewardStepsWithCollection)",
+      "columns": [
+        "Mốc",
+        "Số vịt cần",
+        "Phần thưởng"
+      ],
+      "rows": [
+        [
+          "Mốc 1",
+          "1 vịt (cộng dồn 1)",
+          "30 phút Unlimited Lives"
+        ],
+        [
+          "Mốc 2",
+          "5 vịt (cộng dồn 6)",
+          "1 Undo"
+        ],
+        [
+          "Mốc 3",
+          "4 vịt (cộng dồn 10)",
+          "1 phút Duck Multiplier"
+        ],
+        [
+          "Mốc 4",
+          "8 vịt (cộng dồn 18)",
+          "1 gói thẻ Collection loại 1"
+        ],
+        [
+          "Mốc 5",
+          "5 vịt (cộng dồn 23)",
+          "30 phút Unlimited Lives"
+        ],
+        [
+          "Mốc 6",
+          "10 vịt (cộng dồn 33)",
+          "1 Shuffle"
+        ],
+        [
+          "Mốc 7",
+          "10 vịt (cộng dồn 43)",
+          "100 coin"
+        ],
+        [
+          "Mốc 8",
+          "4 vịt (cộng dồn 47)",
+          "1 phút Duck Multiplier"
+        ],
+        [
+          "Mốc 9",
+          "8 vịt (cộng dồn 55)",
+          "1 giờ Unlimited Lives"
+        ],
+        [
+          "Mốc 10",
+          "15 vịt (cộng dồn 70)",
+          "150 coin"
+        ],
+        [
+          "Mốc 11",
+          "4 vịt (cộng dồn 74)",
+          "5 phút Duck Multiplier"
+        ],
+        [
+          "Mốc 12",
+          "20 vịt (cộng dồn 94)",
+          "1 gói thẻ Collection loại 3"
+        ],
+        [
+          "Mốc 13",
+          "10 vịt (cộng dồn 104)",
+          "1 Shuffle"
+        ],
+        [
+          "Mốc 14",
+          "15 vịt (cộng dồn 119)",
+          "200 coin"
+        ],
+        [
+          "Mốc 15",
+          "10 vịt (cộng dồn 129)",
+          "1 gói thẻ Collection loại 1"
+        ],
+        [
+          "Mốc 16",
+          "25 vịt (cộng dồn 154)",
+          "1 Extra Bottle"
+        ],
+        [
+          "Mốc 17",
+          "8 vịt (cộng dồn 162)",
+          "1 giờ Unlimited Lives"
+        ],
+        [
+          "Mốc 18",
+          "30 vịt (cộng dồn 192)",
+          "1 gói thẻ Collection loại 4"
+        ],
+        [
+          "Mốc 19",
+          "20 vịt (cộng dồn 212)",
+          "2 Shuffle"
+        ],
+        [
+          "Mốc 20",
+          "60 vịt (cộng dồn 272)",
+          "750 coin"
+        ]
+      ]
+    },
+    {
+      "title": "PHẦN THƯỞNG BẢNG XẾP HẠNG (LeaderboardRewards)",
+      "columns": [
+        "Hạng",
+        "Điều kiện",
+        "Phần thưởng"
+      ],
+      "rows": [
+        [
+          "Hạng 1",
+          "Xếp hạng 1 cuối sự kiện",
+          "rương ChestType 13 gồm 1000 coin, 1 Undo, 1 Shuffle, 1 Extra Bottle"
+        ],
+        [
+          "Hạng 2",
+          "Xếp hạng 2 cuối sự kiện",
+          "rương ChestType 12 gồm 500 coin, 1 Undo, 1 Shuffle"
+        ],
+        [
+          "Hạng 3",
+          "Xếp hạng 3 cuối sự kiện",
+          "rương ChestType 11 gồm 250 coin, 1 Undo"
+        ],
+        [
+          "Hạng 4",
+          "Xếp hạng 4 cuối sự kiện",
+          "100 coin"
+        ],
+        [
+          "Hạng 5",
+          "Xếp hạng 5 cuối sự kiện",
+          "100 coin"
+        ],
+        [
+          "Hạng 6",
+          "Xếp hạng 6 cuối sự kiện",
+          "100 coin"
+        ],
+        [
+          "Hạng 7",
+          "Xếp hạng 7 cuối sự kiện",
+          "100 coin"
+        ],
+        [
+          "Hạng 8",
+          "Xếp hạng 8 cuối sự kiện",
+          "100 coin"
+        ],
+        [
+          "Hạng 9",
+          "Xếp hạng 9 cuối sự kiện",
+          "100 coin"
+        ],
+        [
+          "Hạng 10",
+          "Xếp hạng 10 cuối sự kiện",
+          "100 coin"
+        ]
+      ]
+    },
+    {
+      "title": "PHẦN THƯỞNG BẢNG XẾP HẠNG KHI COLLECTION BẬT (LeaderboardRewardsWithCollection)",
+      "columns": [
+        "Hạng",
+        "Điều kiện",
+        "Phần thưởng"
+      ],
+      "rows": [
+        [
+          "Hạng 1",
+          "Xếp hạng 1 cuối sự kiện",
+          "rương ChestType 13 gồm 1 gói thẻ Collection loại 5, 1000 coin, 1 Undo, 1 Shuffle"
+        ],
+        [
+          "Hạng 2",
+          "Xếp hạng 2 cuối sự kiện",
+          "rương ChestType 12 gồm 1 gói thẻ Collection loại 3, 500 coin, 1 Undo"
+        ],
+        [
+          "Hạng 3",
+          "Xếp hạng 3 cuối sự kiện",
+          "rương ChestType 11 gồm 1 gói thẻ Collection loại 2, 250 coin"
+        ],
+        [
+          "Hạng 4",
+          "Xếp hạng 4 cuối sự kiện",
+          "rương ChestType 9 gồm 1 gói thẻ Collection loại 1, 50 coin"
+        ],
+        [
+          "Hạng 5",
+          "Xếp hạng 5 cuối sự kiện",
+          "rương ChestType 9 gồm 1 gói thẻ Collection loại 1, 50 coin"
+        ],
+        [
+          "Hạng 6",
+          "Xếp hạng 6 cuối sự kiện",
+          "rương ChestType 9 gồm 1 gói thẻ Collection loại 1, 50 coin"
+        ],
+        [
+          "Hạng 7",
+          "Xếp hạng 7 cuối sự kiện",
+          "rương ChestType 9 gồm 1 gói thẻ Collection loại 1, 50 coin"
+        ],
+        [
+          "Hạng 8",
+          "Xếp hạng 8 cuối sự kiện",
+          "rương ChestType 9 gồm 1 gói thẻ Collection loại 1, 50 coin"
+        ],
+        [
+          "Hạng 9",
+          "Xếp hạng 9 cuối sự kiện",
+          "rương ChestType 9 gồm 1 gói thẻ Collection loại 1, 50 coin"
+        ],
+        [
+          "Hạng 10",
+          "Xếp hạng 10 cuối sự kiện",
+          "rương ChestType 9 gồm 1 gói thẻ Collection loại 1, 50 coin"
+        ]
+      ]
+    }
+  ],
+  "key_numbers": [
+    {
+      "label": "Level mở sự kiện",
+      "value": "110",
+      "source": "DuckFestivalConfigModel.json: EventOpenLevel"
+    },
+    {
+      "label": "IsEventEnabled mặc định",
+      "value": "false (chờ remote config bật)",
+      "source": "DuckFestivalConfigModel.json: IsEventEnabled"
+    },
+    {
+      "label": "TournamentType",
+      "value": "1",
+      "source": "DuckFestivalConfigModel.json: TournamentType"
+    },
+    {
+      "label": "Số mốc thanh tiến độ",
+      "value": "20",
+      "source": "DuckFestivalConfigModel.json: GaeRewardSteps"
+    },
+    {
+      "label": "Tổng vịt để hoàn thành 20 mốc",
+      "value": "232 vịt",
+      "source": "DuckFestivalConfigModel.json: GaeRewardSteps (NeededDuckCount cộng dồn)"
+    },
+    {
+      "label": "Tổng vịt bản Collection",
+      "value": "272 vịt",
+      "source": "DuckFestivalConfigModel.json: GaeRewardStepsWithCollection"
+    },
+    {
+      "label": "Mốc cuối cùng",
+      "value": "60 vịt đổi 750 coin",
+      "source": "DuckFestivalConfigModel.json: GaeRewardSteps[19]"
+    },
+    {
+      "label": "Số hạng có thưởng",
+      "value": "10",
+      "source": "DuckFestivalConfigModel.json: LeaderboardRewards"
+    },
+    {
+      "label": "Thưởng hạng 1",
+      "value": "Rương ChestType 13: 1000 coin, 1 Undo, 1 Shuffle, 1 Extra Bottle",
+      "source": "DuckFestivalConfigModel.json: LeaderboardRewards[0]"
+    },
+    {
+      "label": "Thưởng hạng 4–10",
+      "value": "100 coin",
+      "source": "DuckFestivalConfigModel.json: LeaderboardRewards[3..9]"
+    },
+    {
+      "label": "Số mốc chưa nhận để ép mở popup",
+      "value": "4",
+      "source": "DuckFestivalService.MinimumClaimCountForForcePopUp"
+    },
+    {
+      "label": "HTTP status báo sự kiện tắt",
+      "value": "425",
+      "source": "DuckFestivalService.NotActiveStatusCode"
+    },
+    {
+      "label": "Các mức Duck Multiplier",
+      "value": "1 phút, 10 phút, 1 giờ (bản Collection thêm 5 phút)",
+      "source": "DuckFestivalConfigModel.json: GaeRewardSteps / GaeRewardStepsWithCollection"
+    },
+    {
+      "label": "Số mốc cấp Duck Multiplier",
+      "value": "4 mốc (bậc 3, 9, 13, 19)",
+      "source": "DuckFestivalConfigModel.json: GaeRewardSteps"
+    },
+    {
+      "label": "Các mức Unlimited Lives của mốc",
+      "value": "30 phút, 1 giờ, 2 giờ",
+      "source": "DuckFestivalConfigModel.json: GaeRewardSteps"
+    },
+    {
+      "label": "Các mức coin của mốc",
+      "value": "100, 150, 200, 750",
+      "source": "DuckFestivalConfigModel.json: GaeRewardSteps"
+    },
+    {
+      "label": "Số màu vịt",
+      "value": "6 (Blue=1, Orange=2, Wine=3, Green=4, Red=5, Yellow=6)",
+      "source": "DuckType"
+    },
+    {
+      "label": "Số trạng thái sự kiện",
+      "value": "10 (Disable=0 … Claim=9)",
+      "source": "DuckFestivalStateType"
+    },
+    {
+      "label": "CurrencyType của vật phẩm nhân đôi",
+      "value": "DuckMultiplier = 16",
+      "source": "Modules.Contexts.Application.Inventory.Scripts.CurrencyType"
+    },
+    {
+      "label": "Nhiệm vụ Wheel of Fortune liên quan",
+      "value": "WheelOfFortuneTaskType.DuckFestivalWin = 5",
+      "source": "DuckFestivalService.IsAvailableForWheelOfFortune"
+    },
+    {
+      "label": "Tên khối đồng bộ",
+      "value": "DuckFestivalSyncModel",
+      "source": "DuckFestivalDataService.GetSyncName"
+    },
+    {
+      "label": "Số endpoint backend",
+      "value": "4 (/v1/pre-join, /v1/join, /v1/get-leaderboard, /v1/claim)",
+      "source": "DuckFestivalRemoteService"
+    }
+  ],
+  "config_highlights": [
+    {
+      "key": "DuckFestivalConfigModel.json: IsEventEnabled",
+      "value": "false",
+      "meaning": "Mặc định tắt, remote config bật sự kiện"
+    },
+    {
+      "key": "DuckFestivalConfigModel.json: EventOpenLevel",
+      "value": "110",
+      "meaning": "Level tối thiểu để mở Duck Festival"
+    },
+    {
+      "key": "DuckFestivalConfigModel.json: TournamentType",
+      "value": "1",
+      "meaning": "Mã loại giải gửi kèm mọi request backend"
+    },
+    {
+      "key": "DuckFestivalService.MinimumClaimCountForForcePopUp",
+      "value": "4",
+      "meaning": "Số mốc chưa nhận tối thiểu để ép mở popup"
+    },
+    {
+      "key": "DuckFestivalService.NotActiveStatusCode",
+      "value": "425",
+      "meaning": "HTTP status báo sự kiện không hoạt động"
+    },
+    {
+      "key": "GaeRewardSteps[0..19].NeededDuckCount",
+      "value": "1, 5, 4, 5, 10, 5, 10, 10, 4, 15, 10, 20, 4, 5, 15, 25, 10, 10, 4, 60",
+      "meaning": "Số vịt cộng thêm cho từng mốc, tổng 232"
+    },
+    {
+      "key": "GaeRewardSteps[19]",
+      "value": "60 vịt đổi 750 coin",
+      "meaning": "Mốc cuối, phần thưởng lớn nhất của thanh tiến độ"
+    },
+    {
+      "key": "GaeRewardSteps[18]",
+      "value": "4 vịt đổi 1 giờ Duck Multiplier",
+      "meaning": "Mốc rẻ ngay trước mốc cuối, đẩy người chơi cày nốt"
+    },
+    {
+      "key": "GaeRewardStepsWithCollection",
+      "value": "20 mốc, tổng 272 vịt, có 4 mốc gói thẻ (loại 1, 3, 1, 4)",
+      "meaning": "Bảng mốc thay thế khi Collection bật"
+    },
+    {
+      "key": "LeaderboardRewards[0]",
+      "value": "Rương ChestType 13: 1000 coin, 1 Undo, 1 Shuffle, 1 Extra Bottle",
+      "meaning": "Thưởng hạng 1"
+    },
+    {
+      "key": "LeaderboardRewards[1]",
+      "value": "Rương ChestType 12: 500 coin, 1 Undo, 1 Shuffle",
+      "meaning": "Thưởng hạng 2"
+    },
+    {
+      "key": "LeaderboardRewards[2]",
+      "value": "Rương ChestType 11: 250 coin, 1 Undo",
+      "meaning": "Thưởng hạng 3"
+    },
+    {
+      "key": "LeaderboardRewards[3..9]",
+      "value": "100 coin mỗi hạng",
+      "meaning": "Thưởng an ủi cho hạng 4 đến 10"
+    },
+    {
+      "key": "LeaderboardRewardsWithCollection[3..9]",
+      "value": "Rương ChestType 9: 1 gói thẻ Collection loại 1, 50 coin",
+      "meaning": "Hạng 4–10 vẫn có gói thẻ khi Collection bật"
+    },
+    {
+      "key": "DuckType",
+      "value": "Blue=1, Orange=2, Wine=3, Green=4, Red=5, Yellow=6",
+      "meaning": "Màu vịt trong nhà vịt ở màn chơi"
+    },
+    {
+      "key": "DuckFestivalStateType",
+      "value": "Disable=0, ProgressNotEnough=1, NoCache=2, NotIntroduced=3, PreJoin=4, PreJoinCompleted=5, InProgress=6, LocalEnd=7, RemoteEnd=8, Claim=9",
+      "meaning": "Máy trạng thái của sự kiện"
+    },
+    {
+      "key": "DuckFestivalPopupStateType",
+      "value": "Disable=0, NoInternetConnection=1, PreJoin=2, InProgress=3",
+      "meaning": "Loại popup hiển thị theo trạng thái"
+    },
+    {
+      "key": "DuckFestivalPopUpImpressionSource",
+      "value": "FirstImpression=0, Force=1, LobbyButton=2",
+      "meaning": "Nguồn mở popup gửi kèm analytics"
+    },
+    {
+      "key": "CurrencyType.DuckMultiplier",
+      "value": "16",
+      "meaning": "Vật phẩm nhân đôi vịt, cấp theo TimeSpan"
+    },
+    {
+      "key": "preJoinDuckFestival",
+      "value": "{base}/v1/pre-join-duck-festival",
+      "meaning": "Lấy preJoinScore trước khi ghép bảng"
+    },
+    {
+      "key": "joinDuckFestival",
+      "value": "{base}/v1/join-duck-festival",
+      "meaning": "Tham gia bảng xếp hạng"
+    },
+    {
+      "key": "getDuckFestivalLeaderboard",
+      "value": "{base}/v1/get-duck-festival-leaderboard",
+      "meaning": "Đẩy điểm và lấy bảng xếp hạng"
+    },
+    {
+      "key": "claimDuckFestival",
+      "value": "{base}/v1/claim-duck-festival",
+      "meaning": "Nhận thưởng hạng cuối sự kiện"
+    },
+    {
+      "key": "DuckFestivalResponse",
+      "value": "tournamentID, leaderboardID, players, startTime, finishTime, joinWindowEndEpoch, capacity, isClaimed, isFinished, isJoinWindowEnded, preJoinScore, avgProgress, elo, previousElo",
+      "meaning": "Toàn bộ trạng thái sự kiện do server trả"
+    },
+    {
+      "key": "DuckFestivalLeaderboardPlayer",
+      "value": "UserPublicID, NickName, Score, Rank, IsBot, IsMe, ImageUrl, ImageID, TokenID, TeamName, NameStyle, FrameId",
+      "meaning": "Một dòng bảng xếp hạng, có cờ IsBot"
+    },
+    {
+      "key": "DuckFestivalRewardStepModel",
+      "value": "{NeededDuckCount, RewardModel}",
+      "meaning": "Cấu trúc một mốc trên thanh tiến độ"
+    },
+    {
+      "key": "DuckFestivalSyncModel",
+      "value": "tên khối sync",
+      "meaning": "Đồng bộ điểm vịt, mốc đã nhận, Elo"
+    },
+    {
+      "key": "DuckFestivalModel.LastClaimedStep",
+      "value": "Nullable<int>",
+      "meaning": "null nghĩa là chưa nhận mốc nào"
+    },
+    {
+      "key": "DuckFestivalSessionCacheModel",
+      "value": "{ProgressModel, ExtraEarnedProgress}",
+      "meaning": "Cache theo phiên, không đồng bộ"
+    },
+    {
+      "key": "capacity / realUserCount / botCount",
+      "value": "server",
+      "meaning": "Số slot bảng và tỉ lệ bot do server quyết định"
+    }
+  ],
+  "tips": [
+    "Mốc đầu chỉ cần 1 vịt để người chơi thấy phần thưởng ngay lần chạm đầu tiên với nhà vịt.",
+    "Các mốc Duck Multiplier luôn rẻ (4 vịt) và đặt xen kẽ, tạo nhịp thưởng nhanh giữa các mốc đắt.",
+    "Mốc cuối 60 vịt đắt gấp hơn hai lần mốc đắt thứ nhì (25 vịt), đóng vai trò mục tiêu dài hạn của sự kiện.",
+    "Ghép bảng theo Elo cộng với bot lấp chỗ giúp ai cũng thấy mình có cơ hội vào top, kể cả người chơi ít.",
+    "Giai đoạn pre-join lọc người chơi thật sự tham gia trước khi tốn slot bảng xếp hạng."
+  ],
+  "categories": [
+    "Sự kiện",
+    "Có bảng xếp hạng",
+    "Live-ops",
+    "Cơ chế lõi"
+  ]
+}

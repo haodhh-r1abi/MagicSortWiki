@@ -1,0 +1,656 @@
+{
+  "id": "LevelGeneration",
+  "title": "Sinh & phân phối level (Level Generation)",
+  "tagline": "Level Magic Sort dựng sẵn ngoại tuyến thành seed JSON, phân phối theo bảng LevelsConfig kèm cân bằng độ khó DLB.",
+  "infobox": [
+    [
+      "Loại",
+      "Tiến trình"
+    ],
+    [
+      "Mở khóa",
+      "Bảng level do resolver chọn; mapping mọi tài khoản chưa được so sánh"
+    ],
+    [
+      "Chu kỳ / lịch",
+      "Cache 15/11:999 regular+500 loop; default 0.0.3063:219 regular+80 loop"
+    ],
+    [
+      "Tham gia",
+      "Người chơi đơn"
+    ],
+    [
+      "Vật phẩm thu thập",
+      "Seed level (file JSON mô tả bàn chai)"
+    ],
+    [
+      "Thưởng chính",
+      "20 / 60 / 100 coin theo Regular / Hard / SuperHard, cộng phần thưởng vạc (cauldronReward)"
+    ],
+    [
+      "Điều kiện / phụ thuộc",
+      "GrandRemoteRegularLevelsConfigs từ backend, fallback cache rồi Resources/defaultconfigs"
+    ],
+    [
+      "Manager",
+      "LevelModelService (kèm LevelModelPersistenceService, LevelModelRemoteService, CheatLevelModelService)"
+    ]
+  ],
+  "description": [
+    "Level không sinh ngẫu nhiên lúc chạy: mỗi bàn là một 'seed' — file JSON mô tả đủ số chai, vị trí, từng ô nước và từng vật cản.",
+    "Package 0.0.3063 có 3.956 JSON board; catalog có 3.956 entry gồm một entry rỗng, tương ứng 3.955 seed thật. zurna.json nằm ngoài catalog. Cache thiết bị ngày 15/11 có 350 board và catalog 350 entry, không thiếu/thừa.",
+    "Cache 0.0.3129 đọc ngày 15/11 có 999 regular + 500 loop. Default 0.0.3063 riêng có 219 regular (level 1–219) + 80 loop (levelIndex 220–299); không dùng mốc default để diễn tả cache.",
+    "Mỗi level thường trỏ tới 5 seed cùng độ khó nhưng khác biến thể, để người chơi thua lại không gặp đúng bàn cũ.",
+    "DLB: cache ngày 15/11 có 7 regular entry, mỗi entry 3 seed; loop không có DLB. Default 0.0.3063 riêng có 8 entry. Ý định giảm khó sau thất bại chưa chứng minh mức tăng tỷ lệ thắng.",
+    "Cache phân lớp bằng isHard/isSuperHard: 801 Regular / 99 Hard / 99 SuperHard trong 999 regular; 400/50/50 trong 500 loop. Difficulty int bằng 0 ở toàn bộ 1.499 entry; không dùng field này riêng để phân lớp.",
+    "Level Hard/SuperHard đổi toàn bộ nền, khung, nút Play và chất liệu chữ qua DifficultySpriteConfig, đồng thời thưởng coin cao hơn.",
+    "Seed thiếu được tải trước theo lô (tối đa 120 level một lần) và lưu vào thư mục 'Levels' trong persistent path để chơi được offline.",
+    "Bốn level đầu (1–4) là tutorial, dùng bộ seed 'magicsort'; level 1 có 4 seed, level 2–4 mỗi level 1 seed.",
+    "BELevelConfig.ConfigName/ConfigType là selector; giá trị default được giữ riêng trong bảng config, không tự xác nhận mapping production hoặc mọi segment."
+  ],
+  "notes": [
+    "Lưu ý: khi SnitchService đang hoạt động và slSeed không rỗng, seed SL được chọn trước mọi logic khác (bàn đã đặt sẵn chỗ cho Snitch).",
+    "Default Snitch IsEnabled=false và FirstLevelToShow=290 thuộc 0.0.3063; không suy ra trạng thái Snitch có hiệu lực của mọi tài khoản 0.0.3129.",
+    "Pseudo-C 0.0.3063: khi index vượt danh sách, sao chép tập và loại lastSelectedSeed trước random; nếu tập còn lại rỗng thì dùng lại tập gốc. Chưa kiểm chứng mọi biên trên 0.0.3129.",
+    "Lưu ý: seed đã chọn được cache (LevelSeedCacheData) để các lần thử trong cùng phiên vẫn nhất quán.",
+    "Code có cooldown tải lỗi tối đa 200 giây; seed không có cache/package vẫn có thể tải thất bại. Không khẳng định mọi level luôn chơi offline được.",
+    "Lưu ý: thứ tự ưu tiên cấu hình là remote mới → cache 'GrandCachedRemoteConfigs' → JSON đóng gói trong Resources/defaultconfigs.",
+    "Difficulty int thiếu ở default 0.0.3063 nhưng bằng 0 ở 1.499 cache entry; độ khó phải đọc cùng isHard/isSuperHard."
+  ],
+  "how_it_works": [
+    "Khởi động: GrandRemoteConfigFetcher gọi backend lấy GrandRemoteRegularLevelsConfigs và GrandRemoteDailyLevelsConfig theo BELevelConfig.ConfigName.",
+    "Nếu lỗi ('Failed to fetch regular config.'), GrandConfigPersistenceService đọc cache trong thư mục 'GrandConfigs'; không có cache thì LoadDefaultRegularConfigs đọc 'LevelsConfigv2', 'LoopLevelsConfig', 'BlockerIntroConfigModel'.",
+    "Vào level N: GetLevelConfigModel(N) kiểm cheat trước, sau đó GetLevelConfigModelWhenCheatNotEnabled(N).",
+    "Level 1–4 → GetTutorialLevelConfigModel(level), isTutorial = true, LevelStats.GetLevelType() trả 'tutorial'.",
+    "Chọn regular/loop theo kích thước bảng được resolver nạp: cache quan sát có 999 + 500; default cũ có 219 + 80. Không hardcode mốc 219 cho mọi nguồn.",
+    "LevelConfigModel trả về Seeds, DlbSeeds, DlbCap, SlSeed, IsHard, IsSuperHard, IsTutorial, Difficulty, CauldronReward.",
+    "Chọn seed: nếu SnitchService bật và slSeed không rỗng thì trả ngay slSeed — GetSeedIdFromConfig(dlbSeeds, seeds, dlbCap, slSeed).",
+    "Retry hiệu dụng = max(GetRetryCount − GetSnitchRetryCount, 0) theo code 0.0.3063; có DLB và retry ≥ dlbCap thì chọn DLB. Ví dụ default level 24 cap 2; cache level 39 cap 7.",
+    "Trong tập đã chọn, dùng index retry hiệu dụng (DLB trừ cap); vượt Count thì loại lastSelectedSeed và random, tập rỗng quay lại gốc. Chưa xác minh mọi biên native 0.0.3129.",
+    "Nạp bàn: TryGetLevelModelBySeedFromPersistentPath tìm trong thư mục 'Levels'; không có thì GetLevelModelBySeedFromResources đọc 'DefaultLevels/<seed>'.",
+    "LevelModelConverter / LevelObjectConverter / ItemModelConverter giải mã khoá rút gọn (CC, UCCC, MUC, LId, B) thành LevelModel.",
+    "Song song mỗi giây, LevelModelPersistenceService.SecondUpdate() gom seed của các level phía trước thành LevelBatch (tối đa 120 level), lọc bằng IsCached / IsInResources / IsInPersistentPath.",
+    "TryDownloadAndPersistBatch gửi GetGivenSeedsRequestModel { seed_names } tới backend, ghi từng file vào 'Levels' và cập nhật 'levelcatalog' trong persistent path.",
+    "Batch lỗi → LevelBatch.IsFailed = true, cooldown tăng dần tới tối đa 200 giây rồi LevelBatches.ResetFailed() thử lại.",
+    "Vào bàn: LevelAndLevelConfigModel mang LevelModel, LevelConfigModel, SelectedSeedId, Attempt, HasMagicBottle, HasSnitch; thắng level Hard/SuperHard có vạc thì trao CauldronReward qua RewardService với EarnReason.LevelWinCauldron (= 1)."
+  ],
+  "reward_tables": [
+    {
+      "title": "DEFAULT 0.0.3063 / CODE CŨ — THƯỞNG COIN KHI THẮNG THEO ĐỘ KHÓ",
+      "columns": [
+        "Độ khó",
+        "Level áp dụng",
+        "Phần thưởng"
+      ],
+      "rows": [
+        [
+          "Regular (0)",
+          "Level thường",
+          "20 coin"
+        ],
+        [
+          "Hard (1)",
+          "Level tận cùng 4: 14, 24, … 214 (và 224–294 trong vòng lặp)",
+          "60 coin"
+        ],
+        [
+          "SuperHard (2)",
+          "Level tận cùng 9: 19, 29, … 219 (và 229–299 trong vòng lặp)",
+          "100 coin"
+        ]
+      ]
+    },
+    {
+      "title": "DEFAULT 0.0.3063 / CODE CŨ — PHẦN THƯỞNG VẠC (CAULDRON REWARD) — TỔNG HỢP",
+      "columns": [
+        "Loại thưởng",
+        "currencyType",
+        "Số level có thưởng này"
+      ],
+      "rows": [
+        [
+          "1 Shuffle",
+          "5",
+          "9 level Super Hard"
+        ],
+        [
+          "1 Undo",
+          "4",
+          "8 level Super Hard"
+        ],
+        [
+          "1 Extra Bottle",
+          "6",
+          "7 level Super Hard"
+        ],
+        [
+          "30 phút Limitless Life (timeSpan 00:30:00)",
+          "2",
+          "5 level Super Hard và 1 level Hard"
+        ]
+      ]
+    },
+    {
+      "title": "DEFAULT 0.0.3063 / CODE CŨ — PHẦN THƯỞNG VẠC — CÁC MỤC TRÍCH ĐƯỢC TRONG DEFAULTCONFIGS",
+      "columns": [
+        "Mục cấu hình",
+        "Loại level",
+        "Phần thưởng"
+      ],
+      "rows": [
+        [
+          "LevelsConfigv2 levelConfigModels[13] (level 14)",
+          "Hard",
+          "30 phút Limitless Life (currencyType 2, amount 0, timeSpan 00:30:00)"
+        ],
+        [
+          "LevelsConfigv2 levelConfigModels[18] (level 19)",
+          "Super Hard",
+          "1 Extra Bottle (currencyType 6)"
+        ],
+        [
+          "LevelsConfigv2 levelConfigModels[28] (level 29)",
+          "Super Hard",
+          "1 Undo (currencyType 4)"
+        ],
+        [
+          "LevelsConfigv2 levelConfigModels[38] (level 39)",
+          "Super Hard",
+          "1 Extra Bottle (currencyType 6)"
+        ],
+        [
+          "LoopLevelsConfig levelConfigModels[9] (level 229)",
+          "Super Hard",
+          "1 Extra Bottle (currencyType 6)"
+        ],
+        [
+          "LoopLevelsConfig levelConfigModels[19] (level 239)",
+          "Super Hard",
+          "30 phút Limitless Life (currencyType 2, amount 0, timeSpan 00:30:00)"
+        ],
+        [
+          "LoopLevelsConfig levelConfigModels[29] (level 249)",
+          "Super Hard",
+          "1 Shuffle (currencyType 5)"
+        ],
+        [
+          "LoopLevelsConfig levelConfigModels[39] (level 259)",
+          "Super Hard",
+          "1 Shuffle (currencyType 5)"
+        ]
+      ]
+    },
+    {
+      "title": "DEFAULT 0.0.3063 / CODE CŨ — BỘ SEED DLB (BÀN DỄ HƠN KHI THUA NHIỀU)",
+      "columns": [
+        "Level",
+        "dlbCap",
+        "Bộ seed DLB"
+      ],
+      "rows": [
+        [
+          "Level 24",
+          "2",
+          "dlb_dlb24_difficulty1-1, dlb_dlb24_difficulty1-2, dlb_dlb24_difficulty1-3"
+        ],
+        [
+          "Level 29",
+          "2",
+          "dlb_dlb29_difficulty2-1, dlb_dlb29_difficulty2-2, dlb_dlb29_difficulty1-3"
+        ],
+        [
+          "Level 34",
+          "2",
+          "dlb_dlb34_difficulty2-1, dlb_dlb34_difficulty2-2, dlb_dlb34_difficulty1-3"
+        ],
+        [
+          "Level 39",
+          "4",
+          "dlb_dlb39_difficulty2-1, dlb_dlb39_difficulty2-2, dlb_dlb39_difficulty2-3"
+        ],
+        [
+          "4 level còn lại (tổng 8 level có DLB)",
+          "(xem defaultconfigs)",
+          "Bộ seed tiền tố dlb / bfmdlb / earlyflowdlb"
+        ]
+      ]
+    },
+    {
+      "title": "DEFAULT 0.0.3063 / CODE CŨ — KHO SEED THEO BỘ LEVEL (levelcatalog.json)",
+      "columns": [
+        "Tiền tố bộ seed",
+        "Số seed",
+        "Ghi chú"
+      ],
+      "rows": [
+        [
+          "v2blockerprod",
+          "1000",
+          "Bộ vật cản sản xuất v2"
+        ],
+        [
+          "v3magicsort",
+          "885",
+          "Bộ level chính v3"
+        ],
+        [
+          "earlyflow",
+          "580",
+          "Luồng đầu game"
+        ],
+        [
+          "daily",
+          "399",
+          "Daily Level"
+        ],
+        [
+          "v4blockerprod",
+          "255",
+          "Bộ vật cản sản xuất v4"
+        ],
+        [
+          "getcolor",
+          "196",
+          "Bộ 'get color'"
+        ],
+        [
+          "bfm",
+          "158",
+          "-"
+        ],
+        [
+          "iapmagicsort",
+          "150",
+          "Bộ IAP"
+        ],
+        [
+          "paywallms",
+          "145",
+          "Bộ paywall"
+        ],
+        [
+          "v2iapmagicsort",
+          "45",
+          "-"
+        ],
+        [
+          "v2paywallms",
+          "35",
+          "-"
+        ],
+        [
+          "v4pwms",
+          "30",
+          "-"
+        ],
+        [
+          "dlb",
+          "24",
+          "Bàn DLB dễ hơn"
+        ],
+        [
+          "bfmdlb",
+          "18",
+          "-"
+        ],
+        [
+          "v5ms",
+          "10",
+          "-"
+        ],
+        [
+          "v3msprod3row",
+          "5",
+          "Bàn 3 hàng"
+        ],
+        [
+          "v3paywallms",
+          "5",
+          "-"
+        ],
+        [
+          "v5pwms",
+          "5",
+          "-"
+        ],
+        [
+          "magicsort",
+          "4",
+          "Bốn level tutorial"
+        ],
+        [
+          "beko",
+          "3",
+          "-"
+        ],
+        [
+          "earlyflowdlb",
+          "3",
+          "-"
+        ]
+      ]
+    },
+    {
+      "title": "DEFAULT 0.0.3063 / CODE CŨ — PHÂN BỐ BẬC ĐỘ KHÓ SEED ĐƯỢC DÙNG",
+      "columns": [
+        "Bậc difficulty",
+        "LevelsConfigv2 (lần)",
+        "LoopLevelsConfig (lần)"
+      ],
+      "rows": [
+        [
+          "Bậc 1",
+          "278",
+          "32"
+        ],
+        [
+          "Bậc 2",
+          "335",
+          "103"
+        ],
+        [
+          "Bậc 3",
+          "181",
+          "88"
+        ],
+        [
+          "Bậc 4",
+          "142",
+          "89"
+        ],
+        [
+          "Bậc 5",
+          "136",
+          "81"
+        ],
+        [
+          "Bậc 6",
+          "3",
+          "2"
+        ],
+        [
+          "Bậc 7",
+          "7",
+          "5"
+        ]
+      ]
+    }
+  ],
+  "key_numbers": [
+    {
+      "label": "Số file seed đóng gói",
+      "value": "3.956 file JSON",
+      "source": "Assets/Resources/DefaultLevels/*.json"
+    },
+    {
+      "label": "Số mục trong danh mục seed",
+      "value": "3956 entry:3955 seed+1 rỗng; zurna ngoài catalog",
+      "source": "levelcatalog.json (LevelCatalog.Seeds)"
+    },
+    {
+      "label": "Số level trong bảng chính",
+      "value": "999cache; 219 default",
+      "source": "facts/levels_review_20261115/mapping_summary.json"
+    },
+    {
+      "label": "Số level trong vòng lặp",
+      "value": "500cache; 80 default",
+      "source": "facts/levels_review_20261115/mapping_summary.json"
+    },
+    {
+      "label": "Số seed mỗi level thường",
+      "value": "5 seed cùng độ khó khác biến thể",
+      "source": "LevelsConfigv2.json"
+    },
+    {
+      "label": "Level tutorial",
+      "value": "1, 2, 3, 4 (isTutorial = true)",
+      "source": "LevelsConfigv2.json"
+    },
+    {
+      "label": "Level Hard(default 0.0.3063)",
+      "value": "14, 24, 34, … 214 (21 level) + 224–294 (8 level)",
+      "source": "LevelsConfigv2.json / LoopLevelsConfig.json"
+    },
+    {
+      "label": "Level Super Hard(default 0.0.3063)",
+      "value": "19, 29, 39, … 219 (21 level) + 229–299 (8 level)",
+      "source": "LevelsConfigv2.json / LoopLevelsConfig.json"
+    },
+    {
+      "label": "Số level có bộ DLB",
+      "value": "7 cache; 8 default",
+      "source": "facts/levels_review_20261115/mapping_summary.json"
+    },
+    {
+      "label": "dlbCap ví dụ",
+      "value": "Cache39cap7;default 24cap2",
+      "source": "facts/levels_review_20261115/mapping_summary.json"
+    },
+    {
+      "label": "Coin thắng level Regular",
+      "value": "20 coin",
+      "source": "AdConfigModel.GetLevelWinCoinRewardByDifficulty"
+    },
+    {
+      "label": "Coin thắng level Hard",
+      "value": "60 coin",
+      "source": "AdConfigModel.GetLevelWinCoinRewardByDifficulty"
+    },
+    {
+      "label": "Coin thắng level Super Hard",
+      "value": "100 coin",
+      "source": "AdConfigModel.GetLevelWinCoinRewardByDifficulty"
+    },
+    {
+      "label": "Số level tối đa mỗi lần tải hàng loạt",
+      "value": "120",
+      "source": "LevelModelPersistenceService._maxTotalLevelCountForBulkDownload"
+    },
+    {
+      "label": "Cooldown tối đa sau khi tải lỗi",
+      "value": "200 giây",
+      "source": "LevelModelPersistenceService._maxCoolDownDurationAsSeconds"
+    },
+    {
+      "label": "Thư mục lưu seed tải về",
+      "value": "\"Levels\" trong persistent path",
+      "source": "LevelModelPersistenceService._persistentDirectoryName"
+    },
+    {
+      "label": "Thư mục seed đóng gói",
+      "value": "\"DefaultLevels\" trong Resources",
+      "source": "LevelModelPersistenceService._resourcesDirectoryName"
+    },
+    {
+      "label": "Bộ cấu hình level thường(default 0.0.3063)",
+      "value": "\"04-02-25-default-w-dlb\", ConfigType = 0",
+      "source": "BELevelConfig.json"
+    },
+    {
+      "label": "Bộ cấu hình Daily(default 0.0.3063)",
+      "value": "\"18-10-24\"",
+      "source": "BEDailyLevelConfig.json"
+    },
+    {
+      "label": "Dải bậc độ khó trong tên seed",
+      "value": "X = 1..7, Y = 1..35 (đa số 1..5)",
+      "source": "levelcatalog.json"
+    },
+    {
+      "label": "Số seed Daily trong kho",
+      "value": "399 seed tiền tố 'daily'",
+      "source": "levelcatalog.json"
+    },
+    {
+      "label": "Preset rót màu trong Level Editor",
+      "value": "DeterBottle=1, Luck=2, PartialLuck=3",
+      "source": "BottlePresetType"
+    },
+    {
+      "label": "Level đầu tiên Snitch có thể xuất hiện",
+      "value": "290 (IsEnabled = false mặc định)",
+      "source": "SnitchConfigModel"
+    }
+  ],
+  "config_highlights": [
+    {
+      "key": "BELevelConfig.ConfigName / ConfigType",
+      "value": "\"04-02-25-default-w-dlb\" / 0",
+      "meaning": "Default 0.0.3063: Bộ cấu hình level thường yêu cầu từ backend"
+    },
+    {
+      "key": "BEDailyLevelConfig.ConfigName",
+      "value": "\"18-10-24\"",
+      "meaning": "Default 0.0.3063: Bộ cấu hình level Daily"
+    },
+    {
+      "key": "LevelsConfigv2.levelConfigModels",
+      "value": "219 mục, levelIndex 1–219",
+      "meaning": "Default 0.0.3063: Bảng level thường: levelOrder, levelIndex, seeds, dlbSeeds, dlbCap, isHard, isSuperHard, isTutorial, cauldronReward"
+    },
+    {
+      "key": "LoopLevelsConfig.levelConfigModels",
+      "value": "80 mục, levelIndex 220–299",
+      "meaning": "Default 0.0.3063: Vòng lặp level sau khi hết bảng chính"
+    },
+    {
+      "key": "Level Hard",
+      "value": "14, 24, 34, … 214 (+224–294)",
+      "meaning": "Default 0.0.3063: Các level độ khó Hard, cứ 10 level một, tận cùng 4"
+    },
+    {
+      "key": "Level Super Hard",
+      "value": "19, 29, 39, … 219 (+229–299)",
+      "meaning": "Default 0.0.3063: Các level độ khó Super Hard, tận cùng 9"
+    },
+    {
+      "key": "Level tutorial",
+      "value": "1, 2, 3, 4",
+      "meaning": "Bốn level dạy chơi đầu tiên"
+    },
+    {
+      "key": "cauldronReward",
+      "value": "9× 1 Shuffle; 8× 1 Undo; 7× 1 Extra Bottle; 6× 30 phút Limitless Life",
+      "meaning": "Default 0.0.3063: Phần thưởng vạc của các level Hard/Super Hard"
+    },
+    {
+      "key": "dlbSeeds / dlbCap",
+      "value": "Cache7 entry:39/59/69/79/89/99/129 cap 7/11/6/10/7/18/11;default8 entry",
+      "meaning": "Ngưỡng retry hiệu dụng từcode cũ, không tự bằng số lần chơi UI"
+    },
+    {
+      "key": "levelcatalog.json (LevelCatalog.Seeds)",
+      "value": "3.956 mục",
+      "meaning": "Catalog package 0.0.3063:3955 seedthật+1 entry rỗng;zurna.json ngoài catalog"
+    },
+    {
+      "key": "LevelModelPersistenceService._persistentDirectoryName",
+      "value": "\"Levels\"",
+      "meaning": "Thư mục lưu seed tải về trong persistent path"
+    },
+    {
+      "key": "LevelModelPersistenceService._resourcesDirectoryName",
+      "value": "\"DefaultLevels\"",
+      "meaning": "Thư mục seed đóng gói trong Resources"
+    },
+    {
+      "key": "LevelModelPersistenceService._levelCatalogResourcesFileName / _levelCatalogPersistentFileName",
+      "value": "\"levelcatalog\" / \"levelcatalog\"",
+      "meaning": "Tên file danh mục seed ở hai nơi"
+    },
+    {
+      "key": "LevelModelPersistenceService._maxTotalLevelCountForBulkDownload",
+      "value": "120",
+      "meaning": "Số level tối đa gom vào một lần tải hàng loạt"
+    },
+    {
+      "key": "LevelModelPersistenceService._maxCoolDownDurationAsSeconds",
+      "value": "200",
+      "meaning": "Cooldown tối đa sau khi tải seed thất bại"
+    },
+    {
+      "key": "LevelDifficultyType",
+      "value": "Regular=0, Hard=1, SuperHard=2",
+      "meaning": "Bậc độ khó hiển thị cho người chơi"
+    },
+    {
+      "key": "BottlePresetType",
+      "value": "DeterBottle=1, Luck=2, PartialLuck=3",
+      "meaning": "Preset rót màu khi vẽ bàn trong Level Editor"
+    },
+    {
+      "key": "LevelConfigModel",
+      "value": "Seeds, DlbSeeds, DlbCap, SlSeed, IsHard, IsSuperHard, CauldronReward, Difficulty, IsTutorial",
+      "meaning": "Cấu hình một level"
+    },
+    {
+      "key": "LevelModel (khoá JSON rút gọn)",
+      "value": "CC = ColorCount, UCCC = UniqueCurtainColorCount, MUC = MosaicColorCount, LId = LevelId, B = BottleModels, ExternalSnitches",
+      "meaning": "Mô tả một bàn chơi"
+    },
+    {
+      "key": "BottleItemModel (khoá JSON)",
+      "value": "Id, P = Position, C = Cells, OBIM = OverItemModels, OVBIM = OverlayItemModel",
+      "meaning": "Một chai trong bàn"
+    },
+    {
+      "key": "CellModel (khoá JSON)",
+      "value": "LP = LocalPosition, BIM = ItemModel, CBIM = BlockerModel trong ô",
+      "meaning": "Một ô trong chai"
+    },
+    {
+      "key": "Khoá phụ của item trong JSON",
+      "value": "[Serializer 0.0.3063] CI=ColorId; Obj=ObjectiveModel của Curtain; RA=RequiredAmount theo model; KLT=loại Woodbox/Key. MCI=IceItemModel.Id int (serialized15); CAI=CarpetItemModel.Id int (26); IO=ToggleItemModel.IsOn bool (28); NC=GeneratorItemModel.ColorIds ColorId[] (18) hoặc MosaicItemModel.ColorIds List<ColorId> (41). Không dùng enum ItemType để tra serializedId; giữ model context và rawvalue.",
+      "meaning": "Tham số riêng của từng loại vật cản trong file seed"
+    },
+    {
+      "key": "DailyLevelConfigModel",
+      "value": "Seeds, LevelDuration, EmptyBottleCount, FilledBottleCount",
+      "meaning": "Cấu hình một ngày của Daily Level"
+    },
+    {
+      "key": "GrandRemoteDailyLevelsConfig",
+      "value": "PlayOnDurationInSeconds, TutorialLevel ('tutorial_level'), CurrentMonthDailyLevels, PreviousMonthDailyLevels, ApplicationVersion",
+      "meaning": "Toàn bộ lịch Daily"
+    },
+    {
+      "key": "GrandRemoteRegularLevelsConfigs",
+      "value": "LevelsConfig, LoopLevelsConfig, BlockerIntroConfigModel, ApplicationVersion",
+      "meaning": "Gói cấu hình level thường từ backend"
+    },
+    {
+      "key": "GrandCachedRemoteConfigs / GrandCachedDailyLevelsRemoteConfigs",
+      "value": "trong thư mục \"GrandConfigs\"",
+      "meaning": "Cache cấu hình level đã tải để dùng offline"
+    },
+    {
+      "key": "DifficultySpriteConfig",
+      "value": "Bộ sprite/material Default, Hard, SuperHard",
+      "meaning": "Bộ giao diện đổi theo độ khó level"
+    },
+    {
+      "key": "Tiền tố bộ seed và số lượng",
+      "value": "v2blockerprod 1000, v3magicsort 885, earlyflow 580, daily 399, v4blockerprod 255, getcolor 196, …",
+      "meaning": "Các bộ level do thiết kế tạo"
+    },
+    {
+      "key": "Dải difficulty trong tên seed",
+      "value": "X = 1..7, Y = 1..35",
+      "meaning": "Bậc độ khó nội bộ và số biến thể của mỗi bàn"
+    }
+  ],
+  "tips": [
+    "So độ khó theo attempt/seed/retry/booster và tỷ lệ thắng lần thử đầu; bottlecount/tênseed không chứng minh tỷ lệ thắng.",
+    "DLB có mục tiêu hỗ trợ sau thất bại; cần cohort phù hợp để đo tác dụng, chưa có uplift ở audit này.",
+    "Mapping cache đọc15/11 giống byte nguồn tháng 9/10, không coi mỗi nhãn ngày là mapping mới.",
+    "[Serializer 0.0.3063] Id1→Water,2→QuestionMark,4→Curtain,6→Clay,7→Plaster,15→Ice,17→Tag,18→Generator,21→Woodbox,22→WoodboxKey,26→Carpet,27→Snitch,28→Toggle,29→Ivy,30→Frog,31→MagicSeal,32→Duck,33→DuckHouse,34→Safe,36→Shelf,37→Bag,38→Firework,39→Rainbow,40→Icicle,41→Mosaic; Id0→Bottle through genericItemModel. Đây là serialized discriminator, khác enum ItemType runtime; fullcasebody/line/hash có trong facts/final_data_review_20261115/serialized_item_mapping.json.",
+    "SolveLevelRequestModel tồn tại không chứng minh mọi seed production đã được solver kiểm tra."
+  ],
+  "categories": [
+    "Tiến trình",
+    "Cơ chế lõi",
+    "Live-ops",
+    "Meta"
+  ]
+}

@@ -1,0 +1,2992 @@
+{
+  "id": "LevelFlow",
+  "name": "Vòng đời màn chơi (LevelFlow)",
+  "category": "Core",
+  "managers": [
+    "Modules.Contexts.GamePlay.Levels.Scripts.RegularLevels.RegularLevelManager",
+    "Modules.Contexts.GamePlay.Loop.Scripts.Regular.RegularGamePlayStateManager",
+    "Modules.Contexts.Application.GameState.Scripts.GameStateService",
+    "Modules.Contexts.GamePlay.PlayOn.Scripts.PlayOnManager",
+    "Modules.Contexts.GamePlay.PlayOn.Scripts.PlayOnWithRewarded.PlayOnWithRewardedService",
+    "Modules.Contexts.GamePlay.Boosters.Scripts.MegaShuffleManager",
+    "Modules.Contexts.GamePlay.Loop.Scripts.ReturnToHomeSequenceService",
+    "Modules.Contexts.GamePlay.UI.TryAgainPopUpNs.Scripts.TryAgainFlowService",
+    "Modules.Infrastructure.Common.Scripts.CommandNS.CommandHistoryManager"
+  ],
+  "summary": "LevelFlow là khung điều khiển toàn bộ một lượt chơi Magic Sort: từ lúc bấm Play ở Home, nạp model level theo seed, chơi, tới các nhánh kết thúc (thắng / thua / kẹt / thoát) và chuỗi lệnh đưa người chơi trở lại Home. Hai lớp song song cùng chạy: RegularLevelManager giữ trạng thái dữ liệu của level (enum LevelState) còn RegularGamePlayStateManager là máy trạng thái UI/luồng (enum GamePlayStateType) với các state Enter/Exit riêng biệt. Điểm thiết kế đặc trưng của thể loại bottle-sort là không có 'hết lượt': người chơi chỉ thua khi hết giờ (daily) hoặc khi bàn cờ bị kẹt (StuckType.NoMove) — nên nhánh Stuck mới là nhánh kiếm tiền chính, nơi game mời mua Play On bằng coin (giá tăng dần theo số lần dùng trong cùng level) hoặc xem quảng cáo thưởng (PlayOnWithRewarded) để nhận thêm chai/undo/mega shuffle. Sau khi rời level, ReturnToHomeSequenceService chạy một hàng lệnh (trao thưởng coin, tiến trình Journey, popup Daily/RateUs/MagicLab/BroomStreak/Tournament...) có giới hạn số popup theo AB test trước khi trả người chơi về Home.",
+  "unlock": "Có từ level 1, không có điều kiện mở khoá. Các nhánh phụ mới bật dần: quảng cáo Play On chỉ bật khi AdConfigModel.PlayOnWithRewardedEnabled = true và người chơi đã qua AdConfigModel.FirstLevelToShowPlayOnWithRewarded (AdService.GetPlayOnWithRewardedFirstLevelToShow, kiểm trong PlayOnWithRewardedService.CanUsePlayOnWithRewarded); luồng TryAgain mới bật bằng cờ RootLevelConfigModel.IsNewTryAgainFlowEnabled; giới hạn popup sau level theo RootLevelConfigModel.LevelEndPopupsAbGroup / HomeReturnPopupShowLimit (ReturnToHomeSequenceService.get_IsPopupLimitAbEnabled).",
+  "entry_points": [
+    "Nút Play ở Home (PreLevelPopUp → analytics play_button_clicked / play_button_click_failed)",
+    "Popup PreLevel trong level (InLevelPreLevelPopUp) và popup level kế tiếp (NextLevelPreLevelPopUp)",
+    "Nút Try Again trên TryAgainPopup sau khi thua/thoát (TryAgainPopupOpenPlace.Quit / .Stuck)",
+    "Nút Continue trên LevelWinPopUp (analytics level_win_pop_up_continue_clicked)",
+    "Daily Level (DailyStateManager dùng cùng bộ state ở namespace Loop.Scripts.Daily)",
+    "Cheat/Level Editor (LevelStats.GetLevelType trả 'editor')"
+  ],
+  "flow": "GameStateService.ChangeGameState(GameStateType.GamePlay) mở context gameplay; BootstrapGamePlayContextCommand + GamePlayContextInstaller dựng service. RegularGamePlayStateManager.Initialize() nạp toàn bộ state vào StateMachine<GamePlayStateType> và chạy FromHomeToGamePlayState. RegularLevelManager.StartLevel() gọi ILevelModelService lấy LevelAndLevelConfigModel (LevelModel + BottleModels + LevelConfigModel), điền _SelectedSeedId, _Attempt, _IsTutorial, _HasMagicBottle (MagicBottleService), _HasSnitch (SnitchService.IsActive), đặt _levelState = Playing rồi bắn signal bắt đầu level và bật AdService (chặn/đổi trạng thái quảng cáo). Máy trạng thái sang PlayingState — bàn cờ nhận input, LevelStats đếm mọi chỉ số (total_move_count, bottles_completed, từng loại vật cản mở được, undo/shuffle/extrabottle đã dùng...). Khi bàn hết nước đi hoặc hết giờ, board gọi RegularLevelManager.StuckLevel(StuckType) → _levelState = Stuck → StuckState.Enter mở popup 'StuckPopup' (biến thể A/B/C) kèm PlayOnView và PlayOnWithRewardedButton. Nếu người chơi trả coin: PlayOnManager.TryUse() (miễn phí lần đầu nếu GameEconomyModel.IsFirstPlayOnFree, sau đó trừ Coin theo PlayOnConfigModels[playOnUsage]); nếu xem quảng cáo: PlayOnManager.TryUseWithRewarded() + PlayOnWithRewardedService. Thành công → RegularLevelManager.PlayOnLevel(behaviours) đưa _levelState về Playing và PlayOnState áp dụng các PlayOnBehaviourType (ExtraBottle / ExtraTinyBottle / Undo / MegaShuffle). Từ chối → StuckAreYouSurePopup rồi LoseState (bắn 'energy_depleted', SnitchService.TryResetProgress) → WaitingForStartAfterLoseState mở LevelFailPopUp/TryAgainPopup. Bấm nút thoát trong InLevelSettings → QuitPressedState mở 'QuitAreYouSurePopup'; xác nhận → QuitState (KillAll tween, reset snitch); huỷ → ResumePlayingAfterQuit. Khi chai cuối hoàn thành, WinLevel() → _levelState = Win → WinState.Enter chờ animation rồi DelayedWin() mở 'LevelCongratsPopUp', gọi JourneyService.OnLevelWin, gửi analytics level_win + Adjust event. RegularLevelManager.TryIntroduceNewBlocker() mở NewBlockerIntroPopUp nếu level sắp tới có vật cản mới (BlockerIntroConfigModel). Cuối cùng GamePlaySceneToHomeSceneState + ReturnToHomeSequenceService.LevelWin/LevelLoseOrQuit chạy danh sách lệnh tương ứng (regular/daily × win/lose) rồi EndLevel() giải phóng level.",
+  "use_cases": [
+    {
+      "id": "UC-01",
+      "title": "Vào level từ Home",
+      "actor": "Player",
+      "trigger": "Bấm nút Play trên Home hoặc PreLevelPopUp",
+      "precondition": "Còn mạng (RefillPopUp chặn nếu hết), scene GamePlay đã preload (PreloadPlaySceneInHomeSceneCommand)",
+      "steps": [
+        "GameStateService.ChangeGameState(GameStateType.GamePlay)",
+        "HomeSceneToGamePlaySceneCommand + BootstrapGamePlayContextCommand dựng context",
+        "RegularGamePlayStateManager.Initialize() → StateMachine<GamePlayStateType> chuyển sang FromHomeToGamePlayState",
+        "RegularLevelManager.StartLevel(): DOTween.KillAll, _levelState = LevelState.Playing, lấy LevelAndLevelConfigModel từ ILevelModelService",
+        "Điền _SelectedSeedId, _LevelId, _Attempt (số lần thử), _IsTutorial, _HasMagicBottle, _HasSnitch = SnitchService.IsActive",
+        "Bắn signal bắt đầu level; AdService được thông báo để khoá/mở quảng cáo",
+        "RegularGamePlayStateManager.Playing() → PlayingState.Enter, gửi analytics level_start"
+      ],
+      "result": "Bàn chai được dựng, người chơi có thể tap; LevelStats bắt đầu ghi nhận; GrandEventSender.SendLevelEvent(LevelState.Playing) gửi 'level_start'",
+      "rules": "Nếu level không nạp được → GrandEventSender.SendLevelIsNotLoadedEvent ('level_is_not_loaded'). Nếu bấm Play mà không vào được → 'play_button_click_failed'.",
+      "evidence": "RegularLevelManager.StartLevel; RegularGamePlayStateManager.Initialize; RegularGamePlayStateManager.FromHomeToGamePlay; GameStateService.ChangeGameState; GrandEventSender.SendLevelEvent; GrandEventSender.PlayButtonClickedEvent"
+    },
+    {
+      "id": "UC-02",
+      "title": "Chơi và đếm chỉ số trong level",
+      "actor": "Player",
+      "trigger": "Mỗi lần tap chai / đổ nước / hoàn thành một chai",
+      "precondition": "LevelState.Playing",
+      "steps": [
+        "Input đổ nước → LevelStats tăng _totalMoveCount, cập nhật _progress, _emptyBottleCount",
+        "Mỗi vật cản bị mở tăng bộ đếm tương ứng (_curtainOpened, _plasterOpened, _clayOpened, _lockOpened, _tagOpened, _iceOpened, _generatorOpened, _woodboxOpened, _carpetOpened, _toggleOpened, _sealOpened, _crystalOpened, _safeOpened, _bagOpened)",
+        "Lần chạm chai đầu tiên và nước đi đầu tiên gửi analytics riêng",
+        "LevelStats.GetLevelStats() gói toàn bộ thành dictionary cho event level_*"
+      ],
+      "result": "Chuỗi chỉ số phục vụ cân bằng độ khó và AB test; obstacle_stats được nén thành chuỗi JSON theo khuôn {\"0\":..,\"3\":..,\"1\":..} ",
+      "rules": "level_type = 'tutorial' | 'editor' | (loại thường) theo LevelStats.GetLevelType()",
+      "evidence": "LevelStats.GetLevelStats; LevelStats.GetLevelType; GrandEventSender.LevelFirstBottleClickEvent; GrandEventSender.LevelFirstMoveEvent"
+    },
+    {
+      "id": "UC-03",
+      "title": "Bàn cờ bị kẹt (hết nước đi) → mở Stuck Popup",
+      "actor": "System",
+      "trigger": "Không còn nước đi hợp lệ (StuckType.NoMove) hoặc hết giờ ở Daily (StuckType.TimeIsUp)",
+      "precondition": "LevelState.Playing",
+      "steps": [
+        "RegularLevelManager.StuckLevel(stuckType): _levelState = LevelState.Stuck (4), thông báo AdService",
+        "RegularGamePlayStateManager.Stuck(stuckType) → StuckState.Enter mở popup tên 'StuckPopup'",
+        "PlayOnWithRewardedService.OnLevelStuck() reset _watchedAdCountInStuck = 0",
+        "StuckPopup chọn biến thể AStuckPopupVariant (StuckPopupVariantA/B/C) và hiện PlayOnView (mua bằng coin) + PlayOnWithRewardedButton (xem quảng cáo)",
+        "GrandEventSender.SendLevelEvent(LevelState.Stuck) gửi 'level_stuck'"
+      ],
+      "result": "Người chơi được mời chơi tiếp thay vì thua ngay",
+      "rules": "StuckType: None=0, NoMove=1, TimeIsUp=2. LevelStats ghi _lastTimeIsUpStuckRemainingTime cho nhánh hết giờ.",
+      "evidence": "RegularLevelManager.StuckLevel; RegularGamePlayStateManager.Stuck; StuckState.Enter; PlayOnWithRewardedService.OnLevelStuck; StuckPopup.Show"
+    },
+    {
+      "id": "UC-04",
+      "title": "Play On bằng coin (giá tăng dần)",
+      "actor": "Player",
+      "trigger": "Bấm nút Play On trên StuckPopup",
+      "precondition": "LevelState.Stuck",
+      "steps": [
+        "PlayOnManager.TryUse(): nếu InventoryService có lượt Play On miễn phí → InventoryService.UseFreePlayOn(), trả true",
+        "Ngược lại PlayOnManager.GetCurrentPlayOnPrice(): lấy RemoteConfigs → GameEconomyModel.PlayOnConfigModels, chỉ số = clamp(LevelStats._playOnUsage, 0, Count-1), trả Price của phần tử đó",
+        "InventoryService.DoesEnoughVisibleCurrency(CurrencyType.Coin, price)",
+        "Nếu đủ: InventoryService.Spend(CurrencySpendReason.PlayOn, CurrencyType.Coin, price) rồi Invoke PlayOnUsedSignal",
+        "RegularLevelManager.PlayOnLevel(behaviours): _levelState = LevelState.Playing; PlayOnState.Enter áp dụng các PlayOnBehaviourType",
+        "LevelStats._playOnUsage += 1 (lần Play On sau đắt hơn)"
+      ],
+      "result": "Bàn cờ được thêm chai/undo/xáo trộn, người chơi chơi tiếp; analytics 'level_play_on' + play_on_count / playoncount_cumulative / playoncount_between_steps",
+      "rules": "Bậc giá lấy từ GameEconomyModel: PlayOnPrice, SecondPlayOnPrice, ThirdSecondPlayOnPrice và/hoặc danh sách PlayOnConfigModels (mỗi phần tử có PlayOnType + Price). IsFirstPlayOnFree bật lượt đầu miễn phí.",
+      "evidence": "PlayOnManager.TryUse; PlayOnManager.GetCurrentPlayOnPrice; RegularLevelManager.PlayOnLevel; GrandEventSender.SendLevelEvent"
+    },
+    {
+      "id": "UC-05",
+      "title": "Không đủ coin khi Play On → mở Store",
+      "actor": "System",
+      "trigger": "InventoryService.DoesEnoughVisibleCurrency trả false trong PlayOnManager.TryUse",
+      "precondition": "Đã bấm Play On bằng coin",
+      "steps": [
+        "Tạo StorePopUpArguments với StorePopUpSource = PlayOn (giá trị 3)",
+        "OpenStorePopupCommand mở popup cửa hàng coin",
+        "TryUse trả false, level vẫn ở LevelState.Stuck"
+      ],
+      "result": "Người chơi được dẫn tới màn bán coin; nếu mua xong có thể bấm lại Play On",
+      "rules": "StorePopUpSource: None=0, Booster=1, Navigation=2, PlayOn=3, Refill=4, Teams=5",
+      "evidence": "PlayOnManager.TryUse; OpenStorePopupCommand; StorePopUpArguments"
+    },
+    {
+      "id": "UC-06",
+      "title": "Play On bằng quảng cáo thưởng (PlayOnWithRewarded)",
+      "actor": "Player",
+      "trigger": "Bấm PlayOnWithRewardedButton trên StuckPopup",
+      "precondition": "PlayOnWithRewardedService.IsEligible và ShouldShowRewarded() = true",
+      "steps": [
+        "PlayOnWithRewardedService.CanUsePlayOnWithRewarded(): AdService.IsPlayOnWithRewardedEnabled() && RemoteTimeService.IsRemoteDaySameWithLocalDay() && PlayOnWithRewardedDataModel.Count <= AdService.GetDailyPlayOnRewardedLimit() && playerLevel >= AdService.GetPlayOnWithRewardedFirstLevelToShow() && CheckCanUndoIfRewardIsUndo()",
+        "PlayOnManager.TryUseWithRewarded() gọi AdService.ShowRewarded(AdRequestSource...)",
+        "Xem xong: PlayOnWithRewardedService.RewardedAdWatched() → DataService.IncreaseWatchedRewardedCount() + SetLastWatchTime(TimeProvider.Now); IncreaseWatchedAdCountInStuck()",
+        "PlayOnRequirementsSatisfied(): _watchedAdCountInStuck >= GetTargetAdWatchCount()",
+        "Đủ số lần → GetPlayOnBehaviours() trả danh sách PlayOnBehaviourType theo biến thể → RegularLevelManager.PlayOnLevel(behaviours)"
+      ],
+      "result": "Người chơi chơi tiếp miễn phí bằng cách xem 1–2 quảng cáo; analytics 'playon_withrewarded'",
+      "rules": "Số quảng cáo cần xem (GetTargetAdWatchCount) là 1 hoặc 2 tuỳ PlayOnWithRewardedVariantType; với biến thể 'WithLimit' còn so với PlayOnRewardedConfigModel.StagedPlayOnLimit. Với variant AddUndoAndExtraBottle (=3), lần xem thứ nhất và thứ hai trả behaviour khác nhau.",
+      "evidence": "PlayOnWithRewardedService.CanUsePlayOnWithRewarded; PlayOnWithRewardedService.RewardedAdWatched; PlayOnWithRewardedService.GetTargetAdWatchCount; PlayOnWithRewardedService.GetPlayOnBehaviours; PlayOnManager.TryUseWithRewarded"
+    },
+    {
+      "id": "UC-07",
+      "title": "Giới hạn quảng cáo Play On mỗi ngày & reset theo ngày",
+      "actor": "System",
+      "trigger": "Khởi tạo dữ liệu (InitializeData) hoặc trước khi kiểm tra điều kiện",
+      "precondition": "-",
+      "steps": [
+        "PlayOnWithRewardedService.TryResetDailyWatchCount(): so DayOfYear và Year giữa GetLastUsedTime() và thời điểm hiện tại",
+        "Khác ngày → PlayOnWithRewardedDataModel.Count = 0",
+        "CanUsePlayOnWithRewarded() so Count với AdService.GetDailyPlayOnRewardedLimit() (AdConfigModel.PlayOnWithRewardedDailyLimit)",
+        "RemoteTimeService.IsRemoteDaySameWithLocalDay() chặn khi người chơi chỉnh giờ máy"
+      ],
+      "result": "Số lượt Play On bằng quảng cáo mỗi ngày bị giới hạn, chống lạm dụng và chống chỉnh giờ",
+      "rules": "Dữ liệu lưu ở PlayOnWithRewardedDataModel, đồng bộ server qua ISyncable (GetSyncName trả 'PlayOnWithRewardedDataModel')",
+      "evidence": "PlayOnWithRewardedService.TryResetDailyWatchCount; PlayOnWithRewardedService.CanUsePlayOnWithRewarded; PlayOnWithRewardedDataService.ResetWatchCount; PlayOnWithRewardedDataService.GetSyncName"
+    },
+    {
+      "id": "UC-08",
+      "title": "Mega Shuffle trộn lại bàn cờ",
+      "actor": "Player | System",
+      "trigger": "Booster Mega Shuffle hoặc PlayOnBehaviourType.MegaShuffle (variant DoMegaShuffle)",
+      "precondition": "MegaShuffleManager.CanUseMegaShuffle(bottleCollections) = true",
+      "steps": [
+        "GetValidMoveColors / GetColorBlocks tách nội dung các chai thành khối màu",
+        "GetBottleSizes lấy dung tích từng chai khả dụng; AddExcludedColors loại các màu không được trộn (ví dụ màu khớp Tag)",
+        "BuildVirtualBoardFromColorBlocksRandom (hoặc BuildVirtualBoardFromColorBlocks) dựng bàn ảo, ShuffleColorBlocks / ShuffleBlocksInBottle xáo",
+        "MinimizeOneBottle cố ép trống hẳn một chai khi _megaShuffleEmptyOneBottle bật",
+        "TryShuffleBoard lặp lại tối đa _shuffleRetryCount lần nếu kết quả không hợp lệ",
+        "PlaceShuffledBottles / ApplyInitialBoard đổ lại nước thật lên bàn (AItem.Recycle blob cũ)"
+      ],
+      "result": "Bàn cờ có bố cục mới còn nước đi; thoát trạng thái kẹt",
+      "rules": "_megaShuffleUseNewAlgorithm = true, _megaShuffleEmptyOneBottle = true (const). Số lần thử và xác suất tạo chai trống điều khiển từ remote: RootLevelConfigModel.MegaShuffleRetryCount, MegaShuffleEmptyBottleProbability. Giá booster: GameEconomyModel.MegaShufflePrice.",
+      "evidence": "MegaShuffleManager.TryShuffleBoard; MegaShuffleManager.CanUseMegaShuffle; MegaShuffleManager.MinimizeOneBottle; MegaShuffleManager.GetInitialColorBlocks; MegaShuffleManager.ApplyInitialBoard"
+    },
+    {
+      "id": "UC-09",
+      "title": "Hoàn tác nước đi (Undo)",
+      "actor": "Player",
+      "trigger": "Bấm booster Undo hoặc nhận PlayOnBehaviourType.Undo",
+      "precondition": "Có ít nhất một lệnh trong lịch sử",
+      "steps": [
+        "Mỗi nước đổ nước được đóng gói thành IUndoableCommand và đẩy vào CommandHistoryManager.ExecuteCommand → _executedCommands",
+        "CommandHistoryManager.Undo() pop khỏi _executedCommands, hoàn tác và đẩy sang _undoneCommands",
+        "PlayOnWithRewardedService.CheckCanUndoIfRewardIsUndo() kiểm trước khi mời quảng cáo dạng Undo (variant DoSingleUndo = 8) để không tặng thưởng vô nghĩa",
+        "LevelStats ghi undo_used"
+      ],
+      "result": "Bàn cờ quay lại trạng thái trước; nếu là Play On thì thoát trạng thái kẹt",
+      "rules": "CommandHistoryManager còn hỗ trợ Redo() từ _undoneCommands (không lộ ra UI gameplay). Giá booster Undo: GameEconomyModel.UndoPrice; mở khoá tại GameEconomyModel.UndoUnlockAtLevel.",
+      "evidence": "CommandHistoryManager.ExecuteCommand; CommandHistoryManager.Undo; CommandHistoryManager.Redo; PlayOnWithRewardedService.CheckCanUndoIfRewardIsUndo"
+    },
+    {
+      "id": "UC-10",
+      "title": "Từ chối Play On → thua level",
+      "actor": "Player",
+      "trigger": "Đóng StuckPopup / xác nhận trên StuckAreYouSurePopup",
+      "precondition": "LevelState.Stuck",
+      "steps": [
+        "StuckAreYouSurePopup xác nhận bỏ cuộc (StuckAreYouSurePopUpCloseArguments)",
+        "RegularLevelManager.LoseLevel(): _levelState = LevelState.Lose (2)",
+        "LoseState.Enter: bắn signal thua, SnitchService.TryResetProgress(), gửi sự kiện 'energy_depleted' (mất 1 mạng)",
+        "WaitingForStartAfterLoseState.Enter mở LevelFailPopUp (banner Level Failed rồi các AreYouSureContainer) hoặc TryAgainPopup",
+        "GrandEventSender.SendLevelEvent(LevelState.Lose) gửi 'level_lose'"
+      ],
+      "result": "Mất 1 mạng, tiến trình Snitch reset, người chơi được mời thử lại hoặc về Home",
+      "rules": "LevelFailPopUp hiển thị lần lượt nhiều container: EgoAreYouSureButtonController (End Game Offer), EndGameOfferButtonController, LifeLoseAreYouSureContainer, QuitAreYouSureButtonController — theo LevelFailedIterateAreYouSureContainersCommand.",
+      "evidence": "RegularLevelManager.LoseLevel; LoseState.Enter; WaitingForStartAfterLoseState.Enter; LevelFailPopUp.ShowAndIterateLevelFailedContainers; LevelFailedIterateAreYouSureContainersCommand"
+    },
+    {
+      "id": "UC-11",
+      "title": "Thắng level",
+      "actor": "Player",
+      "trigger": "Chai cuối cùng được hoàn thành (tất cả màu đã gom đủ)",
+      "precondition": "LevelState.Playing",
+      "steps": [
+        "RegularLevelManager.WinLevel(): _levelState = LevelState.Win (3)",
+        "WinState.Enter chạy sequence animation rồi WinState.DelayedWin()",
+        "DelayedWin: DOTween.KillAll, mở popup 'LevelCongratsPopUp', bắn signal thắng, JourneyService.OnLevelWin()",
+        "WinState.SendLevelWinAnalytics(): GrandEventSender 'level_win' + Adjust.TrackEvent; SendSuperChagerStatusEvent gửi trạng thái SuperCharger",
+        "LevelWinPopUp mở với LevelWinPopUpArguments (LevelAndLevelConfigModel, IsFirstTry, EarnedCoinsFromWin); Rewarded2xButton mời nhân đôi coin bằng quảng cáo",
+        "GiveRegularCoinRewardsCommand.GiveRegularLevelCoinReward() trao coin theo độ khó",
+        "RegularLevelManager.TryIntroduceNewBlocker() kiểm HasNewBlockerToIntroduce(), nếu có mở NewBlockerIntroPopUp"
+      ],
+      "result": "Level +1, nhận coin (và phần thưởng Cauldron nếu LevelConfigModel.HasCauldronReward), analytics level_win / level_congrats / level_win_pop_up_opened",
+      "rules": "Coin thưởng: AdConfigModel.RegularLevelWinCoinReward / HardLevelWinCoinReward / SuperHardLevelWinCoinReward qua AdConfigModel.GetLevelWinCoinRewardByDifficulty; nhân đôi bằng quảng cáo dùng CoinAmountNew2xRewardedForRegular / ForHard / ForSuperHard; EarnReason.LevelWinCauldron cho thưởng vạc.",
+      "evidence": "RegularLevelManager.WinLevel; WinState.DelayedWin; WinState.SendLevelWinAnalytics; GiveRegularCoinRewardsCommand.GiveRegularLevelCoinReward; RegularLevelManager.TryIntroduceNewBlocker; AdConfigModel.GetLevelWinCoinRewardByDifficulty"
+    },
+    {
+      "id": "UC-12",
+      "title": "Thoát level giữa chừng",
+      "actor": "Player",
+      "trigger": "Bấm nút thoát trong InLevelSettings (InLevelQuitButton)",
+      "precondition": "LevelState.Playing hoặc Pause",
+      "steps": [
+        "RegularGamePlayStateManager.QuitPressedState() → QuitPressedState.Enter mở popup 'QuitAreYouSurePopup'; analytics quit_from_settings_clicked",
+        "Nếu người chơi huỷ → ResumePlayingAfterQuit.Enter đưa về PlayingState",
+        "Nếu xác nhận → RegularLevelManager.QuitLevel(): _levelState = LevelState.Quit (6); QuitState.Enter: DOTween.KillAll, SnitchService.TryResetProgress()",
+        "WaitingForStartAfterQuitState mở TryAgainPopup với TryAgainPopupOpenPlace.Quit",
+        "GrandEventSender.SendLevelEvent(LevelState.Quit) gửi 'level_quit'"
+      ],
+      "result": "Rời level (tính là mất mạng như thua), tiến trình Snitch reset, chuyển sang chuỗi về Home",
+      "rules": "TryAgainPopupOpenPlace: Quit = 0, Stuck = 1",
+      "evidence": "RegularGamePlayStateManager.QuitPressedState; QuitPressedState.Enter; RegularLevelManager.QuitLevel; QuitState.Enter; RegularGamePlayStateManager.ResumePlayingAfterQuit"
+    },
+    {
+      "id": "UC-13",
+      "title": "Luồng Try Again sau khi thua/thoát",
+      "actor": "System",
+      "trigger": "Vào WaitingForStartAfterLoseState / WaitingForStartAfterQuitState",
+      "precondition": "-",
+      "steps": [
+        "TryAgainFlowService.SetTryAgainOpenPlace(TryAgainPopupOpenPlace) ghi nhận ngữ cảnh",
+        "Các sự kiện live-ops nạp lệnh vào _preTryAgainCommands: SkyJumpFallDown, SkyJumpWithStageFallDown, TowerFallDown(lastScoreBeforeFail), BroomFallDown(lastBroomScore), JetpackFallDown, JetpackWithStageFallDown",
+        "TryAgainFlowService.Execute() → ExecuteAsync(commands) chạy tuần tự từng ITryAgainCommand (TowerWinStreakTryAgainCommand, BroomStreakTryAgainCommand, SkyJump*, JetpackRace*)",
+        "Cuối chuỗi mở TryAgainPopup kèm LevelRewardsView; Clear() dọn danh sách"
+      ],
+      "result": "Người chơi thấy hậu quả với các event đang tham gia (rơi tháp, mất streak…) rồi được mời chơi lại",
+      "rules": "Bật/tắt bằng RootLevelConfigModel.IsNewTryAgainFlowEnabled",
+      "evidence": "TryAgainFlowService.Execute; TryAgainFlowService.ExecuteAsync; TryAgainFlowService.SetTryAgainOpenPlace; TryAgainFlowService.TowerFallDown; TryAgainFlowService.BroomFallDown"
+    },
+    {
+      "id": "UC-14",
+      "title": "Chuỗi lệnh trở về Home sau khi kết thúc level",
+      "actor": "System",
+      "trigger": "GamePlaySceneToHomeSceneState",
+      "precondition": "Level đã Win / Lose / Quit",
+      "steps": [
+        "ReturnToHomeSequenceService.LevelWin(model) hoặc LevelLoseOrQuit(model) đặt _isLevelWin và _lastLevelAndLevelConfigModel",
+        "SelectReturnToHomeSequence() chọn 1 trong 4 danh sách: _regularWinSequenceCommands / _regularLoseSequenceCommands / _dailyWinSequenceCommands / _dailyLoseSequenceCommands",
+        "Execute() → ExecuteAsync chạy lần lượt: InitializeReturnToHomeCommand, GiveRegularCoinRewardsCommand, PlayJourneyAnimationsCommand, TryShowDailyCommand, TryShowMagicLabCommand, TryShowBroomStreakCommand, TryShowTowerWinStreakCommand, TryShowWeeklyTournamentCommand, TryShowMagicBottlePopUpCommand, TryShowRateUsCommand, TryShowSoftUpdateCommand, TryPlayLobbyButtonsCollectibleAnimationsCommand, OpenHomePageCommand, ShowHomePlayButtonAnimationCommand",
+        "AreRemainingCommandsSkippable(startIndex, list) cho phép bỏ qua phần đuôi khi đã chạm giới hạn popup",
+        "CancelSequence() + DisposeCommands() nếu người chơi ngắt (IHomeIdleInterrupter.IsInterrupting)",
+        "Analytics 'home_return' rồi 'home_return_completed'"
+      ],
+      "result": "Người chơi về Home, đã nhận thưởng và thấy tối đa N popup",
+      "rules": "IsPopupLimitAbEnabled dựa vào RootLevelConfigModel.LevelEndPopupsAbGroup / IsHomeReturnPopupShowLimitEnabled; số popup tối đa = HomeReturnPopupShowLimit. Mỗi command khai báo ShouldShowForce / IsShowPopup / IsSkippable / ShouldTerminateTheFlow.",
+      "evidence": "ReturnToHomeSequenceService.LevelWin; ReturnToHomeSequenceService.LevelLoseOrQuit; ReturnToHomeSequenceService.SelectReturnToHomeSequence; ReturnToHomeSequenceService.AreRemainingCommandsSkippable; ReturnToHomeSequenceService.get_IsPopupLimitAbEnabled; GiveRegularCoinRewardsCommand.ShouldTerminateTheFlow"
+    },
+    {
+      "id": "UC-15",
+      "title": "Tạm dừng / mất focus ứng dụng giữa level",
+      "actor": "System",
+      "trigger": "App bị đưa xuống nền, quảng cáo toàn màn hình mở, hoặc mở InLevelSettings",
+      "precondition": "LevelState.Playing",
+      "steps": [
+        "RegularLevelManager.PauseLevel(): _levelState = LevelState.Pause (7), báo AdService",
+        "GrandEventSender.SendAppFocusLostEvent gửi 'app_focus_lost' kèm chuỗi _moves{0}_lcd{1} và _fps{0}_spikes{1}",
+        "Khi quay lại: RegularLevelManager.ResumeLevel() đặt _levelState = LevelState.Playing, analytics 'app_focus_gain'",
+        "GrandEventSender.SendLevelEvent(LevelState.Pause) gửi 'level_pause'"
+      ],
+      "result": "Level giữ nguyên trạng thái, timer Daily tạm dừng",
+      "rules": "Ngắt quãng do quảng cáo interstitial cũng đi qua PauseLevel/ResumeLevel (AdService)",
+      "evidence": "RegularLevelManager.PauseLevel; RegularLevelManager.ResumeLevel; GrandEventSender.SendAppFocusLostEvent; GrandEventSender.SendAppFocusGainEvent"
+    },
+    {
+      "id": "UC-16",
+      "title": "Giới thiệu vật cản mới trước/sau level",
+      "actor": "System",
+      "trigger": "Level sắp chơi chứa loại ItemType lần đầu xuất hiện",
+      "precondition": "RegularLevelManager.HasNewBlockerToIntroduce() = true",
+      "steps": [
+        "So level hiện tại với BlockerIntroConfigModel (Curtain / Plaster / Clay / LockAndKey — mỗi trường là số level bắt đầu)",
+        "RegularLevelManager.TryIntroduceNewBlocker() dựng NewBlockerIntroPopUpArguments với ItemType tương ứng",
+        "Mở NewBlockerIntroPopUp, hiển thị prefab minh hoạ theo BoardItemTypeAndGameObject"
+      ],
+      "result": "Người chơi được dạy vật cản mới trước khi gặp trong bàn",
+      "rules": "BlockerIntroConfigModel nằm trong GrandRemoteRegularLevelsConfigs (server); nếu ItemType = 0 (None) thì bỏ qua",
+      "evidence": "RegularLevelManager.TryIntroduceNewBlocker; RegularLevelManager.HasNewBlockerToIntroduce; NewBlockerIntroPopUp.Show; BlockerIntroConfigModel"
+    },
+    {
+      "id": "UC-17",
+      "title": "Hết mạng khi muốn chơi lại → Refill Popup",
+      "actor": "Player",
+      "trigger": "Bấm Try Again / Play khi không còn mạng",
+      "precondition": "Số mạng = 0 và không có Unlimited Life",
+      "steps": [
+        "Mở RefillPopUp; analytics 'refill_pop_up_opened'",
+        "RefillPopUp chọn biến thể nút: _refillButtonWithAd, _refillButtonWithoutAd, _refillButtonWithFreeLives tuỳ AdService và tính năng bạn bè",
+        "LifeRewardedButton cho xem quảng cáo nhận 1 mạng (AdService.ShouldShowLifeRewarded / CurrencyEarnReason.RewardedOneLife)",
+        "RefillButton mua đầy mạng bằng coin: InventoryService.Spend(CurrencySpendReason.Refill) theo GameEconomyModel.RefillPrice",
+        "FreeLivesButton / TryShowInviteFriends dẫn sang xin mạng bạn bè",
+        "MagicPassOfferView chèn offer Magic Pass"
+      ],
+      "result": "Người chơi hồi mạng và quay lại level, hoặc đóng popup về Home",
+      "rules": "GameEconomyModel: RefillPrice, RefillDurationAsMinutes, MaxLifeAmount. Nguồn store khi thiếu coin là StorePopUpSource.Refill (4).",
+      "evidence": "RefillPopUp.Show; RefillPopUp.TryShowInviteFriends; RefillPopUp.OnMagicPassActivated; GrandEventSender.SendRefillPopUpOpenedEvent"
+    },
+    {
+      "id": "UC-18",
+      "title": "Kết thúc và giải phóng level",
+      "actor": "System",
+      "trigger": "Rời scene gameplay",
+      "precondition": "Đã đi qua Win/Lose/Quit state",
+      "steps": [
+        "RegularLevelManager.EndLevel() đặt Level = null và dọn tham chiếu RegularLevel",
+        "GamePlaySceneToHomeSceneCommand tải lại scene Home; GameStateService.ChangeGameState(GameStateType.Home)",
+        "RegularLevelManager.Dispose() huỷ đăng ký signal"
+      ],
+      "result": "Bộ nhớ level được giải phóng, trạng thái quay về Home",
+      "rules": "GameStateType: Application=0, Home=1, GamePlay=2, Daily=3",
+      "evidence": "RegularLevelManager.EndLevel; RegularLevelManager.Dispose; GameStateService.ChangeGameState; GamePlaySceneToHomeSceneCommand"
+    },
+    {
+      "id": "UC-19",
+      "title": "Ghi nhận thời lượng level cho phân tích",
+      "actor": "System",
+      "trigger": "Bất kỳ nhánh kết thúc nào",
+      "precondition": "-",
+      "steps": [
+        "EventSender.SendLevelDurationEvent(finishStatus, LevelEndType, levelStartTimeStamp, levelEndTimeStamp, averageMoveDuration, firstMoveDuration)",
+        "Gói tham số: level_duration, level_start_time, level_end_time, level_end_type, finish_status, average_move_duration, first_move_duration, progress",
+        "EventSender.SendLevelEvent(LevelState) gói thêm state, user_segment, liveOps_stats, session_durations"
+      ],
+      "result": "Dữ liệu đo độ khó/độ giữ chân theo từng level",
+      "rules": "LevelEndType: None=0, Win=1, Lose=2, Quit=3",
+      "evidence": "EventSender.SendLevelDurationEvent; EventSender.SendLevelEvent; LevelEndType"
+    },
+    {
+      "id": "UC-20",
+      "title": "Cài đặt trong level và UI góc trái",
+      "actor": "Player",
+      "trigger": "Bấm nút bánh răng InLevelSettingsButton",
+      "precondition": "Đang trong level",
+      "steps": [
+        "InLevelSettingsController mở bảng cài đặt (analytics 'settings_clicked')",
+        "MusicToggle / SoundToggle / VibrationToggle bật tắt theo RootLevelConfigModel.IsMusicEnabled, IsVibrationOn",
+        "AutoOpenCloseAccordingToOgPlayStyle tự mở/đóng theo cờ RootLevelConfigModel.IsOgPlayStyle",
+        "InLevelQuitButton dẫn sang UC-12",
+        "InLevelTopLeftUIController hiển thị số level, độ khó (SpriteSetterByDifficultyType), timer daily (DailyInLevelTimer)"
+      ],
+      "result": "Người chơi chỉnh âm thanh/rung hoặc thoát level",
+      "rules": "SpriteSetterByDifficultyType và DifficultySpriteConfig quyết định khung màu theo LevelDifficultyType",
+      "evidence": "InLevelSettingsController; InLevelQuitButton; InLevelTopLeftUIController; AutoOpenCloseAccordingToOgPlayStyle; GrandEventSender.SendSettingsClickedEvent"
+    }
+  ],
+  "configs": [
+    {
+      "source": "code enum",
+      "key": "LevelState",
+      "type": "enum",
+      "value": "None=0, Playing=1, Lose=2, Win=3, Stuck=4, PlayOn=5, Quit=6, Pause=7, PlayOnWithRewarded=8",
+      "meaning": "Trạng thái dữ liệu của level do RegularLevelManager giữ",
+      "where": "Modules/Contexts/GamePlay/Levels/Scripts/LevelState.cs"
+    },
+    {
+      "source": "code enum",
+      "key": "GamePlayStateType",
+      "type": "enum",
+      "value": "None=0, FromHomeToGamePlayState=1, PlayingState=2, StuckState=3, PlayOnState=4, LoseState=5, WaitingForStartAfterLoseState=6, WinState=7, GamePlaySceneToHomeSceneState=9, QuitPressedState=10, ResumePlayingAfterQuit=11, QuitState=12, WaitingForStartAfterQuitState=13",
+      "meaning": "State machine luồng gameplay (không có giá trị 8)",
+      "where": "Loop/Scripts/Regular/GamePlayStateType.cs"
+    },
+    {
+      "source": "code enum",
+      "key": "StuckType",
+      "type": "enum",
+      "value": "None=0, NoMove=1, TimeIsUp=2",
+      "meaning": "Lý do bàn cờ kẹt",
+      "where": "Levels/Scripts/StuckType.cs"
+    },
+    {
+      "source": "code enum",
+      "key": "GameStateType",
+      "type": "enum",
+      "value": "Application=0, Home=1, GamePlay=2, Daily=3",
+      "meaning": "Ngữ cảnh scene hiện tại",
+      "where": "Application/GameState/Scripts/GameStateType.cs"
+    },
+    {
+      "source": "code enum",
+      "key": "LevelEndType",
+      "type": "enum",
+      "value": "None=0, Win=1, Lose=2, Quit=3",
+      "meaning": "Kiểu kết thúc gửi lên analytics",
+      "where": "GamePlay/Systems/Scripts/TimeNS/LevelEndType.cs"
+    },
+    {
+      "source": "code enum",
+      "key": "PlayOnBehaviourType",
+      "type": "enum",
+      "value": "ExtraBottle=0, ExtraTinyBottle=1, Undo=3, MegaShuffle=4",
+      "meaning": "Hiệu ứng được cấp khi Play On (không có giá trị 2)",
+      "where": "GamePlay/PlayOn/Scripts/PlayOnBehaviourType"
+    },
+    {
+      "source": "code enum",
+      "key": "PlayOnType",
+      "type": "enum",
+      "value": "ExtraBottle=0, Undo=1",
+      "meaning": "Loại Play On khai báo trong PlayOnConfigModel (remote)",
+      "where": "Application/RemoteConfig/Scripts/PlayOnType.cs"
+    },
+    {
+      "source": "code enum",
+      "key": "PlayOnWithRewardedVariantType",
+      "type": "enum",
+      "value": "AddExtraBottle=0, AddTinyBottle=1, AddExtraBottleWithDoubleRewarded=2, AddUndoAndExtraBottle=3, AddTinyBottleWithDoubleRewarded=4, AddTinyBottlesWithInterAndRewarded=5, AddTinyBottlesWithLimit=6, AddTinyBottlesWithLimitInterAndRewarded=7, DoSingleUndo=8, DoMegaShuffle=9, Disabled=99",
+      "meaning": "Biến thể AB của Play On bằng quảng cáo",
+      "where": "Application/Ads/Scripts/PlayOnWithRewardedVariantType"
+    },
+    {
+      "source": "code enum",
+      "key": "TryAgainPopupOpenPlace",
+      "type": "enum",
+      "value": "Quit=0, Stuck=1",
+      "meaning": "Ngữ cảnh mở TryAgainPopup",
+      "where": "GamePlay/UI/TryAgainPopUpNs/Scripts/TryAgainPopupOpenPlace.cs"
+    },
+    {
+      "source": "code enum",
+      "key": "StorePopUpSource",
+      "type": "enum",
+      "value": "None=0, Booster=1, Navigation=2, PlayOn=3, Refill=4, Teams=5",
+      "meaning": "Nguồn mở cửa hàng khi thiếu coin",
+      "where": "Home/Store/Scripts/StorePopUpSource.cs"
+    },
+    {
+      "source": "code enum",
+      "key": "CurrencySpendReason.PlayOn",
+      "type": "enum",
+      "value": "3",
+      "meaning": "Lý do trừ coin khi mua Play On",
+      "where": "Application/Inventory/Scripts/CurrencySpendReason.cs"
+    },
+    {
+      "source": "code enum",
+      "key": "CurrencyType.Coin",
+      "type": "enum",
+      "value": "1",
+      "meaning": "Loại tiền dùng cho Play On/Refill/Booster",
+      "where": "Application/Inventory/Scripts/CurrencyType.cs"
+    },
+    {
+      "source": "code const",
+      "key": "MegaShuffleManager._megaShuffleUseNewAlgorithm",
+      "type": "bool",
+      "value": "True",
+      "meaning": "Dùng thuật toán trộn mới (client default)",
+      "where": "MegaShuffleManager"
+    },
+    {
+      "source": "code const",
+      "key": "MegaShuffleManager._megaShuffleEmptyOneBottle",
+      "type": "bool",
+      "value": "True",
+      "meaning": "Cố gắng để trống hẳn 1 chai sau khi trộn (client default)",
+      "where": "MegaShuffleManager"
+    },
+    {
+      "source": "json default + server override",
+      "key": "GameEconomyModel.PlayOnPrice",
+      "type": "int",
+      "value": "900 (client default)",
+      "meaning": "Giá Play On lần 1 (coin)",
+      "where": "FirebaseRemoteConfigs.GameEconomyModel ; mặc định đóng gói: Resources/defaultconfigs/GameEconomyModel.json"
+    },
+    {
+      "source": "json default + server override",
+      "key": "GameEconomyModel.SecondPlayOnPrice",
+      "type": "int",
+      "value": "1900 (client default)",
+      "meaning": "Giá Play On lần 2",
+      "where": "FirebaseRemoteConfigs.GameEconomyModel ; mặc định đóng gói: Resources/defaultconfigs/GameEconomyModel.json"
+    },
+    {
+      "source": "json default + server override",
+      "key": "GameEconomyModel.ThirdSecondPlayOnPrice",
+      "type": "int",
+      "value": "2300 (client default)",
+      "meaning": "Giá Play On từ lần 3 trở đi",
+      "where": "FirebaseRemoteConfigs.GameEconomyModel ; mặc định đóng gói: Resources/defaultconfigs/GameEconomyModel.json"
+    },
+    {
+      "source": "json default + server override",
+      "key": "GameEconomyModel.PlayOnConfigModels",
+      "type": "List<PlayOnConfigModel>",
+      "value": "3 bậc, PlayOnType=0 (ExtraBottle): 900 / 1900 / 2300 coin (client default)",
+      "meaning": "Bảng bậc giá Play On; index = LevelStats._playOnUsage kẹp trong [0, Count-1]",
+      "where": "PlayOnManager.GetCurrentPlayOnPrice ; mặc định đóng gói: Resources/defaultconfigs/GameEconomyModel.json"
+    },
+    {
+      "source": "json default + server override",
+      "key": "GameEconomyModel.IsFirstPlayOnFree",
+      "type": "bool",
+      "value": "false (client default)",
+      "meaning": "Cho phép lượt Play On đầu tiên miễn phí (InventoryService.UseFreePlayOn)",
+      "where": "FirebaseRemoteConfigs.GameEconomyModel ; mặc định đóng gói: Resources/defaultconfigs/GameEconomyModel.json"
+    },
+    {
+      "source": "json default + server override",
+      "key": "GameEconomyModel.RefillPrice",
+      "type": "int",
+      "value": "900 (client default)",
+      "meaning": "Giá đổ đầy mạng",
+      "where": "FirebaseRemoteConfigs.GameEconomyModel ; mặc định đóng gói: Resources/defaultconfigs/GameEconomyModel.json"
+    },
+    {
+      "source": "json default + server override",
+      "key": "GameEconomyModel.RefillDurationAsMinutes",
+      "type": "int",
+      "value": "30 (client default)",
+      "meaning": "Thời gian hồi 1 mạng (phút)",
+      "where": "FirebaseRemoteConfigs.GameEconomyModel ; mặc định đóng gói: Resources/defaultconfigs/GameEconomyModel.json"
+    },
+    {
+      "source": "json default + server override",
+      "key": "GameEconomyModel.MaxLifeAmount",
+      "type": "int",
+      "value": "5 (client default)",
+      "meaning": "Số mạng tối đa",
+      "where": "FirebaseRemoteConfigs.GameEconomyModel ; mặc định đóng gói: Resources/defaultconfigs/GameEconomyModel.json"
+    },
+    {
+      "source": "json default + server override",
+      "key": "GameEconomyModel.MegaShufflePrice",
+      "type": "int",
+      "value": "900 (client default)",
+      "meaning": "Giá booster Mega Shuffle",
+      "where": "FirebaseRemoteConfigs.GameEconomyModel ; mặc định đóng gói: Resources/defaultconfigs/GameEconomyModel.json"
+    },
+    {
+      "source": "json default + server override",
+      "key": "AdConfigModel.PlayOnWithRewardedEnabled",
+      "type": "bool",
+      "value": "false (client default)",
+      "meaning": "Bật Play On bằng quảng cáo thưởng",
+      "where": "AdService.IsPlayOnWithRewardedEnabled ; mặc định đóng gói: Resources/defaultconfigs/AdConfigModel.json"
+    },
+    {
+      "source": "json default + server override",
+      "key": "AdConfigModel.PlayOnWithRewardedDailyLimit",
+      "type": "int",
+      "value": "20 (client default)",
+      "meaning": "Số lượt Play On bằng quảng cáo mỗi ngày",
+      "where": "AdService.GetDailyPlayOnRewardedLimit ; mặc định đóng gói: Resources/defaultconfigs/AdConfigModel.json"
+    },
+    {
+      "source": "json default + server override",
+      "key": "AdConfigModel.FirstLevelToShowPlayOnWithRewarded",
+      "type": "int",
+      "value": "100 (client default)",
+      "meaning": "Level tối thiểu để thấy Play On bằng quảng cáo",
+      "where": "AdService.GetPlayOnWithRewardedFirstLevelToShow ; mặc định đóng gói: Resources/defaultconfigs/AdConfigModel.json"
+    },
+    {
+      "source": "json default + server override",
+      "key": "AdConfigModel.PlayOnWithRewardedVariantType",
+      "type": "enum",
+      "value": "0 = AddExtraBottle (client default)",
+      "meaning": "Chọn biến thể phần thưởng Play On",
+      "where": "AdService.GetPlayOnWithRewardedBehaviour ; mặc định đóng gói: Resources/defaultconfigs/AdConfigModel.json"
+    },
+    {
+      "source": "json default + server override",
+      "key": "PlayOnRewardedConfigModel.StagedPlayOnLimit",
+      "type": "int",
+      "value": "5 (client default)",
+      "meaning": "Ngưỡng chuyển từ 1 sang 2 quảng cáo cho biến thể 'WithLimit'",
+      "where": "PlayOnWithRewardedService.GetTargetAdWatchCount ; mặc định đóng gói: Resources/defaultconfigs/PlayOnRewardedConfigModel.json"
+    },
+    {
+      "source": "json default + server override",
+      "key": "AdConfigModel.RegularLevelWinCoinReward / HardLevelWinCoinReward / SuperHardLevelWinCoinReward",
+      "type": "int",
+      "value": "20 / 60 / 100 (client default)",
+      "meaning": "Coin thưởng khi thắng theo độ khó",
+      "where": "AdConfigModel.GetLevelWinCoinRewardByDifficulty ; mặc định đóng gói: Resources/defaultconfigs/AdConfigModel.json"
+    },
+    {
+      "source": "server info",
+      "key": "AdConfigModel.CoinAmountNew2xRewardedForRegular / ForHard / ForSuperHard",
+      "type": "int",
+      "value": "server",
+      "meaning": "Coin khi nhân đôi bằng quảng cáo ở LevelWinPopUp",
+      "where": "AdService.Get2XRewardedCoinAmount"
+    },
+    {
+      "source": "json default + server override",
+      "key": "AdConfigModel.IsInterEnabled / FirstLevelToShowInter / InterShowFrequencyInSeconds / IsInterResetAfterRewardedActive",
+      "type": "bool/int",
+      "value": "true / 61 / 240 / - (client default)",
+      "meaning": "Điều kiện chèn quảng cáo interstitial giữa các level",
+      "where": "AdService.CanShowInterstitial / CanShowEarlyInterstitial / CanShowLaterInterstitial ; mặc định đóng gói: Resources/defaultconfigs/AdConfigModel.json"
+    },
+    {
+      "source": "Default/code0.0.3063 and historical caches20260910/20261010; per-snapshot source/hash in snapshot_values; not effective-runtime proof",
+      "key": "RootLevelConfigModel.IsNewTryAgainFlowEnabled",
+      "type": "bool",
+      "value": "cache_20260910: true; cache_20261010: true",
+      "meaning": "Bật luồng TryAgain mới [15/11: giá trị theo snapshot cụ thể; thiếu field khác với false/0. Không xác nhận assignment hoặc effective runtime.]",
+      "where": "TryAgainFlowService",
+      "previous_unresolved_value": "server",
+      "snapshot_values": [
+        {
+          "snapshot": "cache_20260910",
+          "model": "rootLevelConfigModel",
+          "key": "isNewTryAgainFlowEnabled",
+          "value": true,
+          "type": "bool",
+          "source": "facts/runtime/server_configs/rootLevelConfigModel.json",
+          "value_type": "bool",
+          "source_sha256": "d2727cef6e6dc5661af6926ffa600e1cf98cbe093515095f11b2c0551c8ffac8",
+          "field_present": true
+        },
+        {
+          "snapshot": "cache_20261010",
+          "model": "rootLevelConfigModel",
+          "key": "isNewTryAgainFlowEnabled",
+          "value": true,
+          "type": "bool",
+          "source": "facts/runtime/test_20261010/before/CachedRemoteConfigs",
+          "value_type": "bool",
+          "source_sha256": "433164d4877b2dee55d2bbd79ef2fe83d3fe9519492fe15e3cb0926daf216050",
+          "field_present": true
+        }
+      ],
+      "snapshot_review_id": "MS-CFG-LevelFlow-0031"
+    },
+    {
+      "source": "Default/code0.0.3063 and historical caches20260910/20261010; per-snapshot source/hash in snapshot_values; not effective-runtime proof",
+      "key": "RootLevelConfigModel.LevelEndPopupsAbGroup",
+      "type": "int",
+      "value": "cache_20260910: 0; cache_20261010: 0",
+      "meaning": "Nhóm AB quyết định giới hạn popup cuối level [15/11: giá trị theo snapshot cụ thể; thiếu field khác với false/0. Không xác nhận assignment hoặc effective runtime.]",
+      "where": "ReturnToHomeSequenceService.get_IsPopupLimitAbEnabled",
+      "previous_unresolved_value": "server",
+      "snapshot_values": [
+        {
+          "snapshot": "cache_20260910",
+          "model": "rootLevelConfigModel",
+          "key": "levelEndPopupsAbGroup",
+          "value": 0,
+          "type": "int",
+          "source": "facts/runtime/server_configs/rootLevelConfigModel.json",
+          "value_type": "int",
+          "source_sha256": "d2727cef6e6dc5661af6926ffa600e1cf98cbe093515095f11b2c0551c8ffac8",
+          "field_present": true
+        },
+        {
+          "snapshot": "cache_20261010",
+          "model": "rootLevelConfigModel",
+          "key": "levelEndPopupsAbGroup",
+          "value": 0,
+          "type": "int",
+          "source": "facts/runtime/test_20261010/before/CachedRemoteConfigs",
+          "value_type": "int",
+          "source_sha256": "433164d4877b2dee55d2bbd79ef2fe83d3fe9519492fe15e3cb0926daf216050",
+          "field_present": true
+        }
+      ],
+      "snapshot_review_id": "MS-CFG-LevelFlow-0032"
+    },
+    {
+      "source": "server info",
+      "key": "RootLevelConfigModel.HomeReturnPopupShowLimit / IsHomeReturnPopupShowLimitEnabled",
+      "type": "int/bool",
+      "value": "server",
+      "meaning": "Số popup tối đa khi về Home",
+      "where": "ReturnToHomeSequenceService.AreRemainingCommandsSkippable"
+    },
+    {
+      "source": "server info",
+      "key": "RootLevelConfigModel.SessionStartPopUpShowLimit / IsSessionStartPopupShowLimitEnabled",
+      "type": "int/bool",
+      "value": "server",
+      "meaning": "Giới hạn popup đầu phiên",
+      "where": "RootLevelConfigModel"
+    },
+    {
+      "source": "Default/code0.0.3063 and historical caches20260910/20261010; per-snapshot source/hash in snapshot_values; not effective-runtime proof",
+      "key": "RootLevelConfigModel.MegaShuffleRetryCount",
+      "type": "int",
+      "value": "cache_20260910: 30; cache_20261010: 30",
+      "meaning": "Số lần thử lại thuật toán Mega Shuffle [15/11: giá trị theo snapshot cụ thể; thiếu field khác với false/0. Không xác nhận assignment hoặc effective runtime.]",
+      "where": "MegaShuffleManager.TryShuffleBoard",
+      "previous_unresolved_value": "server",
+      "snapshot_values": [
+        {
+          "snapshot": "cache_20260910",
+          "model": "rootLevelConfigModel",
+          "key": "megaShuffleRetryCount",
+          "value": 30,
+          "type": "int",
+          "source": "facts/runtime/server_configs/rootLevelConfigModel.json",
+          "value_type": "int",
+          "source_sha256": "d2727cef6e6dc5661af6926ffa600e1cf98cbe093515095f11b2c0551c8ffac8",
+          "field_present": true
+        },
+        {
+          "snapshot": "cache_20261010",
+          "model": "rootLevelConfigModel",
+          "key": "megaShuffleRetryCount",
+          "value": 30,
+          "type": "int",
+          "source": "facts/runtime/test_20261010/before/CachedRemoteConfigs",
+          "value_type": "int",
+          "source_sha256": "433164d4877b2dee55d2bbd79ef2fe83d3fe9519492fe15e3cb0926daf216050",
+          "field_present": true
+        }
+      ],
+      "snapshot_review_id": "MS-CFG-LevelFlow-0035"
+    },
+    {
+      "source": "Default/code0.0.3063 and historical caches20260910/20261010; per-snapshot source/hash in snapshot_values; not effective-runtime proof",
+      "key": "RootLevelConfigModel.MegaShuffleEmptyBottleProbability",
+      "type": "int",
+      "value": "cache_20260910: 0; cache_20261010: 0",
+      "meaning": "Xác suất (%) tạo chai trống sau Mega Shuffle [15/11: giá trị theo snapshot cụ thể; thiếu field khác với false/0. Không xác nhận assignment hoặc effective runtime.]",
+      "where": "MegaShuffleManager",
+      "previous_unresolved_value": "server",
+      "snapshot_values": [
+        {
+          "snapshot": "cache_20260910",
+          "model": "rootLevelConfigModel",
+          "key": "megaShuffleEmptyBottleProbability",
+          "value": 0,
+          "type": "int",
+          "source": "facts/runtime/server_configs/rootLevelConfigModel.json",
+          "value_type": "int",
+          "source_sha256": "d2727cef6e6dc5661af6926ffa600e1cf98cbe093515095f11b2c0551c8ffac8",
+          "field_present": true
+        },
+        {
+          "snapshot": "cache_20261010",
+          "model": "rootLevelConfigModel",
+          "key": "megaShuffleEmptyBottleProbability",
+          "value": 0,
+          "type": "int",
+          "source": "facts/runtime/test_20261010/before/CachedRemoteConfigs",
+          "value_type": "int",
+          "source_sha256": "433164d4877b2dee55d2bbd79ef2fe83d3fe9519492fe15e3cb0926daf216050",
+          "field_present": true
+        }
+      ],
+      "snapshot_review_id": "MS-CFG-LevelFlow-0036"
+    },
+    {
+      "source": "server info",
+      "key": "RootLevelConfigModel.IsOgPlayStyle / IsVibrationOn / IsMusicEnabled",
+      "type": "bool",
+      "value": "server",
+      "meaning": "Kiểu chơi và mặc định âm thanh/rung trong level",
+      "where": "InLevelSettings, AutoOpenCloseAccordingToOgPlayStyle"
+    },
+    {
+      "source": "server info",
+      "key": "RootLevelConfigModel.InGameBoosterVariant / ColorVariant",
+      "type": "int",
+      "value": "server",
+      "meaning": "Biến thể AB bố cục booster trong level và bảng màu",
+      "where": "RootLevelConfigModel"
+    },
+    {
+      "source": "server info",
+      "key": "BlockerIntroConfigModel.Curtain / Plaster / Clay / LockAndKey",
+      "type": "int",
+      "value": "server",
+      "meaning": "Level bắt đầu giới thiệu từng vật cản",
+      "where": "GrandRemoteRegularLevelsConfigs.BlockerIntroConfigModel"
+    },
+    {
+      "source": "server info",
+      "key": "EgoOfferConfigModel.OfferPriorities",
+      "type": "List<EgoOfferType>",
+      "value": "server (SpecialOffer=0, TreasureDrill=1, MagicPass=2, PawTouch=3)",
+      "meaning": "Thứ tự ưu tiên offer hiện ở màn thua (End Game Offer)",
+      "where": "FirebaseRemoteConfigs.EgoOfferConfigModel"
+    },
+    {
+      "source": "storage key",
+      "key": "PlayOnWithRewardedDataModel",
+      "type": "sync model",
+      "value": "{ Count, LastWatchTime }",
+      "meaning": "Số lượt quảng cáo Play On đã xem trong ngày, đồng bộ server",
+      "where": "PlayOnWithRewardedDataService.GetSyncName / SerializeModelForSync"
+    },
+    {
+      "source": "json default",
+      "key": "BELevelConfig.ConfigName / ConfigType",
+      "type": "string/int",
+      "value": "\"04-02-25-default-w-dlb\" / 0",
+      "meaning": "Bộ cấu hình level backend đang dùng",
+      "where": "Resources/defaultconfigs/BELevelConfig.json"
+    },
+    {
+      "source": "json default",
+      "key": "GameEconomyModel.json: refillPrice",
+      "type": "",
+      "value": "900",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/GameEconomyModel.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "GameEconomyModel.json: PlayOnPrice",
+      "type": "",
+      "value": "900",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/GameEconomyModel.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "GameEconomyModel.json: SecondPlayOnPrice",
+      "type": "",
+      "value": "1900",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/GameEconomyModel.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "GameEconomyModel.json: ThirdSecondPlayOnPrice",
+      "type": "",
+      "value": "2300",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/GameEconomyModel.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "GameEconomyModel.json: refillDurationAsMinutes",
+      "type": "",
+      "value": "30",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/GameEconomyModel.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "GameEconomyModel.json: maxLifeAmount",
+      "type": "",
+      "value": "5",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/GameEconomyModel.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "GameEconomyModel.json: initialCoin",
+      "type": "",
+      "value": "1000",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/GameEconomyModel.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "GameEconomyModel.json: initialUndoAmount",
+      "type": "",
+      "value": "3",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/GameEconomyModel.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "GameEconomyModel.json: initialShuffleAmount",
+      "type": "",
+      "value": "3",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/GameEconomyModel.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "GameEconomyModel.json: initialExtraBottleAmount",
+      "type": "",
+      "value": "3",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/GameEconomyModel.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "GameEconomyModel.json: initialFourthBoosterAmount",
+      "type": "",
+      "value": "3",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/GameEconomyModel.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "GameEconomyModel.json: undoUnlockAtLevel",
+      "type": "",
+      "value": "15",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/GameEconomyModel.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "GameEconomyModel.json: shuffleUnlockAtLevel",
+      "type": "",
+      "value": "15",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/GameEconomyModel.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "GameEconomyModel.json: extraBottleUnlockAtLevel",
+      "type": "",
+      "value": "15",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/GameEconomyModel.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "GameEconomyModel.json: UndoPrice",
+      "type": "",
+      "value": "300",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/GameEconomyModel.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "GameEconomyModel.json: ShufflePrice",
+      "type": "",
+      "value": "300",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/GameEconomyModel.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "GameEconomyModel.json: ExtraBottlePrice",
+      "type": "",
+      "value": "900",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/GameEconomyModel.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "GameEconomyModel.json: MegaShufflePrice",
+      "type": "",
+      "value": "900",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/GameEconomyModel.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "GameEconomyModel.json: RevealPrice",
+      "type": "",
+      "value": "900",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/GameEconomyModel.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "GameEconomyModel.json: RegularLevelWinCoinReward",
+      "type": "",
+      "value": "20",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/GameEconomyModel.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "GameEconomyModel.json: HardLevelWinCoinReward",
+      "type": "",
+      "value": "60",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/GameEconomyModel.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "GameEconomyModel.json: SuperHardLevelWinCoinReward",
+      "type": "",
+      "value": "100",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/GameEconomyModel.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "GameEconomyModel.json: IsFirstPlayOnFree",
+      "type": "",
+      "value": "false",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/GameEconomyModel.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "GameEconomyModel.json: PlayOnConfigModels[0].PlayOnType",
+      "type": "",
+      "value": "0",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/GameEconomyModel.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "GameEconomyModel.json: PlayOnConfigModels[0].Price",
+      "type": "",
+      "value": "900",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/GameEconomyModel.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "GameEconomyModel.json: PlayOnConfigModels[1].PlayOnType",
+      "type": "",
+      "value": "0",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/GameEconomyModel.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "GameEconomyModel.json: PlayOnConfigModels[1].Price",
+      "type": "",
+      "value": "1900",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/GameEconomyModel.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "GameEconomyModel.json: PlayOnConfigModels[2].PlayOnType",
+      "type": "",
+      "value": "0",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/GameEconomyModel.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "GameEconomyModel.json: PlayOnConfigModels[2].Price",
+      "type": "",
+      "value": "2300",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/GameEconomyModel.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "server cache (historical)",
+      "key": "GameEconomyModel (live) = default?",
+      "type": "",
+      "value": "26/27 key trùng default, 1 key khác/thêm",
+      "meaning": "Đối chiếu config server thật (CachedRemoteConfigs) với GameEconomyModel.json",
+      "where": "Configs/CachedRemoteConfigs + Firebase RC template 3197 — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server cache (historical)",
+      "key": "GameEconomyModel: hierarchy",
+      "type": "",
+      "value": "0",
+      "meaning": "server-only (không có trong default)",
+      "where": "Configs/CachedRemoteConfigs + Firebase RC template 3197 — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server cache (historical)",
+      "key": "playOnMultipleBottlesConfigModel: isEnabled",
+      "type": "",
+      "value": "false",
+      "meaning": "server-only (không có file default)",
+      "where": "Configs/CachedRemoteConfigs + Firebase RC template 3197 — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server cache (historical)",
+      "key": "playOnMultipleBottlesConfigModel: firstLevelToShow",
+      "type": "",
+      "value": "35",
+      "meaning": "server-only (không có file default)",
+      "where": "Configs/CachedRemoteConfigs + Firebase RC template 3197 — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server cache (historical)",
+      "key": "playOnMultipleBottlesConfigModel: addedBottleCount",
+      "type": "",
+      "value": "2",
+      "meaning": "server-only (không có file default)",
+      "where": "Configs/CachedRemoteConfigs + Firebase RC template 3197 — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server cache (historical)",
+      "key": "playOnMultipleBottlesConfigModel: levelAttemptCount",
+      "type": "",
+      "value": "3",
+      "meaning": "server-only (không có file default)",
+      "where": "Configs/CachedRemoteConfigs + Firebase RC template 3197 — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server cache (historical)",
+      "key": "preGameConfigModel: isEnabled",
+      "type": "",
+      "value": "false",
+      "meaning": "server-only (không có file default)",
+      "where": "Configs/CachedRemoteConfigs + Firebase RC template 3197 — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server cache (historical)",
+      "key": "preGameConfigModel: firstLevelToShow",
+      "type": "",
+      "value": "100",
+      "meaning": "server-only (không có file default)",
+      "where": "Configs/CachedRemoteConfigs + Firebase RC template 3197 — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server cache (historical)",
+      "key": "preGameConfigModel: multiplierConfig.isEnabled",
+      "type": "",
+      "value": "false",
+      "meaning": "server-only (không có file default)",
+      "where": "Configs/CachedRemoteConfigs + Firebase RC template 3197 — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server cache (historical)",
+      "key": "preGameConfigModel: multiplierConfig.isTagEnabled",
+      "type": "",
+      "value": "false",
+      "meaning": "server-only (không có file default)",
+      "where": "Configs/CachedRemoteConfigs + Firebase RC template 3197 — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server cache (historical)",
+      "key": "preGameConfigModel: multiplierConfig.firstLevelToShow",
+      "type": "",
+      "value": "100",
+      "meaning": "server-only (không có file default)",
+      "where": "Configs/CachedRemoteConfigs + Firebase RC template 3197 — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server cache (historical)",
+      "key": "preGameConfigModel: multiplierConfig.regularMultiplierConfig.isEnabled",
+      "type": "",
+      "value": "false",
+      "meaning": "server-only (không có file default)",
+      "where": "Configs/CachedRemoteConfigs + Firebase RC template 3197 — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server cache (historical)",
+      "key": "preGameConfigModel: multiplierConfig.regularMultiplierConfig.multipliers",
+      "type": "",
+      "value": "[1, 2, 3]",
+      "meaning": "server-only (không có file default)",
+      "where": "Configs/CachedRemoteConfigs + Firebase RC template 3197 — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server cache (historical)",
+      "key": "preGameConfigModel: multiplierConfig.regularMultiplierConfig.defaultMultiplier",
+      "type": "",
+      "value": "1",
+      "meaning": "server-only (không có file default)",
+      "where": "Configs/CachedRemoteConfigs + Firebase RC template 3197 — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server cache (historical)",
+      "key": "preGameConfigModel: multiplierConfig.regularMultiplierConfig.multiplierPlayOnPrices.1",
+      "type": "",
+      "value": "[900, 1900, 2300]",
+      "meaning": "server-only (không có file default)",
+      "where": "Configs/CachedRemoteConfigs + Firebase RC template 3197 — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server cache (historical)",
+      "key": "preGameConfigModel: multiplierConfig.regularMultiplierConfig.multiplierPlayOnPrices.2",
+      "type": "",
+      "value": "[1350, 2350, 2800]",
+      "meaning": "server-only (không có file default)",
+      "where": "Configs/CachedRemoteConfigs + Firebase RC template 3197 — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server cache (historical)",
+      "key": "preGameConfigModel: multiplierConfig.regularMultiplierConfig.multiplierPlayOnPrices.3",
+      "type": "",
+      "value": "[1800, 2800, 3250]",
+      "meaning": "server-only (không có file default)",
+      "where": "Configs/CachedRemoteConfigs + Firebase RC template 3197 — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server cache (historical)",
+      "key": "preGameConfigModel: multiplierConfig.regularMultiplierConfig.multiplierExtraBottlePrice.1",
+      "type": "",
+      "value": "900",
+      "meaning": "server-only (không có file default)",
+      "where": "Configs/CachedRemoteConfigs + Firebase RC template 3197 — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server cache (historical)",
+      "key": "preGameConfigModel: multiplierConfig.regularMultiplierConfig.multiplierExtraBottlePrice.2",
+      "type": "",
+      "value": "1350",
+      "meaning": "server-only (không có file default)",
+      "where": "Configs/CachedRemoteConfigs + Firebase RC template 3197 — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server cache (historical)",
+      "key": "preGameConfigModel: multiplierConfig.regularMultiplierConfig.multiplierExtraBottlePrice.3",
+      "type": "",
+      "value": "1800",
+      "meaning": "server-only (không có file default)",
+      "where": "Configs/CachedRemoteConfigs + Firebase RC template 3197 — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server cache (historical)",
+      "key": "preGameConfigModel: multiplierConfig.regularMultiplierConfig.multiplierShufflePrice.1",
+      "type": "",
+      "value": "450",
+      "meaning": "server-only (không có file default)",
+      "where": "Configs/CachedRemoteConfigs + Firebase RC template 3197 — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server cache (historical)",
+      "key": "preGameConfigModel: multiplierConfig.regularMultiplierConfig.multiplierShufflePrice.2",
+      "type": "",
+      "value": "900",
+      "meaning": "server-only (không có file default)",
+      "where": "Configs/CachedRemoteConfigs + Firebase RC template 3197 — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server cache (historical)",
+      "key": "preGameConfigModel: multiplierConfig.regularMultiplierConfig.multiplierShufflePrice.3",
+      "type": "",
+      "value": "1350",
+      "meaning": "server-only (không có file default)",
+      "where": "Configs/CachedRemoteConfigs + Firebase RC template 3197 — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server cache (historical)",
+      "key": "preGameConfigModel: multiplierConfig.regularMultiplierConfig.multiplierUndoPrice.1",
+      "type": "",
+      "value": "450",
+      "meaning": "server-only (không có file default)",
+      "where": "Configs/CachedRemoteConfigs + Firebase RC template 3197 — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server cache (historical)",
+      "key": "preGameConfigModel: multiplierConfig.regularMultiplierConfig.multiplierUndoPrice.2",
+      "type": "",
+      "value": "900",
+      "meaning": "server-only (không có file default)",
+      "where": "Configs/CachedRemoteConfigs + Firebase RC template 3197 — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server cache (historical)",
+      "key": "preGameConfigModel: multiplierConfig.regularMultiplierConfig.multiplierUndoPrice.3",
+      "type": "",
+      "value": "1350",
+      "meaning": "server-only (không có file default)",
+      "where": "Configs/CachedRemoteConfigs + Firebase RC template 3197 — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server cache (historical)",
+      "key": "preGameConfigModel: multiplierConfig.hardMultiplierConfig.isEnabled",
+      "type": "",
+      "value": "false",
+      "meaning": "server-only (không có file default)",
+      "where": "Configs/CachedRemoteConfigs + Firebase RC template 3197 — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server cache (historical)",
+      "key": "preGameConfigModel: multiplierConfig.hardMultiplierConfig.multipliers",
+      "type": "",
+      "value": "[1, 2, 3]",
+      "meaning": "server-only (không có file default)",
+      "where": "Configs/CachedRemoteConfigs + Firebase RC template 3197 — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server cache (historical)",
+      "key": "preGameConfigModel: multiplierConfig.hardMultiplierConfig.defaultMultiplier",
+      "type": "",
+      "value": "3",
+      "meaning": "server-only (không có file default)",
+      "where": "Configs/CachedRemoteConfigs + Firebase RC template 3197 — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server cache (historical)",
+      "key": "preGameConfigModel: multiplierConfig.hardMultiplierConfig.multiplierPlayOnPrices.1",
+      "type": "",
+      "value": "[900, 1900, 2300]",
+      "meaning": "server-only (không có file default)",
+      "where": "Configs/CachedRemoteConfigs + Firebase RC template 3197 — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server cache (historical)",
+      "key": "preGameConfigModel: multiplierConfig.hardMultiplierConfig.multiplierPlayOnPrices.2",
+      "type": "",
+      "value": "[1350, 2350, 2800]",
+      "meaning": "server-only (không có file default)",
+      "where": "Configs/CachedRemoteConfigs + Firebase RC template 3197 — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server cache (historical)",
+      "key": "preGameConfigModel: multiplierConfig.hardMultiplierConfig.multiplierPlayOnPrices.3",
+      "type": "",
+      "value": "[1800, 2800, 3250]",
+      "meaning": "server-only (không có file default)",
+      "where": "Configs/CachedRemoteConfigs + Firebase RC template 3197 — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server cache (historical)",
+      "key": "preGameConfigModel: multiplierConfig.hardMultiplierConfig.multiplierExtraBottlePrice.1",
+      "type": "",
+      "value": "900",
+      "meaning": "server-only (không có file default)",
+      "where": "Configs/CachedRemoteConfigs + Firebase RC template 3197 — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server cache (historical)",
+      "key": "preGameConfigModel: multiplierConfig.hardMultiplierConfig.multiplierExtraBottlePrice.2",
+      "type": "",
+      "value": "1350",
+      "meaning": "server-only (không có file default)",
+      "where": "Configs/CachedRemoteConfigs + Firebase RC template 3197 — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server cache (historical)",
+      "key": "preGameConfigModel: multiplierConfig.hardMultiplierConfig.multiplierExtraBottlePrice.3",
+      "type": "",
+      "value": "1800",
+      "meaning": "server-only (không có file default)",
+      "where": "Configs/CachedRemoteConfigs + Firebase RC template 3197 — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server cache (historical)",
+      "key": "preGameConfigModel: multiplierConfig.hardMultiplierConfig.multiplierShufflePrice.1",
+      "type": "",
+      "value": "450",
+      "meaning": "server-only (không có file default)",
+      "where": "Configs/CachedRemoteConfigs + Firebase RC template 3197 — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server cache (historical)",
+      "key": "preGameConfigModel: multiplierConfig.hardMultiplierConfig.multiplierShufflePrice.2",
+      "type": "",
+      "value": "900",
+      "meaning": "server-only (không có file default)",
+      "where": "Configs/CachedRemoteConfigs + Firebase RC template 3197 — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server cache (historical)",
+      "key": "preGameConfigModel: multiplierConfig.hardMultiplierConfig.multiplierShufflePrice.3",
+      "type": "",
+      "value": "1350",
+      "meaning": "server-only (không có file default)",
+      "where": "Configs/CachedRemoteConfigs + Firebase RC template 3197 — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server cache (historical)",
+      "key": "preGameConfigModel: multiplierConfig.hardMultiplierConfig.multiplierUndoPrice.1",
+      "type": "",
+      "value": "450",
+      "meaning": "server-only (không có file default)",
+      "where": "Configs/CachedRemoteConfigs + Firebase RC template 3197 — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server cache (historical)",
+      "key": "preGameConfigModel: multiplierConfig.hardMultiplierConfig.multiplierUndoPrice.2",
+      "type": "",
+      "value": "900",
+      "meaning": "server-only (không có file default)",
+      "where": "Configs/CachedRemoteConfigs + Firebase RC template 3197 — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server cache (historical)",
+      "key": "preGameConfigModel: multiplierConfig.hardMultiplierConfig.multiplierUndoPrice.3",
+      "type": "",
+      "value": "1350",
+      "meaning": "server-only (không có file default)",
+      "where": "Configs/CachedRemoteConfigs + Firebase RC template 3197 — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server cache (historical)",
+      "key": "preGameConfigModel: multiplierConfig.superHardMultiplierConfig.isEnabled",
+      "type": "",
+      "value": "false",
+      "meaning": "server-only (không có file default)",
+      "where": "Configs/CachedRemoteConfigs + Firebase RC template 3197 — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server cache (historical)",
+      "key": "preGameConfigModel: multiplierConfig.superHardMultiplierConfig.multipliers",
+      "type": "",
+      "value": "[1, 2, 3]",
+      "meaning": "server-only (không có file default)",
+      "where": "Configs/CachedRemoteConfigs + Firebase RC template 3197 — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server cache (historical)",
+      "key": "preGameConfigModel: multiplierConfig.superHardMultiplierConfig.defaultMultiplier",
+      "type": "",
+      "value": "3",
+      "meaning": "server-only (không có file default)",
+      "where": "Configs/CachedRemoteConfigs + Firebase RC template 3197 — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server cache (historical)",
+      "key": "preGameConfigModel: multiplierConfig.superHardMultiplierConfig.multiplierPlayOnPrices.1",
+      "type": "",
+      "value": "[900, 1900, 2300]",
+      "meaning": "server-only (không có file default)",
+      "where": "Configs/CachedRemoteConfigs + Firebase RC template 3197 — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server cache (historical)",
+      "key": "preGameConfigModel: multiplierConfig.superHardMultiplierConfig.multiplierPlayOnPrices.2",
+      "type": "",
+      "value": "[1350, 2350, 2800]",
+      "meaning": "server-only (không có file default)",
+      "where": "Configs/CachedRemoteConfigs + Firebase RC template 3197 — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server cache (historical)",
+      "key": "preGameConfigModel: multiplierConfig.superHardMultiplierConfig.multiplierPlayOnPrices.3",
+      "type": "",
+      "value": "[1800, 2800, 3250]",
+      "meaning": "server-only (không có file default)",
+      "where": "Configs/CachedRemoteConfigs + Firebase RC template 3197 — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server cache (historical)",
+      "key": "preGameConfigModel: multiplierConfig.superHardMultiplierConfig.multiplierExtraBottlePrice.1",
+      "type": "",
+      "value": "900",
+      "meaning": "server-only (không có file default)",
+      "where": "Configs/CachedRemoteConfigs + Firebase RC template 3197 — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server cache (historical)",
+      "key": "preGameConfigModel: multiplierConfig.superHardMultiplierConfig.multiplierExtraBottlePrice.2",
+      "type": "",
+      "value": "1350",
+      "meaning": "server-only (không có file default)",
+      "where": "Configs/CachedRemoteConfigs + Firebase RC template 3197 — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server cache (historical)",
+      "key": "preGameConfigModel: multiplierConfig.superHardMultiplierConfig.multiplierExtraBottlePrice.3",
+      "type": "",
+      "value": "1800",
+      "meaning": "server-only (không có file default)",
+      "where": "Configs/CachedRemoteConfigs + Firebase RC template 3197 — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server cache (historical)",
+      "key": "preGameConfigModel: multiplierConfig.superHardMultiplierConfig.multiplierShufflePrice.1",
+      "type": "",
+      "value": "450",
+      "meaning": "server-only (không có file default)",
+      "where": "Configs/CachedRemoteConfigs + Firebase RC template 3197 — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server cache (historical)",
+      "key": "preGameConfigModel: multiplierConfig.superHardMultiplierConfig.multiplierShufflePrice.2",
+      "type": "",
+      "value": "900",
+      "meaning": "server-only (không có file default)",
+      "where": "Configs/CachedRemoteConfigs + Firebase RC template 3197 — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server cache (historical)",
+      "key": "preGameConfigModel: multiplierConfig.superHardMultiplierConfig.multiplierShufflePrice.3",
+      "type": "",
+      "value": "1350",
+      "meaning": "server-only (không có file default)",
+      "where": "Configs/CachedRemoteConfigs + Firebase RC template 3197 — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server cache (historical)",
+      "key": "preGameConfigModel: multiplierConfig.superHardMultiplierConfig.multiplierUndoPrice.1",
+      "type": "",
+      "value": "450",
+      "meaning": "server-only (không có file default)",
+      "where": "Configs/CachedRemoteConfigs + Firebase RC template 3197 — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server cache (historical)",
+      "key": "preGameConfigModel: multiplierConfig.superHardMultiplierConfig.multiplierUndoPrice.2",
+      "type": "",
+      "value": "900",
+      "meaning": "server-only (không có file default)",
+      "where": "Configs/CachedRemoteConfigs + Firebase RC template 3197 — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server cache (historical)",
+      "key": "preGameConfigModel: multiplierConfig.superHardMultiplierConfig.multiplierUndoPrice.3",
+      "type": "",
+      "value": "1350",
+      "meaning": "server-only (không có file default)",
+      "where": "Configs/CachedRemoteConfigs + Firebase RC template 3197 — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "AB test",
+      "key": "Firebase RC: BottleVar",
+      "type": "",
+      "value": "1",
+      "meaning": "cờ AB/tinh chỉnh server-only (giá trị nhánh máy này)",
+      "where": "Configs/CachedRemoteConfigs + Firebase RC template 3197 — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "AB test",
+      "key": "Firebase RC: BottlesAreTaller",
+      "type": "",
+      "value": "false",
+      "meaning": "cờ AB/tinh chỉnh server-only (giá trị nhánh máy này)",
+      "where": "Configs/CachedRemoteConfigs + Firebase RC template 3197 — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "AB test",
+      "key": "Firebase RC: ExtraBottleHeightOnPlayOn",
+      "type": "",
+      "value": "4",
+      "meaning": "cờ AB/tinh chỉnh server-only (giá trị nhánh máy này)",
+      "where": "Configs/CachedRemoteConfigs + Firebase RC template 3197 — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "AB test",
+      "key": "Firebase RC: IsAlternativeFailFlow",
+      "type": "",
+      "value": "false",
+      "meaning": "cờ AB/tinh chỉnh server-only (giá trị nhánh máy này)",
+      "where": "Configs/CachedRemoteConfigs + Firebase RC template 3197 — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "AB test",
+      "key": "Firebase RC: IsNewBottleParticlesEnabled",
+      "type": "",
+      "value": "true",
+      "meaning": "cờ AB/tinh chỉnh server-only (giá trị nhánh máy này)",
+      "where": "Configs/CachedRemoteConfigs + Firebase RC template 3197 — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "AB test",
+      "key": "Firebase RC: IsNewBottleVisualsEnabled",
+      "type": "",
+      "value": "true",
+      "meaning": "cờ AB/tinh chỉnh server-only (giá trị nhánh máy này)",
+      "where": "Configs/CachedRemoteConfigs + Firebase RC template 3197 — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "AB test",
+      "key": "Firebase RC: IsNewTryAgainFlowEnabled",
+      "type": "",
+      "value": "true",
+      "meaning": "cờ AB/tinh chỉnh server-only (giá trị nhánh máy này)",
+      "where": "Configs/CachedRemoteConfigs + Firebase RC template 3197 — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "AB test",
+      "key": "Firebase RC: LevelEndPopupsAbGroup",
+      "type": "",
+      "value": "0",
+      "meaning": "cờ AB/tinh chỉnh server-only (giá trị nhánh máy này)",
+      "where": "Configs/CachedRemoteConfigs + Firebase RC template 3197 — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "AB test",
+      "key": "Firebase RC: PlayOnTwoBottlesLimit",
+      "type": "",
+      "value": "3",
+      "meaning": "cờ AB/tinh chỉnh server-only (giá trị nhánh máy này)",
+      "where": "Configs/CachedRemoteConfigs + Firebase RC template 3197 — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "AB test",
+      "key": "Firebase RC: StuckPopupAbGroup",
+      "type": "",
+      "value": "0",
+      "meaning": "cờ AB/tinh chỉnh server-only (giá trị nhánh máy này)",
+      "where": "Configs/CachedRemoteConfigs + Firebase RC template 3197 — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    }
+  ],
+  "rewards": [
+    {
+      "context": "Thắng level thường",
+      "reward": "Coin theo AdConfigModel.GetLevelWinCoinRewardByDifficulty (Regular/Hard/SuperHard)",
+      "evidence": "GiveRegularCoinRewardsCommand.GiveRegularLevelCoinReward; AdConfigModel.GetLevelWinCoinRewardByDifficulty"
+    },
+    {
+      "context": "Nhân đôi coin bằng quảng cáo ở LevelWinPopUp",
+      "reward": "CoinAmountNew2xRewardedForRegular / ForHard / ForSuperHard (CurrencyEarnReason.Rewarded2XCoin = 8)",
+      "evidence": "Rewarded2xButton; AdService.Get2XRewardedCoinAmount; AdService.ShouldShow2XRewarded"
+    },
+    {
+      "context": "Level có phần thưởng vạc",
+      "reward": "LevelConfigModel.CauldronReward (RewardModel), EarnReason.LevelWinCauldron = 1",
+      "evidence": "LevelConfigModel.HasCauldronReward; EarnReason"
+    },
+    {
+      "context": "Play On bằng quảng cáo",
+      "reward": "1 ExtraBottle / TinyBottle / Undo / MegaShuffle theo PlayOnWithRewardedVariantType",
+      "evidence": "PlayOnWithRewardedService.GetPlayOnBehaviours; PlayOnWithRewardedService.GetDefaultPlayOnBehaviour"
+    },
+    {
+      "context": "Xem quảng cáo trong RefillPopUp",
+      "reward": "1 mạng (CurrencyEarnReason.RewardedOneLife = 9)",
+      "evidence": "LifeRewardedButton; AdService.ShouldShowLifeRewarded"
+    }
+  ],
+  "backend": [
+    {
+      "command": "GrandRemoteRegularLevelsConfigs (LevelsConfig, LoopLevelsConfig, BlockerIntroConfigModel)",
+      "direction": "server→client",
+      "purpose": "Cấu hình seed/độ khó/giới thiệu vật cản cho level thường"
+    },
+    {
+      "command": "FirebaseRemoteConfigs (RootLevelConfigModel, GameEconomyModel, AdConfigModel, PlayOnRewardedConfigModel, EgoOfferConfigModel)",
+      "direction": "server→client",
+      "purpose": "Toàn bộ cờ AB, giá Play On, thưởng thắng level"
+    },
+    {
+      "command": "PlayOnWithRewardedDataModel sync",
+      "direction": "client↔server",
+      "purpose": "Đồng bộ số lượt quảng cáo Play On đã xem trong ngày (ISyncable)"
+    },
+    {
+      "command": "RemoteTimeService.IsRemoteDaySameWithLocalDay",
+      "direction": "client→server",
+      "purpose": "Xác thực ngày theo giờ server, chống chỉnh giờ để lách giới hạn quảng cáo"
+    }
+  ],
+  "ui": [
+    {
+      "element": "PreLevelPopUp / InLevelPreLevelPopUp / NextLevelPreLevelPopUp",
+      "class": "Modules.Contexts.GamePlay.UI.PreLevelPopUpNS.Scripts",
+      "purpose": "Chọn booster trước khi vào level, nút Play"
+    },
+    {
+      "element": "StuckPopup (biến thể A/B/C)",
+      "class": "Modules.Contexts.GamePlay.UI.LevelStuckPopUpNs.Scripts.StuckPopup",
+      "purpose": "Mời Play On bằng coin hoặc quảng cáo khi kẹt"
+    },
+    {
+      "element": "StuckAreYouSurePopup",
+      "class": "Modules.Contexts.GamePlay.UI.StuckAreYouSurePopUpNs.Scripts.StuckAreYouSurePopup",
+      "purpose": "Xác nhận bỏ cuộc khi kẹt"
+    },
+    {
+      "element": "LevelFailPopUp",
+      "class": "Modules.Contexts.GamePlay.UI.LevelFailPopUpNS.Scripts.LevelFailPopUp",
+      "purpose": "Màn thua, lần lượt hiện các AreYouSureContainer (offer, mất mạng, thoát)"
+    },
+    {
+      "element": "LevelWinPopUp / LevelCongratsPopUp",
+      "class": "Modules.Contexts.GamePlay.UI.LevelWinPopUpNS.Scripts",
+      "purpose": "Màn thắng, coin thưởng, nút x2 bằng quảng cáo, nút Continue"
+    },
+    {
+      "element": "QuitAreYouSurePopup",
+      "class": "Modules.Contexts.GamePlay.UI.QuitAreYouSurePopUpNS.Scripts.QuitAreYouSurePopup",
+      "purpose": "Xác nhận thoát level"
+    },
+    {
+      "element": "TryAgainPopup",
+      "class": "Modules.Contexts.GamePlay.UI.TryAgainPopUpNs.Scripts.TryAgainPopup",
+      "purpose": "Mời chơi lại, hiện hậu quả với các event live-ops"
+    },
+    {
+      "element": "RefillPopUp",
+      "class": "Modules.Contexts.GamePlay.UI.RefillPopUpNs.Scripts.RefillPopUp",
+      "purpose": "Hồi mạng bằng coin/quảng cáo/bạn bè"
+    },
+    {
+      "element": "NewBlockerIntroPopUp",
+      "class": "Modules.Contexts.GamePlay.UI.NewBlockerIntro.Scripts.NewBlockerIntroPopUp",
+      "purpose": "Giới thiệu vật cản mới"
+    },
+    {
+      "element": "InLevelSettings",
+      "class": "Modules.Contexts.GamePlay.UI.InLevelSettings.Scripts.InLevelSettingsController",
+      "purpose": "Nhạc/âm thanh/rung/thoát trong level"
+    },
+    {
+      "element": "InLevelTopLeftUI",
+      "class": "Modules.Contexts.GamePlay.UI.Common.Scripts.InLevelTopLeftUIController",
+      "purpose": "Số level, độ khó, timer daily"
+    }
+  ],
+  "analytics": [
+    {
+      "event": "level_start / level_win / level_lose / level_quit / level_stuck / level_play_on / level_pause / level_none",
+      "params": "progress (kèm hậu tố _{0})",
+      "when": "GrandEventSender.SendLevelEvent(LevelState, progress) ở mỗi chuyển trạng thái"
+    },
+    {
+      "event": "level_event",
+      "params": "state, progress, user_segment, liveOps_stats, session_durations",
+      "when": "EventSender.SendLevelEvent(LevelState)"
+    },
+    {
+      "event": "level_duration",
+      "params": "level_duration, level_start_time, level_end_time, level_end_type, finish_status, average_move_duration, first_move_duration, progress",
+      "when": "Kết thúc level (EventSender.SendLevelDurationEvent)"
+    },
+    {
+      "event": "Bảng chỉ số level",
+      "params": "attempt, progress, level_type, level_difficulty, seed_id, total_move_count, bottles_completed, empty_bottle_count, initial_empty_bottle_count, initial_filled_bottle_count, undo_used, shuffle_used, extrabottle_used, streak_count, session_count, snitch_progress, obstacle_stats, moves2",
+      "when": "LevelStats.GetLevelStats() gắn kèm event level_*"
+    },
+    {
+      "event": "level_congrats / level_win_pop_up_opened / level_win_pop_up_continue_clicked",
+      "params": "progress",
+      "when": "Popup thắng"
+    },
+    {
+      "event": "level_first_bottle_click / level_first_move_click",
+      "params": "progress",
+      "when": "Lần chạm/nước đi đầu tiên trong level"
+    },
+    {
+      "event": "play_button_clicked / play_button_click_failed",
+      "params": "progress",
+      "when": "Bấm Play ở Home"
+    },
+    {
+      "event": "playon_withrewarded / playon_withrewarded_mega_shuffle_stucked / play_on_count / playoncount_cumulative / playoncount_between_steps",
+      "params": "source, segment",
+      "when": "Dùng Play On (EventSender)"
+    },
+    {
+      "event": "energy_depleted",
+      "params": "-",
+      "when": "LoseState.Enter — mất 1 mạng"
+    },
+    {
+      "event": "refill_pop_up_opened",
+      "params": "-",
+      "when": "Mở RefillPopUp"
+    },
+    {
+      "event": "home_return / home_return_completed",
+      "params": "-",
+      "when": "Bắt đầu và kết thúc chuỗi trở về Home"
+    },
+    {
+      "event": "app_focus_lost / app_focus_gain",
+      "params": "_moves{0}_lcd{1}, _fps{0}_spikes{1}",
+      "when": "Mất/khôi phục focus giữa level"
+    },
+    {
+      "event": "settings_clicked / quit_from_settings_clicked",
+      "params": "-",
+      "when": "Mở cài đặt / thoát từ cài đặt trong level"
+    },
+    {
+      "event": "level_entrance_animation_end / level_is_not_loaded",
+      "params": "-",
+      "when": "Kết thúc animation vào level / nạp level thất bại"
+    },
+    {
+      "event": "level_reach_45_24h / level_reach_45_72h / level_reach_100_72h",
+      "params": "progress, seconds_since_first_open",
+      "when": "Mốc tiến trình sau lần mở app đầu tiên"
+    }
+  ],
+  "storage_keys": [
+    "PlayOnWithRewardedDataModel"
+  ],
+  "related_features": [
+    "BottleSortMechanics",
+    "Boosters",
+    "DailyLevel",
+    "LevelGeneration",
+    "Obstacles",
+    "Tutorial"
+  ],
+  "gaps": [
+    "15/11 — resolved_historical_snapshot: Đã có default/cache/Firebase theo snapshot và77fieldplaceholder được nối giá trị exactpath cótype/hash. Không còn chỉ có default; đây là catalog nguồn lịch sử, không xác nhận configeffective của mọi nhánh. Còn lại: Dùngsnapshot_values trongGDD, đối chiếu ledger chỉ vớicase đã thựcthi.",
+    "15/11 — resolved_static_code_historical_build: Constructor ReturnToHomeSequenceService dựng 4 danh sách có số phần tử9 regularLose,57 regularWin,2 dailyLose,6 dailyWin; ordered type rows đã lưu tại local_code_gap_results.supporting_tables.return_home_sequences. Đây là queue command count, không phải57 popup đều xuất hiện. Còn lại: Đối chiếu nhánh này trên app0.0.3129 ARM64; chưa là runtime pass.",
+    "15/11 — resolved_static_code_historical_build: GetDefaultPlayOnBehaviour: variant0/out-of-range→ExtraBottle0; table variant1..9=[Tiny1,Extra0,Extra0,Tiny1,Tiny1,Tiny1,Tiny1,Undo3,Mega4]. GetPlayOnBehaviours special variant3: watchedCount1→[Undo3],<2→[],>=2→[Undo3,Extra0]. Các variant khác dùng table. Disabled99 default0 trong helper này không chứng minh offer enabled; eligibility nằm caller khác. Còn lại: Đối chiếu nhánh này trên app0.0.3129 ARM64; chưa là runtime pass.",
+    "15/11 — partial_actual_evidence: Ledger/board chứng minhUndo mộtpour vàShuffle chọn/hủy. Còn lại: Thựcthi đúng câu hỏi còn lại trên fixture phù hợp; không nâng một nhánh thànhfullUCpass.",
+    "[Runtime 2026-09-10] Config server LIVE đã đọc trực tiếp từ cache máy (không cần request); các hàng 'server live' là giá trị server ghi đè/thêm so với default.",
+    "[Runtime 2026-09-10] Model server-only playOnMultipleBottlesConfigModel (không có trong Resources/defaultconfigs) đã đọc từ cache live.",
+    "[Runtime 2026-09-10] Model server-only preGameConfigModel (không có trong Resources/defaultconfigs) đã đọc từ cache live.",
+    "[Runtime 2026-09-10] Cờ AB/tinh chỉnh server-only đọc từ Firebase Remote Config (template 3197)."
+  ],
+  "sources": [
+    "features/RegularLevelManager.md",
+    "features/GameStateService.md",
+    "features/PlayOnManager.md",
+    "features/PlayOnWithRewardedService.md",
+    "features/PlayOnWithRewardedDataService.md",
+    "features/MegaShuffleManager.md",
+    "features/CommandHistoryManager.md",
+    "features/ReturnToHomeSequenceService.md",
+    "RecoveredNative/PseudoC/Assembly-CSharp/Modules/Contexts/GamePlay/PlayOn/Scripts/PlayOnManager.c",
+    "RecoveredNative/PseudoC/Assembly-CSharp/Modules/Contexts/GamePlay/PlayOn/Scripts/PlayOnWithRewarded/PlayOnWithRewardedService.c",
+    "RecoveredNative/PseudoC/Assembly-CSharp/Modules/Contexts/GamePlay/Loop/Scripts/Regular/*.c",
+    "UnityExport/.../Assembly-CSharp/Modules/Contexts/GamePlay/Levels/Scripts/LevelState.cs, StuckType.cs, LevelStats.cs",
+    "UnityExport/.../Modules/Contexts/Application/RemoteConfig/Scripts/GameEconomyModel.cs, RootLevelConfigModel.cs",
+    "UnityExport/.../Modules/Contexts/Application/Ads/Scripts/AdConfigModel.cs",
+    "RecoveredNative/strings-by-type.tsv (GrandEventSender, EventSender, LevelStats)"
+  ],
+  "audit_provenance": {
+    "review_date": "2026-11-15",
+    "mode": "offline_existing_files",
+    "code_build": "0.0.3063 ARMv7",
+    "runtime_build_observed_historically": "0.0.3129 ARM64 (audit 2026-10-18); not rechecked 2026-11-15",
+    "new_playtests": 4,
+    "uc_status": "See facts/audit_20261115/uc_registry.json; image reference is not pass",
+    "workbook_status": "Existing XLSX is historical; JSON and local web include 2026-11-15 corrections",
+    "static_review": "facts/local_code_gap_results_20261115.json; facts/local_asset_gap_results_20261115.json; facts/final_data_gap_decisions_20261115.json; facts/core_body_gap_decisions_20261115.json; facts/remaining_asset_gap_decisions_20261115.json"
+  },
+  "runtime_review_20261115": [
+    {
+      "id": "MS-R15-CORE05",
+      "feature": "LevelFlow",
+      "uc": [
+        "UC-12",
+        "UC-20"
+      ],
+      "title": "Mở cài đặt và hủy thoát level",
+      "precondition": "App 0.0.3129 ARM64, UID offline, tài nguyên fixture có sẵn; level 351 rồi 352. Nguồn code 0.0.3063 được phân biệt riêng.",
+      "steps": [
+        "Mở gear",
+        "Bấm Exit",
+        "Bấm X trên cảnh báo"
+      ],
+      "expected": "Hủy thoát giữ board và phiên level.",
+      "actual": "Hiện cảnh báo You will lose 1 life! dù đang có unlimited lives; X trở về board đang chơi, inventory giữ nguyên, isLevelInProgress=true.",
+      "status": "verified_observed_branch",
+      "limitations": "Không xác nhận mất mạng vì chưa bấm Quit ở case này; chữ cảnh báo không đủ chứng minh mức trừ thực tế.",
+      "images": [
+        "CORE10_pause",
+        "CORE11_exit_warning",
+        "CORE12_exit_cancel"
+      ],
+      "before": "CORE09_extra_bottle",
+      "after": "CORE12_exit_cancel",
+      "currency_unchanged": true,
+      "build": "0.0.3129 ARM64",
+      "mode": "offline_existing_fixture",
+      "date": "2026-11-15",
+      "ledger": {
+        "before": "CORE09_extra_bottle.json",
+        "after": "CORE12_exit_cancel.json"
+      }
+    },
+    {
+      "id": "MS-R15-CORE07",
+      "feature": "LevelFlow",
+      "uc": [
+        "UC-11",
+        "UC-14"
+      ],
+      "title": "Thắng level351, reset retry và thưởng20coin",
+      "precondition": "App 0.0.3129 ARM64, UID offline, tài nguyên fixture có sẵn; level 351 rồi 352. Nguồn code 0.0.3063 được phân biệt riêng.",
+      "steps": [
+        "Giải seed351 với hỗ trợ tính đường đi từ JSON",
+        "Thực thi từng nhóm nước đổ qua ADB và đối chiếu ảnh",
+        "Continue ở popup Perfect"
+      ],
+      "expected": "Hoàn thành board, tiến level, thưởng và retry đúng thời điểm.",
+      "actual": "Win nâng PlayerModel351→352 và isLevelInProgress=false trước Continue; retry8→0, snitchRetry1→0. Popup thưởng20. Coin vẫn999995869 tại popup, sau Continue999995889. firstTryLevelWinCount giữ5.",
+      "status": "verified_observed_branch",
+      "limitations": "Đây là lượt có dùng Undo/Shuffle/ExtraBottle và đọc seed, không dùng thời lượng để đo độ khó tự nhiên. Chỉ seed...351_difficulty1-12; không phải toàn bộ level pass. Replay log ghi input, ảnh checkpoint và kết quả win xác nhận thực thi.",
+      "images": [
+        "CORE17_solver_6",
+        "CORE19_solver_18",
+        "CORE20_solver_finish",
+        "CORE21_win_ready",
+        "CORE22_win_continue"
+      ],
+      "before": "CORE01_prelevel",
+      "after": "CORE22_win_continue",
+      "currency_unchanged": false,
+      "build": "0.0.3129 ARM64",
+      "mode": "offline_existing_fixture",
+      "date": "2026-11-15",
+      "ledger": {
+        "before": "CORE01_prelevel.json",
+        "after": "CORE22_win_continue.json"
+      },
+      "related_uc": [
+        "UC-18"
+      ],
+      "uc_scope_note": "related_uc chỉ context/dependency: gate, chưa vào UC, khác subsystem hoặc teardown nội bộ chưa đo; không tính vào executed branch coverage."
+    },
+    {
+      "id": "MS-R15-CORE10",
+      "feature": "LevelFlow",
+      "uc": [
+        "UC-12",
+        "UC-13"
+      ],
+      "title": "Quit giữa level và popup Failed có phần thưởng hiển thị",
+      "precondition": "App 0.0.3129 ARM64, UID offline, tài nguyên fixture có sẵn; level 351 rồi 352. Nguồn code 0.0.3063 được phân biệt riêng.",
+      "steps": [
+        "Gear → Exit → Quit",
+        "Đóng popup Failed bằngX"
+      ],
+      "expected": "Ghi fail state, mức thưởng thật và phân biệt với nhãn UI.",
+      "actual": "Level352 giữ nguyên, isLevelInProgress true→false. Failed có TryAgain và vẫn hiển thị Rewards20; đóng bằngX vềHome, coin giữ999995889, không cấp20. RetryCount giữ1 trong khoảng quit; unlimitedLifeEnd/lifeFillDate không đổi.",
+      "status": "observed_ui_ledger_discrepancy",
+      "limitations": "Một lượt quit sau thắng351, có unlimited lives. Phần Rewards20 có thể là UI còn trạng thái cũ; chưa quy kết bug production hoặc tuyên bố fail có thưởng. Chưa bấmTryAgain.",
+      "images": [
+        "CORE25_quit352_warning",
+        "CORE28_quit352",
+        "CORE29_fail_close"
+      ],
+      "before": "CORE27_pillow_unlock",
+      "after": "CORE29_fail_close",
+      "currency_unchanged": true,
+      "build": "0.0.3129 ARM64",
+      "mode": "offline_existing_fixture",
+      "date": "2026-11-15",
+      "ledger": {
+        "before": "CORE27_pillow_unlock.json",
+        "after": "CORE29_fail_close.json"
+      },
+      "related_uc": [
+        "UC-18"
+      ],
+      "uc_scope_note": "related_uc chỉ context/dependency: gate, chưa vào UC, khác subsystem hoặc teardown nội bộ chưa đo; không tính vào executed branch coverage."
+    },
+    {
+      "id": "MS-R15-CORE12",
+      "feature": "LevelFlow",
+      "uc": [
+        "UC-01",
+        "UC-12",
+        "UC-13"
+      ],
+      "title": "Vào rồi Quit352 khi không còn unlimited lives",
+      "precondition": "0.0.3129 ARM64; level352, UID MagicSort offline, save fixture có sẵn. Code/asset0.0.3063 là nguồn lịch sử riêng.",
+      "steps": [
+        "Bấm Play352",
+        "Không đổ nước/không booster",
+        "Gear→Exit→Quit",
+        "Đóng Failed bằngX"
+      ],
+      "expected": "Ghi entry/quit và số dư; phân biệt Reward label với actual grant.",
+      "actual": "isLevelInProgress true ở board, false sau Quit. Failed vẫn hiện Rewards20; coin giữ999995889 và không nhận20. Home4mạng, timer29:15; lifeFillDate đã đổi ở entry, không đổi thêm ở quit.",
+      "limitations": "Không gọi Dispose/memory verified; chưa bấmTryAgain hay thử stuck/fail mất hết nước. Một lượt không có nước đi, không booster; không đo natural regen.",
+      "status": "observed_ui_ledger_discrepancy",
+      "before": "MORE22_home_before_core",
+      "after": "MORE27_home_four_lives",
+      "images": [
+        "MORE23_level352",
+        "MORE24_game_settings",
+        "MORE25_quit_warning",
+        "MORE26_quit_fail",
+        "MORE27_home_four_lives"
+      ],
+      "build": "0.0.3129 ARM64",
+      "mode": "offline_existing_fixture",
+      "date": "2026-11-15",
+      "currency_unchanged": true,
+      "ledger": {
+        "before": "MORE22_home_before_core.json",
+        "after": "MORE27_home_four_lives.json"
+      }
+    }
+  ],
+  "static_review_20261115": {
+    "date": "2026-11-15",
+    "scope": "Historical code/assets 0.0.3063, dated caches, device 0.0.3129 cached bundles and explicitly scoped runtime evidence. Not full runtime pass.",
+    "findings": [
+      {
+        "kind": "core_body",
+        "source_report": "facts/core_body_gap_decisions_20261115.json",
+        "id": "MS-CORE-BODY-07",
+        "gap_ids": [
+          "MS-LevelFlow-G002"
+        ],
+        "title": "Bốn queue return-home",
+        "conclusion": "Constructor ReturnToHomeSequenceService dựng 4 danh sách có số phần tử9 regularLose,57 regularWin,2 dailyLose,6 dailyWin; ordered type rows đã lưu tại local_code_gap_results.supporting_tables.return_home_sequences. Đây là queue command count, không phải57 popup đều xuất hiện.",
+        "evidence": [
+          {
+            "file": "../com.grandgames.magicsort_Unity_20260909_112501/RecoveredNative/PseudoC/Assembly-CSharp/Modules/Contexts/GamePlay/Loop/Scripts/ReturnToHomeSequenceService.c",
+            "line": 1015,
+            "end_line": 1048,
+            "method": "// ===== ReturnToHomeSequenceService :: public void .ctor(",
+            "sha256": "7950940e30fbffce0b9d6a07d8f020bacb799f6cb7b8fb0bee4079aae370bd06",
+            "body_checked": true,
+            "build": "0.0.3063 ARMv7",
+            "required_body_tokens": []
+          }
+        ],
+        "status": "resolved_static_code_historical_build",
+        "remaining": "Đối chiếu nhánh này trên app0.0.3129 ARM64; chưa là runtime pass.",
+        "runtime_verified": false,
+        "scope": "recovered_native_0.0.3063_only"
+      },
+      {
+        "kind": "core_body",
+        "source_report": "facts/core_body_gap_decisions_20261115.json",
+        "id": "MS-CORE-BODY-08",
+        "gap_ids": [
+          "MS-LevelFlow-G003"
+        ],
+        "title": "PlayOn variant mapping đã giải ELF",
+        "conclusion": "GetDefaultPlayOnBehaviour: variant0/out-of-range→ExtraBottle0; table variant1..9=[Tiny1,Extra0,Extra0,Tiny1,Tiny1,Tiny1,Tiny1,Undo3,Mega4]. GetPlayOnBehaviours special variant3: watchedCount1→[Undo3],<2→[],>=2→[Undo3,Extra0]. Các variant khác dùng table. Disabled99 default0 trong helper này không chứng minh offer enabled; eligibility nằm caller khác.",
+        "evidence": [
+          {
+            "file": "../com.grandgames.magicsort_Unity_20260909_112501/RecoveredNative/PseudoC/Assembly-CSharp/Modules/Contexts/GamePlay/PlayOn/Scripts/PlayOnWithRewarded/PlayOnWithRewardedService.c",
+            "line": 687,
+            "end_line": 823,
+            "method": "// ===== PlayOnWithRewardedService :: public List<PlayOnBehaviourType> GetPlayOnBehaviours(",
+            "sha256": "76a2d9193b57c1c0685bba2736edf412b16df608b9c1c5821da3567487cf342d",
+            "body_checked": true,
+            "build": "0.0.3063 ARMv7",
+            "required_body_tokens": []
+          },
+          {
+            "file": "../com.grandgames.magicsort_Unity_20260909_112501/RecoveredNative/PseudoC/Assembly-CSharp/Modules/Contexts/GamePlay/PlayOn/Scripts/PlayOnWithRewarded/PlayOnWithRewardedService.c",
+            "line": 824,
+            "end_line": 848,
+            "method": "// ===== PlayOnWithRewardedService :: public PlayOnBehaviourType GetDefaultPlayOnBehaviour(",
+            "sha256": "76a2d9193b57c1c0685bba2736edf412b16df608b9c1c5821da3567487cf342d",
+            "body_checked": true,
+            "build": "0.0.3063 ARMv7",
+            "required_body_tokens": []
+          }
+        ],
+        "status": "resolved_static_code_historical_build",
+        "remaining": "Đối chiếu nhánh này trên app0.0.3129 ARM64; chưa là runtime pass.",
+        "runtime_verified": false,
+        "scope": "recovered_native_0.0.3063_only"
+      },
+      {
+        "kind": "final_data",
+        "source_report": "facts/final_data_gap_decisions_20261115.json",
+        "id": "MS-FDG-029",
+        "gap_ids": [
+          "MS-LevelFlow-G001"
+        ],
+        "title": "Giá trị remote thật do Firebase quyết định lúc chạy; các số ghi trong file này là mặc định đóng gói trong Resources/defaultconfigs/*.json (client default) và có",
+        "status": "resolved_historical_snapshot",
+        "conclusion": "Đã có default/cache/Firebase theo snapshot và77fieldplaceholder được nối giá trị exactpath cótype/hash. Không còn chỉ có default; đây là catalog nguồn lịch sử, không xác nhận configeffective của mọi nhánh.",
+        "evidence": [
+          "facts/config_placeholder_patchset_20261115.json",
+          "facts/audit_20261115/config_leaves.json"
+        ],
+        "remaining": "Effective runtime mọi biến thể vẫn chưa được chứng minh bởi sự tồn tại cache.",
+        "next_action": "Dùngsnapshot_values trongGDD, đối chiếu ledger chỉ vớicase đã thựcthi.",
+        "scope": "question-specific source/observed branch only; no full-UC or production claim",
+        "source_records": []
+      },
+      {
+        "kind": "final_data",
+        "source_report": "facts/final_data_gap_decisions_20261115.json",
+        "id": "MS-FDG-036",
+        "gap_ids": [
+          "MS-LevelFlow-G004"
+        ],
+        "title": "CommandHistoryManager là lớp hạ tầng chung; chưa xác nhận được toàn bộ loại IUndoableCommand mà gameplay đẩy vào.",
+        "status": "partial_actual_evidence",
+        "conclusion": "Ledger/board chứng minhUndo mộtpour vàShuffle chọn/hủy.",
+        "evidence": [
+          "facts/review_cases_20261115.json#MS-R15-CORE02",
+          "facts/review_cases_20261115.json#MS-R15-CORE03"
+        ],
+        "remaining": "Danh mục tấtcảIUndoableCommand và reset lịch sử ởmọiranhgiới chưa đủ.",
+        "next_action": "Thựcthi đúng câu hỏi còn lại trên fixture phù hợp; không nâng một nhánh thànhfullUCpass.",
+        "scope": "question-specific source/observed branch only; no full-UC or production claim",
+        "source_records": []
+      }
+    ]
+  },
+  "acceptance_review_20261115": {
+    "source": "facts/feature_acceptance_20261115.json",
+    "feature_id": "LevelFlow",
+    "scope": "All eleven dossier dimensions reviewed; full_feature_verified is not implied; read per-dimension gaps and actual runtime evidence."
+  },
+  "segment_ab_review_20261115": {
+    "status": "reviewed_rows_associated_assignment_not_proven",
+    "segment_ids": [
+      "MS-SEG-001",
+      "MS-SEG-060",
+      "MS-SEG-083",
+      "MS-SEG-084",
+      "MS-SEG-085",
+      "MS-SEG-109",
+      "MS-SEG-110",
+      "MS-SEG-111",
+      "MS-SEG-112",
+      "MS-SEG-158",
+      "MS-SEG-159",
+      "MS-SEG-160",
+      "MS-SEG-220"
+    ],
+    "matching_basis": "explicit_gd_config_map_or_exact_model_token_in_gdd_configs_where_key_sources; rootfieldscoped",
+    "rows": [
+      {
+        "snapshot": "default_0.0.3063",
+        "model": "AdConfigModel",
+        "key": "PlayOnWithRewardedVariantType",
+        "value": 0,
+        "type": "int",
+        "source": "../com.grandgames.magicsort_Unity_20260909_112501/UnityExport/ExportedProject/Assets/Resources/defaultconfigs/AdConfigModel.json",
+        "classification": "config_candidate_not_backend_assignment_proof",
+        "review_id": "MS-SEG-001",
+        "review_classification": "variant_config",
+        "review_status": "missing_experiment_assignment_and_outcome",
+        "consumer": {
+          "source": "com.grandgames.magicsort_Unity_20260909_112501/RecoveredNative/PseudoC/Assembly-CSharp/Modules/Contexts/Application/Ads/Scripts/ConfigService/AdConfigService.c",
+          "line": 830,
+          "marker": "// ===== AdConfigService :: public void SetAdConfigModels",
+          "build": "0.0.3063 ARMv7",
+          "evidence": "recovered_native_historical_version"
+        },
+        "interpretation": "Giá trị variant được cache/default/Firebase; chưa có experimentID hoặc traffic split.",
+        "next_action": "Cần experimentID, variant, allocation, activation timestamp, consumer effect và đối chứng cùng điều kiện.",
+        "assignment_proof": false,
+        "uplift_proof": false,
+        "matching_basis": [
+          {
+            "kind": "exact_model_token_in_dossier_source_or_config",
+            "source": "gdd/LevelFlow.json#/sources/13"
+          },
+          {
+            "kind": "exact_model_token_in_dossier_source_or_config",
+            "source": "gdd/LevelFlow.json#/configs/23/key_where"
+          },
+          {
+            "kind": "exact_model_token_in_dossier_source_or_config",
+            "source": "gdd/LevelFlow.json#/configs/24/key_where"
+          },
+          {
+            "kind": "exact_model_token_in_dossier_source_or_config",
+            "source": "gdd/LevelFlow.json#/configs/25/key_where"
+          },
+          {
+            "kind": "exact_model_token_in_dossier_source_or_config",
+            "source": "gdd/LevelFlow.json#/configs/26/key_where"
+          },
+          {
+            "kind": "exact_model_token_in_dossier_source_or_config",
+            "source": "gdd/LevelFlow.json#/configs/28/key_where"
+          },
+          {
+            "kind": "exact_model_token_in_dossier_source_or_config",
+            "source": "gdd/LevelFlow.json#/configs/29/key_where"
+          },
+          {
+            "kind": "exact_model_token_in_dossier_source_or_config",
+            "source": "gdd/LevelFlow.json#/configs/30/key_where"
+          }
+        ]
+      },
+      {
+        "snapshot": "cache_20260910",
+        "model": "adConfigModel",
+        "key": "playOnWithRewardedVariantType",
+        "value": 0,
+        "type": "int",
+        "source": "facts/runtime/server_configs/adConfigModel.json",
+        "classification": "config_candidate_not_backend_assignment_proof",
+        "review_id": "MS-SEG-060",
+        "review_classification": "variant_config",
+        "review_status": "missing_experiment_assignment_and_outcome",
+        "consumer": {
+          "source": "com.grandgames.magicsort_Unity_20260909_112501/RecoveredNative/PseudoC/Assembly-CSharp/Modules/Contexts/Application/Ads/Scripts/ConfigService/AdConfigService.c",
+          "line": 830,
+          "marker": "// ===== AdConfigService :: public void SetAdConfigModels",
+          "build": "0.0.3063 ARMv7",
+          "evidence": "recovered_native_historical_version"
+        },
+        "interpretation": "Giá trị variant được cache/default/Firebase; chưa có experimentID hoặc traffic split.",
+        "next_action": "Cần experimentID, variant, allocation, activation timestamp, consumer effect và đối chứng cùng điều kiện.",
+        "assignment_proof": false,
+        "uplift_proof": false,
+        "matching_basis": [
+          {
+            "kind": "exact_model_token_in_dossier_source_or_config",
+            "source": "gdd/LevelFlow.json#/sources/13"
+          },
+          {
+            "kind": "exact_model_token_in_dossier_source_or_config",
+            "source": "gdd/LevelFlow.json#/configs/23/key_where"
+          },
+          {
+            "kind": "exact_model_token_in_dossier_source_or_config",
+            "source": "gdd/LevelFlow.json#/configs/24/key_where"
+          },
+          {
+            "kind": "exact_model_token_in_dossier_source_or_config",
+            "source": "gdd/LevelFlow.json#/configs/25/key_where"
+          },
+          {
+            "kind": "exact_model_token_in_dossier_source_or_config",
+            "source": "gdd/LevelFlow.json#/configs/26/key_where"
+          },
+          {
+            "kind": "exact_model_token_in_dossier_source_or_config",
+            "source": "gdd/LevelFlow.json#/configs/28/key_where"
+          },
+          {
+            "kind": "exact_model_token_in_dossier_source_or_config",
+            "source": "gdd/LevelFlow.json#/configs/29/key_where"
+          },
+          {
+            "kind": "exact_model_token_in_dossier_source_or_config",
+            "source": "gdd/LevelFlow.json#/configs/30/key_where"
+          }
+        ]
+      },
+      {
+        "snapshot": "cache_20260910",
+        "model": "rootLevelConfigModel",
+        "key": "colorVariant",
+        "value": 2,
+        "type": "int",
+        "source": "facts/runtime/server_configs/rootLevelConfigModel.json",
+        "classification": "config_candidate_not_backend_assignment_proof",
+        "review_id": "MS-SEG-083",
+        "review_classification": "variant_config",
+        "review_status": "missing_experiment_assignment_and_outcome",
+        "consumer": {
+          "source": "com.grandgames.magicsort_Unity_20260909_112501/RecoveredNative/PseudoC/Assembly-CSharp/Modules/Contexts/Application/FirebaseNS/Scripts/FirebaseRemoteConfigResolver.c",
+          "line": 863,
+          "marker": "/* \"ColorVariant\" */",
+          "build": "0.0.3063 ARMv7",
+          "evidence": "recovered_native_historical_version"
+        },
+        "interpretation": "Giá trị variant được cache/default/Firebase; chưa có experimentID hoặc traffic split.",
+        "next_action": "Cần experimentID, variant, allocation, activation timestamp, consumer effect và đối chứng cùng điều kiện.",
+        "assignment_proof": false,
+        "uplift_proof": false,
+        "matching_basis": [
+          {
+            "kind": "exact_model_token_in_dossier_source_or_config",
+            "source": "gdd/LevelFlow.json#/sources/12"
+          },
+          {
+            "kind": "exact_model_token_in_dossier_source_or_config",
+            "source": "gdd/LevelFlow.json#/configs/31/key_where"
+          },
+          {
+            "kind": "exact_model_token_in_dossier_source_or_config",
+            "source": "gdd/LevelFlow.json#/configs/32/key_where"
+          },
+          {
+            "kind": "exact_model_token_in_dossier_source_or_config",
+            "source": "gdd/LevelFlow.json#/configs/33/key_where"
+          },
+          {
+            "kind": "exact_model_token_in_dossier_source_or_config",
+            "source": "gdd/LevelFlow.json#/configs/34/key_where"
+          },
+          {
+            "kind": "exact_model_token_in_dossier_source_or_config",
+            "source": "gdd/LevelFlow.json#/configs/35/key_where"
+          },
+          {
+            "kind": "exact_model_token_in_dossier_source_or_config",
+            "source": "gdd/LevelFlow.json#/configs/36/key_where"
+          },
+          {
+            "kind": "exact_model_token_in_dossier_source_or_config",
+            "source": "gdd/LevelFlow.json#/configs/37/key_where"
+          },
+          {
+            "kind": "exact_model_token_in_dossier_source_or_config",
+            "source": "gdd/LevelFlow.json#/configs/38/key_where"
+          }
+        ]
+      },
+      {
+        "snapshot": "cache_20260910",
+        "model": "rootLevelConfigModel",
+        "key": "levelEndPopupsAbGroup",
+        "value": 0,
+        "type": "int",
+        "source": "facts/runtime/server_configs/rootLevelConfigModel.json",
+        "classification": "config_candidate_not_backend_assignment_proof",
+        "review_id": "MS-SEG-084",
+        "review_classification": "variant_config",
+        "review_status": "missing_experiment_assignment_and_outcome",
+        "consumer": {
+          "source": "com.grandgames.magicsort_Unity_20260909_112501/RecoveredNative/PseudoC/Assembly-CSharp/Modules/Contexts/Application/FirebaseNS/Scripts/FirebaseRemoteConfigResolver.c",
+          "line": 863,
+          "marker": "/* \"ColorVariant\" */",
+          "build": "0.0.3063 ARMv7",
+          "evidence": "recovered_native_historical_version"
+        },
+        "interpretation": "Giá trị variant được cache/default/Firebase; chưa có experimentID hoặc traffic split.",
+        "next_action": "Cần experimentID, variant, allocation, activation timestamp, consumer effect và đối chứng cùng điều kiện.",
+        "assignment_proof": false,
+        "uplift_proof": false,
+        "matching_basis": [
+          {
+            "kind": "exact_model_token_in_dossier_source_or_config",
+            "source": "gdd/LevelFlow.json#/sources/12"
+          },
+          {
+            "kind": "exact_model_token_in_dossier_source_or_config",
+            "source": "gdd/LevelFlow.json#/configs/31/key_where"
+          },
+          {
+            "kind": "exact_model_token_in_dossier_source_or_config",
+            "source": "gdd/LevelFlow.json#/configs/32/key_where"
+          },
+          {
+            "kind": "exact_model_token_in_dossier_source_or_config",
+            "source": "gdd/LevelFlow.json#/configs/33/key_where"
+          },
+          {
+            "kind": "exact_model_token_in_dossier_source_or_config",
+            "source": "gdd/LevelFlow.json#/configs/34/key_where"
+          },
+          {
+            "kind": "exact_model_token_in_dossier_source_or_config",
+            "source": "gdd/LevelFlow.json#/configs/35/key_where"
+          },
+          {
+            "kind": "exact_model_token_in_dossier_source_or_config",
+            "source": "gdd/LevelFlow.json#/configs/36/key_where"
+          },
+          {
+            "kind": "exact_model_token_in_dossier_source_or_config",
+            "source": "gdd/LevelFlow.json#/configs/37/key_where"
+          },
+          {
+            "kind": "exact_model_token_in_dossier_source_or_config",
+            "source": "gdd/LevelFlow.json#/configs/38/key_where"
+          }
+        ]
+      },
+      {
+        "snapshot": "cache_20260910",
+        "model": "rootLevelConfigModel",
+        "key": "inGameBoosterVariant",
+        "value": 0,
+        "type": "int",
+        "source": "facts/runtime/server_configs/rootLevelConfigModel.json",
+        "classification": "config_candidate_not_backend_assignment_proof",
+        "review_id": "MS-SEG-085",
+        "review_classification": "variant_config",
+        "review_status": "missing_experiment_assignment_and_outcome",
+        "consumer": {
+          "source": "com.grandgames.magicsort_Unity_20260909_112501/RecoveredNative/PseudoC/Assembly-CSharp/Modules/Contexts/Application/Inventory/Scripts/InventoryService.c",
+          "line": 388,
+          "marker": "_InGameBoosterVariant_k__BackingField",
+          "build": "0.0.3063 ARMv7",
+          "evidence": "recovered_native_historical_version"
+        },
+        "interpretation": "Giá trị variant được cache/default/Firebase; chưa có experimentID hoặc traffic split.",
+        "next_action": "Cần experimentID, variant, allocation, activation timestamp, consumer effect và đối chứng cùng điều kiện.",
+        "assignment_proof": false,
+        "uplift_proof": false,
+        "matching_basis": [
+          {
+            "kind": "exact_model_token_in_dossier_source_or_config",
+            "source": "gdd/LevelFlow.json#/sources/12"
+          },
+          {
+            "kind": "exact_model_token_in_dossier_source_or_config",
+            "source": "gdd/LevelFlow.json#/configs/31/key_where"
+          },
+          {
+            "kind": "exact_model_token_in_dossier_source_or_config",
+            "source": "gdd/LevelFlow.json#/configs/32/key_where"
+          },
+          {
+            "kind": "exact_model_token_in_dossier_source_or_config",
+            "source": "gdd/LevelFlow.json#/configs/33/key_where"
+          },
+          {
+            "kind": "exact_model_token_in_dossier_source_or_config",
+            "source": "gdd/LevelFlow.json#/configs/34/key_where"
+          },
+          {
+            "kind": "exact_model_token_in_dossier_source_or_config",
+            "source": "gdd/LevelFlow.json#/configs/35/key_where"
+          },
+          {
+            "kind": "exact_model_token_in_dossier_source_or_config",
+            "source": "gdd/LevelFlow.json#/configs/36/key_where"
+          },
+          {
+            "kind": "exact_model_token_in_dossier_source_or_config",
+            "source": "gdd/LevelFlow.json#/configs/37/key_where"
+          },
+          {
+            "kind": "exact_model_token_in_dossier_source_or_config",
+            "source": "gdd/LevelFlow.json#/configs/38/key_where"
+          }
+        ]
+      },
+      {
+        "snapshot": "cache_20261010",
+        "model": "rootLevelConfigModel",
+        "key": "colorVariant",
+        "value": 2,
+        "type": "int",
+        "source": "facts/runtime/test_20261010/before/CachedRemoteConfigs",
+        "classification": "config_candidate_not_backend_assignment_proof",
+        "review_id": "MS-SEG-109",
+        "review_classification": "variant_config",
+        "review_status": "missing_experiment_assignment_and_outcome",
+        "consumer": {
+          "source": "com.grandgames.magicsort_Unity_20260909_112501/RecoveredNative/PseudoC/Assembly-CSharp/Modules/Contexts/Application/FirebaseNS/Scripts/FirebaseRemoteConfigResolver.c",
+          "line": 863,
+          "marker": "/* \"ColorVariant\" */",
+          "build": "0.0.3063 ARMv7",
+          "evidence": "recovered_native_historical_version"
+        },
+        "interpretation": "Giá trị variant được cache/default/Firebase; chưa có experimentID hoặc traffic split.",
+        "next_action": "Cần experimentID, variant, allocation, activation timestamp, consumer effect và đối chứng cùng điều kiện.",
+        "assignment_proof": false,
+        "uplift_proof": false,
+        "matching_basis": [
+          {
+            "kind": "exact_model_token_in_dossier_source_or_config",
+            "source": "gdd/LevelFlow.json#/sources/12"
+          },
+          {
+            "kind": "exact_model_token_in_dossier_source_or_config",
+            "source": "gdd/LevelFlow.json#/configs/31/key_where"
+          },
+          {
+            "kind": "exact_model_token_in_dossier_source_or_config",
+            "source": "gdd/LevelFlow.json#/configs/32/key_where"
+          },
+          {
+            "kind": "exact_model_token_in_dossier_source_or_config",
+            "source": "gdd/LevelFlow.json#/configs/33/key_where"
+          },
+          {
+            "kind": "exact_model_token_in_dossier_source_or_config",
+            "source": "gdd/LevelFlow.json#/configs/34/key_where"
+          },
+          {
+            "kind": "exact_model_token_in_dossier_source_or_config",
+            "source": "gdd/LevelFlow.json#/configs/35/key_where"
+          },
+          {
+            "kind": "exact_model_token_in_dossier_source_or_config",
+            "source": "gdd/LevelFlow.json#/configs/36/key_where"
+          },
+          {
+            "kind": "exact_model_token_in_dossier_source_or_config",
+            "source": "gdd/LevelFlow.json#/configs/37/key_where"
+          },
+          {
+            "kind": "exact_model_token_in_dossier_source_or_config",
+            "source": "gdd/LevelFlow.json#/configs/38/key_where"
+          }
+        ]
+      },
+      {
+        "snapshot": "cache_20261010",
+        "model": "rootLevelConfigModel",
+        "key": "levelEndPopupsAbGroup",
+        "value": 0,
+        "type": "int",
+        "source": "facts/runtime/test_20261010/before/CachedRemoteConfigs",
+        "classification": "config_candidate_not_backend_assignment_proof",
+        "review_id": "MS-SEG-110",
+        "review_classification": "variant_config",
+        "review_status": "missing_experiment_assignment_and_outcome",
+        "consumer": {
+          "source": "com.grandgames.magicsort_Unity_20260909_112501/RecoveredNative/PseudoC/Assembly-CSharp/Modules/Contexts/Application/FirebaseNS/Scripts/FirebaseRemoteConfigResolver.c",
+          "line": 863,
+          "marker": "/* \"ColorVariant\" */",
+          "build": "0.0.3063 ARMv7",
+          "evidence": "recovered_native_historical_version"
+        },
+        "interpretation": "Giá trị variant được cache/default/Firebase; chưa có experimentID hoặc traffic split.",
+        "next_action": "Cần experimentID, variant, allocation, activation timestamp, consumer effect và đối chứng cùng điều kiện.",
+        "assignment_proof": false,
+        "uplift_proof": false,
+        "matching_basis": [
+          {
+            "kind": "exact_model_token_in_dossier_source_or_config",
+            "source": "gdd/LevelFlow.json#/sources/12"
+          },
+          {
+            "kind": "exact_model_token_in_dossier_source_or_config",
+            "source": "gdd/LevelFlow.json#/configs/31/key_where"
+          },
+          {
+            "kind": "exact_model_token_in_dossier_source_or_config",
+            "source": "gdd/LevelFlow.json#/configs/32/key_where"
+          },
+          {
+            "kind": "exact_model_token_in_dossier_source_or_config",
+            "source": "gdd/LevelFlow.json#/configs/33/key_where"
+          },
+          {
+            "kind": "exact_model_token_in_dossier_source_or_config",
+            "source": "gdd/LevelFlow.json#/configs/34/key_where"
+          },
+          {
+            "kind": "exact_model_token_in_dossier_source_or_config",
+            "source": "gdd/LevelFlow.json#/configs/35/key_where"
+          },
+          {
+            "kind": "exact_model_token_in_dossier_source_or_config",
+            "source": "gdd/LevelFlow.json#/configs/36/key_where"
+          },
+          {
+            "kind": "exact_model_token_in_dossier_source_or_config",
+            "source": "gdd/LevelFlow.json#/configs/37/key_where"
+          },
+          {
+            "kind": "exact_model_token_in_dossier_source_or_config",
+            "source": "gdd/LevelFlow.json#/configs/38/key_where"
+          }
+        ]
+      },
+      {
+        "snapshot": "cache_20261010",
+        "model": "rootLevelConfigModel",
+        "key": "inGameBoosterVariant",
+        "value": 0,
+        "type": "int",
+        "source": "facts/runtime/test_20261010/before/CachedRemoteConfigs",
+        "classification": "config_candidate_not_backend_assignment_proof",
+        "review_id": "MS-SEG-111",
+        "review_classification": "variant_config",
+        "review_status": "missing_experiment_assignment_and_outcome",
+        "consumer": {
+          "source": "com.grandgames.magicsort_Unity_20260909_112501/RecoveredNative/PseudoC/Assembly-CSharp/Modules/Contexts/Application/Inventory/Scripts/InventoryService.c",
+          "line": 388,
+          "marker": "_InGameBoosterVariant_k__BackingField",
+          "build": "0.0.3063 ARMv7",
+          "evidence": "recovered_native_historical_version"
+        },
+        "interpretation": "Giá trị variant được cache/default/Firebase; chưa có experimentID hoặc traffic split.",
+        "next_action": "Cần experimentID, variant, allocation, activation timestamp, consumer effect và đối chứng cùng điều kiện.",
+        "assignment_proof": false,
+        "uplift_proof": false,
+        "matching_basis": [
+          {
+            "kind": "exact_model_token_in_dossier_source_or_config",
+            "source": "gdd/LevelFlow.json#/sources/12"
+          },
+          {
+            "kind": "exact_model_token_in_dossier_source_or_config",
+            "source": "gdd/LevelFlow.json#/configs/31/key_where"
+          },
+          {
+            "kind": "exact_model_token_in_dossier_source_or_config",
+            "source": "gdd/LevelFlow.json#/configs/32/key_where"
+          },
+          {
+            "kind": "exact_model_token_in_dossier_source_or_config",
+            "source": "gdd/LevelFlow.json#/configs/33/key_where"
+          },
+          {
+            "kind": "exact_model_token_in_dossier_source_or_config",
+            "source": "gdd/LevelFlow.json#/configs/34/key_where"
+          },
+          {
+            "kind": "exact_model_token_in_dossier_source_or_config",
+            "source": "gdd/LevelFlow.json#/configs/35/key_where"
+          },
+          {
+            "kind": "exact_model_token_in_dossier_source_or_config",
+            "source": "gdd/LevelFlow.json#/configs/36/key_where"
+          },
+          {
+            "kind": "exact_model_token_in_dossier_source_or_config",
+            "source": "gdd/LevelFlow.json#/configs/37/key_where"
+          },
+          {
+            "kind": "exact_model_token_in_dossier_source_or_config",
+            "source": "gdd/LevelFlow.json#/configs/38/key_where"
+          }
+        ]
+      },
+      {
+        "snapshot": "cache_20261010",
+        "model": "adConfigModel",
+        "key": "playOnWithRewardedVariantType",
+        "value": 0,
+        "type": "int",
+        "source": "facts/runtime/test_20261010/before/CachedRemoteConfigs",
+        "classification": "config_candidate_not_backend_assignment_proof",
+        "review_id": "MS-SEG-112",
+        "review_classification": "variant_config",
+        "review_status": "missing_experiment_assignment_and_outcome",
+        "consumer": {
+          "source": "com.grandgames.magicsort_Unity_20260909_112501/RecoveredNative/PseudoC/Assembly-CSharp/Modules/Contexts/Application/Ads/Scripts/ConfigService/AdConfigService.c",
+          "line": 830,
+          "marker": "// ===== AdConfigService :: public void SetAdConfigModels",
+          "build": "0.0.3063 ARMv7",
+          "evidence": "recovered_native_historical_version"
+        },
+        "interpretation": "Giá trị variant được cache/default/Firebase; chưa có experimentID hoặc traffic split.",
+        "next_action": "Cần experimentID, variant, allocation, activation timestamp, consumer effect và đối chứng cùng điều kiện.",
+        "assignment_proof": false,
+        "uplift_proof": false,
+        "matching_basis": [
+          {
+            "kind": "exact_model_token_in_dossier_source_or_config",
+            "source": "gdd/LevelFlow.json#/sources/13"
+          },
+          {
+            "kind": "exact_model_token_in_dossier_source_or_config",
+            "source": "gdd/LevelFlow.json#/configs/23/key_where"
+          },
+          {
+            "kind": "exact_model_token_in_dossier_source_or_config",
+            "source": "gdd/LevelFlow.json#/configs/24/key_where"
+          },
+          {
+            "kind": "exact_model_token_in_dossier_source_or_config",
+            "source": "gdd/LevelFlow.json#/configs/25/key_where"
+          },
+          {
+            "kind": "exact_model_token_in_dossier_source_or_config",
+            "source": "gdd/LevelFlow.json#/configs/26/key_where"
+          },
+          {
+            "kind": "exact_model_token_in_dossier_source_or_config",
+            "source": "gdd/LevelFlow.json#/configs/28/key_where"
+          },
+          {
+            "kind": "exact_model_token_in_dossier_source_or_config",
+            "source": "gdd/LevelFlow.json#/configs/29/key_where"
+          },
+          {
+            "kind": "exact_model_token_in_dossier_source_or_config",
+            "source": "gdd/LevelFlow.json#/configs/30/key_where"
+          }
+        ]
+      },
+      {
+        "snapshot": "firebase_20260910",
+        "model": "ColorVariant",
+        "key": "",
+        "value": "2",
+        "type": "str",
+        "source": "facts/runtime/decoded/firebase_rc.json",
+        "classification": "config_candidate_not_backend_assignment_proof",
+        "review_id": "MS-SEG-158",
+        "review_classification": "variant_config",
+        "review_status": "missing_experiment_assignment_and_outcome",
+        "consumer": {
+          "source": "com.grandgames.magicsort_Unity_20260909_112501/RecoveredNative/PseudoC/Assembly-CSharp/Modules/Contexts/Application/FirebaseNS/Scripts/FirebaseRemoteConfigResolver.c",
+          "line": 863,
+          "marker": "/* \"ColorVariant\" */",
+          "build": "0.0.3063 ARMv7",
+          "evidence": "recovered_native_historical_version"
+        },
+        "interpretation": "Giá trị variant được cache/default/Firebase; chưa có experimentID hoặc traffic split.",
+        "next_action": "Cần experimentID, variant, allocation, activation timestamp, consumer effect và đối chứng cùng điều kiện.",
+        "assignment_proof": false,
+        "uplift_proof": false,
+        "matching_basis": [
+          {
+            "kind": "exact_model_token_in_dossier_source_or_config",
+            "source": "gdd/LevelFlow.json#/configs/38/key_where"
+          }
+        ]
+      },
+      {
+        "snapshot": "firebase_20260910",
+        "model": "InGameBoosterVariant",
+        "key": "",
+        "value": "0",
+        "type": "str",
+        "source": "facts/runtime/decoded/firebase_rc.json",
+        "classification": "config_candidate_not_backend_assignment_proof",
+        "review_id": "MS-SEG-159",
+        "review_classification": "variant_config",
+        "review_status": "missing_experiment_assignment_and_outcome",
+        "consumer": {
+          "source": "com.grandgames.magicsort_Unity_20260909_112501/RecoveredNative/PseudoC/Assembly-CSharp/Modules/Contexts/Application/Inventory/Scripts/InventoryService.c",
+          "line": 388,
+          "marker": "_InGameBoosterVariant_k__BackingField",
+          "build": "0.0.3063 ARMv7",
+          "evidence": "recovered_native_historical_version"
+        },
+        "interpretation": "Giá trị variant được cache/default/Firebase; chưa có experimentID hoặc traffic split.",
+        "next_action": "Cần experimentID, variant, allocation, activation timestamp, consumer effect và đối chứng cùng điều kiện.",
+        "assignment_proof": false,
+        "uplift_proof": false,
+        "matching_basis": [
+          {
+            "kind": "exact_model_token_in_dossier_source_or_config",
+            "source": "gdd/LevelFlow.json#/configs/38/key_where"
+          }
+        ]
+      },
+      {
+        "snapshot": "firebase_20260910",
+        "model": "LevelEndPopupsAbGroup",
+        "key": "",
+        "value": "0",
+        "type": "str",
+        "source": "facts/runtime/decoded/firebase_rc.json",
+        "classification": "config_candidate_not_backend_assignment_proof",
+        "review_id": "MS-SEG-160",
+        "review_classification": "variant_config",
+        "review_status": "missing_experiment_assignment_and_outcome",
+        "consumer": {
+          "source": "com.grandgames.magicsort_Unity_20260909_112501/RecoveredNative/PseudoC/Assembly-CSharp/Modules/Contexts/Application/FirebaseNS/Scripts/FirebaseRemoteConfigResolver.c",
+          "line": 863,
+          "marker": "/* \"ColorVariant\" */",
+          "build": "0.0.3063 ARMv7",
+          "evidence": "recovered_native_historical_version"
+        },
+        "interpretation": "Giá trị variant được cache/default/Firebase; chưa có experimentID hoặc traffic split.",
+        "next_action": "Cần experimentID, variant, allocation, activation timestamp, consumer effect và đối chứng cùng điều kiện.",
+        "assignment_proof": false,
+        "uplift_proof": false,
+        "matching_basis": [
+          {
+            "kind": "exact_model_token_in_dossier_source_or_config",
+            "source": "gdd/LevelFlow.json#/configs/32/key_where"
+          },
+          {
+            "kind": "exact_model_token_in_dossier_source_or_config",
+            "source": "gdd/LevelFlow.json#/configs/135/key_where"
+          }
+        ]
+      },
+      {
+        "snapshot": "firebase_20260910",
+        "model": "StuckPopupAbGroup",
+        "key": "",
+        "value": "0",
+        "type": "str",
+        "source": "facts/runtime/decoded/firebase_rc.json",
+        "classification": "config_candidate_not_backend_assignment_proof",
+        "review_id": "MS-SEG-220",
+        "review_classification": "variant_config",
+        "review_status": "firebase_key_observed_consumer_unresolved",
+        "consumer": null,
+        "interpretation": "Firebase key có tên AB; chưa tìm được consumer trong phần PseudoC được audit. Không gán vào RootLevelConfigModel theo tên.",
+        "next_action": "Cần experimentID, variant, allocation, activation timestamp, consumer effect và đối chứng cùng điều kiện.",
+        "assignment_proof": false,
+        "uplift_proof": false,
+        "matching_basis": [
+          {
+            "kind": "exact_model_token_in_dossier_source_or_config",
+            "source": "gdd/LevelFlow.json#/configs/137/key_where"
+          }
+        ]
+      }
+    ],
+    "classifications": {
+      "variant_config": 13
+    },
+    "assignment_verified": false,
+    "uplift_verified": false,
+    "note": "No matchingrow does not prove no segmentation/AB. Rewardbucketfalsepositives remain explicitly classified."
+  },
+  "continuation_review_20261116": {
+    "date": "2026-11-16",
+    "build": "0.0.3129 ARM64 host APK",
+    "build_scope": "Host APK version3129 matches LAST observed installed version15/11 only; installed bytes/live device16/11 not verified.",
+    "runtime_status": "device_unavailable",
+    "runtime_case_ids": [],
+    "current_apk_model_links": {
+      "feature": "LevelFlow",
+      "models": [
+        {
+          "model": "AdConfigModel",
+          "current_default_file": "facts/review_20261116/public_current_config_3129/defaults/AdConfigModel.json",
+          "resource_path": "defaultconfigs/adconfigmodel",
+          "sha256": "acf16b97659a1c2117eb4416382c82dade85f528edef6eebefd472047e9e728b",
+          "matching_basis": [
+            "gdd/LevelFlow.json#/configs",
+            "gdd/LevelFlow.json#/sources"
+          ],
+          "scope": "Packaged default3129, not effective server config.",
+          "site_data_path": "data/current_config_3129/defaults/AdConfigModel.json",
+          "original_source_sha256": "acf16b97659a1c2117eb4416382c82dade85f528edef6eebefd472047e9e728b",
+          "public_artifact_sha256": "2c1ecb6b58fb7de904bc6456cebd88126477b42f490e712952dcb80d3ebaafbf",
+          "sha256_scope": "sha256 is original raw model; public_artifact_sha256 is the sanitized download"
+        },
+        {
+          "model": "BELevelConfig",
+          "current_default_file": "facts/review_20261116/public_current_config_3129/defaults/BELevelConfig.json",
+          "resource_path": "defaultconfigs/belevelconfig",
+          "sha256": "ef358134aa8773eb2ff7dc58e19c8d964140a03b0adabdb3d712d816bde600fc",
+          "matching_basis": [
+            "gdd/LevelFlow.json#/configs"
+          ],
+          "scope": "Packaged default3129, not effective server config.",
+          "site_data_path": "data/current_config_3129/defaults/BELevelConfig.json",
+          "original_source_sha256": "ef358134aa8773eb2ff7dc58e19c8d964140a03b0adabdb3d712d816bde600fc",
+          "public_artifact_sha256": "aa9866400614ad4e87cb8d8874bee38a3e5445bae5495092f3701dc2f2bf83ff",
+          "sha256_scope": "sha256 is original raw model; public_artifact_sha256 is the sanitized download"
+        },
+        {
+          "model": "BlockerIntroConfigModel",
+          "current_default_file": "facts/review_20261116/public_current_config_3129/defaults/BlockerIntroConfigModel.json",
+          "resource_path": "defaultconfigs/blockerintroconfigmodel",
+          "sha256": "8e4b2300e324bbfdf80231e7cfa4e495d8e93ea157ce4d13a4d81a656c23f68e",
+          "matching_basis": [
+            "gdd/LevelFlow.json#/configs",
+            "gdd/LevelFlow.json#/flow"
+          ],
+          "scope": "Packaged default3129, not effective server config.",
+          "site_data_path": "data/current_config_3129/defaults/BlockerIntroConfigModel.json",
+          "original_source_sha256": "8e4b2300e324bbfdf80231e7cfa4e495d8e93ea157ce4d13a4d81a656c23f68e",
+          "public_artifact_sha256": "136d30fcc0ec8ba968f994bf859d398bbaa76510ea0651ed2ddba6b478f41c14",
+          "sha256_scope": "sha256 is original raw model; public_artifact_sha256 is the sanitized download"
+        },
+        {
+          "model": "GameEconomyModel",
+          "current_default_file": "facts/review_20261116/public_current_config_3129/defaults/GameEconomyModel.json",
+          "resource_path": "defaultconfigs/gameeconomymodel",
+          "sha256": "a32421a6f1e34e66cc5dcf1943c56a1c3efeacd8f3b762401b3c067e9960ca9b",
+          "matching_basis": [
+            "gdd/LevelFlow.json#/configs",
+            "gdd/LevelFlow.json#/sources",
+            "gdd/LevelFlow.json#/flow"
+          ],
+          "scope": "Packaged default3129, not effective server config.",
+          "site_data_path": "data/current_config_3129/defaults/GameEconomyModel.json",
+          "original_source_sha256": "a32421a6f1e34e66cc5dcf1943c56a1c3efeacd8f3b762401b3c067e9960ca9b",
+          "public_artifact_sha256": "2027b6e23169a78b572e5778d87be378571cf217c876e5cbe386963ad0f27598",
+          "sha256_scope": "sha256 is original raw model; public_artifact_sha256 is the sanitized download"
+        },
+        {
+          "model": "PlayOnRewardedConfigModel",
+          "current_default_file": "facts/review_20261116/public_current_config_3129/defaults/PlayOnRewardedConfigModel.json",
+          "resource_path": "defaultconfigs/playonrewardedconfigmodel",
+          "sha256": "cbf0a61656fdbfc231e469034a86ba9065a000672a4bdd01c1721f3969900117",
+          "matching_basis": [
+            "gdd/LevelFlow.json#/configs"
+          ],
+          "scope": "Packaged default3129, not effective server config.",
+          "site_data_path": "data/current_config_3129/defaults/PlayOnRewardedConfigModel.json",
+          "original_source_sha256": "cbf0a61656fdbfc231e469034a86ba9065a000672a4bdd01c1721f3969900117",
+          "public_artifact_sha256": "705561a42e6e0bb89761d394fbd53024e6372ce3f7e60b2527ece7b4b14a4528",
+          "sha256_scope": "sha256 is original raw model; public_artifact_sha256 is the sanitized download"
+        }
+      ],
+      "status": "exact_model_source_association",
+      "distribution": "sanitized_public",
+      "public_mapping_pending": false
+    },
+    "current_packaged_defaults": [
+      {
+        "model": "AdConfigModel",
+        "source": "facts/review_20261116/public_current_config_3129/defaults/AdConfigModel.json",
+        "site_data_path": "data/current_config_3129/defaults/AdConfigModel.json",
+        "public_artifact_sha256": "2c1ecb6b58fb7de904bc6456cebd88126477b42f490e712952dcb80d3ebaafbf",
+        "original_source_sha256": "acf16b97659a1c2117eb4416382c82dade85f528edef6eebefd472047e9e728b",
+        "source_class": "static_asset",
+        "build": "0.0.3129 host APK",
+        "scope": "Sanitized packaged default fullvalues only; not effective remote/selected config or runtime.",
+        "values": {
+          "IsMaxSdkEnabled": true,
+          "IsInterEnabled": true,
+          "FirstLevelToShowInter": 61,
+          "InterShowFrequencyInSeconds": 240,
+          "IsBannerEnabled": false,
+          "FirstLevelToShowBanner": 10,
+          "Is2xRewardedEnabled": false,
+          "FirstLevelToShow2xRewarded": 20,
+          "IsLifeRewardedEnabled": true,
+          "Is2xEnabledForRegularLevels": false,
+          "Is2xEnabledForHardLevels": false,
+          "RegularLevelWinCoinReward": 20,
+          "HardLevelWinCoinReward": 60,
+          "SuperHardLevelWinCoinReward": 100,
+          "IsLaterInterEnabled": false,
+          "IsEndlessEventDisabled": false,
+          "IsChooseOneOfferDisabled": false,
+          "PlayOnWithRewardedEnabled": false,
+          "WheelOfFortuneConfigType": 0,
+          "IsWheelOfFortuneEnabled": false,
+          "PlayOnWithRewardedDailyLimit": 20,
+          "FirstLevelToShowPlayOnWithRewarded": 100,
+          "PlayOnWithRewardedVariantType": 0
+        }
+      },
+      {
+        "model": "BELevelConfig",
+        "source": "facts/review_20261116/public_current_config_3129/defaults/BELevelConfig.json",
+        "site_data_path": "data/current_config_3129/defaults/BELevelConfig.json",
+        "public_artifact_sha256": "aa9866400614ad4e87cb8d8874bee38a3e5445bae5495092f3701dc2f2bf83ff",
+        "original_source_sha256": "ef358134aa8773eb2ff7dc58e19c8d964140a03b0adabdb3d712d816bde600fc",
+        "source_class": "static_asset",
+        "build": "0.0.3129 host APK",
+        "scope": "Sanitized packaged default fullvalues only; not effective remote/selected config or runtime.",
+        "values": {
+          "ConfigName": "04-02-25-default-w-dlb",
+          "ConfigType": 0
+        }
+      },
+      {
+        "model": "BlockerIntroConfigModel",
+        "source": "facts/review_20261116/public_current_config_3129/defaults/BlockerIntroConfigModel.json",
+        "site_data_path": "data/current_config_3129/defaults/BlockerIntroConfigModel.json",
+        "public_artifact_sha256": "136d30fcc0ec8ba968f994bf859d398bbaa76510ea0651ed2ddba6b478f41c14",
+        "original_source_sha256": "8e4b2300e324bbfdf80231e7cfa4e495d8e93ea157ce4d13a4d81a656c23f68e",
+        "source_class": "static_asset",
+        "build": "0.0.3129 host APK",
+        "scope": "Sanitized packaged default fullvalues only; not effective remote/selected config or runtime.",
+        "values": {
+          "Curtain": 20,
+          "Plaster": 110,
+          "Clay": 60
+        }
+      },
+      {
+        "model": "GameEconomyModel",
+        "source": "facts/review_20261116/public_current_config_3129/defaults/GameEconomyModel.json",
+        "site_data_path": "data/current_config_3129/defaults/GameEconomyModel.json",
+        "public_artifact_sha256": "2027b6e23169a78b572e5778d87be378571cf217c876e5cbe386963ad0f27598",
+        "original_source_sha256": "a32421a6f1e34e66cc5dcf1943c56a1c3efeacd8f3b762401b3c067e9960ca9b",
+        "source_class": "static_asset",
+        "build": "0.0.3129 host APK",
+        "scope": "Sanitized packaged default fullvalues only; not effective remote/selected config or runtime.",
+        "values": {
+          "refillPrice": 900,
+          "PlayOnPrice": 900,
+          "SecondPlayOnPrice": 1900,
+          "ThirdSecondPlayOnPrice": 2300,
+          "refillDurationAsMinutes": 30,
+          "maxLifeAmount": 5,
+          "initialCoin": 1000,
+          "initialUndoAmount": 3,
+          "initialShuffleAmount": 3,
+          "initialExtraBottleAmount": 3,
+          "initialFourthBoosterAmount": 3,
+          "undoUnlockAtLevel": 15,
+          "shuffleUnlockAtLevel": 15,
+          "extraBottleUnlockAtLevel": 15,
+          "UndoPrice": 300,
+          "ShufflePrice": 300,
+          "ExtraBottlePrice": 900,
+          "MegaShufflePrice": 900,
+          "RevealPrice": 900,
+          "RegularLevelWinCoinReward": 20,
+          "HardLevelWinCoinReward": 60,
+          "SuperHardLevelWinCoinReward": 100,
+          "IsFirstPlayOnFree": false,
+          "Hierarchy": 10000,
+          "PlayOnConfigModels": [
+            {
+              "PlayOnType": 0,
+              "Price": 900
+            },
+            {
+              "PlayOnType": 0,
+              "Price": 1900
+            },
+            {
+              "PlayOnType": 0,
+              "Price": 2300
+            }
+          ]
+        }
+      },
+      {
+        "model": "PlayOnRewardedConfigModel",
+        "source": "facts/review_20261116/public_current_config_3129/defaults/PlayOnRewardedConfigModel.json",
+        "site_data_path": "data/current_config_3129/defaults/PlayOnRewardedConfigModel.json",
+        "public_artifact_sha256": "705561a42e6e0bb89761d394fbd53024e6372ce3f7e60b2527ece7b4b14a4528",
+        "original_source_sha256": "cbf0a61656fdbfc231e469034a86ba9065a000672a4bdd01c1721f3969900117",
+        "source_class": "static_asset",
+        "build": "0.0.3129 host APK",
+        "scope": "Sanitized packaged default fullvalues only; not effective remote/selected config or runtime.",
+        "values": {
+          "StagedPlayOnLimit": 5
+        }
+      }
+    ],
+    "native_finding_ids": [],
+    "documentation_source_coverage": {
+      "dossier_present": true,
+      "use_case_catalog_count": 20,
+      "config_catalog_rows": 138,
+      "current_apk_default_model_links": 5,
+      "current_native_findings": 0,
+      "scope": "Documentation/source coverage only; not complete runtime verification."
+    },
+    "runtime_completion": {
+      "date": "2026-11-16",
+      "status": "device_unavailable",
+      "executed_case_count": 0,
+      "full_feature_runtime_verified": false
+    },
+    "planned_branch": "Cuối lượt core: chọn nhánh chưa kiểm từ GDD như resume/PlayOn nếu xuất hiện tự nhiên; ghi state đầy đủ trước/sau.",
+    "target_uc_ids": [
+      "UC-01",
+      "UC-12",
+      "UC-13"
+    ],
+    "execution_phase": "core_and_levels_last",
+    "core_or_levels_last": true,
+    "actionability_full_json": "facts/continuation_20261116/current/feature_actionability.json",
+    "actionability_site_data_path": "data/continuation_20261116/feature_actionability.json",
+    "source_classes": [
+      "static_asset"
+    ],
+    "full_feature_verified": false
+  }
+}

@@ -1,0 +1,628 @@
+{
+  "id": "Notifications",
+  "name": "Thông báo đẩy cục bộ",
+  "category": "LiveOps",
+  "managers": [
+    "Modules.Contexts.Application.Notification.Scripts.NotificationService",
+    "Modules.Infrastructure.Notifications.Scripts.LocalNotificationSo",
+    "NotificationSamples.GameNotificationsPlatform"
+  ],
+  "summary": "Magic Sort dùng thông báo cục bộ (local notification, không phải push từ server) để kéo người chơi quay lại. NotificationService nhận 10 ScriptableObject LocalNotificationSo qua constructor, mỗi cái mang Id, Title và Message viết sẵn bằng tiếng Anh kèm emoji; mọi thông báo đều hẹn giờ bằng DateTime.Now + delayAsSeconds và đăng ký qua NotificationSamples.GameNotificationsPlatform (bọc Unity Mobile Notifications: AndroidNotificationCenter / NotificationCenter). Mỗi loại thông báo có một cặp Send…/Cancel… nên khi điều kiện thay đổi (người chơi vào lại game, sự kiện kết thúc sớm) client huỷ đúng Id thay vì huỷ tất cả. Người chơi bật/tắt toàn bộ bằng một toggle trong Settings, trạng thái lưu trong NotificationModel.IsNotificationOn; khi tắt, mọi lời gọi Send… đều bị bỏ qua ngay trong SendNotification.",
+  "unlock": "Có ngay từ đầu; Android 13+ và iOS cần cấp quyền qua NotificationService.RequestPermission() (GameNotificationsPlatform.RequestNotificationPermission). Giá trị bật/tắt mặc định lấy từ NotificationConfig.IsNotificationOn (ScriptableObject) rồi lưu vào NotificationModel qua NotificationSaveLoad.",
+  "entry_points": [
+    "Toggle Notifications trong Settings (SettingsController.OnNotificationToggleChanged)",
+    "Hộp thoại xin quyền hệ thống khi khởi động (NotificationService.RequestPermission)",
+    "Các dịch vụ gameplay/sự kiện tự gọi Send…/Cancel… (InventoryService, DailyService, các *Service của sự kiện)"
+  ],
+  "flow": "NotificationService.Initialize() nạp NotificationModel qua ISaveLoad (NotificationSaveLoad với modelName riêng) và khởi tạo GameNotificationsPlatform. RequestPermission() trả Task để luồng khởi động await hộp thoại quyền. Khi cần nhắc, dịch vụ tương ứng gọi một hàm Send…(delayAsSeconds); tất cả đổ về SendNotification(localNotificationSo, delayAsSeconds): trước tiên huỷ thông báo cũ cùng Id (Cancel(id)), kiểm tra NotificationModel.IsNotificationOn — nếu tắt thì dừng — rồi dựng GameNotification với Title/Body/Id lấy từ LocalNotificationSo, thay chuỗi 'NEWLINE' trong Message bằng Environment.NewLine, và đặt DeliveryTime = DateTime.Now + delayAsSeconds. InventoryService giữ NotificationService trong constructor nên khi mạng đầy lại sẽ SendLifeNotification(delayAsSeconds) và khi người chơi tiêu mạng thì CancelLifeNotification(). DailyService.ScheduleDailyNotification() tính mốc ngày hôm sau lúc 10 giờ (AddDays(1) + AddHours(10)), trừ đi thời điểm hiện tại để ra delayAsSeconds rồi gọi SendDailyStartedNotification; TryRescheduleDailyNotification(dateTime) đặt lại khi mốc đổi và CancelDailyNotification() khi người chơi đã chơi daily. Tương tự cho các giải: SendStreakTournamentEndNotification / SendWeeklyTournamentEndNotification / SendJetpackRaceEndNotification, hai biến thể Sky Jump (sau khi thắng và sau khi thua, kể cả bản có stage), SendWelcomeBackNotification cho người chơi quay lại và SendWheelOfFortuneSpinReminderNotification(amount, delayAsSeconds) nhắc còn bao nhiêu level nữa là quay được vòng quay. SendD1RetNotification() là thông báo giữ chân ngày đầu (D1 retention), không nhận tham số delay nên dùng mốc cố định trong hàm. OnNotificationPreferenceChanged(isOn) ghi lại lựa chọn và khi tắt sẽ huỷ các thông báo đang hẹn.",
+  "use_cases": [
+    {
+      "id": "UC-01",
+      "title": "Xin quyền thông báo",
+      "actor": "System",
+      "trigger": "Khởi động app (Android 13+/iOS)",
+      "precondition": "Chưa cấp quyền",
+      "steps": [
+        "NotificationService.RequestPermission() trả Task",
+        "GameNotificationsPlatform.RequestNotificationPermission() hiện hộp thoại hệ thống",
+        "Luồng khởi động await tới khi người chơi trả lời"
+      ],
+      "result": "Có quyền thì các thông báo mới được đăng ký",
+      "rules": "NotificationCenter.CheckInitialized được gọi trước mọi thao tác",
+      "evidence": "NotificationService.RequestPermission; NotificationSamples.GameNotificationsPlatform.RequestNotificationPermission"
+    },
+    {
+      "id": "UC-02",
+      "title": "Bật/tắt toàn bộ thông báo",
+      "actor": "Player",
+      "trigger": "Gạt toggle Notifications trong Settings ('SettingsPopupNotifications')",
+      "precondition": "-",
+      "steps": [
+        "SettingsController.OnNotificationToggleChanged(toggle)",
+        "NotificationService.OnNotificationPreferenceChanged(isOn) đặt NotificationModel.IsNotificationOn",
+        "Tắt → huỷ các thông báo đang hẹn; bật → cho phép đăng ký lại",
+        "Lưu qua NotificationSaveLoad (SaveLoad<NotificationModel>)",
+        "GetNotificationPreference() cho UI đọc lại trạng thái"
+      ],
+      "result": "Người chơi kiểm soát hoàn toàn việc bị nhắc",
+      "rules": "SendNotification kiểm tra IsNotificationOn trước khi dựng GameNotification nên không có đường vòng",
+      "evidence": "NotificationService.OnNotificationPreferenceChanged; NotificationService.GetNotificationPreference; NotificationService.SendNotification; NotificationModel.IsNotificationOn"
+    },
+    {
+      "id": "UC-03",
+      "title": "Nhắc khi mạng hồi đầy",
+      "actor": "System",
+      "trigger": "Người chơi tiêu mạng và bắt đầu đếm hồi",
+      "precondition": "Thông báo bật",
+      "steps": [
+        "InventoryService (nhận NotificationService trong constructor) tính thời gian tới khi đầy mạng",
+        "NotificationService.SendLifeNotification(delayAsSeconds) với LivesNotificationSo (Id 127)",
+        "Người chơi vào lại game trước hạn → CancelLifeNotification() huỷ Id 127"
+      ],
+      "result": "Thông báo \"Magic Sort!\" / \"Your lives are full! ❤️❤️❤️ (xuống dòng) Enjoy Magic Sort now! ✨\"",
+      "rules": "Chuỗi 'NEWLINE' trong Message được thay bằng Environment.NewLine khi dựng Body",
+      "evidence": "NotificationService.SendLifeNotification; NotificationService.CancelLifeNotification; InventoryService..ctor; Assets/MonoBehaviour/LivesNotificationSo.asset"
+    },
+    {
+      "id": "UC-04",
+      "title": "Nhắc giữ chân ngày đầu (D1)",
+      "actor": "System",
+      "trigger": "Kết thúc phiên chơi đầu tiên",
+      "precondition": "Thông báo bật",
+      "steps": [
+        "NotificationService.SendD1RetNotification() dùng Ret1NotificationSo (Id 5285)",
+        "Không nhận delay: mã0.0.3063 lập lịch DateTime.Now.AddSeconds(90000), tức25giờ; cần notification on/OS permission."
+      ],
+      "result": "Thông báo \"Unlock the hardest levels! 🧪✨\" / \"Dive back into Magic Sort now! 🪄\"",
+      "rules": "Tên D1 là nhãn retention; delay đã đọc trong mã0.0.3063 là90000giây=25giờ, không phải suy24giờ từ tên. Chưa xác minh delivery trên0.0.3129.",
+      "evidence": "NotificationService.SendD1RetNotification; Assets/MonoBehaviour/Ret1NotificationSo.asset"
+    },
+    {
+      "id": "UC-05",
+      "title": "Nhắc thử thách hằng ngày",
+      "actor": "System",
+      "trigger": "Hoàn tất hoặc bỏ qua daily hôm nay",
+      "precondition": "DailyService bật thông báo (_IsNotificationEnabled)",
+      "steps": [
+        "DailyService.ScheduleDailyNotification() lấy TimeProvider.Now, cộng 1 ngày và đặt giờ 10 (AddDays(1.0), AddHours(10.0))",
+        "Trừ thời điểm hiện tại để ra delayAsSeconds",
+        "NotificationService.SendDailyStartedNotification(delayAsSeconds) với DailyStartedNotificationSo (Id 9637)",
+        "TryRescheduleDailyNotification(dateTime) đặt lại nếu mốc thay đổi",
+        "CancelDailyNotification() khi người chơi đã vào daily"
+      ],
+      "result": "Thông báo \"Daily Challange!\" / \"Every day is a fresh start—tackle today's challenge and make it count! 🚀\" vào 10 giờ sáng hôm sau",
+      "rules": "Giờ 10 và khoảng 1 ngày đọc từ hằng số double trong ScheduleDailyNotification",
+      "evidence": "DailyService.ScheduleDailyNotification; DailyService.TryRescheduleDailyNotification; NotificationService.SendDailyStartedNotification; NotificationService.CancelDailyNotification; Assets/MonoBehaviour/DailyStartedNotificationSo.asset"
+    },
+    {
+      "id": "UC-06",
+      "title": "Nhắc giải Magic Streak kết thúc",
+      "actor": "System",
+      "trigger": "Tham gia giải Magic Streak",
+      "precondition": "-",
+      "steps": [
+        "SendStreakTournamentEndNotification(delayAsSeconds) với StreakTournamentEndNotificationSo (Id 122), delay = thời gian còn lại của giải",
+        "CancelStreakTournamentNotification() khi giải kết thúc sớm hoặc người chơi rời giải"
+      ],
+      "result": "Thông báo \"Magic Streak Tournament Ended! 🏆\" / \"Check your final ranking and rewards now! 🥇\"",
+      "rules": "-",
+      "evidence": "NotificationService.SendStreakTournamentEndNotification; NotificationService.CancelStreakTournamentNotification; Assets/MonoBehaviour/StreakTournamentEndNotificationSo.asset"
+    },
+    {
+      "id": "UC-07",
+      "title": "Nhắc giải tuần kết thúc",
+      "actor": "System",
+      "trigger": "Tham gia Weekly Tournament",
+      "precondition": "-",
+      "steps": [
+        "SendWeeklyTournamentEndNotification(delayAsSeconds) với WeeklyTournamentEndNotificationSo (Id 1124)"
+      ],
+      "result": "Thông báo \"Weekly Tournament Ended!\" / \"Check your final ranking and rewards now!\"",
+      "rules": "Không có hàm Cancel riêng cho loại này trong client",
+      "evidence": "NotificationService.SendWeeklyTournamentEndNotification; Assets/MonoBehaviour/WeeklyTournamentEndNotificationSo.asset"
+    },
+    {
+      "id": "UC-08",
+      "title": "Nhắc Jetpack Race kết thúc",
+      "actor": "System",
+      "trigger": "Tham gia Jetpack Race",
+      "precondition": "-",
+      "steps": [
+        "SendJetpackRaceEndNotification(delayAsSeconds) với JetPackRaceEndNotificationSo (Id 5435)",
+        "CancelJetpackRaceNotification() khi cuộc đua kết thúc sớm"
+      ],
+      "result": "Thông báo \"Jetpack Race Ended! 🚀\" / \"Don't miss out, start a new one to claim awesome rewards!\"",
+      "rules": "-",
+      "evidence": "NotificationService.SendJetpackRaceEndNotification; NotificationService.CancelJetpackRaceNotification; Assets/MonoBehaviour/JetPackRaceEndNotificationSo.asset"
+    },
+    {
+      "id": "UC-09",
+      "title": "Nhắc Sky Jump theo kết quả trận trước",
+      "actor": "System",
+      "trigger": "Kết thúc một lượt Sky Jump",
+      "precondition": "-",
+      "steps": [
+        "Thắng → SendSkyJumpStartedAfterWinNotification(delayAsSeconds) với SkyJumpStartedAfterWinNoficationSo (Id 8924)",
+        "Thua → SendSkyJumpStartedAfterLoseNotification(delayAsSeconds) với SkyJumpStartedAfterLoseNoficationSo (Id 8874)",
+        "Bản có stage: SendSkyJumpWithStageStartedAfterLoseNotification(delayAsSeconds)",
+        "Cancel tương ứng: CancelSkyJumpStartedAfterWinNotification / CancelSkyJumpStartedAfterLoseNotification / CancelSkyJumpWithStageStartedAfterLoseNotification"
+      ],
+      "result": "Thông báo \"☁️ Sky Jump is available! ☁️\" / \"Don't miss your chance to get amazing rewards! 🎁\" (hai bản nội dung gần giống nhưng Id khác nhau để đo hiệu quả riêng)",
+      "rules": "Hai Id tách biệt cho phép phân tích tỉ lệ mở theo việc người chơi thắng hay thua",
+      "evidence": "NotificationService.SendSkyJumpStartedAfterWinNotification; NotificationService.SendSkyJumpStartedAfterLoseNotification; NotificationService.SendSkyJumpWithStageStartedAfterLoseNotification; Assets/MonoBehaviour/SkyJumpStartedAfterWinNoficationSo.asset"
+    },
+    {
+      "id": "UC-10",
+      "title": "Nhắc quà Welcome Back",
+      "actor": "System",
+      "trigger": "Người chơi vắng mặt và đủ điều kiện Welcome Back",
+      "precondition": "Remote config 'IsWelcomeBackEnabled'",
+      "steps": [
+        "SendWelcomeBackNotification(delayAsSeconds) với WelcomeBackNotificationSo (Id 9525)"
+      ],
+      "result": "Thông báo \"We have a gifts for you! 🎁\" / \"Open the app now to claim your surprises! ✨\"",
+      "rules": "-",
+      "evidence": "NotificationService.SendWelcomeBackNotification; Assets/MonoBehaviour/WelcomeBackNotificationSo.asset; FirebaseRemoteConfigResolver (IsWelcomeBackEnabled)"
+    },
+    {
+      "id": "UC-11",
+      "title": "Nhắc quay Wheel of Fortune",
+      "actor": "System",
+      "trigger": "Còn thiếu vài level nữa là được quay",
+      "precondition": "-",
+      "steps": [
+        "SendWheelOfFortuneSpinReminderNotification(amount, delayAsSeconds) với WheelOfFortuneSpinNotificationSo (Id 178178)",
+        "amount là số level còn thiếu, ghép vào nội dung",
+        "CancelWheelOfFortuneSpinReminderNotification() khi người chơi đã quay"
+      ],
+      "result": "Thông báo \"Wheel of Fortune Started!\" / \"Beat 10 more levels to spin the wheel!\"",
+      "rules": "Đây là loại duy nhất nhận thêm tham số số lượng (amount)",
+      "evidence": "NotificationService.SendWheelOfFortuneSpinReminderNotification; NotificationService.CancelWheelOfFortuneSpinReminderNotification; Assets/MonoBehaviour/WheelOfFortuneSpinNotificationSo.asset"
+    },
+    {
+      "id": "UC-12",
+      "title": "Huỷ và đặt lại thông báo cùng Id",
+      "actor": "System",
+      "trigger": "Gọi Send… khi đã có thông báo cùng loại đang hẹn",
+      "precondition": "-",
+      "steps": [
+        "SendNotification() gọi Cancel(id) trước khi tạo mới",
+        "Cancel(id) → GameNotificationsPlatform.CancelNotification(notificationId) → AndroidNotificationCenter/NotificationCenter"
+      ],
+      "result": "Không bao giờ có hai thông báo trùng loại",
+      "rules": "Id là số cố định trong từng LocalNotificationSo",
+      "evidence": "NotificationService.SendNotification; NotificationService.Cancel; NotificationSamples.GameNotificationsPlatform.CancelNotification"
+    },
+    {
+      "id": "UC-13",
+      "title": "Thông báo bị chặn khi người chơi đã tắt",
+      "actor": "System",
+      "trigger": "Dịch vụ gọi Send… khi toggle tắt",
+      "precondition": "NotificationModel.IsNotificationOn = false",
+      "steps": [
+        "SendNotification() kiểm tra IsNotificationOn và thoát sớm",
+        "Thông báo cũ cùng Id vẫn bị Cancel(id) trước đó nên không còn tồn đọng"
+      ],
+      "result": "Không có thông báo nào được lên lịch",
+      "rules": "Kiểm tra ở một chỗ duy nhất nên mọi loại đều tuân theo",
+      "evidence": "NotificationService.SendNotification; NotificationModel.IsNotificationOn"
+    },
+    {
+      "id": "UC-14",
+      "title": "Dọn dẹp khi thoát hoặc khởi động lại dịch vụ",
+      "actor": "System",
+      "trigger": "Dispose / restart (IRestartableService)",
+      "precondition": "-",
+      "steps": [
+        "NotificationService.Dispose() giải phóng GameNotificationsPlatform",
+        "GameNotificationsPlatform có CancelAllScheduledNotifications() và DismissAllDisplayedNotifications() cho trường hợp cần dọn sạch"
+      ],
+      "result": "Không rò rỉ handler và không còn thông báo treo khi đổi tài khoản",
+      "rules": "NotificationService là IRestartableService nên được dựng lại sau khi đăng nhập lại",
+      "evidence": "NotificationService.Dispose; NotificationSamples.GameNotificationsPlatform.CancelAllScheduledNotifications; NotificationSamples.GameNotificationsPlatform.DismissAllDisplayedNotifications"
+    }
+  ],
+  "configs": [
+    {
+      "source": "asset",
+      "key": "LivesNotificationSo.asset",
+      "type": "LocalNotificationSo",
+      "value": "Id = 127; Title = \"Magic Sort!\"; Message = \"Your lives are full! ❤️❤️❤️ NEWLINE Enjoy Magic Sort now! ✨\"",
+      "meaning": "Nhắc mạng đã đầy",
+      "where": "Assets/MonoBehaviour/LivesNotificationSo.asset"
+    },
+    {
+      "source": "asset",
+      "key": "Ret1NotificationSo.asset",
+      "type": "LocalNotificationSo",
+      "value": "Id = 5285; Title = \"Unlock the hardest levels! 🧪✨\"; Message = \"Dive back into Magic Sort now! 🪄\"",
+      "meaning": "Nhắc giữ chân ngày đầu (D1)",
+      "where": "Assets/MonoBehaviour/Ret1NotificationSo.asset"
+    },
+    {
+      "source": "asset",
+      "key": "StreakTournamentEndNotificationSo.asset",
+      "type": "LocalNotificationSo",
+      "value": "Id = 122; Title = \"Magic Streak Tournament Ended! 🏆\"; Message = \"Check your final ranking and rewards now! 🥇\"",
+      "meaning": "Giải Magic Streak kết thúc",
+      "where": "Assets/MonoBehaviour/"
+    },
+    {
+      "source": "asset",
+      "key": "WeeklyTournamentEndNotificationSo.asset",
+      "type": "LocalNotificationSo",
+      "value": "Id = 1124; Title = \"Weekly Tournament Ended!\"; Message = \"Check your final ranking and rewards now!\"",
+      "meaning": "Giải tuần kết thúc",
+      "where": "Assets/MonoBehaviour/"
+    },
+    {
+      "source": "asset",
+      "key": "JetPackRaceEndNotificationSo.asset",
+      "type": "LocalNotificationSo",
+      "value": "Id = 5435; Title = \"Jetpack Race Ended! 🚀\"; Message = \"Don't miss out, start a new one to claim awesome rewards!\"",
+      "meaning": "Jetpack Race kết thúc",
+      "where": "Assets/MonoBehaviour/"
+    },
+    {
+      "source": "asset",
+      "key": "SkyJumpStartedAfterWinNoficationSo.asset",
+      "type": "LocalNotificationSo",
+      "value": "Id = 8924; Title = \"☁️ Sky Jump is available! ☁️\"; Message = \"Don't miss your chance to get amazing rewards! 🎁\"",
+      "meaning": "Sky Jump mở lại sau khi thắng",
+      "where": "Assets/MonoBehaviour/"
+    },
+    {
+      "source": "asset",
+      "key": "SkyJumpStartedAfterLoseNoficationSo.asset",
+      "type": "LocalNotificationSo",
+      "value": "Id = 8874; Title = \"☁️ Sky Jump is available! ☁️\"; Message = \"Don't miss your chance to get amazing rewards!️ 🎁\"",
+      "meaning": "Sky Jump mở lại sau khi thua",
+      "where": "Assets/MonoBehaviour/"
+    },
+    {
+      "source": "asset",
+      "key": "DailyStartedNotificationSo.asset",
+      "type": "LocalNotificationSo",
+      "value": "Id = 9637; Title = \"Daily Challange!\"; Message = \"Every day is a fresh start—tackle today's challenge and make it count! 🚀\"",
+      "meaning": "Thử thách hằng ngày mới",
+      "where": "Assets/MonoBehaviour/"
+    },
+    {
+      "source": "asset",
+      "key": "WelcomeBackNotificationSo.asset",
+      "type": "LocalNotificationSo",
+      "value": "Id = 9525; Title = \"We have a gifts for you! 🎁\"; Message = \"Open the app now to claim your surprises! ✨\"",
+      "meaning": "Quà chào mừng quay lại",
+      "where": "Assets/MonoBehaviour/"
+    },
+    {
+      "source": "asset",
+      "key": "WheelOfFortuneSpinNotificationSo.asset",
+      "type": "LocalNotificationSo",
+      "value": "Id = 178178; Title = \"Wheel of Fortune Started!\"; Message = \"Beat 10 more levels to spin the wheel!\"",
+      "meaning": "Nhắc quay vòng quay may mắn",
+      "where": "Assets/MonoBehaviour/"
+    },
+    {
+      "source": "code const",
+      "key": "Lịch daily notification",
+      "type": "double",
+      "value": "AddDays(1.0) + AddHours(10.0)",
+      "meaning": "Thông báo daily hẹn vào 10 giờ sáng ngày hôm sau",
+      "where": "DailyService.ScheduleDailyNotification (hằng số 1.0 và 10.0 trong pseudo-C)"
+    },
+    {
+      "source": "code const",
+      "key": "Chuỗi xuống dòng trong Message",
+      "type": "string",
+      "value": "\"NEWLINE\" → Environment.NewLine",
+      "meaning": "Cách viết xuống dòng trong nội dung asset",
+      "where": "NotificationService.SendNotification (String.Replace)"
+    },
+    {
+      "source": "config class",
+      "key": "NotificationConfig.IsNotificationOn",
+      "type": "bool",
+      "value": "giá trị mặc định trong ScriptableObject",
+      "meaning": "Trạng thái thông báo mặc định cho người chơi mới",
+      "where": "Modules.Contexts.Application.Notification.Scripts.NotificationConfig"
+    },
+    {
+      "source": "code field",
+      "key": "NotificationModel.IsNotificationOn",
+      "type": "bool",
+      "value": "lưu cục bộ",
+      "meaning": "Lựa chọn bật/tắt của người chơi",
+      "where": "NotificationModel + NotificationSaveLoad (SaveLoad<NotificationModel>)"
+    },
+    {
+      "source": "code field",
+      "key": "LocalNotificationSo",
+      "type": "ScriptableObject",
+      "value": "Id (int), Title (string), Message (string)",
+      "meaning": "Khuôn mẫu một thông báo cục bộ",
+      "where": "Modules.Infrastructure.Notifications.Scripts.LocalNotificationSo"
+    },
+    {
+      "source": "remote config",
+      "key": "IsWelcomeBackEnabled",
+      "type": "bool",
+      "value": "server",
+      "meaning": "Bật tính năng Welcome Back (kéo theo thông báo tương ứng)",
+      "where": "FirebaseRemoteConfigResolver"
+    }
+  ],
+  "rewards": [],
+  "backend": [],
+  "ui": [
+    {
+      "element": "Toggle Notifications",
+      "class": "Modules.Contexts.Home.UI.Settings.SettingsController (_notificationToggle: RadioToggle)",
+      "purpose": "bật/tắt toàn bộ thông báo"
+    },
+    {
+      "element": "Hộp thoại quyền hệ thống",
+      "class": "NotificationSamples.GameNotificationsPlatform.RequestNotificationPermission",
+      "purpose": "xin quyền Android 13+/iOS"
+    },
+    {
+      "element": "Thông báo hệ thống",
+      "class": "NotificationSamples.GameNotification (Unity Mobile Notifications)",
+      "purpose": "hiển thị Title/Body ở khay thông báo"
+    }
+  ],
+  "analytics": [],
+  "storage_keys": [
+    "NotificationModel (SaveLoad<NotificationModel> qua NotificationSaveLoad)"
+  ],
+  "related_features": [
+    "Settings",
+    "Inventory",
+    "HomeUI",
+    "Account"
+  ],
+  "gaps": [
+    "15/11 — partial_static_code_unresolved: SendNotification(LocalNotificationSo,int delayAsSeconds) tạo local notification và lập lịch theo delay của caller. SendWelcomeBackNotification cũng nhận delayAsSeconds; D1 là ca hằng90000riêng. Không có một delay mặcđịnh chung suy cho tất cả event. Còn lại: Inventory mọi sendcaller event và remainingtime cùng snapshot; OS permission/Doze/delivery cần runtime riêng, giá trịdynamic không khôi phục bằng mộtconstructor.",
+    "15/11 — resolved_static_code_historical_build: SendD1RetNotification kiểm notification model.IsNotificationOn, lấy DateTime.Now và AddSeconds với literal90000 (25giờ). Đây là local scheduling time, không phải UTCserver hay delivery guaranteed. Đã thấy sốliteral trong body, bỏ giảđịnh24giờ. Còn lại: Cần đối chiếu ARM64/current runtime và các nhánh caller còn chưa đủ bằng chứng.",
+    "15/11 — partial_static_code_unresolved: NotificationService khởi tạo NotificationSamples platform và cácLocalNotificationSo, có local send/cancel/permission. Đây là bằng chứng local pipeline; AndroidManifest đónggói là binaryAXML và source survey này chưa audit đầy đủ SDK receiver/cloud registration. Không giữ khẳngđịnh toànbuild chỉlocal. Còn lại: Cần decode binarymanifest và SDK messaging receiver/tokenregistration, cùng response/backend khi có; localbody không chứng minh absence push.",
+    "15/11 — partial_static_reconciliation: Các NotificationSo asset đã xuất đầy đủ Title/Message tiếngAnh. Chưa chứng minh caller không localize hoặc không đa ngôn ngữ; localization full11language được giữ riêng. Còn lại: Trace schedule/send caller cùng locale lookup trước khi nâng kết luận; Settings toggle chỉ kiểm persistence, chưa kiểm delivery/locale."
+  ],
+  "sources": [
+    "Il2CppDumper/dump.cs: NotificationService, NotificationConfig, NotificationModel, NotificationSaveLoad, LocalNotificationSo, NotificationSamples.GameNotificationsPlatform",
+    "Assets/MonoBehaviour/*NotificationSo.asset (10 asset, giá trị Id/Title/Message thật)",
+    "GameDesign/facts/calls.jsonl (quan hệ gọi tới AndroidNotificationCenter, DailyService.ScheduleDailyNotification)",
+    "RecoveredNative/PseudoC/Assembly-CSharp/Modules/Contexts/Application/Notification/*.c",
+    "GameDesign/appendix/localization.tsv (SettingsPopupNotifications)"
+  ],
+  "audit_provenance": {
+    "review_date": "2026-11-15",
+    "mode": "offline_existing_files",
+    "code_build": "0.0.3063 ARMv7",
+    "runtime_build_observed_historically": "0.0.3129 ARM64 (audit 2026-10-18); not rechecked 2026-11-15",
+    "new_playtests": 0,
+    "uc_status": "See facts/audit_20261115/uc_registry.json; image reference is not pass",
+    "workbook_status": "Existing XLSX is historical; JSON and local web include 2026-11-15 corrections",
+    "static_review": "facts/local_code_gap_results_20261115.json; facts/local_asset_gap_results_20261115.json; facts/final_data_gap_decisions_20261115.json; facts/core_body_gap_decisions_20261115.json; facts/remaining_asset_gap_decisions_20261115.json"
+  },
+  "static_review_20261115": {
+    "date": "2026-11-15",
+    "scope": "Historical code/assets 0.0.3063, dated caches, device 0.0.3129 cached bundles and explicitly scoped runtime evidence. Not full runtime pass.",
+    "findings": [
+      {
+        "kind": "code",
+        "source_report": "facts/local_code_gap_results_20261115.json",
+        "id": "MS-CODE-48",
+        "gap_ids": [
+          "MS-Notifications-G002"
+        ],
+        "title": "D1 retention delay =90000seconds trong body",
+        "status": "resolved_static_code",
+        "conclusion": "SendD1RetNotification kiểm notification model.IsNotificationOn, lấy DateTime.Now và AddSeconds với literal90000 (25giờ). Đây là local scheduling time, không phải UTCserver hay delivery guaranteed. Đã thấy sốliteral trong body, bỏ giảđịnh24giờ.",
+        "evidence": [
+          {
+            "file": "../com.grandgames.magicsort_Unity_20260909_112501/RecoveredNative/PseudoC/Assembly-CSharp/Modules/Contexts/Application/Notification/Scripts/NotificationService.c",
+            "line": 832,
+            "end_line": 954,
+            "method": "// ===== NotificationService :: public void SendD1RetNotification()",
+            "sha256": "fa2658be1245356379244ad3830908ba6a309055f092266da9fca9d2f05a9cbb",
+            "body_checked": true,
+            "build": "0.0.3063 ARMv7",
+            "required_body_tokens": [
+              "VectorSignedToFloat(90000",
+              "System_DateTime__AddSeconds"
+            ]
+          }
+        ],
+        "remaining": "Cần đối chiếu ARM64/current runtime và các nhánh caller còn chưa đủ bằng chứng.",
+        "scope": "recovered_native_0.0.3063_only",
+        "runtime_verified": false
+      },
+      {
+        "kind": "code",
+        "source_report": "facts/local_code_gap_results_20261115.json",
+        "id": "MS-CODE-56",
+        "gap_ids": [
+          "MS-Notifications-G001"
+        ],
+        "title": "Notification caller quyết định delay, cần ledger lịch cụ thể",
+        "status": "partial_static_code",
+        "conclusion": "SendNotification(LocalNotificationSo,int delayAsSeconds) tạo local notification và lập lịch theo delay của caller. SendWelcomeBackNotification cũng nhận delayAsSeconds; D1 là ca hằng90000riêng. Không có một delay mặcđịnh chung suy cho tất cả event.",
+        "evidence": [
+          {
+            "file": "../com.grandgames.magicsort_Unity_20260909_112501/RecoveredNative/PseudoC/Assembly-CSharp/Modules/Contexts/Application/Notification/Scripts/NotificationService.c",
+            "line": 489,
+            "end_line": 611,
+            "method": "// ===== NotificationService :: private void SendNotification(",
+            "sha256": "fa2658be1245356379244ad3830908ba6a309055f092266da9fca9d2f05a9cbb",
+            "body_checked": true,
+            "build": "0.0.3063 ARMv7",
+            "required_body_tokens": [
+              "delayAsSeconds"
+            ]
+          }
+        ],
+        "remaining": "Inventory mọi sendcaller event và remainingtime cùng snapshot; OS permission/Doze/delivery cần runtime riêng, giá trịdynamic không khôi phục bằng mộtconstructor.",
+        "scope": "recovered_native_0.0.3063_only",
+        "runtime_verified": false
+      },
+      {
+        "kind": "code",
+        "source_report": "facts/local_code_gap_results_20261115.json",
+        "id": "MS-CODE-57",
+        "gap_ids": [
+          "MS-Notifications-G003"
+        ],
+        "title": "Code đã đọc là local scheduling, push vẫn unknown",
+        "status": "partial_static_code",
+        "conclusion": "NotificationService khởi tạo NotificationSamples platform và cácLocalNotificationSo, có local send/cancel/permission. Đây là bằng chứng local pipeline; AndroidManifest đónggói là binaryAXML và source survey này chưa audit đầy đủ SDK receiver/cloud registration. Không giữ khẳngđịnh toànbuild chỉlocal.",
+        "evidence": [
+          {
+            "file": "../com.grandgames.magicsort_Unity_20260909_112501/RecoveredNative/PseudoC/Assembly-CSharp/Modules/Contexts/Application/Notification/Scripts/NotificationService.c",
+            "line": 304,
+            "end_line": 417,
+            "method": "// ===== NotificationService :: public void Initialize()",
+            "sha256": "fa2658be1245356379244ad3830908ba6a309055f092266da9fca9d2f05a9cbb",
+            "body_checked": true,
+            "build": "0.0.3063 ARMv7",
+            "required_body_tokens": []
+          }
+        ],
+        "remaining": "Cần decode binarymanifest và SDK messaging receiver/tokenregistration, cùng response/backend khi có; localbody không chứng minh absence push.",
+        "scope": "recovered_native_0.0.3063_only",
+        "runtime_verified": false
+      },
+      {
+        "kind": "asset",
+        "source_report": "facts/local_asset_gap_results_20261115.json",
+        "id": "MS-Notifications-G004",
+        "status": "partial_static_reconciliation",
+        "conclusion": "Các NotificationSo asset đã xuất đầy đủ Title/Message tiếngAnh. Chưa chứng minh caller không localize hoặc không đa ngôn ngữ; localization full11language được giữ riêng.",
+        "evidence": [
+          {
+            "source": "MonoBehaviour\\DailyStartedNotificationSo.asset",
+            "root": "UnityExport Assets 0.0.3063",
+            "sha256": "f54288d927f5e5da704c6f21fbe0d574f1e7a2087a113a635693954358a88d39",
+            "line": 1,
+            "build": "0.0.3063 ARMv7"
+          },
+          {
+            "source": "MonoBehaviour\\JetPackRaceEndNotificationSo.asset",
+            "root": "UnityExport Assets 0.0.3063",
+            "sha256": "63c55e2911f202de3a44ca06ed8435a3a72eb0ce5c298e0309a35befca1ee973",
+            "line": 1,
+            "build": "0.0.3063 ARMv7"
+          },
+          {
+            "source": "MonoBehaviour\\LivesNotificationSo.asset",
+            "root": "UnityExport Assets 0.0.3063",
+            "sha256": "fd11aee4000d06b2865e882c855606a112b2e0201c502e72d0d2aeb3b2678452",
+            "line": 1,
+            "build": "0.0.3063 ARMv7"
+          },
+          {
+            "source": "MonoBehaviour\\Ret1NotificationSo.asset",
+            "root": "UnityExport Assets 0.0.3063",
+            "sha256": "f574c7243d53ea8c57a859139f6854a7595ed18139ff54f59360c3da4b357500",
+            "line": 1,
+            "build": "0.0.3063 ARMv7"
+          },
+          {
+            "source": "MonoBehaviour\\StreakTournamentEndNotificationSo.asset",
+            "root": "UnityExport Assets 0.0.3063",
+            "sha256": "fae03f3b2a0b3b28b8831a7ad47ef8a731bb3d874722b06ea254672cb0ab2733",
+            "line": 1,
+            "build": "0.0.3063 ARMv7"
+          },
+          {
+            "source": "MonoBehaviour\\WeeklyTournamentEndNotificationSo.asset",
+            "root": "UnityExport Assets 0.0.3063",
+            "sha256": "1677f9f15d11659c9ea4c315bb49bfc5d98e2becc5e9693c7620c8e4de729187",
+            "line": 1,
+            "build": "0.0.3063 ARMv7"
+          },
+          {
+            "source": "MonoBehaviour\\WelcomeBackNotificationSo.asset",
+            "root": "UnityExport Assets 0.0.3063",
+            "sha256": "8397b3329e32b6e98eb1506dc43e9e08950561b5ca10a2acca19b79543357476",
+            "line": 1,
+            "build": "0.0.3063 ARMv7"
+          },
+          {
+            "source": "MonoBehaviour\\WheelOfFortuneSpinNotificationSo.asset",
+            "root": "UnityExport Assets 0.0.3063",
+            "sha256": "f631825f43742e92892140d689b8e3ef263f6347b9e06443ce207e6ad472ebc0",
+            "line": 1,
+            "build": "0.0.3063 ARMv7"
+          }
+        ],
+        "data": "asset_catalog.json",
+        "scope": "static_export0.0.3063_or_historical_cache_not_runtime_pass",
+        "reviewed": "2026-11-15",
+        "next_action": "Trace schedule/send caller cùng locale lookup trước khi nâng kết luận; Settings toggle chỉ kiểm persistence, chưa kiểm delivery/locale.",
+        "remaining": "Full notification Title/Message tiếngAnh và11locale text đã có; chưa đọc đầy đủ caller để kết luận bypass localization hoặc không đa ngôn ngữ."
+      }
+    ]
+  },
+  "acceptance_review_20261115": {
+    "source": "facts/feature_acceptance_20261115.json",
+    "feature_id": "Notifications",
+    "scope": "All eleven dossier dimensions reviewed; full_feature_verified is not implied; read per-dimension gaps and actual runtime evidence."
+  },
+  "segment_ab_review_20261115": {
+    "status": "not_identified_in_sources",
+    "segment_ids": [],
+    "matching_basis": "explicit_gd_config_map_or_exact_model_token_in_gdd_configs_where_key_sources; rootfieldscoped",
+    "rows": [],
+    "classifications": {},
+    "assignment_verified": false,
+    "uplift_verified": false,
+    "note": "No matchingrow does not prove no segmentation/AB. Rewardbucketfalsepositives remain explicitly classified."
+  },
+  "continuation_review_20261116": {
+    "date": "2026-11-16",
+    "build": "0.0.3129 ARM64 host APK",
+    "build_scope": "Host APK version3129 matches LAST observed installed version15/11 only; installed bytes/live device16/11 not verified.",
+    "runtime_status": "device_unavailable",
+    "runtime_case_ids": [],
+    "current_apk_model_links": {
+      "feature": "Notifications",
+      "models": [],
+      "status": "no_exact_model_token_identified",
+      "distribution": "sanitized_public",
+      "public_mapping_pending": false
+    },
+    "current_packaged_defaults": [],
+    "native_finding_ids": [
+      "MS-CURRENT-20261116-07"
+    ],
+    "documentation_source_coverage": {
+      "dossier_present": true,
+      "use_case_catalog_count": 14,
+      "config_catalog_rows": 16,
+      "current_apk_default_model_links": 0,
+      "current_native_findings": 1,
+      "scope": "Documentation/source coverage only; not complete runtime verification."
+    },
+    "runtime_completion": {
+      "date": "2026-11-16",
+      "status": "device_unavailable",
+      "executed_case_count": 0,
+      "full_feature_runtime_verified": false
+    },
+    "planned_branch": "Đối chiếu toggle đã kiểm với permission/scheduled notification snapshot chỉ đọc nếu lấy được; kiểm tra popup xin quyền nếu app tự hiện.",
+    "target_uc_ids": [
+      "UC-01",
+      "UC-12",
+      "UC-13"
+    ],
+    "execution_phase": "noncore_first",
+    "core_or_levels_last": false,
+    "actionability_full_json": "facts/continuation_20261116/current/feature_actionability.json",
+    "actionability_site_data_path": "data/continuation_20261116/feature_actionability.json",
+    "source_classes": [
+      "external_dependency",
+      "recovered_code"
+    ],
+    "full_feature_verified": false
+  }
+}

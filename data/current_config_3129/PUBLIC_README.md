@@ -1,0 +1,1 @@
+Public sanitized packaged config3129. WebShopConfigModel.ClientKey is redacted from every payload. All4070TextAssets and63defaults retained; no runtime claim. Original source hashes in copied catalogs refer to immutable original data. Public downloadable payload hashes are in public_artifact_manifest.json; ZIP hashes are in downloads.json. Raw dataset must not be published.

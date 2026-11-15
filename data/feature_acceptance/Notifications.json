@@ -1,0 +1,311 @@
+{
+  "id": "Notifications",
+  "feature": "Notifications",
+  "name": "Thông báo đẩy cục bộ",
+  "category": "LiveOps",
+  "category_label": "Live-ops & hạ tầng",
+  "core_levels_last": false,
+  "acceptance_status": "documented_with_explicit_remaining_scope",
+  "full_feature_verified": false,
+  "checks": {
+    "purpose": {
+      "status": "documented_static_scope",
+      "source": "gdd/Notifications.json#/summary",
+      "claim_excerpt": "Magic Sort dùng thông báo cục bộ (local notification, không phải push từ server) để kéo người chơi quay lại. NotificationService nhận 10 ScriptableObject LocalNotificationSo qua constructor, mỗi cái mang Id, Title và Message viết sẵn bằng tiếng Anh kèm emoji; mọi thông báo đều hẹn giờ bằng DateTime.Now + delayAsSeconds và đăng ký qua NotificationSamples.GameNotificationsPlatform (bọc Unity Mobile "
+    },
+    "unlock": {
+      "status": "described_historical_conditions_runtime_boundary_unverified",
+      "source": "gdd/Notifications.json#/unlock",
+      "content": "Có ngay từ đầu; Android 13+ và iOS cần cấp quyền qua NotificationService.RequestPermission() (GameNotificationsPlatform.RequestNotificationPermission). Giá trị bật/tắt mặc định lấy từ NotificationConfig.IsNotificationOn (ScriptableObject) rồi lưu vào NotificationModel qua NotificationSaveLoad."
+    },
+    "entry_flow": {
+      "status": "documented_paths_not_all_executed",
+      "entry_points": [
+        "Toggle Notifications trong Settings (SettingsController.OnNotificationToggleChanged)",
+        "Hộp thoại xin quyền hệ thống khi khởi động (NotificationService.RequestPermission)",
+        "Các dịch vụ gameplay/sự kiện tự gọi Send…/Cancel… (InventoryService, DailyService, các *Service của sự kiện)"
+      ],
+      "flow_source": "gdd/Notifications.json#/flow",
+      "acceptance_scope": "All notification payloads/delay/cancel/reschedule/platform permissions/time/locale; actual OS delivery"
+    },
+    "config": {
+      "status": "source_bound_catalog_present",
+      "gdd_rows": 16,
+      "full_leaf_rows_associated": 1,
+      "snapshots": {
+        "firebase_20260910": 1
+      },
+      "models": [
+        {
+          "model": "IsWelcomeBackEnabled",
+          "matching_basis": [
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/Notifications.json#/configs/15/key_where"
+            }
+          ]
+        }
+      ],
+      "declared_models_without_catalog_data": [],
+      "placeholder_rows_requiring_source_review": [
+        {
+          "index": 15,
+          "key": "IsWelcomeBackEnabled",
+          "value": "server",
+          "source": "remote config"
+        }
+      ],
+      "exact_placeholder_snapshot_values": [
+        {
+          "gdd_config_index": 15,
+          "key": "IsWelcomeBackEnabled",
+          "status": "no_unambiguous_exact_field_match",
+          "matches": [],
+          "basis": "Model explicitly cited in key/where, or sole declaredmodel; fieldpath exactcasefold, no alias guessing."
+        }
+      ],
+      "dossier_abbreviated_values": [],
+      "note": "Model association uses explicitmap or exacttoken citations; fieldpresence does not prove allproductiondata. GDDsummaryrows and fullcatalogrows have separate counts. Abbreviated source summaries are not full arrays; catalog/source links remain authoritative."
+    },
+    "reward": {
+      "status": "delegated_or_no_direct_reward_in_this_scope",
+      "entries": 0,
+      "tables_in_site_meta": 3,
+      "source": "gdd/Notifications.json#/rewards"
+    },
+    "use_cases": {
+      "status": "specified_not_executed_in15nov_ledger",
+      "specified": 14,
+      "reviewed_uc_branch_count": 0,
+      "reviewed_uc_ids": [],
+      "not_reviewed_in_new_ledger": [
+        "UC-01",
+        "UC-02",
+        "UC-03",
+        "UC-04",
+        "UC-05",
+        "UC-06",
+        "UC-07",
+        "UC-08",
+        "UC-09",
+        "UC-10",
+        "UC-11",
+        "UC-12",
+        "UC-13",
+        "UC-14"
+      ],
+      "full_uc_pass_claimed": false
+    },
+    "screenshots": {
+      "historical_gallery_entries": 0,
+      "historical_uc_with_image_reference": 0,
+      "curated_new_images": [],
+      "curated_new_image_count": 0,
+      "status": "not_present_in_reviewed_gallery",
+      "source": "screens/web/screens.json#/Notifications",
+      "note": "Image presence does not prove execution result or completeness."
+    },
+    "runtime_actual": {
+      "status": "not_observed_in15nov_ledger",
+      "case_count": 0,
+      "cases": [],
+      "mode": "offline_existing_fixture",
+      "build": "0.0.3129 ARM64"
+    },
+    "segment_ab": {
+      "status": "not_identified_in_sources",
+      "segment_ids": [],
+      "matching_basis": "explicit_gd_config_map_or_exact_model_token_in_gdd_configs_where_key_sources; rootfieldscoped",
+      "rows": [],
+      "classifications": {},
+      "assignment_verified": false,
+      "uplift_verified": false,
+      "note": "No matchingrow does not prove no segmentation/AB. Rewardbucketfalsepositives remain explicitly classified."
+    },
+    "storage_backend_analytics": {
+      "storage_keys": {
+        "entries": 1,
+        "status": "documented_static_contract_runtime_not_verified",
+        "source": "gdd/Notifications.json#/storage_keys"
+      },
+      "backend": {
+        "entries": 0,
+        "status": "not_identified_in_dossier",
+        "source": "gdd/Notifications.json#/backend",
+        "qualification": "This dossier documents local scheduling; absence does not rule out all thirdparty remote notifications."
+      },
+      "analytics": {
+        "entries": 0,
+        "status": "not_identified_in_dossier",
+        "source": "gdd/Notifications.json#/analytics"
+      }
+    },
+    "remaining_next_step": {
+      "gap_count": 4,
+      "static_scoped_resolutions": 1,
+      "remaining_count": 3,
+      "all_gap_dispositions": [
+        {
+          "id": "MS-Notifications-G001",
+          "feature": "Notifications",
+          "source": "gdd/Notifications.json#/gaps/0",
+          "original": "Giá trị delayAsSeconds của phần lớn thông báo do dịch vụ gọi truyền vào (thời gian còn lại của sự kiện), không phải hằng số trong NotificationService.",
+          "current_note": "15/11 — partial_static_code_unresolved: SendNotification(LocalNotificationSo,int delayAsSeconds) tạo local notification và lập lịch theo delay của caller. SendWelcomeBackNotification cũng nhận delayAsSeconds; D1 là ca hằng90000riêng. Không có một delay mặcđịnh chung suy cho tất cả event. Còn lại: Inventory mọi sendcaller event và remainingtime cùng snapshot; OS permission/Doze/delivery cần runtime riêng, giá trịdynamic không khôi phục bằng mộtconstructor.",
+          "status": "partial_static_code_unresolved",
+          "review_status": "preserved_partial_static_code_unresolved",
+          "dependency": "local_code_review",
+          "next_action": "SendNotification(LocalNotificationSo,int delayAsSeconds) tạo local notification và lập lịch theo delay của caller. SendWelcomeBackNotification cũng nhận delayAsSeconds; D1 là ca hằng90000riêng. Không có một delay mặcđịnh chung suy cho tất cả event. Inventory mọi sendcaller event và remainingtime cùng snapshot; OS permission/Doze/delivery cần runtime riêng, giá trịdynamic không khôi phục bằng mộtconstructor.",
+          "conclusion": "SendNotification(LocalNotificationSo,int delayAsSeconds) tạo local notification và lập lịch theo delay của caller. SendWelcomeBackNotification cũng nhận delayAsSeconds; D1 là ca hằng90000riêng. Không có một delay mặcđịnh chung suy cho tất cả event.",
+          "evidence": [
+            "../com.grandgames.magicsort_Unity_20260909_112501/RecoveredNative/PseudoC/Assembly-CSharp/Modules/Contexts/Application/Notification/Scripts/NotificationService.c:489"
+          ],
+          "reviewed": "2026-11-15",
+          "mode": "file_only_recovered_native_0.0.3063",
+          "remaining": "15/11 — partial_static_code_unresolved: SendNotification(LocalNotificationSo,int delayAsSeconds) tạo local notification và lập lịch theo delay của caller. SendWelcomeBackNotification cũng nhận delayAsSeconds; D1 là ca hằng90000riêng. Không có một delay mặcđịnh chung suy cho tất cả event. Còn lại: Inventory mọi sendcaller event và remainingtime cùng snapshot; OS permission/Doze/delivery cần runtime riêng, giá trịdynamic không khôi phục bằng mộtconstructor."
+        },
+        {
+          "id": "MS-Notifications-G002",
+          "feature": "Notifications",
+          "source": "gdd/Notifications.json#/gaps/1",
+          "original": "Mốc trễ cụ thể của SendD1RetNotification nằm trong thân hàm, pseudo-C chưa cho ra con số rõ ràng.",
+          "current_note": "15/11 — resolved_static_code_historical_build: SendD1RetNotification kiểm notification model.IsNotificationOn, lấy DateTime.Now và AddSeconds với literal90000 (25giờ). Đây là local scheduling time, không phải UTCserver hay delivery guaranteed. Đã thấy sốliteral trong body, bỏ giảđịnh24giờ. Còn lại: Cần đối chiếu ARM64/current runtime và các nhánh caller còn chưa đủ bằng chứng.",
+          "status": "resolved_static_code_historical_build",
+          "review_status": "preserved_resolved_static_code_historical_build",
+          "dependency": "local_code_review",
+          "next_action": "SendD1RetNotification kiểm notification model.IsNotificationOn, lấy DateTime.Now và AddSeconds với literal90000 (25giờ). Đây là local scheduling time, không phải UTCserver hay delivery guaranteed. Đã thấy sốliteral trong body, bỏ giảđịnh24giờ. Cần đối chiếu ARM64/current runtime và các nhánh caller còn chưa đủ bằng chứng.",
+          "conclusion": "SendD1RetNotification kiểm notification model.IsNotificationOn, lấy DateTime.Now và AddSeconds với literal90000 (25giờ). Đây là local scheduling time, không phải UTCserver hay delivery guaranteed. Đã thấy sốliteral trong body, bỏ giảđịnh24giờ.",
+          "evidence": [
+            "../com.grandgames.magicsort_Unity_20260909_112501/RecoveredNative/PseudoC/Assembly-CSharp/Modules/Contexts/Application/Notification/Scripts/NotificationService.c:832"
+          ],
+          "reviewed": "2026-11-15",
+          "mode": "file_only_recovered_native_0.0.3063",
+          "remaining": "15/11 — resolved_static_code_historical_build: SendD1RetNotification kiểm notification model.IsNotificationOn, lấy DateTime.Now và AddSeconds với literal90000 (25giờ). Đây là local scheduling time, không phải UTCserver hay delivery guaranteed. Đã thấy sốliteral trong body, bỏ giảđịnh24giờ. Còn lại: Cần đối chiếu ARM64/current runtime và các nhánh caller còn chưa đủ bằng chứng."
+        },
+        {
+          "id": "MS-Notifications-G003",
+          "feature": "Notifications",
+          "source": "gdd/Notifications.json#/gaps/2",
+          "original": "Không thấy push notification từ server trong build này — chỉ có thông báo cục bộ (suy luận).",
+          "current_note": "15/11 — partial_static_code_unresolved: NotificationService khởi tạo NotificationSamples platform và cácLocalNotificationSo, có local send/cancel/permission. Đây là bằng chứng local pipeline; AndroidManifest đónggói là binaryAXML và source survey này chưa audit đầy đủ SDK receiver/cloud registration. Không giữ khẳngđịnh toànbuild chỉlocal. Còn lại: Cần decode binarymanifest và SDK messaging receiver/tokenregistration, cùng response/backend khi có; localbody không chứng minh absence push.",
+          "status": "partial_static_code_unresolved",
+          "review_status": "preserved_partial_static_code_unresolved",
+          "dependency": "local_code_review",
+          "next_action": "NotificationService khởi tạo NotificationSamples platform và cácLocalNotificationSo, có local send/cancel/permission. Đây là bằng chứng local pipeline; AndroidManifest đónggói là binaryAXML và source survey này chưa audit đầy đủ SDK receiver/cloud registration. Không giữ khẳngđịnh toànbuild chỉlocal. Cần decode binarymanifest và SDK messaging receiver/tokenregistration, cùng response/backend khi có; localbody không chứng minh absence push.",
+          "conclusion": "NotificationService khởi tạo NotificationSamples platform và cácLocalNotificationSo, có local send/cancel/permission. Đây là bằng chứng local pipeline; AndroidManifest đónggói là binaryAXML và source survey này chưa audit đầy đủ SDK receiver/cloud registration. Không giữ khẳngđịnh toànbuild chỉlocal.",
+          "evidence": [
+            "../com.grandgames.magicsort_Unity_20260909_112501/RecoveredNative/PseudoC/Assembly-CSharp/Modules/Contexts/Application/Notification/Scripts/NotificationService.c:304"
+          ],
+          "reviewed": "2026-11-15",
+          "mode": "file_only_recovered_native_0.0.3063",
+          "remaining": "15/11 — partial_static_code_unresolved: NotificationService khởi tạo NotificationSamples platform và cácLocalNotificationSo, có local send/cancel/permission. Đây là bằng chứng local pipeline; AndroidManifest đónggói là binaryAXML và source survey này chưa audit đầy đủ SDK receiver/cloud registration. Không giữ khẳngđịnh toànbuild chỉlocal. Còn lại: Cần decode binarymanifest và SDK messaging receiver/tokenregistration, cùng response/backend khi có; localbody không chứng minh absence push."
+        },
+        {
+          "id": "MS-Notifications-G004",
+          "feature": "Notifications",
+          "source": "gdd/Notifications.json#/gaps/3",
+          "original": "Nội dung thông báo nằm thẳng trong asset bằng tiếng Anh, không đi qua bảng localization nên không đa ngôn ngữ.",
+          "current_note": "15/11 — partial_static_reconciliation: Các NotificationSo asset đã xuất đầy đủ Title/Message tiếngAnh. Chưa chứng minh caller không localize hoặc không đa ngôn ngữ; localization full11language được giữ riêng. Còn lại: Trace schedule/send caller cùng locale lookup trước khi nâng kết luận; Settings toggle chỉ kiểm persistence, chưa kiểm delivery/locale.",
+          "status": "partial_static_reconciliation",
+          "review_status": "preserved_partial_static_reconciliation",
+          "dependency": "local_asset_or_missing_bundle",
+          "next_action": "Các NotificationSo asset đã xuất đầy đủ Title/Message tiếngAnh. Chưa chứng minh caller không localize hoặc không đa ngôn ngữ; localization full11language được giữ riêng. Trace schedule/send caller cùng locale lookup trước khi nâng kết luận; Settings toggle chỉ kiểm persistence, chưa kiểm delivery/locale.",
+          "conclusion": "Các NotificationSo asset đã xuất đầy đủ Title/Message tiếngAnh. Chưa chứng minh caller không localize hoặc không đa ngôn ngữ; localization full11language được giữ riêng.",
+          "evidence": [
+            "facts/local_asset_review_20261115/asset_catalog.json"
+          ],
+          "data": "asset_catalog.json",
+          "scope": "static_export0.0.3063_or_historical_cache_not_runtime_pass",
+          "reviewed": "2026-11-15",
+          "remaining": "15/11 — partial_static_reconciliation: Các NotificationSo asset đã xuất đầy đủ Title/Message tiếngAnh. Chưa chứng minh caller không localize hoặc không đa ngôn ngữ; localization full11language được giữ riêng. Còn lại: Trace schedule/send caller cùng locale lookup trước khi nâng kết luận; Settings toggle chỉ kiểm persistence, chưa kiểm delivery/locale.",
+          "source_records": [
+            {
+              "source": "MonoBehaviour\\DailyStartedNotificationSo.asset",
+              "root": "UnityExport Assets 0.0.3063",
+              "sha256": "f54288d927f5e5da704c6f21fbe0d574f1e7a2087a113a635693954358a88d39",
+              "line": 1,
+              "build": "0.0.3063 ARMv7"
+            },
+            {
+              "source": "MonoBehaviour\\JetPackRaceEndNotificationSo.asset",
+              "root": "UnityExport Assets 0.0.3063",
+              "sha256": "63c55e2911f202de3a44ca06ed8435a3a72eb0ce5c298e0309a35befca1ee973",
+              "line": 1,
+              "build": "0.0.3063 ARMv7"
+            },
+            {
+              "source": "MonoBehaviour\\LivesNotificationSo.asset",
+              "root": "UnityExport Assets 0.0.3063",
+              "sha256": "fd11aee4000d06b2865e882c855606a112b2e0201c502e72d0d2aeb3b2678452",
+              "line": 1,
+              "build": "0.0.3063 ARMv7"
+            },
+            {
+              "source": "MonoBehaviour\\Ret1NotificationSo.asset",
+              "root": "UnityExport Assets 0.0.3063",
+              "sha256": "f574c7243d53ea8c57a859139f6854a7595ed18139ff54f59360c3da4b357500",
+              "line": 1,
+              "build": "0.0.3063 ARMv7"
+            },
+            {
+              "source": "MonoBehaviour\\StreakTournamentEndNotificationSo.asset",
+              "root": "UnityExport Assets 0.0.3063",
+              "sha256": "fae03f3b2a0b3b28b8831a7ad47ef8a731bb3d874722b06ea254672cb0ab2733",
+              "line": 1,
+              "build": "0.0.3063 ARMv7"
+            },
+            {
+              "source": "MonoBehaviour\\WeeklyTournamentEndNotificationSo.asset",
+              "root": "UnityExport Assets 0.0.3063",
+              "sha256": "1677f9f15d11659c9ea4c315bb49bfc5d98e2becc5e9693c7620c8e4de729187",
+              "line": 1,
+              "build": "0.0.3063 ARMv7"
+            },
+            {
+              "source": "MonoBehaviour\\WelcomeBackNotificationSo.asset",
+              "root": "UnityExport Assets 0.0.3063",
+              "sha256": "8397b3329e32b6e98eb1506dc43e9e08950561b5ca10a2acca19b79543357476",
+              "line": 1,
+              "build": "0.0.3063 ARMv7"
+            },
+            {
+              "source": "MonoBehaviour\\WheelOfFortuneSpinNotificationSo.asset",
+              "root": "UnityExport Assets 0.0.3063",
+              "sha256": "f631825f43742e92892140d689b8e3ef263f6347b9e06443ce207e6ad472ebc0",
+              "line": 1,
+              "build": "0.0.3063 ARMv7"
+            }
+          ]
+        }
+      ],
+      "feature_specific_acceptance_questions": [
+        "All notification payloads/delay/cancel/reschedule/platform permissions/time/locale",
+        " actual OS delivery"
+      ],
+      "next_steps": [
+        "SendNotification(LocalNotificationSo,int delayAsSeconds) tạo local notification và lập lịch theo delay của caller. SendWelcomeBackNotification cũng nhận delayAsSeconds; D1 là ca hằng90000riêng. Không có một delay mặcđịnh chung suy cho tất cả event. Inventory mọi sendcaller event và remainingtime cùng snapshot; OS permission/Doze/delivery cần runtime riêng, giá trịdynamic không khôi phục bằng mộtconstructor.",
+        "NotificationService khởi tạo NotificationSamples platform và cácLocalNotificationSo, có local send/cancel/permission. Đây là bằng chứng local pipeline; AndroidManifest đónggói là binaryAXML và source survey này chưa audit đầy đủ SDK receiver/cloud registration. Không giữ khẳngđịnh toànbuild chỉlocal. Cần decode binarymanifest và SDK messaging receiver/tokenregistration, cùng response/backend khi có; localbody không chứng minh absence push.",
+        "Các NotificationSo asset đã xuất đầy đủ Title/Message tiếngAnh. Chưa chứng minh caller không localize hoặc không đa ngôn ngữ; localization full11language được giữ riêng. Trace schedule/send caller cùng locale lookup trước khi nâng kết luận; Settings toggle chỉ kiểm persistence, chưa kiểm delivery/locale."
+      ]
+    }
+  },
+  "use_cases": 14,
+  "configs": 16,
+  "new_review_case_count": 0,
+  "reviewed_uc_branch_count": 0,
+  "curated_new_image_count": 0,
+  "segment_ids": [],
+  "matching_basis": "explicit_gd_config_map_or_exact_model_token_in_gdd_configs_where_key_sources; rootfieldscoped",
+  "unmatched_segment_status": "not_identified_in_sources",
+  "local_document_repairs": [],
+  "sources": [
+    "Il2CppDumper/dump.cs: NotificationService, NotificationConfig, NotificationModel, NotificationSaveLoad, LocalNotificationSo, NotificationSamples.GameNotificationsPlatform",
+    "Assets/MonoBehaviour/*NotificationSo.asset (10 asset, giá trị Id/Title/Message thật)",
+    "GameDesign/facts/calls.jsonl (quan hệ gọi tới AndroidNotificationCenter, DailyService.ScheduleDailyNotification)",
+    "RecoveredNative/PseudoC/Assembly-CSharp/Modules/Contexts/Application/Notification/*.c",
+    "GameDesign/appendix/localization.tsv (SettingsPopupNotifications)"
+  ],
+  "source_hashes": {
+    "gdd_sha256": "6166b557a25471e533755ed5f584bff8341b9ec329c60fb8fec340efbdf65366",
+    "site_meta_sha256": "48a03b980aaffc17f6793c74d32e400a89e476ce3c7f6d34e2accfb0634d03c8"
+  }
+}

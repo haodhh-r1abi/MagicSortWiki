@@ -1,0 +1,430 @@
+{
+ "id": "JetpackRace",
+ "title": "Đua Jetpack (Jetpack Race)",
+ "tagline": "Đua chuỗi thắng với nhóm nhỏ người chơi và bot: thắng level thì bay lên một nấc, thua thì rơi về 0.",
+ "infobox": [
+  [
+   "Loại",
+   "Sự kiện solo"
+  ],
+  [
+   "Mở khóa",
+   "Level 80 (JetpackRaceConfigModel.json: FirstLevelToShow)"
+  ],
+  [
+   "Thời lượng",
+   "Theo startTime / finishTime của cuộc đua (server)"
+  ],
+  [
+   "Chu kỳ / lịch",
+   "Các cuộc đua nối tiếp nhau; client hỏi trước thời điểm kết thúc cuộc đua kế"
+  ],
+  [
+   "Tham gia",
+   "Cá nhân, ghép vào một bảng đua nhỏ gồm cả bot"
+  ],
+  [
+   "Vật phẩm thu thập",
+   "Điểm chuỗi thắng (Score), mỗi lần thắng level cộng 1"
+  ],
+  [
+   "Thưởng chính",
+   "500 coin, 15 phút Unlimited Lives (bản Collection thêm 1 gói thẻ Collection loại 3)"
+  ],
+  [
+   "Điều kiện / phụ thuộc",
+   "IsEnabled = true; muốn thắng phải đạt MaxReachableScore (server) và đứng hạng 1"
+  ],
+  [
+   "Manager",
+   "JetpackRaceService"
+  ]
+ ],
+ "description": [
+  "Jetpack Race là bản đua của cơ chế chuỗi thắng: backend gọi nó là streak race với nhóm endpoint /v1/*-streakrace-*.",
+  "Mỗi lần thắng level, nhân vật đeo jetpack bay lên một nấc; mỗi lần thua hoặc bỏ level, điểm bị reset về 0 và nhân vật rơi xuống.",
+  "Khác Tower Win Streak ở chỗ có đối thủ trực tiếp trên cùng một bảng và có thời hạn cho mỗi cuộc đua.",
+  "Bảng đua gồm cả người thật và bot, mỗi dòng hiển thị tên, điểm, hạng và avatar.",
+  "Muốn thắng phải vừa chạm mốc MaxReachableScore do server gửi, vừa đứng hạng 1.",
+  "Hết một cuộc đua, client hỏi luôn thời điểm kết thúc cuộc đua kế để nối tiếp liên tục.",
+  "Có một đợt Unlimited Lives dành cho người tham gia lần đầu, chỉ nhận được một lần trong đời.",
+  "Điểm được tích ở máy trước rồi mới đẩy lên server ở lần lấy bảng kế tiếp.",
+  "Popup có thể tự mở khi về lobby, khi mở app, hoặc từ màn hình thử lại sau khi thua."
+ ],
+ "notes": [
+  "Lưu ý: MaxReachableScore là mốc đích, hoàn toàn do server quyết định, không có giá trị mặc định trong client (gaps).",
+  "Lưu ý: số người trong một bảng đua và tỉ lệ bot cũng do server quyết định (gaps).",
+  "Lưu ý: điều kiện thắng trong pseudo-C chỉ thấy so sánh Score với MaxReachableScore cộng một kiểm tra trạng thái; phần hạng 1 chưa xác nhận được từ mã (gaps).",
+  "Lưu ý: quyền Unlimited Lives chỉ cấp một lần, kiểm tra bằng cờ HasUsedLimitlessLife.",
+  "Lưu ý: không thấy nơi thực sự trao Unlimited Lives trong JetpackRaceService, có thể do UI hoặc command khác gọi (gaps).",
+  "Lưu ý: có popup xác nhận trước khi thoát level để cảnh báo người chơi sắp mất chuỗi.",
+  "Lưu ý: NotActiveStatusCode được gán trong constructor nên chưa đọc được giá trị số."
+ ],
+ "how_it_works": [
+  "Sự kiện chỉ chạy khi IsEnabled = true (json default false) và level đạt FirstLevelToShow = 80, nếu không trạng thái là Disable (0) hoặc ProgressNotEnough (1).",
+  "Chưa fetch được dữ liệu thì trạng thái là NoCache (2) và icon lobby bị ẩn.",
+  "Client gọi /v1/get-streakrace-leaderboard với {tournament_id, tournament_type, score} (json default EventType = 4) để lấy bảng đua.",
+  "Server trả tournamentID, startTime, finishTime, isFinished, isClaimed, userScore, maxReachableScore, danh sách người đua và cờ hasUsedLimitlessLife.",
+  "Trạng thái chuyển Join (3), người chơi bấm tham gia thì client gọi /v1/join-streakrace-tournament và bắn analytics jetpack_race_joined.",
+  "Trong cuộc đua, mỗi lần thắng level điểm tăng 1 và cờ đồng bộ bị tắt để lần lấy bảng kế đẩy điểm lên (TryIncreaseScore).",
+  "Điểm cũng có thể đẩy riêng qua /v1/set-streakrace-tournament-points.",
+  "Mỗi lần thua hoặc bỏ level, điểm reset về 0; điểm trước khi rơi được giữ lại cho hoạt ảnh rơi (TryResetScore, LastScoreBeforeFallDown).",
+  "Analytics jetpack_race_lost ghi race_rank, current_race_streak và step_rewards khi mất chuỗi.",
+  "Bảng đua dựng từ JetpackRaceUserModel gồm PublicID, Nickname, Score, Rank, IsMe, IsBot, ImageUrl, ImageID.",
+  "Client so danh sách người chơi lần trước với lần này để phát hiện đối thủ tiến lên và chạy animation tương ứng (ArePlayersScoreChanged).",
+  "Banner lobby và popup có bản 'lần xem trước' riêng, nên animation luôn chạy từ trạng thái người chơi đã thấy.",
+  "Hết giờ, trạng thái chuyển LocalTimeIsUp (5) rồi RemoteTimeIsUp (6); có local notification báo cuộc đua sắp kết thúc.",
+  "Nếu thắng, client gọi /v1/claim-streakrace-tournament, nhận 500 coin và 15 phút Unlimited Lives, hoặc thêm 1 gói thẻ Collection loại 3 khi Collection bật.",
+  "Sau khi nhận, cờ IsClaimedLocally được đặt, kỷ lục thắng tăng, analytics jetpack_race_won bắn và trạng thái về ClaimedLocally (7).",
+  "Client gọi /v1/get-streakrace-endtime để biết finishTime và maxReachableScore của cuộc đua kế, rồi tự hẹn lấy dữ liệu khi hết giờ."
+ ],
+ "reward_tables": [
+  {
+   "title": "PHẦN THƯỞNG THẮNG CUỘC ĐUA (JetpackRaceConfigModel.json: RewardModels)",
+   "columns": [
+    "Mốc",
+    "Điều kiện",
+    "Phần thưởng"
+   ],
+   "rows": [
+    [
+     "Thắng cuộc đua",
+     "Score đạt MaxReachableScore (server) và đứng hạng 1",
+     "500 coin, 15 phút Unlimited Lives"
+    ]
+   ]
+  },
+  {
+   "title": "PHẦN THƯỞNG KHI COLLECTION BẬT (RewardModelsWithCollection)",
+   "columns": [
+    "Mốc",
+    "Điều kiện",
+    "Phần thưởng"
+   ],
+   "rows": [
+    [
+     "Thắng cuộc đua",
+     "Score đạt MaxReachableScore (server) và đứng hạng 1, khi Collection đang chạy",
+     "500 coin, 15 phút Unlimited Lives, 1 gói thẻ Collection loại 3"
+    ]
+   ]
+  },
+  {
+   "title": "QUYỀN LỢI KHÁC",
+   "columns": [
+    "Mốc",
+    "Điều kiện",
+    "Phần thưởng"
+   ],
+   "rows": [
+    [
+     "Tham gia lần đầu",
+     "HasUsedLimitlessLife = false",
+     "Một đợt Unlimited Lives (thời lượng do server)"
+    ]
+   ]
+  },
+  {
+   "title": "TRẠNG THÁI VÀ NGUỒN MỞ POPUP",
+   "columns": [
+    "Nhóm",
+    "Giá trị",
+    "Ghi chú"
+   ],
+   "rows": [
+    [
+     "JetpackRaceStateType",
+     "Disable=0, ProgressNotEnough=1, NoCache=2, Join=3, InProgress=4, LocalTimeIsUp=5, RemoteTimeIsUp=6, ClaimedLocally=7",
+     "Máy trạng thái sự kiện"
+    ],
+    [
+     "JetpackRacePopUpState",
+     "Disabled=0, Join=1, FirstShowEver=2, FirstShow=3, InProgress=4, Result=5, JoinIntroduced=6",
+     "Layout popup theo tình huống"
+    ],
+    [
+     "JetpackRaceImpressionSource",
+     "None=0, LobbyIcon=1, EventJoin=2, Result=3, StepIncrease=4, TryAgain=5",
+     "Nguồn mở popup gửi kèm analytics"
+    ]
+   ]
+  }
+ ],
+ "key_numbers": [
+  {
+   "label": "Level mở sự kiện",
+   "value": "80",
+   "source": "JetpackRaceConfigModel.json: FirstLevelToShow"
+  },
+  {
+   "label": "IsEnabled mặc định",
+   "value": "false (chờ remote config bật)",
+   "source": "JetpackRaceConfigModel.json: IsEnabled"
+  },
+  {
+   "label": "EventType (tournament_type)",
+   "value": "4",
+   "source": "JetpackRaceConfigModel.json: EventType"
+  },
+  {
+   "label": "Điểm cộng mỗi lần thắng level",
+   "value": "1",
+   "source": "JetpackRaceService.TryIncreaseScore"
+  },
+  {
+   "label": "Điểm sau khi thua hoặc bỏ level",
+   "value": "0 (reset)",
+   "source": "JetpackRaceService.TryResetScore"
+  },
+  {
+   "label": "Thưởng thắng cuộc đua",
+   "value": "500 coin, 15 phút Unlimited Lives",
+   "source": "JetpackRaceConfigModel.json: RewardModels"
+  },
+  {
+   "label": "Thưởng thắng khi Collection bật",
+   "value": "500 coin, 15 phút Unlimited Lives, 1 gói thẻ Collection loại 3",
+   "source": "JetpackRaceConfigModel.json: RewardModelsWithCollection"
+  },
+  {
+   "label": "Số phần thưởng trong bộ mặc định",
+   "value": "2 món",
+   "source": "JetpackRaceConfigModel.json: RewardModels"
+  },
+  {
+   "label": "Số phần thưởng bản Collection",
+   "value": "3 món",
+   "source": "JetpackRaceConfigModel.json: RewardModelsWithCollection"
+  },
+  {
+   "label": "Điều kiện thắng",
+   "value": "Score >= MaxReachableScore và trạng thái kết thúc hợp lệ",
+   "source": "JetpackRaceService.DidPlayerWin"
+  },
+  {
+   "label": "Điều kiện nhận Unlimited Lives",
+   "value": "HasUsedLimitlessLife == false",
+   "source": "JetpackRaceService.IsEligibleForLimitlessLife"
+  },
+  {
+   "label": "Mốc đích của cuộc đua",
+   "value": "MaxReachableScore (server)",
+   "source": "JetPackRaceResponseModel.maxReachableScore"
+  },
+  {
+   "label": "Số trạng thái sự kiện",
+   "value": "8 (Disable=0 … ClaimedLocally=7)",
+   "source": "JetpackRaceStateType"
+  },
+  {
+   "label": "Số layout popup",
+   "value": "7 (Disabled=0 … JoinIntroduced=6)",
+   "source": "JetpackRacePopUpState"
+  },
+  {
+   "label": "Số nguồn mở popup",
+   "value": "6 (None=0, LobbyIcon=1, EventJoin=2, Result=3, StepIncrease=4, TryAgain=5)",
+   "source": "JetpackRaceImpressionSource"
+  },
+  {
+   "label": "Số endpoint backend",
+   "value": "5 (get-leaderboard, set-points, join, claim, get-endtime)",
+   "source": "JetpackRaceRemoteService"
+  },
+  {
+   "label": "Số trường của response cuộc đua",
+   "value": "10",
+   "source": "JetPackRaceResponseModel"
+  },
+  {
+   "label": "Số trường của một người đua",
+   "value": "8 (publicId, nickName, score, rank, isMe, isBot, imageUrl, imageId)",
+   "source": "JetPackRaceResponseUserModel"
+  },
+  {
+   "label": "Số trường của cache cuộc đua",
+   "value": "17",
+   "source": "JetPackRaceCacheModel"
+  },
+  {
+   "label": "Tên khối đồng bộ",
+   "value": "JetpackRaceModel",
+   "source": "JetpackRaceDataService.GetSyncName"
+  },
+  {
+   "label": "Schema FlatBuffer",
+   "value": "magicsort.schemas.v1.liveops.jet_pack_v2",
+   "source": "PseudoC/Assembly-CSharp/MagicSort/schemas/v1/liveops/jet_pack_v2"
+  },
+  {
+   "label": "Asset thông báo kết thúc",
+   "value": "JetPackRaceEndNotificationSo",
+   "source": "Assets/MonoBehaviour/JetPackRaceEndNotificationSo.asset"
+  }
+ ],
+ "config_highlights": [
+  {
+   "key": "JetpackRaceConfigModel.json: IsEnabled",
+   "value": "false",
+   "meaning": "Mặc định tắt, remote config bật sự kiện"
+  },
+  {
+   "key": "JetpackRaceConfigModel.json: EventType",
+   "value": "4",
+   "meaning": "tournament_type gửi kèm mọi request"
+  },
+  {
+   "key": "JetpackRaceConfigModel.json: FirstLevelToShow",
+   "value": "80",
+   "meaning": "Level tối thiểu để thấy Jetpack Race"
+  },
+  {
+   "key": "JetpackRaceConfigModel.json: RewardModels[0]",
+   "value": "CurrencyType 1, Amount 500",
+   "meaning": "500 coin cho người thắng cuộc đua"
+  },
+  {
+   "key": "JetpackRaceConfigModel.json: RewardModels[1]",
+   "value": "CurrencyType 2, timeSpan 00:15:00",
+   "meaning": "15 phút Unlimited Lives cho người thắng"
+  },
+  {
+   "key": "JetpackRaceConfigModel.json: RewardModelsWithCollection[2]",
+   "value": "CurrencyType 14, Amount 1, CollectionPackType 3",
+   "meaning": "Thêm 1 gói thẻ Collection loại 3 khi Collection bật"
+  },
+  {
+   "key": "Điều kiện thắng",
+   "value": "Score >= MaxReachableScore và state kết thúc hợp lệ",
+   "meaning": "Phải chạm đích mới thắng"
+  },
+  {
+   "key": "IsEligibleForLimitlessLife",
+   "value": "HasUsedLimitlessLife == false",
+   "meaning": "Quyền Unlimited Lives chỉ nhận một lần"
+  },
+  {
+   "key": "IsSynced",
+   "value": "false sau mỗi lần đổi điểm",
+   "meaning": "Cờ đánh dấu điểm ở máy chưa đẩy lên server"
+  },
+  {
+   "key": "NotActiveStatusCode",
+   "value": "gán trong constructor (chưa đọc được số)",
+   "meaning": "Mã HTTP báo sự kiện không chạy"
+  },
+  {
+   "key": "JetpackRaceStateType",
+   "value": "Disable=0, ProgressNotEnough=1, NoCache=2, Join=3, InProgress=4, LocalTimeIsUp=5, RemoteTimeIsUp=6, ClaimedLocally=7",
+   "meaning": "Máy trạng thái sự kiện"
+  },
+  {
+   "key": "JetpackRacePopUpState",
+   "value": "Disabled=0, Join=1, FirstShowEver=2, FirstShow=3, InProgress=4, Result=5, JoinIntroduced=6",
+   "meaning": "Layout popup theo tình huống"
+  },
+  {
+   "key": "JetpackRaceImpressionSource",
+   "value": "None=0, LobbyIcon=1, EventJoin=2, Result=3, StepIncrease=4, TryAgain=5",
+   "meaning": "Nguồn mở popup gửi kèm analytics"
+  },
+  {
+   "key": "jetpackRaceGetUrl",
+   "value": "{base}/v1/get-streakrace-leaderboard",
+   "meaning": "Lấy bảng đua và đẩy kèm điểm"
+  },
+  {
+   "key": "jetpackRaceSetUrl",
+   "value": "{base}/v1/set-streakrace-tournament-points",
+   "meaning": "Đẩy điểm riêng lên server"
+  },
+  {
+   "key": "jetpackRaceJoinUrl",
+   "value": "{base}/v1/join-streakrace-tournament",
+   "meaning": "Tham gia cuộc đua"
+  },
+  {
+   "key": "jetpackRaceClaimUrl",
+   "value": "{base}/v1/claim-streakrace-tournament",
+   "meaning": "Nhận thưởng cuộc đua"
+  },
+  {
+   "key": "jetpackRaceGetNextRaceFinishTimeUrl",
+   "value": "{base}/v1/get-streakrace-endtime",
+   "meaning": "Lấy thời điểm kết thúc cuộc đua kế"
+  },
+  {
+   "key": "JetPackRaceResponseModel",
+   "value": "tournamentID, tournamentType, startTime, finishTime, isFinished, isClaimed, userScore, maxReachableScore, players[], hasUsedLimitlessLife",
+   "meaning": "Trạng thái cuộc đua do server trả"
+  },
+  {
+   "key": "JetPackRaceResponseUserModel",
+   "value": "publicId, nickName, score, rank, isMe, isBot, imageUrl, imageId",
+   "meaning": "Một người đua, có thể là bot"
+  },
+  {
+   "key": "JetpackRaceGetRequestModel",
+   "value": "tournament_id, tournament_type, score",
+   "meaning": "Payload get, set và claim"
+  },
+  {
+   "key": "JetpackRaceJoinRequestModel",
+   "value": "tournament_type",
+   "meaning": "Payload tham gia"
+  },
+  {
+   "key": "JetpackRaceGetNextRaceEndTimeResponseModel",
+   "value": "finishTime, maxReachableScore",
+   "meaning": "Thông tin cuộc đua kế tiếp"
+  },
+  {
+   "key": "JetpackRaceModel",
+   "value": "WinRecord, JetPackRaceCache, HasUsedLimitlessLife, IsEventIntroducedEverInLifeTime, IsJoinPopupIntroduced",
+   "meaning": "Dữ liệu lưu và đồng bộ của tính năng"
+  },
+  {
+   "key": "JetPackRaceCacheModel",
+   "value": "TournamentId, TournamentType, StartTime, FinishTime, IsFinished, IsClaimed, IsClaimedLocally, Score, MaxScoreReached, LastSeenScore, LastSeenBannerScore, IsIntroduced, MaxReachableScore, Players, LastSeenPlayers, LastSeenBannerPlayers, LastScoreBeforeReset",
+   "meaning": "Cache cuộc đua hiện tại"
+  },
+  {
+   "key": "JetPackRaceEndNotificationSo",
+   "value": "asset",
+   "meaning": "Local notification báo cuộc đua sắp kết thúc"
+  },
+  {
+   "key": "FlatBuffer schema",
+   "value": "magicsort.schemas.v1.liveops.jet_pack_v2",
+   "meaning": "Biến thể nhị phân của dữ liệu jetpack"
+  },
+  {
+   "key": "analytics jetpack_race_lost",
+   "value": "tournament_id, race_rank, current_race_streak, step_rewards, progress, remaining_duration",
+   "meaning": "Ghi lại lúc người chơi mất chuỗi"
+  },
+  {
+   "key": "analytics jetpack_race_won",
+   "value": "tournament_id, race_rank, current_race_streak, progress, remaining_duration",
+   "meaning": "Ghi lại lúc thắng và nhận thưởng"
+  },
+  {
+   "key": "capacity bảng đua và tỉ lệ bot",
+   "value": "server",
+   "meaning": "Số người trong một bảng do server quyết định"
+  }
+ ],
+ "tips": [
+  "Cơ chế thắng thì lên một nấc, thua thì về 0 tạo áp lực rất mạnh: người chơi có xu hướng dùng booster để giữ chuỗi.",
+  "Popup xác nhận trước khi thoát level là điểm chạm kiếm tiền quan trọng vì nó nhắc người chơi sắp mất toàn bộ chuỗi.",
+  "Có đối thủ trực tiếp trên cùng bảng biến chuỗi thắng cá nhân thành cuộc đua có tính cạnh tranh.",
+  "Việc hỏi trước thời điểm kết thúc cuộc đua kế giúp sự kiện chạy liên tục mà không có khoảng trống.",
+  "Một đợt Unlimited Lives cho người mới tham gia làm giảm rào cản cho cuộc đua đầu tiên."
+ ],
+ "categories": [
+  "Sự kiện",
+  "Có bảng xếp hạng",
+  "Live-ops",
+  "Tiến trình"
+ ]
+}

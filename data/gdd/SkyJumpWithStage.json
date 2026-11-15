@@ -1,0 +1,1540 @@
+{
+  "id": "SkyJumpWithStage",
+  "name": "Sky Jump 3 chặng (Staged)",
+  "category": "Event",
+  "managers": [
+    "Modules.Contexts.Home.SkyJumpWithStage.Scripts.SkyJumpWithStageService",
+    "Modules.Contexts.Home.SkyJumpWithStage.Scripts.SkyJumpWithStageDataService",
+    "Modules.Contexts.Home.SkyJumpWithStage.Scripts.SkyJumpWithStageStateService",
+    "Modules.Contexts.Home.SkyJumpWithStage.Scripts.SkyJumpWithStageRemoteService",
+    "Modules.Contexts.Home.SkyJumpWithStage.Scripts.SkyJumpWithStageConfigModel"
+  ],
+  "summary": "Sky Jump With Stage là bản nâng cấp của Sky Jump: thay vì một thang 10 bậc duy nhất, giải chia thành 3 chặng (stage 0, 1, 2). Người chơi leo hết số bậc của chặng hiện tại thì được đẩy sang chặng kế (server trả trường 'stage' trong response), mỗi chặng có giải thưởng coin riêng: Stage1RewardsAsCoin = 5.000, Stage2RewardsAsCoin = 7.000, Stage3RewardsAsCoin = 10.000 (mặc định client). Chặng cuối (index 2) yêu cầu đạt bậc 10 (điều kiện `stage == 2 && score == 10` trong IsNextStageIsAvailable). Luật cốt lõi giống Sky Jump: thắng level = leo 1 bậc, thua level = rơi khỏi giải (Score = -1), thưởng chia đều cho những người cùng về đích. Cấu trúc code là bản sao gần như 1:1 của SkyJump với tiền tố SkyJumpWithStage, chỉ thêm khái niệm chặng và bảng thưởng theo chặng. Backend dùng bộ endpoint riêng /v1/*-staged-sky-jump-*.",
+  "unlock": "SkyJumpWithStageStateService.GetEventState(): Disable(0) nếu SkyJumpWithStageConfigModel.IsEnabled == false; ProgressNotEnough(1) nếu level < FirstLevelToShow; NoCache(2); Join(3); InProgress(4); FinishedByLocal(5); FinishedByRemote(6); ClaimedLocally(8). Client default: IsEnabled=false, EventType=1, FirstLevelToShow=120 (Resources/defaultconfigs/SkyJumpWithStageConfigModel.json).",
+  "entry_points": [
+    "Nút lobby Sky Jump Staged (IsLobbyIconVisible)",
+    "Popup mời tham gia (ShouldShowJoinPopup / CanShowJoinPopupForce / ShouldOpenJoinPopUpAutomaticallyOnLobbyReturn)",
+    "Popup thang đua (GetPopUpState → SkyJumpWithStagePopUpState)",
+    "Tự mở khi lên bậc (ShouldOpenStepIncreasedOnLobbyReturn → source ScoreIncreased) hoặc khi có kết quả (ShouldOpenResultOnLobbyReturn → source EventEnd)",
+    "Tự mở khi mở app (ShouldOpenAutomaticallyOnSessionStart)",
+    "Popup xác nhận thoát level (ShouldShowAreYouSure)"
+  ],
+  "flow": "InitializeData() nạp cache + CacheProfileImages(). IntervalUpdate → ShouldSendGetRequest() → SendGetRequest()/GetRequest() gọi SkyJumpWithStageRemoteService.Get(eventType, tournamentId, score) (hoặc GetWithFlatBuffer) tới skyJumpWithStageGetUrl (/v1/get-staged-sky-jump-tournament) với SkyJumpWithStageGetRequestModel{tournament_id, tournament_type, score}. Response SkyJumpWithStageResponseModel{tournament_id, tournament_type, start_time, finish_time, is_finished, is_claimed, user_score, user_max_step_reached, user_details_by_steps, players_images, stage}. ChangeTournamentCache(response) ghi SkyJumpWithStageCacheModel (có thêm CurrentStage). IsNextStageIsAvailable(response) kiểm tra xem có chặng kế hay không — pseudo-C so sánh `stage == 2` và `score == 10` (chặng cuối, bậc 10) kết hợp mốc thời gian UTC. Join: CanJoinTournament() → Join() gọi skyJumpWithStageJoinUrl (/v1/join-staged-sky-jump-tournament). Trong giải: thắng level → TryIncreaseScore() → SkyJumpWithStageDataService.IncreaseScore(); thua → TryFall() → Fall() đặt Score = -1. Số bậc của mỗi chặng lấy từ một mảng tĩnh 3 phần tử trong binary: GetStageStepCount(stageIndex) = staticArray[stageIndex] (chỉ hợp lệ khi stageIndex < 3); GetCurrentStageStepCount()/GetMaxReachableScore() trả số bậc chặng hiện tại (trong một số nhánh trả stepCount − 1). Thưởng: GetStageRewardAmount(stageIndex) map 0→Stage1RewardsAsCoin, 1→Stage2RewardsAsCoin, 2→Stage3RewardsAsCoin, khác → 0; GetCurrentStageRewardAmount() dùng chặng hiện tại; GetPlayerReward() chia số coin đó cho GetWinnerCount(). Kết thúc và claim giống Sky Jump: ShouldSendClaimRequest() → SendClaimRequest() → skyJumpWithStageClaimUrl (/v1/claim-staged-sky-jump-tournament); ClaimLocally(didWin) + IncreaseWinRecord(). Sau đó SendGetNextTournamentStartTimeRequest() gọi /v1/get-staged-sky-jump-starttime.",
+  "use_cases": [
+    {
+      "id": "UC-01",
+      "title": "Kiểm tra điều kiện và hiện icon",
+      "actor": "System",
+      "trigger": "Vào lobby / IntervalUpdate",
+      "precondition": "RemoteConfigs sẵn sàng",
+      "steps": [
+        "SkyJumpWithStageStateService.GetConfig() lấy SkyJumpWithStageConfigModel",
+        "GetEventState() trả Disable(0)/ProgressNotEnough(1)/NoCache(2)/Join(3)/InProgress(4)/FinishedByLocal(5)/FinishedByRemote(6)/ClaimedLocally(8)",
+        "IsLobbyIconVisible(); GetLiveOpsStateForLevelEvent() cho analytics level"
+      ],
+      "result": "Icon lobby hiện/ẩn",
+      "rules": "Client default: IsEnabled=false, FirstLevelToShow=120, EventType=1",
+      "evidence": "SkyJumpWithStageStateService.GetEventState; SkyJumpWithStageStateService.IsLobbyIconVisible; SkyJumpWithStageService.GetLiveOpsStateForLevelEvent"
+    },
+    {
+      "id": "UC-02",
+      "title": "Fetch trạng thái giải và chặng hiện tại",
+      "actor": "Server",
+      "trigger": "InitializeData / IntervalUpdate khi ShouldSendGetRequest()",
+      "precondition": "Sự kiện bật",
+      "steps": [
+        "SkyJumpWithStageService.TryFetchCurrentEvent() → SendGetRequest() → GetRequest()",
+        "SkyJumpWithStageRemoteService.Get(eventType, tournamentId, score) tới skyJumpWithStageGetUrl (/v1/get-staged-sky-jump-tournament)",
+        "Response chứa trường 'stage' → SkyJumpWithStageCacheModel.CurrentStage",
+        "ChangeTournamentCache(response) + CacheProfileImages()",
+        "GetCurrentStage() ưu tiên cache, nếu null thì lấy từ SkyJumpWithStageGetNextTournamentStartTimeResponseModel; nếu cả hai null thì Debug.LogError('CachedEventInfo and SkyJumpWithStageGetNextTournamentStartTimeResponseModel is null') và trả 0"
+      ],
+      "result": "Client biết mình đang ở chặng nào và bậc nào",
+      "rules": "Chặng do server quyết định, client chỉ đọc",
+      "evidence": "SkyJumpWithStageService.TryFetchCurrentEvent; SkyJumpWithStageService.GetRequest; SkyJumpWithStageRemoteService.Get; SkyJumpWithStageService.ChangeTournamentCache; SkyJumpWithStageService.GetCurrentStage"
+    },
+    {
+      "id": "UC-03",
+      "title": "Tham gia giải",
+      "actor": "Player",
+      "trigger": "Bấm Join",
+      "precondition": "CanJoinTournament() == true",
+      "steps": [
+        "SkyJumpWithStageService.Join() → SkyJumpWithStageRemoteService.Join(eventType) tới skyJumpWithStageJoinUrl (/v1/join-staged-sky-jump-tournament)",
+        "OnJoinPopupOpened() / SkyJumpWithStageDataService.SetIsJoinPopupIntroduced(true)",
+        "GetViewModelsForSearchAnimation() chạy hoạt ảnh ghép người chơi",
+        "TryMarkForceShowedJoinPopUpForSession() chặn ép mở popup Join lần 2 trong phiên"
+      ],
+      "result": "Vào chặng 0, state InProgress(4)",
+      "rules": "Payload SkyJumpWithStageJoinRequestModel{tournament_type}",
+      "evidence": "SkyJumpWithStageService.Join; SkyJumpWithStageRemoteService.Join; SkyJumpWithStageService.OnJoinPopupOpened; SkyJumpWithStageDataService.SetIsJoinPopupIntroduced; SkyJumpWithStageService.TryMarkForceShowedJoinPopUpForSession"
+    },
+    {
+      "id": "UC-04",
+      "title": "Thắng level → leo bậc trong chặng",
+      "actor": "Player",
+      "trigger": "Hoàn thành level",
+      "precondition": "CanIncreaseScore() == true",
+      "steps": [
+        "SkyJumpWithStageService.TryIncreaseScore()",
+        "SkyJumpWithStageDataService.IncreaseScore() tăng Score và MaxScoreReached",
+        "IsPlayerReachedMaxScore() so với GetMaxReachableScore() (số bậc của chặng hiện tại, lấy từ mảng tĩnh 3 phần tử)",
+        "IsScoreIncreasedSinceLastSeen() bật animation khi về lobby; UpdateLastSeen() / UpdateLastSeenBanner()"
+      ],
+      "result": "Leo lên bậc kế trong chặng hiện tại",
+      "rules": "Mã0.0.3063: GetStageStepCount(0/1/2)=5/7/10 theo body+ELF; ngoài0..2 trả0. Chưa xác minh branch trên0.0.3129.",
+      "evidence": "SkyJumpWithStageService.TryIncreaseScore; SkyJumpWithStageDataService.IncreaseScore; SkyJumpWithStageService.GetMaxReachableScore; SkyJumpWithStageService.GetStageStepCount; SkyJumpWithStageService.GetCurrentStageStepCount; SkyJumpWithStageService.IsPlayerReachedMaxScore"
+    },
+    {
+      "id": "UC-05",
+      "title": "Hoàn thành chặng → chuyển sang chặng kế",
+      "actor": "System",
+      "trigger": "Đạt bậc cuối của chặng và server cập nhật 'stage'",
+      "precondition": "Chưa phải chặng cuối",
+      "steps": [
+        "SkyJumpWithStageService.IsNextStageIsAvailable(response) — pseudo-C kiểm tra `stage == 2` (chặng cuối) và `score == 10`, kết hợp mốc thời gian UTC để xác định còn chặng kế hay không",
+        "Nếu còn: cache CurrentStage tăng, thang được vẽ lại với số bậc mới",
+        "GetCurrentStageRewardAmount() đổi sang mức thưởng của chặng mới"
+      ],
+      "result": "Người chơi tiếp tục leo ở chặng khó hơn với thưởng lớn hơn",
+      "rules": "3 chặng: index 0/1/2 ứng với Stage1/Stage2/Stage3RewardsAsCoin",
+      "evidence": "SkyJumpWithStageService.IsNextStageIsAvailable; SkyJumpWithStageService.GetCurrentStage; SkyJumpWithStageService.GetCurrentStageRewardAmount"
+    },
+    {
+      "id": "UC-06",
+      "title": "Thua level → rơi khỏi giải",
+      "actor": "Player",
+      "trigger": "Thua hoặc bỏ level",
+      "precondition": "CanFall() == true",
+      "steps": [
+        "SkyJumpWithStageService.TryFall() → SkyJumpWithStageDataService.Fall() đặt Score = -1",
+        "DidPlayerFallDown() = true cho hoạt ảnh rơi",
+        "Người chơi vào loser_user_ids của bậc tương ứng"
+      ],
+      "result": "Bị loại khỏi giải, không leo tiếp được",
+      "rules": "Giống Sky Jump: loại trực tiếp, không reset-và-chơi-lại",
+      "evidence": "SkyJumpWithStageService.TryFall; SkyJumpWithStageDataService.Fall; SkyJumpWithStageStateService.CanFall; SkyJumpWithStageService.DidPlayerFallDown"
+    },
+    {
+      "id": "UC-07",
+      "title": "Cảnh báo trước khi thoát level",
+      "actor": "Player",
+      "trigger": "Bấm thoát trong level",
+      "precondition": "Đang tham gia",
+      "steps": [
+        "SkyJumpWithStageStateService.ShouldShowAreYouSure()",
+        "Hiển thị cảnh báo mất suất trong giải"
+      ],
+      "result": "Giảm tỉ lệ bỏ giải",
+      "rules": "-",
+      "evidence": "SkyJumpWithStageStateService.ShouldShowAreYouSure"
+    },
+    {
+      "id": "UC-08",
+      "title": "Xem thang đua và người chơi theo bậc",
+      "actor": "Player",
+      "trigger": "Mở popup",
+      "precondition": "Có cache",
+      "steps": [
+        "GetUsersInThisStep(step) trả (người còn trụ, người đã rơi)",
+        "GetViewModelsInCurrentScore() / GetViewModelsInMaxScore() / GetViewModelsInPreviousScore()",
+        "GetViewModel(playerImages, userId) dựng SkyJumpWithStageLeaderboardPlayerViewModel (ảnh 'fb' hoặc imageId)",
+        "GetUserCountInStep(step) đếm người ở bậc"
+      ],
+      "result": "Hiển thị đám đông theo từng bậc trong chặng",
+      "rules": "Dữ liệu từ user_details_by_steps{all_user_ids, loser_user_ids, total_user_count}",
+      "evidence": "SkyJumpWithStageService.GetUsersInThisStep; SkyJumpWithStageService.GetViewModelsInCurrentScore; SkyJumpWithStageService.GetViewModel; SkyJumpWithStageService.GetUserCountInStep"
+    },
+    {
+      "id": "UC-09",
+      "title": "Kết thúc giải, xác định thắng/thua",
+      "actor": "System",
+      "trigger": "Hết giờ hoặc is_finished = true",
+      "precondition": "Đã tham gia",
+      "steps": [
+        "GetRemainingSeconds() / GetEndDate() / GetStartTimeAsUnix() / GetEndTimeAsUnix()",
+        "State → FinishedByLocal(5) / FinishedByRemote(6); IsEventFinished()",
+        "DidPlayerWin() / DidPlayerLost() dựa vào Score so với số bậc tối đa của chặng"
+      ],
+      "result": "Popup chuyển SkyJumpWithStagePopUpState.Result(5)",
+      "rules": "-",
+      "evidence": "SkyJumpWithStageService.DidPlayerWin; SkyJumpWithStageService.DidPlayerLost; SkyJumpWithStageStateService.IsEventFinished; SkyJumpWithStageStateService.GetPopUpState"
+    },
+    {
+      "id": "UC-10",
+      "title": "Nhận thưởng theo chặng, chia đều cho người thắng",
+      "actor": "Player",
+      "trigger": "Bấm Claim ở popup kết quả",
+      "precondition": "DidPlayerWin() và ShouldSendClaimRequest()",
+      "steps": [
+        "GetCurrentStageRewardAmount(): stage 0 → Stage1RewardsAsCoin(5000), 1 → Stage2RewardsAsCoin(7000), 2 → Stage3RewardsAsCoin(10000), khác → 0",
+        "GetWinnerCount() / GetSharingRewardsWith() / GetSharingRewardsWithUserCount()",
+        "GetPlayerReward() tạo RewardModel coin = thưởng chặng / số người thắng",
+        "SendClaimRequest() → SkyJumpWithStageRemoteService.Claim(eventType, tournamentId, score) tới skyJumpWithStageClaimUrl (/v1/claim-staged-sky-jump-tournament)",
+        "ClaimLocally(didWin) → SetClaimedLocally(); nếu thắng thì IncreaseWinRecord()"
+      ],
+      "result": "Coin vào túi, WinRecord tăng, state → ClaimedLocally(8)",
+      "rules": "_claimRequestedManuallyByUser phân biệt claim thủ công và tự động",
+      "evidence": "SkyJumpWithStageService.GetCurrentStageRewardAmount; SkyJumpWithStageService.GetStageRewardAmount; SkyJumpWithStageService.GetPlayerReward; SkyJumpWithStageService.SendClaimRequest; SkyJumpWithStageService.ClaimLocally; SkyJumpWithStageDataService.SetClaimedLocally"
+    },
+    {
+      "id": "UC-11",
+      "title": "Chờ giải kế tiếp",
+      "actor": "System",
+      "trigger": "Giải kết thúc",
+      "precondition": "-",
+      "steps": [
+        "SendGetNextTournamentStartTimeRequest() → SkyJumpWithStageRemoteService.GetNextTournamentStartTime(eventType) tới skyJumpWithStageGetNextTournamentStartTimeUrl (/v1/get-staged-sky-jump-starttime)",
+        "IsNextRaceIsAvailable = true; GetNextTournamentStartTime() / GetNextTournamentEndTime()",
+        "ScheduleLeaderboardFetchOnTimerEnd() dùng SecondTimer để tự fetch khi đồng hồ về 0"
+      ],
+      "result": "Hiển thị đồng hồ chờ giải mới",
+      "rules": "-",
+      "evidence": "SkyJumpWithStageService.SendGetNextTournamentStartTimeRequest; SkyJumpWithStageRemoteService.GetNextTournamentStartTime; SkyJumpWithStageService.ScheduleLeaderboardFetchOnTimerEnd; SkyJumpWithStageService.IsNextRaceIsAvailable"
+    },
+    {
+      "id": "UC-12",
+      "title": "Popup tự mở theo ngữ cảnh",
+      "actor": "System",
+      "trigger": "Về lobby / mở app",
+      "precondition": "State phù hợp",
+      "steps": [
+        "ShouldOpenStepIncreasedOnLobbyReturn(out source) → ScoreIncreased(4)",
+        "ShouldOpenResultOnLobbyReturn(out source) → EventEnd(3)",
+        "ShouldOpenJoinPopUpAutomaticallyOnLobbyReturn(out source) → EventJoin(2)",
+        "ShouldOpenAutomaticallyOnSessionStart(out source)",
+        "GetPopUpState() trả Disabled(0)/Join(1)/FirstShowEver(2)/FirstShow(3)/InProgress(4)/Result(5)/JoinIntroduced(6)",
+        "EventSender.SendSkyJumpWithStageImpression(source) (sky_jump_staged_screen_impression) với thêm param 'stage'"
+      ],
+      "result": "Đúng nội dung được hiển thị theo trạng thái",
+      "rules": "SkyJumpWithStageImpressionSource: None(0), LobbyIcon(1), EventJoin(2), EventEnd(3), ScoreIncreased(4)",
+      "evidence": "SkyJumpWithStageStateService.ShouldOpenStepIncreasedOnLobbyReturn; SkyJumpWithStageStateService.ShouldOpenResultOnLobbyReturn; SkyJumpWithStageStateService.ShouldOpenJoinPopUpAutomaticallyOnLobbyReturn; SkyJumpWithStageStateService.GetPopUpState; EventSender.SendSkyJumpWithStageImpression"
+    },
+    {
+      "id": "UC-13",
+      "title": "Offline / lỗi request",
+      "actor": "System",
+      "trigger": "Get/Join/Claim thất bại",
+      "precondition": "-",
+      "steps": [
+        "NotActiveStatusCode phân biệt sự kiện không hoạt động với lỗi mạng",
+        "State giữ NoCache(2); IntervalUpdate thử lại",
+        "Điểm vẫn tăng/giảm local và được gửi kèm trường 'score' ở request kế"
+      ],
+      "result": "Không mất tiến độ, thao tác server bị hoãn",
+      "rules": "-",
+      "evidence": "SkyJumpWithStageService.NotActiveStatusCode; SkyJumpWithStageService.TryFetchCurrentEvent; SkyJumpWithStageStateService.ShouldSendGetRequest"
+    },
+    {
+      "id": "UC-14",
+      "title": "Đồng bộ dữ liệu",
+      "actor": "Server",
+      "trigger": "Sync / đổi thiết bị",
+      "precondition": "ISyncable",
+      "steps": [
+        "SkyJumpWithStageDataService.GetSyncName() = 'SkyJumpWithStageSyncModel'",
+        "SerializeModelForSync() gửi SkyJumpWithStageSyncModel{IsEventIntroducedEverInLifeTime, WinRecord}",
+        "OverwriteModelFromSync(data); DataSynced(); LateUpdate() lưu khi dirty; DeleteData() khi reset"
+      ],
+      "result": "WinRecord giữ nguyên; cache giải lấy lại từ server",
+      "rules": "SkyJumpWithStageCacheModel không nằm trong sync",
+      "evidence": "SkyJumpWithStageDataService.GetSyncName; SkyJumpWithStageDataService.SerializeModelForSync; SkyJumpWithStageDataService.OverwriteModelFromSync; SkyJumpWithStageDataService.DeleteData"
+    }
+  ],
+  "configs": [
+    {
+      "source": "json default",
+      "key": "IsEnabled",
+      "type": "bool",
+      "value": "false",
+      "meaning": "Bật/tắt sự kiện",
+      "where": "Resources/defaultconfigs/SkyJumpWithStageConfigModel.json"
+    },
+    {
+      "source": "json default",
+      "key": "EventType",
+      "type": "int",
+      "value": "1",
+      "meaning": "tournament_type gửi backend",
+      "where": "SkyJumpWithStageConfigModel.json"
+    },
+    {
+      "source": "json default",
+      "key": "FirstLevelToShow",
+      "type": "int",
+      "value": "120",
+      "meaning": "Level tối thiểu",
+      "where": "SkyJumpWithStageConfigModel.json"
+    },
+    {
+      "source": "json default",
+      "key": "Stage1RewardsAsCoin",
+      "type": "int",
+      "value": "5000",
+      "meaning": "Tổng thưởng coin của chặng 1 (stageIndex 0)",
+      "where": "SkyJumpWithStageConfigModel.json"
+    },
+    {
+      "source": "json default",
+      "key": "Stage2RewardsAsCoin",
+      "type": "int",
+      "value": "7000",
+      "meaning": "Tổng thưởng coin của chặng 2 (stageIndex 1)",
+      "where": "SkyJumpWithStageConfigModel.json"
+    },
+    {
+      "source": "json default",
+      "key": "Stage3RewardsAsCoin",
+      "type": "int",
+      "value": "10000",
+      "meaning": "Tổng thưởng coin của chặng 3 (stageIndex 2)",
+      "where": "SkyJumpWithStageConfigModel.json"
+    },
+    {
+      "source": "static array",
+      "key": "Số bậc mỗi chặng",
+      "type": "int[3]",
+      "value": "mảng tĩnh 3 phần tử trong binary (UNK_04395e6c) — giá trị không đọc được từ pseudo-C",
+      "meaning": "GetStageStepCount(stageIndex) = array[stageIndex] khi stageIndex < 3",
+      "where": "SkyJumpWithStageService.GetStageStepCount / GetMaxReachableScore"
+    },
+    {
+      "source": "code const",
+      "key": "Điều kiện chặng cuối",
+      "type": "expr",
+      "value": "stage == 2 && score == 10",
+      "meaning": "Chặng cuối kết thúc ở bậc 10",
+      "where": "SkyJumpWithStageService.IsNextStageIsAvailable (pseudo-C `iVar2 == 2` và `iVar2 == 10`)"
+    },
+    {
+      "source": "code const",
+      "key": "Số chặng",
+      "type": "int",
+      "value": "3",
+      "meaning": "GetStageRewardAmount chỉ nhận stageIndex 0/1/2, khác → return 0",
+      "where": "SkyJumpWithStageService.GetStageRewardAmount"
+    },
+    {
+      "source": "code enum",
+      "key": "SkyJumpWithStageStateType",
+      "type": "enum",
+      "value": "Disable=0, ProgressNotEnough=1, NoCache=2, Join=3, InProgress=4, FinishedByLocal=5, FinishedByRemote=6, ClaimedLocally=8",
+      "meaning": "Trạng thái sự kiện",
+      "where": "dump.cs TypeDefIndex 2432"
+    },
+    {
+      "source": "code enum",
+      "key": "SkyJumpWithStagePopUpState",
+      "type": "enum",
+      "value": "Disabled=0, Join=1, FirstShowEver=2, FirstShow=3, InProgress=4, Result=5, JoinIntroduced=6",
+      "meaning": "Layout popup",
+      "where": "dump.cs TypeDefIndex 2431"
+    },
+    {
+      "source": "code enum",
+      "key": "SkyJumpWithStageImpressionSource",
+      "type": "enum",
+      "value": "None=0, LobbyIcon=1, EventJoin=2, EventEnd=3, ScoreIncreased=4",
+      "meaning": "Nguồn mở popup",
+      "where": "dump.cs TypeDefIndex 2409"
+    },
+    {
+      "source": "server info",
+      "key": "SkyJumpWithStageResponseModel",
+      "type": "object",
+      "value": "tournament_id, tournament_type, start_time, finish_time, is_finished, is_claimed, user_score, user_max_step_reached, user_details_by_steps, players_images, stage",
+      "meaning": "Trạng thái giải + chặng hiện tại",
+      "where": "dump.cs TypeDefIndex 2410"
+    },
+    {
+      "source": "server info",
+      "key": "SkyJumpWithStageGetRequestModel / ClaimRequestModel",
+      "type": "object",
+      "value": "tournament_id, tournament_type, score",
+      "meaning": "Payload Get/Claim",
+      "where": "dump.cs TypeDefIndex 2412"
+    },
+    {
+      "source": "server info",
+      "key": "SkyJumpWithStageJoinRequestModel",
+      "type": "object",
+      "value": "tournament_type",
+      "meaning": "Payload Join",
+      "where": "GameDesign/features/SkyJumpWithStageJoinRequestModel.md"
+    },
+    {
+      "source": "server info",
+      "key": "SkyJumpWithStageGetNextTournamentStartTimeResponseModel",
+      "type": "object",
+      "value": "tournament_type, tournament_start_time, tournament_end_time (+ CurrentStage)",
+      "meaning": "Lịch và chặng của giải kế",
+      "where": "GameDesign/features/SkyJumpWithStageGetNextTournamentStartTimeResponseModel.md; SkyJumpWithStageService.GetCurrentStage"
+    },
+    {
+      "source": "storage key",
+      "key": "SkyJumpWithStageSyncModel",
+      "type": "string",
+      "value": "-",
+      "meaning": "Tên khối sync",
+      "where": "SkyJumpWithStageDataService.GetSyncName"
+    },
+    {
+      "source": "storage key",
+      "key": "SkyJumpWithStageSyncModel.{IsEventIntroducedEverInLifeTime, WinRecord}",
+      "type": "object",
+      "value": "-",
+      "meaning": "Dữ liệu xuyên thiết bị",
+      "where": "SkyJumpWithStageSyncModel"
+    },
+    {
+      "source": "storage key",
+      "key": "SkyJumpWithStageCacheModel.{TournamentId, TournamentType, StartTime, FinishTime, IsFinished, IsClaimed, IsClaimedLocally, Score, MaxScoreReached, LastSeenScore, IsIntroduced, SkyJumpWithStageUserDetailsBySteps, PlayerImages, CurrentStage}",
+      "type": "object",
+      "value": "-",
+      "meaning": "Cache giải hiện tại",
+      "where": "dump.cs TypeDefIndex 2404"
+    },
+    {
+      "source": "code const",
+      "key": "Log lỗi khi thiếu dữ liệu chặng",
+      "type": "string",
+      "value": "'CachedEventInfo and SkyJumpWithStageGetNextTournamentStartTimeResponseModel is null'",
+      "meaning": "GetCurrentStage trả 0 kèm Debug.LogError",
+      "where": "SkyJumpWithStageService.GetCurrentStage"
+    },
+    {
+      "source": "server cache (historical)",
+      "key": "SkyJumpWithStageConfigModel (live) = default?",
+      "type": "",
+      "value": "5/6 key trùng default, 1 key khác/thêm",
+      "meaning": "Đối chiếu config server thật (CachedRemoteConfigs) với SkyJumpWithStageConfigModel.json",
+      "where": "Configs/CachedRemoteConfigs + Firebase RC template 3197 — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server cache (historical)",
+      "key": "SkyJumpWithStageConfigModel: isEnabled",
+      "type": "",
+      "value": "true",
+      "meaning": "server ghi đè (default = false)",
+      "where": "Configs/CachedRemoteConfigs + Firebase RC template 3197 — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server instance (historical)",
+      "key": "SkyJumpWithStageModel (instance)",
+      "type": "",
+      "value": "93 key, xem facts/runtime/event_instances/SkyJumpWithStageModel.json",
+      "meaning": "Dữ liệu phiên event đang chạy (ngày, mốc, thưởng, đối thủ)",
+      "where": "PlayerPrefs SkyJumpWithStageModel (instance event đang chạy) — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server instance (historical)",
+      "key": "SkyJumpWithStageModel: skyJumpWithStageCache.tournamentId",
+      "type": "",
+      "value": "22bf97a4-5086-4f85-bae6-b7ed8d289763",
+      "meaning": "",
+      "where": "PlayerPrefs SkyJumpWithStageModel (instance event đang chạy) — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server instance (historical)",
+      "key": "SkyJumpWithStageModel: skyJumpWithStageCache.tournamentType",
+      "type": "",
+      "value": "0",
+      "meaning": "",
+      "where": "PlayerPrefs SkyJumpWithStageModel (instance event đang chạy) — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server instance (historical)",
+      "key": "SkyJumpWithStageModel: skyJumpWithStageCache.startTime",
+      "type": "",
+      "value": "0",
+      "meaning": "",
+      "where": "PlayerPrefs SkyJumpWithStageModel (instance event đang chạy) — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server instance (historical)",
+      "key": "SkyJumpWithStageModel: skyJumpWithStageCache.finishTime",
+      "type": "",
+      "value": "1789104984",
+      "meaning": "",
+      "where": "PlayerPrefs SkyJumpWithStageModel (instance event đang chạy) — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server instance (historical)",
+      "key": "SkyJumpWithStageModel: skyJumpWithStageCache.isFinished",
+      "type": "",
+      "value": "false",
+      "meaning": "",
+      "where": "PlayerPrefs SkyJumpWithStageModel (instance event đang chạy) — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server instance (historical)",
+      "key": "SkyJumpWithStageModel: skyJumpWithStageCache.isClaimed",
+      "type": "",
+      "value": "false",
+      "meaning": "",
+      "where": "PlayerPrefs SkyJumpWithStageModel (instance event đang chạy) — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server instance (historical)",
+      "key": "SkyJumpWithStageModel: skyJumpWithStageCache.isClaimedLocally",
+      "type": "",
+      "value": "false",
+      "meaning": "",
+      "where": "PlayerPrefs SkyJumpWithStageModel (instance event đang chạy) — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server instance (historical)",
+      "key": "SkyJumpWithStageModel: skyJumpWithStageCache.score",
+      "type": "",
+      "value": "0",
+      "meaning": "",
+      "where": "PlayerPrefs SkyJumpWithStageModel (instance event đang chạy) — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server instance (historical)",
+      "key": "SkyJumpWithStageModel: skyJumpWithStageCache.maxScoreReached",
+      "type": "",
+      "value": "0",
+      "meaning": "",
+      "where": "PlayerPrefs SkyJumpWithStageModel (instance event đang chạy) — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server instance (historical)",
+      "key": "SkyJumpWithStageModel: skyJumpWithStageCache.lastSeenScore",
+      "type": "",
+      "value": "0",
+      "meaning": "",
+      "where": "PlayerPrefs SkyJumpWithStageModel (instance event đang chạy) — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server instance (historical)",
+      "key": "SkyJumpWithStageModel: skyJumpWithStageCache.isIntroduced",
+      "type": "",
+      "value": "true",
+      "meaning": "",
+      "where": "PlayerPrefs SkyJumpWithStageModel (instance event đang chạy) — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server instance (historical)",
+      "key": "SkyJumpWithStageModel: skyJumpWithStageCache.skyJumpWithStageUserDetailsBySteps.0.allUserIds",
+      "type": "",
+      "value": "[\"22bf97a4-5086-4f85-bae6-b7ed8d289763-55\", \"22bf97a4-5086-4f85-bae6-b7ed8d289763-14\", \"22bf97a4-5086-4f85-bae6-b7ed8d289763-18\", \"22bf97a4-5086-4f85-bae6-b7ed8d289763-17\", \"22bf97a4-5086-4f85-bae6-b7ed8d289763-31\", \"22bf97a4-5086-4f85-bae6-b7ed8d289763-34\", \"22bf97a4-5086-4f85-bae6-b7ed8d289763-48\", \"22bf97a4-5086-4f85-bae6-b7ed8d289763-37\", \"22bf97a4-5086-4f85-bae6-b7ed8d289763-50\", \"22bf97a4-50",
+      "meaning": "",
+      "where": "PlayerPrefs SkyJumpWithStageModel (instance event đang chạy) — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server instance (historical)",
+      "key": "SkyJumpWithStageModel: skyJumpWithStageCache.skyJumpWithStageUserDetailsBySteps.0.loserUserIds",
+      "type": "",
+      "value": "[\"22bf97a4-5086-4f85-bae6-b7ed8d289763-55\", \"22bf97a4-5086-4f85-bae6-b7ed8d289763-14\", \"22bf97a4-5086-4f85-bae6-b7ed8d289763-18\", \"22bf97a4-5086-4f85-bae6-b7ed8d289763-17\"]",
+      "meaning": "",
+      "where": "PlayerPrefs SkyJumpWithStageModel (instance event đang chạy) — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server instance (historical)",
+      "key": "SkyJumpWithStageModel: skyJumpWithStageCache.skyJumpWithStageUserDetailsBySteps.0.totalUserCount",
+      "type": "",
+      "value": "100",
+      "meaning": "",
+      "where": "PlayerPrefs SkyJumpWithStageModel (instance event đang chạy) — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server instance (historical)",
+      "key": "SkyJumpWithStageModel: skyJumpWithStageCache.skyJumpWithStageUserDetailsBySteps.1.allUserIds",
+      "type": "",
+      "value": "[\"22bf97a4-5086-4f85-bae6-b7ed8d289763-11\", \"22bf97a4-5086-4f85-bae6-b7ed8d289763-40\", \"22bf97a4-5086-4f85-bae6-b7ed8d289763-19\", \"22bf97a4-5086-4f85-bae6-b7ed8d289763-6\", \"22bf97a4-5086-4f85-bae6-b7ed8d289763-45\", \"22bf97a4-5086-4f85-bae6-b7ed8d289763-24\", \"22bf97a4-5086-4f85-bae6-b7ed8d289763-30\", \"22bf97a4-5086-4f85-bae6-b7ed8d289763-4\", \"22bf97a4-5086-4f85-bae6-b7ed8d289763-3\", \"22bf97a4-5086-",
+      "meaning": "",
+      "where": "PlayerPrefs SkyJumpWithStageModel (instance event đang chạy) — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server instance (historical)",
+      "key": "SkyJumpWithStageModel: skyJumpWithStageCache.skyJumpWithStageUserDetailsBySteps.1.loserUserIds",
+      "type": "",
+      "value": "[\"22bf97a4-5086-4f85-bae6-b7ed8d289763-11\", \"22bf97a4-5086-4f85-bae6-b7ed8d289763-40\"]",
+      "meaning": "",
+      "where": "PlayerPrefs SkyJumpWithStageModel (instance event đang chạy) — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server instance (historical)",
+      "key": "SkyJumpWithStageModel: skyJumpWithStageCache.skyJumpWithStageUserDetailsBySteps.1.totalUserCount",
+      "type": "",
+      "value": "82",
+      "meaning": "",
+      "where": "PlayerPrefs SkyJumpWithStageModel (instance event đang chạy) — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server instance (historical)",
+      "key": "SkyJumpWithStageModel: skyJumpWithStageCache.skyJumpWithStageUserDetailsBySteps.2.allUserIds",
+      "type": "",
+      "value": "[\"22bf97a4-5086-4f85-bae6-b7ed8d289763-47\", \"22bf97a4-5086-4f85-bae6-b7ed8d289763-31\", \"22bf97a4-5086-4f85-bae6-b7ed8d289763-6\", \"22bf97a4-5086-4f85-bae6-b7ed8d289763-58\", \"22bf97a4-5086-4f85-bae6-b7ed8d289763-38\", \"22bf97a4-5086-4f85-bae6-b7ed8d289763-24\", \"22bf97a4-5086-4f85-bae6-b7ed8d289763-1\", \"22bf97a4-5086-4f85-bae6-b7ed8d289763-37\", \"22bf97a4-5086-4f85-bae6-b7ed8d289763-60\", \"22bf97a4-5086",
+      "meaning": "",
+      "where": "PlayerPrefs SkyJumpWithStageModel (instance event đang chạy) — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server instance (historical)",
+      "key": "SkyJumpWithStageModel: skyJumpWithStageCache.skyJumpWithStageUserDetailsBySteps.2.loserUserIds",
+      "type": "",
+      "value": "[\"22bf97a4-5086-4f85-bae6-b7ed8d289763-47\", \"22bf97a4-5086-4f85-bae6-b7ed8d289763-31\", \"22bf97a4-5086-4f85-bae6-b7ed8d289763-6\", \"22bf97a4-5086-4f85-bae6-b7ed8d289763-58\", \"22bf97a4-5086-4f85-bae6-b7ed8d289763-38\"]",
+      "meaning": "",
+      "where": "PlayerPrefs SkyJumpWithStageModel (instance event đang chạy) — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server instance (historical)",
+      "key": "SkyJumpWithStageModel: skyJumpWithStageCache.skyJumpWithStageUserDetailsBySteps.2.totalUserCount",
+      "type": "",
+      "value": "64",
+      "meaning": "",
+      "where": "PlayerPrefs SkyJumpWithStageModel (instance event đang chạy) — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server instance (historical)",
+      "key": "SkyJumpWithStageModel: skyJumpWithStageCache.skyJumpWithStageUserDetailsBySteps.3.allUserIds",
+      "type": "",
+      "value": "[\"22bf97a4-5086-4f85-bae6-b7ed8d289763-45\", \"22bf97a4-5086-4f85-bae6-b7ed8d289763-57\", \"22bf97a4-5086-4f85-bae6-b7ed8d289763-59\", \"22bf97a4-5086-4f85-bae6-b7ed8d289763-56\", \"22bf97a4-5086-4f85-bae6-b7ed8d289763-21\", \"22bf97a4-5086-4f85-bae6-b7ed8d289763-30\", \"22bf97a4-5086-4f85-bae6-b7ed8d289763-60\", \"22bf97a4-5086-4f85-bae6-b7ed8d289763-27\", \"22bf97a4-5086-4f85-bae6-b7ed8d289763-20\", \"22bf97a4-50",
+      "meaning": "",
+      "where": "PlayerPrefs SkyJumpWithStageModel (instance event đang chạy) — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server instance (historical)",
+      "key": "SkyJumpWithStageModel: skyJumpWithStageCache.skyJumpWithStageUserDetailsBySteps.3.loserUserIds",
+      "type": "",
+      "value": "[\"22bf97a4-5086-4f85-bae6-b7ed8d289763-45\", \"22bf97a4-5086-4f85-bae6-b7ed8d289763-57\", \"22bf97a4-5086-4f85-bae6-b7ed8d289763-59\", \"22bf97a4-5086-4f85-bae6-b7ed8d289763-56\", \"22bf97a4-5086-4f85-bae6-b7ed8d289763-21\"]",
+      "meaning": "",
+      "where": "PlayerPrefs SkyJumpWithStageModel (instance event đang chạy) — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server instance (historical)",
+      "key": "SkyJumpWithStageModel: skyJumpWithStageCache.skyJumpWithStageUserDetailsBySteps.3.totalUserCount",
+      "type": "",
+      "value": "46",
+      "meaning": "",
+      "where": "PlayerPrefs SkyJumpWithStageModel (instance event đang chạy) — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server instance (historical)",
+      "key": "SkyJumpWithStageModel: skyJumpWithStageCache.skyJumpWithStageUserDetailsBySteps.4.allUserIds",
+      "type": "",
+      "value": "[\"22bf97a4-5086-4f85-bae6-b7ed8d289763-43\", \"22bf97a4-5086-4f85-bae6-b7ed8d289763-35\", \"22bf97a4-5086-4f85-bae6-b7ed8d289763-60\", \"22bf97a4-5086-4f85-bae6-b7ed8d289763-29\", \"22bf97a4-5086-4f85-bae6-b7ed8d289763-24\", \"22bf97a4-5086-4f85-bae6-b7ed8d289763-5\", \"22bf97a4-5086-4f85-bae6-b7ed8d289763-7\", \"22bf97a4-5086-4f85-bae6-b7ed8d289763-12\", \"22bf97a4-5086-4f85-bae6-b7ed8d289763-27\", \"22bf97a4-5086",
+      "meaning": "",
+      "where": "PlayerPrefs SkyJumpWithStageModel (instance event đang chạy) — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server instance (historical)",
+      "key": "SkyJumpWithStageModel: skyJumpWithStageCache.skyJumpWithStageUserDetailsBySteps.4.loserUserIds",
+      "type": "",
+      "value": "[\"22bf97a4-5086-4f85-bae6-b7ed8d289763-43\", \"22bf97a4-5086-4f85-bae6-b7ed8d289763-35\", \"22bf97a4-5086-4f85-bae6-b7ed8d289763-60\"]",
+      "meaning": "",
+      "where": "PlayerPrefs SkyJumpWithStageModel (instance event đang chạy) — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server instance (historical)",
+      "key": "SkyJumpWithStageModel: skyJumpWithStageCache.skyJumpWithStageUserDetailsBySteps.4.totalUserCount",
+      "type": "",
+      "value": "28",
+      "meaning": "",
+      "where": "PlayerPrefs SkyJumpWithStageModel (instance event đang chạy) — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server instance (historical)",
+      "key": "SkyJumpWithStageModel: skyJumpWithStageCache.skyJumpWithStageUserDetailsBySteps.5.allUserIds",
+      "type": "",
+      "value": "[\"22bf97a4-5086-4f85-bae6-b7ed8d289763-42\", \"22bf97a4-5086-4f85-bae6-b7ed8d289763-28\", \"22bf97a4-5086-4f85-bae6-b7ed8d289763-41\", \"22bf97a4-5086-4f85-bae6-b7ed8d289763-36\", \"22bf97a4-5086-4f85-bae6-b7ed8d289763-1\", \"22bf97a4-5086-4f85-bae6-b7ed8d289763-22\", \"22bf97a4-5086-4f85-bae6-b7ed8d289763-51\", \"22bf97a4-5086-4f85-bae6-b7ed8d289763-53\", \"22bf97a4-5086-4f85-bae6-b7ed8d289763-2\", \"22bf97a4-5086",
+      "meaning": "",
+      "where": "PlayerPrefs SkyJumpWithStageModel (instance event đang chạy) — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server instance (historical)",
+      "key": "SkyJumpWithStageModel: skyJumpWithStageCache.skyJumpWithStageUserDetailsBySteps.5.loserUserIds",
+      "type": "",
+      "value": "[]",
+      "meaning": "",
+      "where": "PlayerPrefs SkyJumpWithStageModel (instance event đang chạy) — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server instance (historical)",
+      "key": "SkyJumpWithStageModel: skyJumpWithStageCache.skyJumpWithStageUserDetailsBySteps.5.totalUserCount",
+      "type": "",
+      "value": "16",
+      "meaning": "",
+      "where": "PlayerPrefs SkyJumpWithStageModel (instance event đang chạy) — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server instance (historical)",
+      "key": "SkyJumpWithStageModel: skyJumpWithStageCache.playerImages.22bf97a4-5086-4f85-bae6-b7ed8d289763-1",
+      "type": "",
+      "value": "https://static-grand-games.s3.amazonaws.com/fb-images/10033027833373812-profile-image.jpeg",
+      "meaning": "",
+      "where": "PlayerPrefs SkyJumpWithStageModel (instance event đang chạy) — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server instance (historical)",
+      "key": "SkyJumpWithStageModel: skyJumpWithStageCache.playerImages.22bf97a4-5086-4f85-bae6-b7ed8d289763-10",
+      "type": "",
+      "value": "https://static-grand-games.s3.amazonaws.com/fb-images/1003177962230455-profile-image.jpeg",
+      "meaning": "",
+      "where": "PlayerPrefs SkyJumpWithStageModel (instance event đang chạy) — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server instance (historical)",
+      "key": "SkyJumpWithStageModel: skyJumpWithStageCache.playerImages.22bf97a4-5086-4f85-bae6-b7ed8d289763-11",
+      "type": "",
+      "value": "https://static-grand-games.s3.amazonaws.com/fb-images/10030687513649571-profile-image.jpeg",
+      "meaning": "",
+      "where": "PlayerPrefs SkyJumpWithStageModel (instance event đang chạy) — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server instance (historical)",
+      "key": "SkyJumpWithStageModel: skyJumpWithStageCache.playerImages.22bf97a4-5086-4f85-bae6-b7ed8d289763-12",
+      "type": "",
+      "value": "https://static-grand-games.s3.amazonaws.com/fb-images/10020223674672618-profile-image.jfif",
+      "meaning": "",
+      "where": "PlayerPrefs SkyJumpWithStageModel (instance event đang chạy) — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server instance (historical)",
+      "key": "SkyJumpWithStageModel: skyJumpWithStageCache.playerImages.22bf97a4-5086-4f85-bae6-b7ed8d289763-13",
+      "type": "",
+      "value": "https://static-grand-games.s3.amazonaws.com/fb-images/1000039402688460-profile-image.jpeg",
+      "meaning": "",
+      "where": "PlayerPrefs SkyJumpWithStageModel (instance event đang chạy) — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server instance (historical)",
+      "key": "SkyJumpWithStageModel: skyJumpWithStageCache.playerImages.22bf97a4-5086-4f85-bae6-b7ed8d289763-14",
+      "type": "",
+      "value": "https://static-grand-games.s3.amazonaws.com/fb-images/10004080173013532-profile-image.jpeg",
+      "meaning": "",
+      "where": "PlayerPrefs SkyJumpWithStageModel (instance event đang chạy) — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server instance (historical)",
+      "key": "SkyJumpWithStageModel: skyJumpWithStageCache.playerImages.22bf97a4-5086-4f85-bae6-b7ed8d289763-15",
+      "type": "",
+      "value": "https://static-grand-games.s3.amazonaws.com/fb-images/10002024973154411-profile-image.jpeg",
+      "meaning": "",
+      "where": "PlayerPrefs SkyJumpWithStageModel (instance event đang chạy) — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server instance (historical)",
+      "key": "SkyJumpWithStageModel: skyJumpWithStageCache.playerImages.22bf97a4-5086-4f85-bae6-b7ed8d289763-16",
+      "type": "",
+      "value": "https://static-grand-games.s3.amazonaws.com/fb-images/10014040595323660-profile-image.jpeg",
+      "meaning": "",
+      "where": "PlayerPrefs SkyJumpWithStageModel (instance event đang chạy) — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server instance (historical)",
+      "key": "SkyJumpWithStageModel: skyJumpWithStageCache.playerImages.22bf97a4-5086-4f85-bae6-b7ed8d289763-17",
+      "type": "",
+      "value": "https://static-grand-games.s3.amazonaws.com/fb-images/10004727242965925-profile-image.jpeg",
+      "meaning": "",
+      "where": "PlayerPrefs SkyJumpWithStageModel (instance event đang chạy) — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server instance (historical)",
+      "key": "SkyJumpWithStageModel: skyJumpWithStageCache.playerImages.22bf97a4-5086-4f85-bae6-b7ed8d289763-18",
+      "type": "",
+      "value": "https://static-grand-games.s3.amazonaws.com/fb-images/10010651315649308-profile-image.jpeg",
+      "meaning": "",
+      "where": "PlayerPrefs SkyJumpWithStageModel (instance event đang chạy) — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server instance (historical)",
+      "key": "SkyJumpWithStageModel: skyJumpWithStageCache.playerImages.22bf97a4-5086-4f85-bae6-b7ed8d289763-19",
+      "type": "",
+      "value": "https://static-grand-games.s3.amazonaws.com/fb-images/10023413457672832-profile-image.jpeg",
+      "meaning": "",
+      "where": "PlayerPrefs SkyJumpWithStageModel (instance event đang chạy) — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server instance (historical)",
+      "key": "SkyJumpWithStageModel: skyJumpWithStageCache.playerImages.22bf97a4-5086-4f85-bae6-b7ed8d289763-2",
+      "type": "",
+      "value": "https://static-grand-games.s3.amazonaws.com/fb-images/1002031385750357-profile-image.jpeg",
+      "meaning": "",
+      "where": "PlayerPrefs SkyJumpWithStageModel (instance event đang chạy) — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server instance (historical)",
+      "key": "SkyJumpWithStageModel: skyJumpWithStageCache.playerImages.22bf97a4-5086-4f85-bae6-b7ed8d289763-20",
+      "type": "",
+      "value": "https://static-grand-games.s3.amazonaws.com/fb-images/1002318289413064-profile-image.jpeg",
+      "meaning": "",
+      "where": "PlayerPrefs SkyJumpWithStageModel (instance event đang chạy) — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server instance (historical)",
+      "key": "SkyJumpWithStageModel: skyJumpWithStageCache.playerImages.22bf97a4-5086-4f85-bae6-b7ed8d289763-21",
+      "type": "",
+      "value": "https://static-grand-games.s3.amazonaws.com/fb-images/1002352212370490-profile-image.jpeg",
+      "meaning": "",
+      "where": "PlayerPrefs SkyJumpWithStageModel (instance event đang chạy) — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server instance (historical)",
+      "key": "SkyJumpWithStageModel: skyJumpWithStageCache.playerImages.22bf97a4-5086-4f85-bae6-b7ed8d289763-22",
+      "type": "",
+      "value": "https://static-grand-games.s3.amazonaws.com/fb-images/10004397303020845-profile-image.jpeg",
+      "meaning": "",
+      "where": "PlayerPrefs SkyJumpWithStageModel (instance event đang chạy) — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server instance (historical)",
+      "key": "SkyJumpWithStageModel: skyJumpWithStageCache.playerImages.22bf97a4-5086-4f85-bae6-b7ed8d289763-23",
+      "type": "",
+      "value": "https://static-grand-games.s3.amazonaws.com/fb-images/1000769316247155-profile-image.jpeg",
+      "meaning": "",
+      "where": "PlayerPrefs SkyJumpWithStageModel (instance event đang chạy) — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server instance (historical)",
+      "key": "SkyJumpWithStageModel: skyJumpWithStageCache.playerImages.22bf97a4-5086-4f85-bae6-b7ed8d289763-24",
+      "type": "",
+      "value": "8",
+      "meaning": "",
+      "where": "PlayerPrefs SkyJumpWithStageModel (instance event đang chạy) — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server instance (historical)",
+      "key": "SkyJumpWithStageModel: skyJumpWithStageCache.playerImages.22bf97a4-5086-4f85-bae6-b7ed8d289763-25",
+      "type": "",
+      "value": "6",
+      "meaning": "",
+      "where": "PlayerPrefs SkyJumpWithStageModel (instance event đang chạy) — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server instance (historical)",
+      "key": "SkyJumpWithStageModel: skyJumpWithStageCache.playerImages.22bf97a4-5086-4f85-bae6-b7ed8d289763-26",
+      "type": "",
+      "value": "2",
+      "meaning": "",
+      "where": "PlayerPrefs SkyJumpWithStageModel (instance event đang chạy) — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server instance (historical)",
+      "key": "SkyJumpWithStageModel: skyJumpWithStageCache.playerImages.22bf97a4-5086-4f85-bae6-b7ed8d289763-27",
+      "type": "",
+      "value": "5",
+      "meaning": "",
+      "where": "PlayerPrefs SkyJumpWithStageModel (instance event đang chạy) — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server instance (historical)",
+      "key": "SkyJumpWithStageModel: skyJumpWithStageCache.playerImages.22bf97a4-5086-4f85-bae6-b7ed8d289763-28",
+      "type": "",
+      "value": "2",
+      "meaning": "",
+      "where": "PlayerPrefs SkyJumpWithStageModel (instance event đang chạy) — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server instance (historical)",
+      "key": "SkyJumpWithStageModel: skyJumpWithStageCache.playerImages.22bf97a4-5086-4f85-bae6-b7ed8d289763-29",
+      "type": "",
+      "value": "7",
+      "meaning": "",
+      "where": "PlayerPrefs SkyJumpWithStageModel (instance event đang chạy) — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server instance (historical)",
+      "key": "SkyJumpWithStageModel: skyJumpWithStageCache.playerImages.22bf97a4-5086-4f85-bae6-b7ed8d289763-3",
+      "type": "",
+      "value": "https://static-grand-games.s3.amazonaws.com/fb-images/1002771182158547-profile-image.jpeg",
+      "meaning": "",
+      "where": "PlayerPrefs SkyJumpWithStageModel (instance event đang chạy) — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server instance (historical)",
+      "key": "SkyJumpWithStageModel: skyJumpWithStageCache.playerImages.22bf97a4-5086-4f85-bae6-b7ed8d289763-30",
+      "type": "",
+      "value": "1",
+      "meaning": "",
+      "where": "PlayerPrefs SkyJumpWithStageModel (instance event đang chạy) — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server instance (historical)",
+      "key": "SkyJumpWithStageModel: skyJumpWithStageCache.playerImages.22bf97a4-5086-4f85-bae6-b7ed8d289763-31",
+      "type": "",
+      "value": "6",
+      "meaning": "",
+      "where": "PlayerPrefs SkyJumpWithStageModel (instance event đang chạy) — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server instance (historical)",
+      "key": "SkyJumpWithStageModel: skyJumpWithStageCache.playerImages.22bf97a4-5086-4f85-bae6-b7ed8d289763-32",
+      "type": "",
+      "value": "3",
+      "meaning": "",
+      "where": "PlayerPrefs SkyJumpWithStageModel (instance event đang chạy) — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server instance (historical)",
+      "key": "SkyJumpWithStageModel: skyJumpWithStageCache.playerImages.22bf97a4-5086-4f85-bae6-b7ed8d289763-33",
+      "type": "",
+      "value": "8",
+      "meaning": "",
+      "where": "PlayerPrefs SkyJumpWithStageModel (instance event đang chạy) — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server instance (historical)",
+      "key": "SkyJumpWithStageModel: skyJumpWithStageCache.playerImages.22bf97a4-5086-4f85-bae6-b7ed8d289763-34",
+      "type": "",
+      "value": "2",
+      "meaning": "",
+      "where": "PlayerPrefs SkyJumpWithStageModel (instance event đang chạy) — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server instance (historical)",
+      "key": "SkyJumpWithStageModel: skyJumpWithStageCache.playerImages.22bf97a4-5086-4f85-bae6-b7ed8d289763-35",
+      "type": "",
+      "value": "6",
+      "meaning": "",
+      "where": "PlayerPrefs SkyJumpWithStageModel (instance event đang chạy) — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server instance (historical)",
+      "key": "SkyJumpWithStageModel: skyJumpWithStageCache.playerImages.22bf97a4-5086-4f85-bae6-b7ed8d289763-36",
+      "type": "",
+      "value": "1",
+      "meaning": "",
+      "where": "PlayerPrefs SkyJumpWithStageModel (instance event đang chạy) — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server instance (historical)",
+      "key": "SkyJumpWithStageModel: skyJumpWithStageCache.playerImages.22bf97a4-5086-4f85-bae6-b7ed8d289763-37",
+      "type": "",
+      "value": "3",
+      "meaning": "",
+      "where": "PlayerPrefs SkyJumpWithStageModel (instance event đang chạy) — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server instance (historical)",
+      "key": "SkyJumpWithStageModel: skyJumpWithStageCache.playerImages.22bf97a4-5086-4f85-bae6-b7ed8d289763-38",
+      "type": "",
+      "value": "8",
+      "meaning": "",
+      "where": "PlayerPrefs SkyJumpWithStageModel (instance event đang chạy) — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server instance (historical)",
+      "key": "SkyJumpWithStageModel: skyJumpWithStageCache.playerImages.22bf97a4-5086-4f85-bae6-b7ed8d289763-39",
+      "type": "",
+      "value": "7",
+      "meaning": "",
+      "where": "PlayerPrefs SkyJumpWithStageModel (instance event đang chạy) — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server instance (historical)",
+      "key": "SkyJumpWithStageModel: skyJumpWithStageCache.playerImages.22bf97a4-5086-4f85-bae6-b7ed8d289763-4",
+      "type": "",
+      "value": "https://static-grand-games.s3.amazonaws.com/fb-images/1000799245555590-profile-image.jpeg",
+      "meaning": "",
+      "where": "PlayerPrefs SkyJumpWithStageModel (instance event đang chạy) — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server instance (historical)",
+      "key": "SkyJumpWithStageModel: skyJumpWithStageCache.playerImages.22bf97a4-5086-4f85-bae6-b7ed8d289763-40",
+      "type": "",
+      "value": "8",
+      "meaning": "",
+      "where": "PlayerPrefs SkyJumpWithStageModel (instance event đang chạy) — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server instance (historical)",
+      "key": "SkyJumpWithStageModel: skyJumpWithStageCache.playerImages.22bf97a4-5086-4f85-bae6-b7ed8d289763-41",
+      "type": "",
+      "value": "3",
+      "meaning": "",
+      "where": "PlayerPrefs SkyJumpWithStageModel (instance event đang chạy) — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server instance (historical)",
+      "key": "SkyJumpWithStageModel: skyJumpWithStageCache.playerImages.22bf97a4-5086-4f85-bae6-b7ed8d289763-42",
+      "type": "",
+      "value": "7",
+      "meaning": "",
+      "where": "PlayerPrefs SkyJumpWithStageModel (instance event đang chạy) — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server instance (historical)",
+      "key": "SkyJumpWithStageModel: skyJumpWithStageCache.playerImages.22bf97a4-5086-4f85-bae6-b7ed8d289763-43",
+      "type": "",
+      "value": "5",
+      "meaning": "",
+      "where": "PlayerPrefs SkyJumpWithStageModel (instance event đang chạy) — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server instance (historical)",
+      "key": "SkyJumpWithStageModel: skyJumpWithStageCache.playerImages.22bf97a4-5086-4f85-bae6-b7ed8d289763-44",
+      "type": "",
+      "value": "4",
+      "meaning": "",
+      "where": "PlayerPrefs SkyJumpWithStageModel (instance event đang chạy) — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server instance (historical)",
+      "key": "SkyJumpWithStageModel: skyJumpWithStageCache.playerImages.22bf97a4-5086-4f85-bae6-b7ed8d289763-45",
+      "type": "",
+      "value": "7",
+      "meaning": "",
+      "where": "PlayerPrefs SkyJumpWithStageModel (instance event đang chạy) — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server instance (historical)",
+      "key": "SkyJumpWithStageModel: skyJumpWithStageCache.playerImages.22bf97a4-5086-4f85-bae6-b7ed8d289763-46",
+      "type": "",
+      "value": "6",
+      "meaning": "",
+      "where": "PlayerPrefs SkyJumpWithStageModel (instance event đang chạy) — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server instance (historical)",
+      "key": "SkyJumpWithStageModel: skyJumpWithStageCache.playerImages.22bf97a4-5086-4f85-bae6-b7ed8d289763-47",
+      "type": "",
+      "value": "7",
+      "meaning": "",
+      "where": "PlayerPrefs SkyJumpWithStageModel (instance event đang chạy) — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server instance (historical)",
+      "key": "SkyJumpWithStageModel: skyJumpWithStageCache.playerImages.22bf97a4-5086-4f85-bae6-b7ed8d289763-48",
+      "type": "",
+      "value": "7",
+      "meaning": "",
+      "where": "PlayerPrefs SkyJumpWithStageModel (instance event đang chạy) — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server instance (historical)",
+      "key": "SkyJumpWithStageModel: skyJumpWithStageCache.playerImages.22bf97a4-5086-4f85-bae6-b7ed8d289763-49",
+      "type": "",
+      "value": "6",
+      "meaning": "",
+      "where": "PlayerPrefs SkyJumpWithStageModel (instance event đang chạy) — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server instance (historical)",
+      "key": "SkyJumpWithStageModel: skyJumpWithStageCache.playerImages.22bf97a4-5086-4f85-bae6-b7ed8d289763-5",
+      "type": "",
+      "value": "https://static-grand-games.s3.amazonaws.com/fb-images/10010450495634995-profile-image.jpeg",
+      "meaning": "",
+      "where": "PlayerPrefs SkyJumpWithStageModel (instance event đang chạy) — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server instance (historical)",
+      "key": "SkyJumpWithStageModel: skyJumpWithStageCache.playerImages.22bf97a4-5086-4f85-bae6-b7ed8d289763-50",
+      "type": "",
+      "value": "1",
+      "meaning": "",
+      "where": "PlayerPrefs SkyJumpWithStageModel (instance event đang chạy) — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server instance (historical)",
+      "key": "SkyJumpWithStageModel: skyJumpWithStageCache.playerImages.22bf97a4-5086-4f85-bae6-b7ed8d289763-51",
+      "type": "",
+      "value": "3",
+      "meaning": "",
+      "where": "PlayerPrefs SkyJumpWithStageModel (instance event đang chạy) — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server instance (historical)",
+      "key": "SkyJumpWithStageModel: skyJumpWithStageCache.playerImages.22bf97a4-5086-4f85-bae6-b7ed8d289763-52",
+      "type": "",
+      "value": "2",
+      "meaning": "",
+      "where": "PlayerPrefs SkyJumpWithStageModel (instance event đang chạy) — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server instance (historical)",
+      "key": "SkyJumpWithStageModel: skyJumpWithStageCache.playerImages.22bf97a4-5086-4f85-bae6-b7ed8d289763-53",
+      "type": "",
+      "value": "1",
+      "meaning": "",
+      "where": "PlayerPrefs SkyJumpWithStageModel (instance event đang chạy) — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server instance (historical)",
+      "key": "SkyJumpWithStageModel: skyJumpWithStageCache.playerImages.22bf97a4-5086-4f85-bae6-b7ed8d289763-54",
+      "type": "",
+      "value": "1",
+      "meaning": "",
+      "where": "PlayerPrefs SkyJumpWithStageModel (instance event đang chạy) — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server instance (historical)",
+      "key": "SkyJumpWithStageModel: skyJumpWithStageCache.playerImages.22bf97a4-5086-4f85-bae6-b7ed8d289763-55",
+      "type": "",
+      "value": "7",
+      "meaning": "",
+      "where": "PlayerPrefs SkyJumpWithStageModel (instance event đang chạy) — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server instance (historical)",
+      "key": "SkyJumpWithStageModel: skyJumpWithStageCache.playerImages.22bf97a4-5086-4f85-bae6-b7ed8d289763-56",
+      "type": "",
+      "value": "8",
+      "meaning": "",
+      "where": "PlayerPrefs SkyJumpWithStageModel (instance event đang chạy) — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server instance (historical)",
+      "key": "SkyJumpWithStageModel: skyJumpWithStageCache.playerImages.22bf97a4-5086-4f85-bae6-b7ed8d289763-57",
+      "type": "",
+      "value": "2",
+      "meaning": "",
+      "where": "PlayerPrefs SkyJumpWithStageModel (instance event đang chạy) — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server instance (historical)",
+      "key": "SkyJumpWithStageModel: skyJumpWithStageCache.playerImages.22bf97a4-5086-4f85-bae6-b7ed8d289763-58",
+      "type": "",
+      "value": "1",
+      "meaning": "",
+      "where": "PlayerPrefs SkyJumpWithStageModel (instance event đang chạy) — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server instance (historical)",
+      "key": "SkyJumpWithStageModel: skyJumpWithStageCache.playerImages.22bf97a4-5086-4f85-bae6-b7ed8d289763-59",
+      "type": "",
+      "value": "6",
+      "meaning": "",
+      "where": "PlayerPrefs SkyJumpWithStageModel (instance event đang chạy) — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server instance (historical)",
+      "key": "SkyJumpWithStageModel: skyJumpWithStageCache.playerImages.22bf97a4-5086-4f85-bae6-b7ed8d289763-6",
+      "type": "",
+      "value": "https://static-grand-games.s3.amazonaws.com/fb-images/1003431082597037-profile-image.jpeg",
+      "meaning": "",
+      "where": "PlayerPrefs SkyJumpWithStageModel (instance event đang chạy) — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server instance (historical)",
+      "key": "SkyJumpWithStageModel: skyJumpWithStageCache.playerImages.22bf97a4-5086-4f85-bae6-b7ed8d289763-60",
+      "type": "",
+      "value": "1",
+      "meaning": "",
+      "where": "PlayerPrefs SkyJumpWithStageModel (instance event đang chạy) — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server instance (historical)",
+      "key": "SkyJumpWithStageModel: skyJumpWithStageCache.playerImages.22bf97a4-5086-4f85-bae6-b7ed8d289763-7",
+      "type": "",
+      "value": "https://static-grand-games.s3.amazonaws.com/fb-images/10019879108095389-profile-image.jpeg",
+      "meaning": "",
+      "where": "PlayerPrefs SkyJumpWithStageModel (instance event đang chạy) — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server instance (historical)",
+      "key": "SkyJumpWithStageModel: skyJumpWithStageCache.playerImages.22bf97a4-5086-4f85-bae6-b7ed8d289763-8",
+      "type": "",
+      "value": "https://static-grand-games.s3.amazonaws.com/fb-images/10000914489935916-profile-image.jpeg",
+      "meaning": "",
+      "where": "PlayerPrefs SkyJumpWithStageModel (instance event đang chạy) — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server instance (historical)",
+      "key": "SkyJumpWithStageModel: skyJumpWithStageCache.playerImages.22bf97a4-5086-4f85-bae6-b7ed8d289763-9",
+      "type": "",
+      "value": "https://static-grand-games.s3.amazonaws.com/fb-images/1003295648775470-profile-image.jpeg",
+      "meaning": "",
+      "where": "PlayerPrefs SkyJumpWithStageModel (instance event đang chạy) — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server instance (historical)",
+      "key": "SkyJumpWithStageModel: skyJumpWithStageCache.currentStage",
+      "type": "",
+      "value": "0",
+      "meaning": "",
+      "where": "PlayerPrefs SkyJumpWithStageModel (instance event đang chạy) — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server instance (historical)",
+      "key": "SkyJumpWithStageModel: skyJumpWithStageSyncModel.isEventIntroducedEverInLifeTime",
+      "type": "",
+      "value": "true",
+      "meaning": "",
+      "where": "PlayerPrefs SkyJumpWithStageModel (instance event đang chạy) — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server instance (historical)",
+      "key": "SkyJumpWithStageModel: skyJumpWithStageSyncModel.winRecord",
+      "type": "",
+      "value": "0",
+      "meaning": "",
+      "where": "PlayerPrefs SkyJumpWithStageModel (instance event đang chạy) — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server instance (historical)",
+      "key": "SkyJumpWithStageModel: isJoinPopupIntroduced",
+      "type": "",
+      "value": "false",
+      "meaning": "",
+      "where": "PlayerPrefs SkyJumpWithStageModel (instance event đang chạy) — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server instance (historical)",
+      "key": "SkyJump ladder totalUserCount",
+      "type": "",
+      "value": "100 → 82 → 64 → 46 → 28 → 16",
+      "meaning": "'100 người' = ladder rớt dần server tính sẵn; mọi id dạng <tournamentId>-N = bot 100%",
+      "where": "PlayerPrefs SkyJumpWithStageModel (instance event đang chạy) — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server instance (historical)",
+      "key": "SkyJump playerImages",
+      "type": "",
+      "value": "60 id bot ↦ ảnh FB thật (static-grand-games.s3…/fb-images)",
+      "meaning": "Bot mặc ảnh người thật",
+      "where": "PlayerPrefs SkyJumpWithStageModel (instance event đang chạy) — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server instance (historical)",
+      "key": "SkyJump fail flow",
+      "type": "",
+      "value": "score=0 maxScoreReached=0 isFinished=False — bỏ cuộc 1 level => 'You failed the challenge', icon lobby chuyển cooldown ~29 phút",
+      "meaning": "Thua/bỏ cuộc 1 level là rớt challenge; có cooldown trước khi join lại",
+      "where": "PlayerPrefs SkyJumpWithStageModel (instance event đang chạy) — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    }
+  ],
+  "rewards": [
+    {
+      "context": "Về đích chặng 1",
+      "reward": "5.000 Coin chia đều cho người thắng",
+      "evidence": "SkyJumpWithStageService.GetStageRewardAmount; SkyJumpWithStageConfigModel.Stage1RewardsAsCoin"
+    },
+    {
+      "context": "Về đích chặng 2",
+      "reward": "7.000 Coin chia đều",
+      "evidence": "SkyJumpWithStageConfigModel.Stage2RewardsAsCoin"
+    },
+    {
+      "context": "Về đích chặng 3 (bậc 10)",
+      "reward": "10.000 Coin chia đều",
+      "evidence": "SkyJumpWithStageConfigModel.Stage3RewardsAsCoin; SkyJumpWithStageService.IsNextStageIsAvailable"
+    },
+    {
+      "context": "Bị loại",
+      "reward": "Không có",
+      "evidence": "SkyJumpWithStageService.DidPlayerLost"
+    }
+  ],
+  "backend": [
+    {
+      "command": "skyJumpWithStageGetUrl = {base}/v1/get-staged-sky-jump-tournament",
+      "direction": "client→server",
+      "purpose": "Lấy trạng thái giải + chặng, đẩy kèm điểm"
+    },
+    {
+      "command": "skyJumpWithStageJoinUrl = {base}/v1/join-staged-sky-jump-tournament",
+      "direction": "client→server",
+      "purpose": "Tham gia giải"
+    },
+    {
+      "command": "skyJumpWithStageClaimUrl = {base}/v1/claim-staged-sky-jump-tournament",
+      "direction": "client→server",
+      "purpose": "Nhận thưởng"
+    },
+    {
+      "command": "skyJumpWithStageGetNextTournamentStartTimeUrl = {base}/v1/get-staged-sky-jump-starttime",
+      "direction": "client→server",
+      "purpose": "Lấy lịch giải kế"
+    },
+    {
+      "command": "Sync block 'SkyJumpWithStageSyncModel'",
+      "direction": "client↔server",
+      "purpose": "Đồng bộ WinRecord và cờ introduced"
+    }
+  ],
+  "ui": [
+    {
+      "element": "Popup thang đua",
+      "class": "Modules.Contexts.Home.SkyJumpWithStage.Scripts.UI (popup, step view, user view)",
+      "purpose": "Thang bậc theo chặng"
+    },
+    {
+      "element": "ViewModel",
+      "class": "SkyJumpWithStageLeaderboardPlayerViewModel",
+      "purpose": "Một người chơi trên thang"
+    },
+    {
+      "element": "Popup tham gia / thông tin / kết quả",
+      "class": "SkyJumpWithStage* Join / Info / Result popup",
+      "purpose": "Các trạng thái của sự kiện"
+    },
+    {
+      "element": "Are You Sure",
+      "class": "SkyJumpWithStage AreYouSure view",
+      "purpose": "Cảnh báo mất suất"
+    }
+  ],
+  "analytics": [
+    {
+      "event": "sky_jump_staged_screen_impression",
+      "params": "tournament_id, impression_source, stage, current_step, progress, start_time, remaining_duration",
+      "when": "EventSender.SendSkyJumpWithStageImpression(SkyJumpWithStageImpressionSource)"
+    },
+    {
+      "event": "sky_jump_staged_info_impression",
+      "params": "tournament_id, stage, current_step, progress, start_time, remaining_duration",
+      "when": "EventSender.SendSkyJumpWithStageInfoImpression"
+    }
+  ],
+  "storage_keys": [
+    "SkyJumpWithStageSyncModel",
+    "SkyJumpWithStageSyncModel.IsEventIntroducedEverInLifeTime",
+    "SkyJumpWithStageSyncModel.WinRecord",
+    "SkyJumpWithStageModel.IsJoinPopupIntroduced",
+    "SkyJumpWithStageCacheModel.TournamentId",
+    "SkyJumpWithStageCacheModel.CurrentStage",
+    "SkyJumpWithStageCacheModel.Score",
+    "SkyJumpWithStageCacheModel.MaxScoreReached",
+    "SkyJumpWithStageCacheModel.IsClaimedLocally"
+  ],
+  "related_features": [
+    "SkyJump",
+    "JetpackRaceWithStage",
+    "JetpackRace",
+    "EventsFramework"
+  ],
+  "gaps": [
+    "15/11 — resolved_static_code_historical_build: GetStageStepCount chỉindex0..2 vào UNK04395e6c. Ghidra log xácnhậnbase00010000; trừbase→ELFVA04385e6c, PT_LOAD mapping→fileoffset04385e6c đọc littleendian int32[5,7,10]. Ngoàiindex0..2 bodytrả0. Không đọc rawUNKthẳng làmoffsetvì sẽlệch65536byte. Bảngbinary/hash/reproduction giữ trongsupporting_tables. Còn lại: Cần đối chiếu method/consumer trên app0.0.3129 ARM64; chưa là runtime pass.",
+    "Không rõ SkyJump và SkyJumpWithStage có chạy song song hay loại trừ nhau (cả hai đều EventType=1 nhưng khác endpoint).",
+    "15/11 — resolved_static_code_historical_build: Join state machine gọi SendSkyJumpWithStageJoinedEvent; ClaimLocally(didWin) gọi SendSkyJumpWithStageWon khi true và SendSkyJumpWithStageLost khi false. Vì vậy không còn gap chỉthấyscreen/info. Emission thực/params/sessiondedup chưa được test bởi đọcbody. Còn lại: Cần đối chiếu ARM64/current runtime và các nhánh caller còn chưa đủ bằng chứng.",
+    "15/11 — resolved_historical_snapshot: Có các ScriptableObject SkyJumpWithStageAnimationConfig và SkyJumpWithStageAreYouSureAnimationConfig trong export, với đầy đủ mảng và đường cong đã trích. Config cân bằng gameplay trong JSON là nguồn riêng; cần nói rõ loại asset khi mô tả phần thiếu. Còn lại: Giữ rõ build và phiên bản cache của nguồn; kiểm nhánh runtime riêng khi cần.",
+    "[Runtime 2026-09-10] Config server LIVE đã đọc trực tiếp từ cache máy (không cần request); các hàng 'server live' là giá trị server ghi đè/thêm so với default.",
+    "[Runtime 2026-09-10] Instance phiên event đang chạy đã đọc (SkyJumpWithStageModel); phần từng ghi 'do server gửi' nay có giá trị thật trong các hàng 'server instance'."
+  ],
+  "sources": [
+    "GameDesign/features/SkyJumpWithStageService.md",
+    "GameDesign/features/SkyJumpWithStageStateService.md",
+    "GameDesign/features/SkyJumpWithStageDataService.md",
+    "GameDesign/features/SkyJumpWithStageConfigModel.md",
+    "RecoveredNative/PseudoC/Assembly-CSharp/Modules/Contexts/Home/SkyJumpWithStage/Scripts/*.c",
+    "RecoveredNative/Il2CppDumper/dump.cs (TypeDefIndex 2404-2432)",
+    "UnityExport/ExportedProject/Assets/Resources/defaultconfigs/SkyJumpWithStageConfigModel.json",
+    "UnityExport/ExportedProject/Assets/MonoBehaviour/BackendEnvironmentConfig.asset",
+    "RecoveredNative/strings-by-type.tsv (EventSender.SendSkyJumpWithStage*)"
+  ],
+  "related_feature_aliases": [
+    {
+      "original": "LobbyEventsService",
+      "feature": "EventsFramework"
+    }
+  ],
+  "audit_provenance": {
+    "review_date": "2026-11-15",
+    "mode": "offline_existing_files",
+    "code_build": "0.0.3063 ARMv7",
+    "runtime_build_observed_historically": "0.0.3129 ARM64 (audit 2026-10-18); not rechecked 2026-11-15",
+    "new_playtests": 0,
+    "uc_status": "See facts/audit_20261115/uc_registry.json; image reference is not pass",
+    "workbook_status": "Existing XLSX is historical; JSON and local web include 2026-11-15 corrections",
+    "static_review": "facts/local_code_gap_results_20261115.json; facts/local_asset_gap_results_20261115.json; facts/final_data_gap_decisions_20261115.json; facts/core_body_gap_decisions_20261115.json; facts/remaining_asset_gap_decisions_20261115.json"
+  },
+  "static_review_20261115": {
+    "date": "2026-11-15",
+    "scope": "Historical code/assets 0.0.3063, dated caches, device 0.0.3129 cached bundles and explicitly scoped runtime evidence. Not full runtime pass.",
+    "findings": [
+      {
+        "kind": "remaining_asset",
+        "source_report": "facts/remaining_asset_gap_decisions_20261115.json",
+        "id": "MS-RA-020",
+        "gap_ids": [
+          "MS-SkyJumpWithStage-G004"
+        ],
+        "title": "Không có asset ScriptableObject riêng cho bản staged trong Assets/MonoBehaviour.",
+        "status": "resolved_historical_snapshot",
+        "conclusion": "Có các ScriptableObject SkyJumpWithStageAnimationConfig và SkyJumpWithStageAreYouSureAnimationConfig trong export, với đầy đủ mảng và đường cong đã trích. Config cân bằng gameplay trong JSON là nguồn riêng; cần nói rõ loại asset khi mô tả phần thiếu.",
+        "evidence": [
+          "facts/remaining_asset_review_20261115/asset_catalog.json"
+        ],
+        "remaining": "",
+        "next_action": "Giữ rõ build và phiên bản cache của nguồn; kiểm nhánh runtime riêng khi cần.",
+        "scope": "Asset/native export 0.0.3063 và cache UnityFS đọc ngày 15/11 từ app 0.0.3129 được giữ riêng; ảnh render asset không phải ảnh chụp playtest.",
+        "reviewed": "2026-11-15",
+        "full_uc_pass": false
+      },
+      {
+        "kind": "code",
+        "source_report": "facts/local_code_gap_results_20261115.json",
+        "id": "MS-CODE-49",
+        "gap_ids": [
+          "MS-SkyJumpWithStage-G001"
+        ],
+        "title": "Stage-step array vẫn là external native table",
+        "status": "partial_static_code",
+        "conclusion": "GetStageStepCount trả *(UNK_04395e6c+stageIndex×4) cho unsigned index<3, ngoài trả0. Có3entry trongtable, nhưng body không chứa giá trịliteral từngentry. Không biến chặngcuối10 trong pathkhác thành cảarray.",
+        "evidence": [
+          {
+            "file": "../com.grandgames.magicsort_Unity_20260909_112501/RecoveredNative/PseudoC/Assembly-CSharp/Modules/Contexts/Home/SkyJumpWithStage/Scripts/SkyJumpWithStageService.c",
+            "line": 6110,
+            "end_line": 6125,
+            "method": "// ===== SkyJumpWithStageService :: public int GetStageStepCount(",
+            "sha256": "016dcc43874c146c522a627e219fcecf810ef50c00beb20bbd7a7c8953c9afa2",
+            "body_checked": true,
+            "build": "0.0.3063 ARMv7",
+            "required_body_tokens": [
+              "(uint)stageIndex < 3",
+              "UNK_04395e6c"
+            ]
+          }
+        ],
+        "remaining": "Cần đọc12byte ở native offset/VA04395e6c đúng ELF mapping; typedtable/export hiện tại chưa có trongbody.",
+        "scope": "recovered_native_0.0.3063_only",
+        "runtime_verified": false
+      },
+      {
+        "kind": "code",
+        "source_report": "facts/local_code_gap_results_20261115.json",
+        "id": "MS-CODE-62",
+        "gap_ids": [
+          "MS-SkyJumpWithStage-G003"
+        ],
+        "title": "StagedSkyJump có analytics join/win/lost riêng",
+        "status": "resolved_static_code",
+        "conclusion": "Join state machine gọi SendSkyJumpWithStageJoinedEvent; ClaimLocally(didWin) gọi SendSkyJumpWithStageWon khi true và SendSkyJumpWithStageLost khi false. Vì vậy không còn gap chỉthấyscreen/info. Emission thực/params/sessiondedup chưa được test bởi đọcbody.",
+        "evidence": [
+          {
+            "file": "../com.grandgames.magicsort_Unity_20260909_112501/RecoveredNative/PseudoC/Assembly-CSharp/Modules/Contexts/Home/SkyJumpWithStage/Scripts/SkyJumpWithStageService.c",
+            "line": 5609,
+            "end_line": 5692,
+            "method": "// ===== SkyJumpWithStageService :: public void ClaimLocally(",
+            "sha256": "016dcc43874c146c522a627e219fcecf810ef50c00beb20bbd7a7c8953c9afa2",
+            "body_checked": true,
+            "build": "0.0.3063 ARMv7",
+            "required_body_tokens": [
+              "SendSkyJumpWithStageWon",
+              "SendSkyJumpWithStageLost"
+            ]
+          }
+        ],
+        "remaining": "Cần đối chiếu ARM64/current runtime và các nhánh caller còn chưa đủ bằng chứng.",
+        "scope": "recovered_native_0.0.3063_only",
+        "runtime_verified": false
+      },
+      {
+        "kind": "code",
+        "source_report": "facts/local_code_gap_results_20261115.json",
+        "id": "MS-CODE-77",
+        "gap_ids": [
+          "MS-SkyJumpWithStage-G001"
+        ],
+        "title": "Sky staged step array đọc được5/7/10 từELF",
+        "status": "resolved_static_code",
+        "conclusion": "GetStageStepCount chỉindex0..2 vào UNK04395e6c. Ghidra log xácnhậnbase00010000; trừbase→ELFVA04385e6c, PT_LOAD mapping→fileoffset04385e6c đọc littleendian int32[5,7,10]. Ngoàiindex0..2 bodytrả0. Không đọc rawUNKthẳng làmoffsetvì sẽlệch65536byte. Bảngbinary/hash/reproduction giữ trongsupporting_tables.",
+        "evidence": [
+          {
+            "file": "../com.grandgames.magicsort_Unity_20260909_112501/RecoveredNative/PseudoC/Assembly-CSharp/Modules/Contexts/Home/SkyJumpWithStage/Scripts/SkyJumpWithStageService.c",
+            "line": 6110,
+            "end_line": 6125,
+            "method": "// ===== SkyJumpWithStageService :: public int GetStageStepCount(",
+            "sha256": "016dcc43874c146c522a627e219fcecf810ef50c00beb20bbd7a7c8953c9afa2",
+            "body_checked": true,
+            "build": "0.0.3063 ARMv7",
+            "required_body_tokens": [
+              "UNK_04395e6c"
+            ]
+          }
+        ],
+        "remaining": "Cần đối chiếu method/consumer trên app0.0.3129 ARM64; chưa là runtime pass.",
+        "scope": "recovered_native_0.0.3063_only",
+        "runtime_verified": false
+      }
+    ]
+  },
+  "acceptance_review_20261115": {
+    "source": "facts/feature_acceptance_20261115.json",
+    "feature_id": "SkyJumpWithStage",
+    "scope": "All eleven dossier dimensions reviewed; full_feature_verified is not implied; read per-dimension gaps and actual runtime evidence."
+  },
+  "segment_ab_review_20261115": {
+    "status": "not_identified_in_sources",
+    "segment_ids": [],
+    "matching_basis": "explicit_gd_config_map_or_exact_model_token_in_gdd_configs_where_key_sources; rootfieldscoped",
+    "rows": [],
+    "classifications": {},
+    "assignment_verified": false,
+    "uplift_verified": false,
+    "note": "No matchingrow does not prove no segmentation/AB. Rewardbucketfalsepositives remain explicitly classified."
+  },
+  "continuation_review_20261116": {
+    "date": "2026-11-16",
+    "build": "0.0.3129 ARM64 host APK",
+    "build_scope": "Host APK version3129 matches LAST observed installed version15/11 only; installed bytes/live device16/11 not verified.",
+    "runtime_status": "device_unavailable",
+    "runtime_case_ids": [],
+    "current_apk_model_links": {
+      "feature": "SkyJumpWithStage",
+      "models": [
+        {
+          "model": "SkyJumpWithStageConfigModel",
+          "current_default_file": "facts/review_20261116/public_current_config_3129/defaults/SkyJumpWithStageConfigModel.json",
+          "resource_path": "defaultconfigs/skyjumpwithstageconfigmodel",
+          "sha256": "264684732c768cc8f5cef01d6e223b8244922068d01c139ee1ec2845edeb56a5",
+          "matching_basis": [
+            "gdd/SkyJumpWithStage.json#/configs",
+            "gdd/SkyJumpWithStage.json#/sources",
+            "gdd/SkyJumpWithStage.json#/managers"
+          ],
+          "scope": "Packaged default3129, not effective server config.",
+          "site_data_path": "data/current_config_3129/defaults/SkyJumpWithStageConfigModel.json",
+          "original_source_sha256": "264684732c768cc8f5cef01d6e223b8244922068d01c139ee1ec2845edeb56a5",
+          "public_artifact_sha256": "cd3bb6c60e6b86e499c875a701da3fb097b2a91c1a1cd1022bb4cf47e0100793",
+          "sha256_scope": "sha256 is original raw model; public_artifact_sha256 is the sanitized download"
+        }
+      ],
+      "status": "exact_model_source_association",
+      "distribution": "sanitized_public",
+      "public_mapping_pending": false
+    },
+    "current_packaged_defaults": [
+      {
+        "model": "SkyJumpWithStageConfigModel",
+        "source": "facts/review_20261116/public_current_config_3129/defaults/SkyJumpWithStageConfigModel.json",
+        "site_data_path": "data/current_config_3129/defaults/SkyJumpWithStageConfigModel.json",
+        "public_artifact_sha256": "cd3bb6c60e6b86e499c875a701da3fb097b2a91c1a1cd1022bb4cf47e0100793",
+        "original_source_sha256": "264684732c768cc8f5cef01d6e223b8244922068d01c139ee1ec2845edeb56a5",
+        "source_class": "static_asset",
+        "build": "0.0.3129 host APK",
+        "scope": "Sanitized packaged default fullvalues only; not effective remote/selected config or runtime.",
+        "values": {
+          "IsEnabled": false,
+          "EventType": 1,
+          "FirstLevelToShow": 120,
+          "Stage1RewardsAsCoin": 5000,
+          "Stage2RewardsAsCoin": 7000,
+          "Stage3RewardsAsCoin": 10000
+        }
+      }
+    ],
+    "native_finding_ids": [],
+    "documentation_source_coverage": {
+      "dossier_present": true,
+      "use_case_catalog_count": 14,
+      "config_catalog_rows": 119,
+      "current_apk_default_model_links": 1,
+      "current_native_findings": 0,
+      "scope": "Documentation/source coverage only; not complete runtime verification."
+    },
+    "runtime_completion": {
+      "date": "2026-11-16",
+      "status": "device_unavailable",
+      "executed_case_count": 0,
+      "full_feature_runtime_verified": false
+    },
+    "planned_branch": "Tìm đúng variant stage, chụp step/stage ladder, waiting next và lỗi offline; tránh gán nhầm SkyJump thường.",
+    "target_uc_ids": [
+      "UC-01",
+      "UC-08",
+      "UC-11",
+      "UC-13"
+    ],
+    "execution_phase": "noncore_first",
+    "core_or_levels_last": false,
+    "actionability_full_json": "facts/continuation_20261116/current/feature_actionability.json",
+    "actionability_site_data_path": "data/continuation_20261116/feature_actionability.json",
+    "source_classes": [
+      "static_asset"
+    ],
+    "full_feature_verified": false
+  }
+}

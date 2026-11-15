@@ -1,0 +1,990 @@
+{
+  "id": "EventsFramework",
+  "feature": "EventsFramework",
+  "name": "Khung sự kiện (Events)",
+  "category": "LiveOps",
+  "category_label": "Live-ops & hạ tầng",
+  "core_levels_last": false,
+  "acceptance_status": "documented_with_explicit_remaining_scope",
+  "full_feature_verified": false,
+  "checks": {
+    "purpose": {
+      "status": "documented_static_scope",
+      "source": "gdd/EventsFramework.json#/summary",
+      "claim_excerpt": "Magic Sort không viết mỗi sự kiện live-ops một kiểu riêng: toàn bộ sự kiện (BoatRush, WheelOfFortune, SkyJump, JetpackRace, MagicPass, TeamArena, DuckFestival, MagicLab, TreasureDrill, Collection, MiniGame, MergeMiniGame, TeamQuest, EndlessPortal, SuperCharger, Snitch, MagicBottle...) đều dựng trên cùng một khung: một bộ 3-4 class theo mẫu <X>Service (logic + view-model) / <X>DataService (dữ liệu "
+    },
+    "unlock": {
+      "status": "described_historical_conditions_runtime_boundary_unverified",
+      "source": "gdd/EventsFramework.json#/unlock",
+      "content": "Mỗi sự kiện có bộ điều kiện riêng nhưng theo cùng công thức: (1) cờ IsEnabled trong <X>ConfigModel lấy từ Firebase Remote Config (mặc định client trong Resources/defaultconfigs/<X>ConfigModel.json phần lớn là false → server phải bật); (2) FirstLevelToShow so với tiến độ người chơi (ví dụ BoatRushConfigModel.FirstLevelToShow = 90, WheelOfFortuneConfigModelV2.FirstLevelToShow = 130, SuperChargerConfigModel.FirstLevelToShow = 5, SnitchConfigModel.FirstLevelToShow = 290); (3) backend trả dữ liệu sự kiện qua endpoint get-* (nếu server trả HTTP 425 thì client hiểu là sự kiện chưa mở — BoatRushService.NotActiveStatusCode = 425); (4) segment người chơi (SegmentService.GetSegment) được gửi kèm mọi analytics và một số config server chọn theo segment."
+    },
+    "entry_flow": {
+      "status": "documented_paths_not_all_executed",
+      "entry_points": [
+        "Icon sự kiện ở Home (cột trái/phải do LobbyEventsService cấp chỗ, LobbyEventsPositionManager đặt toạ độ)",
+        "Popup tự bật khi quay về Home sau level (ReturnToHomeSequenceService.Execute chạy chuỗi Try*Command)",
+        "Banner/progress bar trên Home (ví dụ BoatRush banner, MagicStreakGae progress bar làm dịch icon trái/phải)",
+        "Nút info trong popup sự kiện (<X>InfoButton → <X>InfoPopUp)",
+        "Trong level: view/nút của sự kiện in-game (SuperCharger, Snitch, MagicBottle)",
+        "Deeplink bạn bè: FriendsService.TryAddFriendsFromDeeplink (chỉ luồng friends có deeplink; không thấy deeplink riêng cho từng event)"
+      ],
+      "flow_source": "gdd/EventsFramework.json#/flow",
+      "acceptance_scope": "Event registration/eligibility/priority/lobby slots/auto-popup; shared request/state/time lifecycle"
+    },
+    "config": {
+      "status": "source_bound_catalog_present",
+      "gdd_rows": 28,
+      "full_leaf_rows_associated": 161,
+      "snapshots": {
+        "default_0.0.3063": 42,
+        "cache_20260910": 34,
+        "cache_20261010": 34,
+        "firebase_20260910": 47,
+        "instance_cache_observed_20261115": 4
+      },
+      "models": [
+        {
+          "model": "boatRushConfigModel",
+          "matching_basis": [
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/EventsFramework.json#/configs/19/key_where"
+            }
+          ]
+        },
+        {
+          "model": "HomeReturnPopupShowLimit",
+          "matching_basis": [
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/EventsFramework.json#/configs/17/key_where"
+            }
+          ]
+        },
+        {
+          "model": "IsHomeReturnPopupShowLimitEnabled",
+          "matching_basis": [
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/EventsFramework.json#/configs/17/key_where"
+            }
+          ]
+        },
+        {
+          "model": "IsNewLobbyIconsEnabled",
+          "matching_basis": [
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/EventsFramework.json#/configs/18/key_where"
+            }
+          ]
+        },
+        {
+          "model": "IsSessionStartPopupShowLimitEnabled",
+          "matching_basis": [
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/EventsFramework.json#/configs/16/key_where"
+            }
+          ]
+        },
+        {
+          "model": "serverCommunicationModel",
+          "matching_basis": [
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/EventsFramework.json#/configs/6/key_where"
+            }
+          ]
+        },
+        {
+          "model": "SessionStartPopUpShowLimit",
+          "matching_basis": [
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/EventsFramework.json#/configs/16/key_where"
+            }
+          ]
+        },
+        {
+          "model": "WeeklyTournamentModel",
+          "matching_basis": [
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/EventsFramework.json#/configs/23/key_where"
+            }
+          ]
+        },
+        {
+          "model": "WheelOfFortuneConfigModelV2",
+          "matching_basis": [
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/EventsFramework.json#/configs/20/key_where"
+            }
+          ]
+        },
+        {
+          "model": "rootLevelConfigModel",
+          "matching_basis": [
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/EventsFramework.json#/configs/16/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/EventsFramework.json#/configs/17/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/EventsFramework.json#/configs/18/key_where"
+            }
+          ]
+        }
+      ],
+      "declared_models_without_catalog_data": [],
+      "placeholder_rows_requiring_source_review": [
+        {
+          "index": 12,
+          "key": "SegmentResponse.Segment",
+          "value": "server",
+          "source": "server info"
+        },
+        {
+          "index": 13,
+          "key": "SegmentResponse.IsAdsDisabled",
+          "value": "server",
+          "source": "server info"
+        },
+        {
+          "index": 16,
+          "key": "RootLevelConfigModel.IsSessionStartPopupShowLimitEnabled / SessionStartPopUpShowLimit",
+          "value": "server",
+          "source": "json default"
+        },
+        {
+          "index": 17,
+          "key": "RootLevelConfigModel.IsHomeReturnPopupShowLimitEnabled / HomeReturnPopupShowLimit",
+          "value": "server",
+          "source": "json default"
+        }
+      ],
+      "exact_placeholder_snapshot_values": [
+        {
+          "gdd_config_index": 12,
+          "key": "SegmentResponse.Segment",
+          "status": "no_unambiguous_exact_field_match",
+          "matches": [],
+          "basis": "Model explicitly cited in key/where, or sole declaredmodel; fieldpath exactcasefold, no alias guessing."
+        },
+        {
+          "gdd_config_index": 13,
+          "key": "SegmentResponse.IsAdsDisabled",
+          "status": "no_unambiguous_exact_field_match",
+          "matches": [],
+          "basis": "Model explicitly cited in key/where, or sole declaredmodel; fieldpath exactcasefold, no alias guessing."
+        },
+        {
+          "gdd_config_index": 16,
+          "key": "RootLevelConfigModel.IsSessionStartPopupShowLimitEnabled / SessionStartPopUpShowLimit",
+          "status": "no_unambiguous_exact_field_match",
+          "matches": [],
+          "basis": "Model explicitly cited in key/where, or sole declaredmodel; fieldpath exactcasefold, no alias guessing."
+        },
+        {
+          "gdd_config_index": 17,
+          "key": "RootLevelConfigModel.IsHomeReturnPopupShowLimitEnabled / HomeReturnPopupShowLimit",
+          "status": "no_unambiguous_exact_field_match",
+          "matches": [],
+          "basis": "Model explicitly cited in key/where, or sole declaredmodel; fieldpath exactcasefold, no alias guessing."
+        }
+      ],
+      "dossier_abbreviated_values": [
+        {
+          "index": 25,
+          "key": "SkyJump playerImages",
+          "value": "60 id bot ↦ ảnh FB thật (static-grand-games.s3…/fb-images)",
+          "where": "PlayerPrefs SkyJumpWithStageModel (instance event đang chạy) — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)",
+          "qualification": "Dossier summary/enum/example abbreviation; inspect linked full source before claiming all values listed here."
+        }
+      ],
+      "note": "Model association uses explicitmap or exacttoken citations; fieldpresence does not prove allproductiondata. GDDsummaryrows and fullcatalogrows have separate counts. Abbreviated source summaries are not full arrays; catalog/source links remain authoritative."
+    },
+    "reward": {
+      "status": "delegated_or_no_direct_reward_in_this_scope",
+      "entries": 0,
+      "tables_in_site_meta": 5,
+      "source": "gdd/EventsFramework.json#/rewards"
+    },
+    "use_cases": {
+      "status": "specified_not_executed_in15nov_ledger",
+      "specified": 16,
+      "reviewed_uc_branch_count": 0,
+      "reviewed_uc_ids": [],
+      "not_reviewed_in_new_ledger": [
+        "UC-01",
+        "UC-02",
+        "UC-03",
+        "UC-04",
+        "UC-05",
+        "UC-06",
+        "UC-07",
+        "UC-08",
+        "UC-09",
+        "UC-10",
+        "UC-11",
+        "UC-12",
+        "UC-13",
+        "UC-14",
+        "UC-15",
+        "UC-16"
+      ],
+      "full_uc_pass_claimed": false
+    },
+    "screenshots": {
+      "historical_gallery_entries": 1,
+      "historical_uc_with_image_reference": 1,
+      "curated_new_images": [],
+      "curated_new_image_count": 0,
+      "status": "historical_references_only",
+      "source": "screens/web/screens.json#/EventsFramework",
+      "note": "Image presence does not prove execution result or completeness."
+    },
+    "runtime_actual": {
+      "status": "not_observed_in15nov_ledger",
+      "case_count": 0,
+      "cases": [],
+      "mode": "offline_existing_fixture",
+      "build": "0.0.3129 ARM64"
+    },
+    "segment_ab": {
+      "status": "reviewed_rows_associated_assignment_not_proven",
+      "segment_ids": [
+        "MS-SEG-052",
+        "MS-SEG-053",
+        "MS-SEG-054",
+        "MS-SEG-055",
+        "MS-SEG-056",
+        "MS-SEG-057",
+        "MS-SEG-058",
+        "MS-SEG-059",
+        "MS-SEG-061",
+        "MS-SEG-113",
+        "MS-SEG-252",
+        "MS-SEG-253",
+        "MS-SEG-254",
+        "MS-SEG-255",
+        "MS-SEG-256",
+        "MS-SEG-257",
+        "MS-SEG-258",
+        "MS-SEG-259"
+      ],
+      "matching_basis": "explicit_gd_config_map_or_exact_model_token_in_gdd_configs_where_key_sources; rootfieldscoped",
+      "rows": [
+        {
+          "snapshot": "default_0.0.3063",
+          "model": "WheelOfFortuneConfigModelV2",
+          "key": "StageProbabilities[0].WithCollection.Poor",
+          "value": 0.5,
+          "type": "float",
+          "source": "../com.grandgames.magicsort_Unity_20260909_112501/UnityExport/ExportedProject/Assets/Resources/defaultconfigs/WheelOfFortuneConfigModelV2.json",
+          "classification": "config_candidate_not_backend_assignment_proof",
+          "review_id": "MS-SEG-052",
+          "review_classification": "reward_bucket_false_positive",
+          "review_status": "excluded_from_commercial_segment_and_ab_inventory",
+          "consumer": {
+            "source": "com.grandgames.magicsort_Unity_20260909_112501/RecoveredNative/PseudoC/Assembly-CSharp/Modules/Contexts/Home/WheelOfFortune/WheelOfFortuneService.c",
+            "line": 3194,
+            "marker": "// ===== WheelOfFortuneService :: private Dictionary<WheelOfFortuneRewardSegment, float> GetRewardProbabilitiesFromConfig",
+            "build": "0.0.3063 ARMv7",
+            "evidence": "recovered_native_historical_version"
+          },
+          "interpretation": "Poor và reward.segment số là bucket WheelOfFortuneRewardSegment (None0/Basic1/Poor2/Premium3/Elite4/Epic5 ở mã0.0.3063), không phải nhãn thương mại.",
+          "next_action": "Đối chiếu stageId, Collection enabled và outcome; giữ rawint và cảnh báo lệch build, không ghép với SegmentDataModel.",
+          "assignment_proof": false,
+          "uplift_proof": false,
+          "matching_basis": [
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/EventsFramework.json#/configs/20/key_where"
+            }
+          ]
+        },
+        {
+          "snapshot": "default_0.0.3063",
+          "model": "WheelOfFortuneConfigModelV2",
+          "key": "StageProbabilities[0].WithoutCollection.Poor",
+          "value": 0.5,
+          "type": "float",
+          "source": "../com.grandgames.magicsort_Unity_20260909_112501/UnityExport/ExportedProject/Assets/Resources/defaultconfigs/WheelOfFortuneConfigModelV2.json",
+          "classification": "config_candidate_not_backend_assignment_proof",
+          "review_id": "MS-SEG-053",
+          "review_classification": "reward_bucket_false_positive",
+          "review_status": "excluded_from_commercial_segment_and_ab_inventory",
+          "consumer": {
+            "source": "com.grandgames.magicsort_Unity_20260909_112501/RecoveredNative/PseudoC/Assembly-CSharp/Modules/Contexts/Home/WheelOfFortune/WheelOfFortuneService.c",
+            "line": 3194,
+            "marker": "// ===== WheelOfFortuneService :: private Dictionary<WheelOfFortuneRewardSegment, float> GetRewardProbabilitiesFromConfig",
+            "build": "0.0.3063 ARMv7",
+            "evidence": "recovered_native_historical_version"
+          },
+          "interpretation": "Poor và reward.segment số là bucket WheelOfFortuneRewardSegment (None0/Basic1/Poor2/Premium3/Elite4/Epic5 ở mã0.0.3063), không phải nhãn thương mại.",
+          "next_action": "Đối chiếu stageId, Collection enabled và outcome; giữ rawint và cảnh báo lệch build, không ghép với SegmentDataModel.",
+          "assignment_proof": false,
+          "uplift_proof": false,
+          "matching_basis": [
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/EventsFramework.json#/configs/20/key_where"
+            }
+          ]
+        },
+        {
+          "snapshot": "default_0.0.3063",
+          "model": "WheelOfFortuneConfigModelV2",
+          "key": "StageProbabilities[1].WithCollection.Poor",
+          "value": 0.5,
+          "type": "float",
+          "source": "../com.grandgames.magicsort_Unity_20260909_112501/UnityExport/ExportedProject/Assets/Resources/defaultconfigs/WheelOfFortuneConfigModelV2.json",
+          "classification": "config_candidate_not_backend_assignment_proof",
+          "review_id": "MS-SEG-054",
+          "review_classification": "reward_bucket_false_positive",
+          "review_status": "excluded_from_commercial_segment_and_ab_inventory",
+          "consumer": {
+            "source": "com.grandgames.magicsort_Unity_20260909_112501/RecoveredNative/PseudoC/Assembly-CSharp/Modules/Contexts/Home/WheelOfFortune/WheelOfFortuneService.c",
+            "line": 3194,
+            "marker": "// ===== WheelOfFortuneService :: private Dictionary<WheelOfFortuneRewardSegment, float> GetRewardProbabilitiesFromConfig",
+            "build": "0.0.3063 ARMv7",
+            "evidence": "recovered_native_historical_version"
+          },
+          "interpretation": "Poor và reward.segment số là bucket WheelOfFortuneRewardSegment (None0/Basic1/Poor2/Premium3/Elite4/Epic5 ở mã0.0.3063), không phải nhãn thương mại.",
+          "next_action": "Đối chiếu stageId, Collection enabled và outcome; giữ rawint và cảnh báo lệch build, không ghép với SegmentDataModel.",
+          "assignment_proof": false,
+          "uplift_proof": false,
+          "matching_basis": [
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/EventsFramework.json#/configs/20/key_where"
+            }
+          ]
+        },
+        {
+          "snapshot": "default_0.0.3063",
+          "model": "WheelOfFortuneConfigModelV2",
+          "key": "StageProbabilities[1].WithoutCollection.Poor",
+          "value": 0.5,
+          "type": "float",
+          "source": "../com.grandgames.magicsort_Unity_20260909_112501/UnityExport/ExportedProject/Assets/Resources/defaultconfigs/WheelOfFortuneConfigModelV2.json",
+          "classification": "config_candidate_not_backend_assignment_proof",
+          "review_id": "MS-SEG-055",
+          "review_classification": "reward_bucket_false_positive",
+          "review_status": "excluded_from_commercial_segment_and_ab_inventory",
+          "consumer": {
+            "source": "com.grandgames.magicsort_Unity_20260909_112501/RecoveredNative/PseudoC/Assembly-CSharp/Modules/Contexts/Home/WheelOfFortune/WheelOfFortuneService.c",
+            "line": 3194,
+            "marker": "// ===== WheelOfFortuneService :: private Dictionary<WheelOfFortuneRewardSegment, float> GetRewardProbabilitiesFromConfig",
+            "build": "0.0.3063 ARMv7",
+            "evidence": "recovered_native_historical_version"
+          },
+          "interpretation": "Poor và reward.segment số là bucket WheelOfFortuneRewardSegment (None0/Basic1/Poor2/Premium3/Elite4/Epic5 ở mã0.0.3063), không phải nhãn thương mại.",
+          "next_action": "Đối chiếu stageId, Collection enabled và outcome; giữ rawint và cảnh báo lệch build, không ghép với SegmentDataModel.",
+          "assignment_proof": false,
+          "uplift_proof": false,
+          "matching_basis": [
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/EventsFramework.json#/configs/20/key_where"
+            }
+          ]
+        },
+        {
+          "snapshot": "default_0.0.3063",
+          "model": "WheelOfFortuneConfigModelV2",
+          "key": "StageProbabilities[2].WithCollection.Poor",
+          "value": 0.5,
+          "type": "float",
+          "source": "../com.grandgames.magicsort_Unity_20260909_112501/UnityExport/ExportedProject/Assets/Resources/defaultconfigs/WheelOfFortuneConfigModelV2.json",
+          "classification": "config_candidate_not_backend_assignment_proof",
+          "review_id": "MS-SEG-056",
+          "review_classification": "reward_bucket_false_positive",
+          "review_status": "excluded_from_commercial_segment_and_ab_inventory",
+          "consumer": {
+            "source": "com.grandgames.magicsort_Unity_20260909_112501/RecoveredNative/PseudoC/Assembly-CSharp/Modules/Contexts/Home/WheelOfFortune/WheelOfFortuneService.c",
+            "line": 3194,
+            "marker": "// ===== WheelOfFortuneService :: private Dictionary<WheelOfFortuneRewardSegment, float> GetRewardProbabilitiesFromConfig",
+            "build": "0.0.3063 ARMv7",
+            "evidence": "recovered_native_historical_version"
+          },
+          "interpretation": "Poor và reward.segment số là bucket WheelOfFortuneRewardSegment (None0/Basic1/Poor2/Premium3/Elite4/Epic5 ở mã0.0.3063), không phải nhãn thương mại.",
+          "next_action": "Đối chiếu stageId, Collection enabled và outcome; giữ rawint và cảnh báo lệch build, không ghép với SegmentDataModel.",
+          "assignment_proof": false,
+          "uplift_proof": false,
+          "matching_basis": [
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/EventsFramework.json#/configs/20/key_where"
+            }
+          ]
+        },
+        {
+          "snapshot": "default_0.0.3063",
+          "model": "WheelOfFortuneConfigModelV2",
+          "key": "StageProbabilities[2].WithoutCollection.Poor",
+          "value": 0.5,
+          "type": "float",
+          "source": "../com.grandgames.magicsort_Unity_20260909_112501/UnityExport/ExportedProject/Assets/Resources/defaultconfigs/WheelOfFortuneConfigModelV2.json",
+          "classification": "config_candidate_not_backend_assignment_proof",
+          "review_id": "MS-SEG-057",
+          "review_classification": "reward_bucket_false_positive",
+          "review_status": "excluded_from_commercial_segment_and_ab_inventory",
+          "consumer": {
+            "source": "com.grandgames.magicsort_Unity_20260909_112501/RecoveredNative/PseudoC/Assembly-CSharp/Modules/Contexts/Home/WheelOfFortune/WheelOfFortuneService.c",
+            "line": 3194,
+            "marker": "// ===== WheelOfFortuneService :: private Dictionary<WheelOfFortuneRewardSegment, float> GetRewardProbabilitiesFromConfig",
+            "build": "0.0.3063 ARMv7",
+            "evidence": "recovered_native_historical_version"
+          },
+          "interpretation": "Poor và reward.segment số là bucket WheelOfFortuneRewardSegment (None0/Basic1/Poor2/Premium3/Elite4/Epic5 ở mã0.0.3063), không phải nhãn thương mại.",
+          "next_action": "Đối chiếu stageId, Collection enabled và outcome; giữ rawint và cảnh báo lệch build, không ghép với SegmentDataModel.",
+          "assignment_proof": false,
+          "uplift_proof": false,
+          "matching_basis": [
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/EventsFramework.json#/configs/20/key_where"
+            }
+          ]
+        },
+        {
+          "snapshot": "default_0.0.3063",
+          "model": "WheelOfFortuneConfigModelV2",
+          "key": "StageProbabilities[3].WithCollection.Poor",
+          "value": 0.5,
+          "type": "float",
+          "source": "../com.grandgames.magicsort_Unity_20260909_112501/UnityExport/ExportedProject/Assets/Resources/defaultconfigs/WheelOfFortuneConfigModelV2.json",
+          "classification": "config_candidate_not_backend_assignment_proof",
+          "review_id": "MS-SEG-058",
+          "review_classification": "reward_bucket_false_positive",
+          "review_status": "excluded_from_commercial_segment_and_ab_inventory",
+          "consumer": {
+            "source": "com.grandgames.magicsort_Unity_20260909_112501/RecoveredNative/PseudoC/Assembly-CSharp/Modules/Contexts/Home/WheelOfFortune/WheelOfFortuneService.c",
+            "line": 3194,
+            "marker": "// ===== WheelOfFortuneService :: private Dictionary<WheelOfFortuneRewardSegment, float> GetRewardProbabilitiesFromConfig",
+            "build": "0.0.3063 ARMv7",
+            "evidence": "recovered_native_historical_version"
+          },
+          "interpretation": "Poor và reward.segment số là bucket WheelOfFortuneRewardSegment (None0/Basic1/Poor2/Premium3/Elite4/Epic5 ở mã0.0.3063), không phải nhãn thương mại.",
+          "next_action": "Đối chiếu stageId, Collection enabled và outcome; giữ rawint và cảnh báo lệch build, không ghép với SegmentDataModel.",
+          "assignment_proof": false,
+          "uplift_proof": false,
+          "matching_basis": [
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/EventsFramework.json#/configs/20/key_where"
+            }
+          ]
+        },
+        {
+          "snapshot": "default_0.0.3063",
+          "model": "WheelOfFortuneConfigModelV2",
+          "key": "StageProbabilities[3].WithoutCollection.Poor",
+          "value": 0.5,
+          "type": "float",
+          "source": "../com.grandgames.magicsort_Unity_20260909_112501/UnityExport/ExportedProject/Assets/Resources/defaultconfigs/WheelOfFortuneConfigModelV2.json",
+          "classification": "config_candidate_not_backend_assignment_proof",
+          "review_id": "MS-SEG-059",
+          "review_classification": "reward_bucket_false_positive",
+          "review_status": "excluded_from_commercial_segment_and_ab_inventory",
+          "consumer": {
+            "source": "com.grandgames.magicsort_Unity_20260909_112501/RecoveredNative/PseudoC/Assembly-CSharp/Modules/Contexts/Home/WheelOfFortune/WheelOfFortuneService.c",
+            "line": 3194,
+            "marker": "// ===== WheelOfFortuneService :: private Dictionary<WheelOfFortuneRewardSegment, float> GetRewardProbabilitiesFromConfig",
+            "build": "0.0.3063 ARMv7",
+            "evidence": "recovered_native_historical_version"
+          },
+          "interpretation": "Poor và reward.segment số là bucket WheelOfFortuneRewardSegment (None0/Basic1/Poor2/Premium3/Elite4/Epic5 ở mã0.0.3063), không phải nhãn thương mại.",
+          "next_action": "Đối chiếu stageId, Collection enabled và outcome; giữ rawint và cảnh báo lệch build, không ghép với SegmentDataModel.",
+          "assignment_proof": false,
+          "uplift_proof": false,
+          "matching_basis": [
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/EventsFramework.json#/configs/20/key_where"
+            }
+          ]
+        },
+        {
+          "snapshot": "cache_20260910",
+          "model": "boatRushConfigModel",
+          "key": "pathVariantIndex",
+          "value": 0,
+          "type": "int",
+          "source": "facts/runtime/server_configs/boatRushConfigModel.json",
+          "classification": "config_candidate_not_backend_assignment_proof",
+          "review_id": "MS-SEG-061",
+          "review_classification": "variant_config",
+          "review_status": "missing_experiment_assignment_and_outcome",
+          "consumer": {
+            "source": "com.grandgames.magicsort_Unity_20260909_112501/RecoveredNative/PseudoC/Assembly-CSharp/Modules/Contexts/Home/BoatRush/Scripts/BoatRushDataService.c",
+            "line": 1088,
+            "marker": "// ===== BoatRushDataService :: public int GetPathVariantIndex()",
+            "build": "0.0.3063 ARMv7",
+            "evidence": "recovered_native_historical_version"
+          },
+          "interpretation": "Giá trị variant được cache/default/Firebase; chưa có experimentID hoặc traffic split.",
+          "next_action": "Cần experimentID, variant, allocation, activation timestamp, consumer effect và đối chứng cùng điều kiện.",
+          "assignment_proof": false,
+          "uplift_proof": false,
+          "matching_basis": [
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/EventsFramework.json#/configs/19/key_where"
+            }
+          ]
+        },
+        {
+          "snapshot": "cache_20261010",
+          "model": "boatRushConfigModel",
+          "key": "pathVariantIndex",
+          "value": 0,
+          "type": "int",
+          "source": "facts/runtime/test_20261010/before/CachedRemoteConfigs",
+          "classification": "config_candidate_not_backend_assignment_proof",
+          "review_id": "MS-SEG-113",
+          "review_classification": "variant_config",
+          "review_status": "missing_experiment_assignment_and_outcome",
+          "consumer": {
+            "source": "com.grandgames.magicsort_Unity_20260909_112501/RecoveredNative/PseudoC/Assembly-CSharp/Modules/Contexts/Home/BoatRush/Scripts/BoatRushDataService.c",
+            "line": 1088,
+            "marker": "// ===== BoatRushDataService :: public int GetPathVariantIndex()",
+            "build": "0.0.3063 ARMv7",
+            "evidence": "recovered_native_historical_version"
+          },
+          "interpretation": "Giá trị variant được cache/default/Firebase; chưa có experimentID hoặc traffic split.",
+          "next_action": "Cần experimentID, variant, allocation, activation timestamp, consumer effect và đối chứng cùng điều kiện.",
+          "assignment_proof": false,
+          "uplift_proof": false,
+          "matching_basis": [
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/EventsFramework.json#/configs/19/key_where"
+            }
+          ]
+        },
+        {
+          "snapshot": "firebase_20260910",
+          "model": "WheelOfFortuneConfigModelV2",
+          "key": "StageProbabilities[0].WithCollection.Poor",
+          "value": 0,
+          "type": "int",
+          "source": "facts/runtime/decoded/firebase_rc.json",
+          "classification": "config_candidate_not_backend_assignment_proof",
+          "review_id": "MS-SEG-252",
+          "review_classification": "reward_bucket_false_positive",
+          "review_status": "excluded_from_commercial_segment_and_ab_inventory",
+          "consumer": {
+            "source": "com.grandgames.magicsort_Unity_20260909_112501/RecoveredNative/PseudoC/Assembly-CSharp/Modules/Contexts/Home/WheelOfFortune/WheelOfFortuneService.c",
+            "line": 3194,
+            "marker": "// ===== WheelOfFortuneService :: private Dictionary<WheelOfFortuneRewardSegment, float> GetRewardProbabilitiesFromConfig",
+            "build": "0.0.3063 ARMv7",
+            "evidence": "recovered_native_historical_version"
+          },
+          "interpretation": "Poor và reward.segment số là bucket WheelOfFortuneRewardSegment (None0/Basic1/Poor2/Premium3/Elite4/Epic5 ở mã0.0.3063), không phải nhãn thương mại.",
+          "next_action": "Đối chiếu stageId, Collection enabled và outcome; giữ rawint và cảnh báo lệch build, không ghép với SegmentDataModel.",
+          "assignment_proof": false,
+          "uplift_proof": false,
+          "matching_basis": [
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/EventsFramework.json#/configs/20/key_where"
+            }
+          ]
+        },
+        {
+          "snapshot": "firebase_20260910",
+          "model": "WheelOfFortuneConfigModelV2",
+          "key": "StageProbabilities[0].WithoutCollection.Poor",
+          "value": 0,
+          "type": "int",
+          "source": "facts/runtime/decoded/firebase_rc.json",
+          "classification": "config_candidate_not_backend_assignment_proof",
+          "review_id": "MS-SEG-253",
+          "review_classification": "reward_bucket_false_positive",
+          "review_status": "excluded_from_commercial_segment_and_ab_inventory",
+          "consumer": {
+            "source": "com.grandgames.magicsort_Unity_20260909_112501/RecoveredNative/PseudoC/Assembly-CSharp/Modules/Contexts/Home/WheelOfFortune/WheelOfFortuneService.c",
+            "line": 3194,
+            "marker": "// ===== WheelOfFortuneService :: private Dictionary<WheelOfFortuneRewardSegment, float> GetRewardProbabilitiesFromConfig",
+            "build": "0.0.3063 ARMv7",
+            "evidence": "recovered_native_historical_version"
+          },
+          "interpretation": "Poor và reward.segment số là bucket WheelOfFortuneRewardSegment (None0/Basic1/Poor2/Premium3/Elite4/Epic5 ở mã0.0.3063), không phải nhãn thương mại.",
+          "next_action": "Đối chiếu stageId, Collection enabled và outcome; giữ rawint và cảnh báo lệch build, không ghép với SegmentDataModel.",
+          "assignment_proof": false,
+          "uplift_proof": false,
+          "matching_basis": [
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/EventsFramework.json#/configs/20/key_where"
+            }
+          ]
+        },
+        {
+          "snapshot": "firebase_20260910",
+          "model": "WheelOfFortuneConfigModelV2",
+          "key": "StageProbabilities[1].WithCollection.Poor",
+          "value": 0,
+          "type": "int",
+          "source": "facts/runtime/decoded/firebase_rc.json",
+          "classification": "config_candidate_not_backend_assignment_proof",
+          "review_id": "MS-SEG-254",
+          "review_classification": "reward_bucket_false_positive",
+          "review_status": "excluded_from_commercial_segment_and_ab_inventory",
+          "consumer": {
+            "source": "com.grandgames.magicsort_Unity_20260909_112501/RecoveredNative/PseudoC/Assembly-CSharp/Modules/Contexts/Home/WheelOfFortune/WheelOfFortuneService.c",
+            "line": 3194,
+            "marker": "// ===== WheelOfFortuneService :: private Dictionary<WheelOfFortuneRewardSegment, float> GetRewardProbabilitiesFromConfig",
+            "build": "0.0.3063 ARMv7",
+            "evidence": "recovered_native_historical_version"
+          },
+          "interpretation": "Poor và reward.segment số là bucket WheelOfFortuneRewardSegment (None0/Basic1/Poor2/Premium3/Elite4/Epic5 ở mã0.0.3063), không phải nhãn thương mại.",
+          "next_action": "Đối chiếu stageId, Collection enabled và outcome; giữ rawint và cảnh báo lệch build, không ghép với SegmentDataModel.",
+          "assignment_proof": false,
+          "uplift_proof": false,
+          "matching_basis": [
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/EventsFramework.json#/configs/20/key_where"
+            }
+          ]
+        },
+        {
+          "snapshot": "firebase_20260910",
+          "model": "WheelOfFortuneConfigModelV2",
+          "key": "StageProbabilities[1].WithoutCollection.Poor",
+          "value": 0,
+          "type": "int",
+          "source": "facts/runtime/decoded/firebase_rc.json",
+          "classification": "config_candidate_not_backend_assignment_proof",
+          "review_id": "MS-SEG-255",
+          "review_classification": "reward_bucket_false_positive",
+          "review_status": "excluded_from_commercial_segment_and_ab_inventory",
+          "consumer": {
+            "source": "com.grandgames.magicsort_Unity_20260909_112501/RecoveredNative/PseudoC/Assembly-CSharp/Modules/Contexts/Home/WheelOfFortune/WheelOfFortuneService.c",
+            "line": 3194,
+            "marker": "// ===== WheelOfFortuneService :: private Dictionary<WheelOfFortuneRewardSegment, float> GetRewardProbabilitiesFromConfig",
+            "build": "0.0.3063 ARMv7",
+            "evidence": "recovered_native_historical_version"
+          },
+          "interpretation": "Poor và reward.segment số là bucket WheelOfFortuneRewardSegment (None0/Basic1/Poor2/Premium3/Elite4/Epic5 ở mã0.0.3063), không phải nhãn thương mại.",
+          "next_action": "Đối chiếu stageId, Collection enabled và outcome; giữ rawint và cảnh báo lệch build, không ghép với SegmentDataModel.",
+          "assignment_proof": false,
+          "uplift_proof": false,
+          "matching_basis": [
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/EventsFramework.json#/configs/20/key_where"
+            }
+          ]
+        },
+        {
+          "snapshot": "firebase_20260910",
+          "model": "WheelOfFortuneConfigModelV2",
+          "key": "StageProbabilities[2].WithCollection.Poor",
+          "value": 0,
+          "type": "int",
+          "source": "facts/runtime/decoded/firebase_rc.json",
+          "classification": "config_candidate_not_backend_assignment_proof",
+          "review_id": "MS-SEG-256",
+          "review_classification": "reward_bucket_false_positive",
+          "review_status": "excluded_from_commercial_segment_and_ab_inventory",
+          "consumer": {
+            "source": "com.grandgames.magicsort_Unity_20260909_112501/RecoveredNative/PseudoC/Assembly-CSharp/Modules/Contexts/Home/WheelOfFortune/WheelOfFortuneService.c",
+            "line": 3194,
+            "marker": "// ===== WheelOfFortuneService :: private Dictionary<WheelOfFortuneRewardSegment, float> GetRewardProbabilitiesFromConfig",
+            "build": "0.0.3063 ARMv7",
+            "evidence": "recovered_native_historical_version"
+          },
+          "interpretation": "Poor và reward.segment số là bucket WheelOfFortuneRewardSegment (None0/Basic1/Poor2/Premium3/Elite4/Epic5 ở mã0.0.3063), không phải nhãn thương mại.",
+          "next_action": "Đối chiếu stageId, Collection enabled và outcome; giữ rawint và cảnh báo lệch build, không ghép với SegmentDataModel.",
+          "assignment_proof": false,
+          "uplift_proof": false,
+          "matching_basis": [
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/EventsFramework.json#/configs/20/key_where"
+            }
+          ]
+        },
+        {
+          "snapshot": "firebase_20260910",
+          "model": "WheelOfFortuneConfigModelV2",
+          "key": "StageProbabilities[2].WithoutCollection.Poor",
+          "value": 0,
+          "type": "int",
+          "source": "facts/runtime/decoded/firebase_rc.json",
+          "classification": "config_candidate_not_backend_assignment_proof",
+          "review_id": "MS-SEG-257",
+          "review_classification": "reward_bucket_false_positive",
+          "review_status": "excluded_from_commercial_segment_and_ab_inventory",
+          "consumer": {
+            "source": "com.grandgames.magicsort_Unity_20260909_112501/RecoveredNative/PseudoC/Assembly-CSharp/Modules/Contexts/Home/WheelOfFortune/WheelOfFortuneService.c",
+            "line": 3194,
+            "marker": "// ===== WheelOfFortuneService :: private Dictionary<WheelOfFortuneRewardSegment, float> GetRewardProbabilitiesFromConfig",
+            "build": "0.0.3063 ARMv7",
+            "evidence": "recovered_native_historical_version"
+          },
+          "interpretation": "Poor và reward.segment số là bucket WheelOfFortuneRewardSegment (None0/Basic1/Poor2/Premium3/Elite4/Epic5 ở mã0.0.3063), không phải nhãn thương mại.",
+          "next_action": "Đối chiếu stageId, Collection enabled và outcome; giữ rawint và cảnh báo lệch build, không ghép với SegmentDataModel.",
+          "assignment_proof": false,
+          "uplift_proof": false,
+          "matching_basis": [
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/EventsFramework.json#/configs/20/key_where"
+            }
+          ]
+        },
+        {
+          "snapshot": "firebase_20260910",
+          "model": "WheelOfFortuneConfigModelV2",
+          "key": "StageProbabilities[3].WithCollection.Poor",
+          "value": 0,
+          "type": "int",
+          "source": "facts/runtime/decoded/firebase_rc.json",
+          "classification": "config_candidate_not_backend_assignment_proof",
+          "review_id": "MS-SEG-258",
+          "review_classification": "reward_bucket_false_positive",
+          "review_status": "excluded_from_commercial_segment_and_ab_inventory",
+          "consumer": {
+            "source": "com.grandgames.magicsort_Unity_20260909_112501/RecoveredNative/PseudoC/Assembly-CSharp/Modules/Contexts/Home/WheelOfFortune/WheelOfFortuneService.c",
+            "line": 3194,
+            "marker": "// ===== WheelOfFortuneService :: private Dictionary<WheelOfFortuneRewardSegment, float> GetRewardProbabilitiesFromConfig",
+            "build": "0.0.3063 ARMv7",
+            "evidence": "recovered_native_historical_version"
+          },
+          "interpretation": "Poor và reward.segment số là bucket WheelOfFortuneRewardSegment (None0/Basic1/Poor2/Premium3/Elite4/Epic5 ở mã0.0.3063), không phải nhãn thương mại.",
+          "next_action": "Đối chiếu stageId, Collection enabled và outcome; giữ rawint và cảnh báo lệch build, không ghép với SegmentDataModel.",
+          "assignment_proof": false,
+          "uplift_proof": false,
+          "matching_basis": [
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/EventsFramework.json#/configs/20/key_where"
+            }
+          ]
+        },
+        {
+          "snapshot": "firebase_20260910",
+          "model": "WheelOfFortuneConfigModelV2",
+          "key": "StageProbabilities[3].WithoutCollection.Poor",
+          "value": 0,
+          "type": "int",
+          "source": "facts/runtime/decoded/firebase_rc.json",
+          "classification": "config_candidate_not_backend_assignment_proof",
+          "review_id": "MS-SEG-259",
+          "review_classification": "reward_bucket_false_positive",
+          "review_status": "excluded_from_commercial_segment_and_ab_inventory",
+          "consumer": {
+            "source": "com.grandgames.magicsort_Unity_20260909_112501/RecoveredNative/PseudoC/Assembly-CSharp/Modules/Contexts/Home/WheelOfFortune/WheelOfFortuneService.c",
+            "line": 3194,
+            "marker": "// ===== WheelOfFortuneService :: private Dictionary<WheelOfFortuneRewardSegment, float> GetRewardProbabilitiesFromConfig",
+            "build": "0.0.3063 ARMv7",
+            "evidence": "recovered_native_historical_version"
+          },
+          "interpretation": "Poor và reward.segment số là bucket WheelOfFortuneRewardSegment (None0/Basic1/Poor2/Premium3/Elite4/Epic5 ở mã0.0.3063), không phải nhãn thương mại.",
+          "next_action": "Đối chiếu stageId, Collection enabled và outcome; giữ rawint và cảnh báo lệch build, không ghép với SegmentDataModel.",
+          "assignment_proof": false,
+          "uplift_proof": false,
+          "matching_basis": [
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/EventsFramework.json#/configs/20/key_where"
+            }
+          ]
+        }
+      ],
+      "classifications": {
+        "reward_bucket_false_positive": 16,
+        "variant_config": 2
+      },
+      "assignment_verified": false,
+      "uplift_verified": false,
+      "note": "No matchingrow does not prove no segmentation/AB. Rewardbucketfalsepositives remain explicitly classified."
+    },
+    "storage_backend_analytics": {
+      "storage_keys": {
+        "entries": 6,
+        "status": "documented_static_contract_runtime_not_verified",
+        "source": "gdd/EventsFramework.json#/storage_keys"
+      },
+      "backend": {
+        "entries": 11,
+        "status": "documented_static_contract_runtime_not_verified",
+        "source": "gdd/EventsFramework.json#/backend"
+      },
+      "analytics": {
+        "entries": 7,
+        "status": "documented_static_contract_runtime_not_verified",
+        "source": "gdd/EventsFramework.json#/analytics"
+      }
+    },
+    "remaining_next_step": {
+      "gap_count": 6,
+      "static_scoped_resolutions": 3,
+      "remaining_count": 3,
+      "all_gap_dispositions": [
+        {
+          "id": "MS-EventsFramework-G001",
+          "feature": "EventsFramework",
+          "source": "gdd/EventsFramework.json#/gaps/0",
+          "original": "Số ô icon cụ thể của cột Left/Right nằm trong LobbyEventsService.Initialize; pseudo-C chỉ để lộ nhánh rẽ (8/12) chứ chưa đọc được giá trị gán rõ ràng",
+          "current_note": "15/11 — partial_static_code_unresolved: GetServicesInPosition dùng iVar2=0xc, nếu position==1 thì8 rồi dereference HashSet theo byteoffset của LobbyEventMap. Đây là offsets right/left fields trong object32bit; không phải8/12slot như gap gốc gợi ý. Initialize và event map dùng tập service, chưa có hằng maxicon trong body này. Còn lại: Số icon đồng thời cần layout/prefab/controller clipping và eligible services; không lấy byteoffset làmcapacity.",
+          "status": "partial_static_code_unresolved",
+          "review_status": "preserved_partial_static_code_unresolved",
+          "dependency": "local_code_review",
+          "next_action": "GetServicesInPosition dùng iVar2=0xc, nếu position==1 thì8 rồi dereference HashSet theo byteoffset của LobbyEventMap. Đây là offsets right/left fields trong object32bit; không phải8/12slot như gap gốc gợi ý. Initialize và event map dùng tập service, chưa có hằng maxicon trong body này. Số icon đồng thời cần layout/prefab/controller clipping và eligible services; không lấy byteoffset làmcapacity.",
+          "conclusion": "GetServicesInPosition dùng iVar2=0xc, nếu position==1 thì8 rồi dereference HashSet theo byteoffset của LobbyEventMap. Đây là offsets right/left fields trong object32bit; không phải8/12slot như gap gốc gợi ý. Initialize và event map dùng tập service, chưa có hằng maxicon trong body này.",
+          "evidence": [
+            "../com.grandgames.magicsort_Unity_20260909_112501/RecoveredNative/PseudoC/Assembly-CSharp/Modules/Contexts/Home/UI/Common/Scripts/LobbyEventController/LobbyEventsService.c:596"
+          ],
+          "reviewed": "2026-11-15",
+          "mode": "file_only_recovered_native_0.0.3063",
+          "remaining": "15/11 — partial_static_code_unresolved: GetServicesInPosition dùng iVar2=0xc, nếu position==1 thì8 rồi dereference HashSet theo byteoffset của LobbyEventMap. Đây là offsets right/left fields trong object32bit; không phải8/12slot như gap gốc gợi ý. Initialize và event map dùng tập service, chưa có hằng maxicon trong body này. Còn lại: Số icon đồng thời cần layout/prefab/controller clipping và eligible services; không lấy byteoffset làmcapacity."
+        },
+        {
+          "id": "MS-EventsFramework-G002",
+          "feature": "EventsFramework",
+          "source": "gdd/EventsFramework.json#/gaps/1",
+          "original": "Danh sách LobbyEventMap.InitializesEventServices (service nào vào cột nào) chưa giải mã được thành tên type",
+          "current_note": "15/11 — resolved_static_code_historical_build: InitializeEventServices dựng right HashSet11service: MagicPass,WheelOfFortune,MagicLab,MiniGame,Snitch,EndlessPortal,SpecialOffer,ChooseOneSpecialOffer,TreasureDrill,WatchAndWin,MergeMiniGame; left6service: DuckFestival,BroomStreak,JetpackRaceWithStage,TeamArena,TeamQuest,BoatRush. Đây là registration, không bảo đảm tất cảicon xuất hiện cùng lúc. HashSet không đảm bảo thứ tự hiển thị. Còn lại: Cần đối chiếu ARM64/current runtime và các nhánh caller còn chưa đủ bằng chứng.",
+          "status": "resolved_static_code_historical_build",
+          "review_status": "preserved_resolved_static_code_historical_build",
+          "dependency": "local_code_review",
+          "next_action": "InitializeEventServices dựng right HashSet11service: MagicPass,WheelOfFortune,MagicLab,MiniGame,Snitch,EndlessPortal,SpecialOffer,ChooseOneSpecialOffer,TreasureDrill,WatchAndWin,MergeMiniGame; left6service: DuckFestival,BroomStreak,JetpackRaceWithStage,TeamArena,TeamQuest,BoatRush. Đây là registration, không bảo đảm tất cảicon xuất hiện cùng lúc. HashSet không đảm bảo thứ tự hiển thị. Cần đối chiếu ARM64/current runtime và các nhánh caller còn chưa đủ bằng chứng.",
+          "conclusion": "InitializeEventServices dựng right HashSet11service: MagicPass,WheelOfFortune,MagicLab,MiniGame,Snitch,EndlessPortal,SpecialOffer,ChooseOneSpecialOffer,TreasureDrill,WatchAndWin,MergeMiniGame; left6service: DuckFestival,BroomStreak,JetpackRaceWithStage,TeamArena,TeamQuest,BoatRush. Đây là registration, không bảo đảm tất cảicon xuất hiện cùng lúc. HashSet không đảm bảo thứ tự hiển thị.",
+          "evidence": [
+            "../com.grandgames.magicsort_Unity_20260909_112501/RecoveredNative/PseudoC/Assembly-CSharp/Modules/Contexts/Home/UI/Common/Scripts/LobbyEventController/LobbyEventMap.c:361"
+          ],
+          "reviewed": "2026-11-15",
+          "mode": "file_only_recovered_native_0.0.3063",
+          "remaining": "15/11 — resolved_static_code_historical_build: InitializeEventServices dựng right HashSet11service: MagicPass,WheelOfFortune,MagicLab,MiniGame,Snitch,EndlessPortal,SpecialOffer,ChooseOneSpecialOffer,TreasureDrill,WatchAndWin,MergeMiniGame; left6service: DuckFestival,BroomStreak,JetpackRaceWithStage,TeamArena,TeamQuest,BoatRush. Đây là registration, không bảo đảm tất cảicon xuất hiện cùng lúc. HashSet không đảm bảo thứ tự hiển thị. Còn lại: Cần đối chiếu ARM64/current runtime và các nhánh caller còn chưa đủ bằng chứng."
+        },
+        {
+          "id": "MS-EventsFramework-G003",
+          "feature": "EventsFramework",
+          "source": "gdd/EventsFramework.json#/gaps/2",
+          "original": "Bốn danh sách lệnh return-to-home (regularWin/regularLose/dailyWin/dailyLose) trong pseudo-C nằm chung một hàm; thứ tự liệt kê ở đây là thứ tự xuất hiện trong Initialize, chưa tách chắc chắn được lệnh nào thuộc danh sách nào",
+          "current_note": "15/11 — resolved_static_code_historical_build: ReturnToHomeSequenceService.Initialize gán từng field _regularLoseSequenceCommands/_regularWinSequenceCommands/_dailyLoseSequenceCommands/_dailyWinSequenceCommands và dựng command bằng allocationTypeInfo theo thứ tự Add. Bảng full order trong supporting_tables của JSON/report lấy trực tiếp từng đoạn field. Execution có thể skip/terminate theo từng command và context, không đồng nghĩa mọi popup luôn hiện. Còn lại: Cần đối chiếu ARM64/current runtime và các nhánh caller còn chưa đủ bằng chứng.",
+          "status": "resolved_static_code_historical_build",
+          "review_status": "preserved_resolved_static_code_historical_build",
+          "dependency": "local_code_review",
+          "next_action": "ReturnToHomeSequenceService.Initialize gán từng field _regularLoseSequenceCommands/_regularWinSequenceCommands/_dailyLoseSequenceCommands/_dailyWinSequenceCommands và dựng command bằng allocationTypeInfo theo thứ tự Add. Bảng full order trong supporting_tables của JSON/report lấy trực tiếp từng đoạn field. Execution có thể skip/terminate theo từng command và context, không đồng nghĩa mọi popup luôn hiện. Cần đối chiếu ARM64/current runtime và các nhánh caller còn chưa đủ bằng chứng.",
+          "conclusion": "ReturnToHomeSequenceService.Initialize gán từng field _regularLoseSequenceCommands/_regularWinSequenceCommands/_dailyLoseSequenceCommands/_dailyWinSequenceCommands và dựng command bằng allocationTypeInfo theo thứ tự Add. Bảng full order trong supporting_tables của JSON/report lấy trực tiếp từng đoạn field. Execution có thể skip/terminate theo từng command và context, không đồng nghĩa mọi popup luôn hiện.",
+          "evidence": [
+            "../com.grandgames.magicsort_Unity_20260909_112501/RecoveredNative/PseudoC/Assembly-CSharp/Modules/Contexts/GamePlay/Loop/Scripts/ReturnToHomeSequenceService.c:1049"
+          ],
+          "reviewed": "2026-11-15",
+          "mode": "file_only_recovered_native_0.0.3063",
+          "remaining": "15/11 — resolved_static_code_historical_build: ReturnToHomeSequenceService.Initialize gán từng field _regularLoseSequenceCommands/_regularWinSequenceCommands/_dailyLoseSequenceCommands/_dailyWinSequenceCommands và dựng command bằng allocationTypeInfo theo thứ tự Add. Bảng full order trong supporting_tables của JSON/report lấy trực tiếp từng đoạn field. Execution có thể skip/terminate theo từng command và context, không đồng nghĩa mọi popup luôn hiện. Còn lại: Cần đối chiếu ARM64/current runtime và các nhánh caller còn chưa đủ bằng chứng."
+        },
+        {
+          "id": "MS-EventsFramework-G004",
+          "feature": "EventsFramework",
+          "source": "gdd/EventsFramework.json#/gaps/3",
+          "original": "RemoteTimeService._coolDownDurationAsSeconds / _maxCoolDownDurationAsSeconds gán trong .ctor, chưa đọc được số",
+          "current_note": "15/11 — resolved_static_code_historical_build: RemoteTimeService.Initialize (không phải constructor) gán ByPassRemoteTimeCheck=false, RemoteTime=DateTime.MinValue, cooldown10s, elapsed0 và maxcooldown300s. Đây là giá trị init; không được gọi là server time đã hợp lệ ngay khi khởi động. Còn lại: Cần đối chiếu method/consumer trên app0.0.3129 ARM64; chưa là runtime pass.",
+          "status": "resolved_static_code_historical_build",
+          "review_status": "preserved_resolved_static_code_historical_build",
+          "dependency": "local_code_review",
+          "next_action": "RemoteTimeService.Initialize (không phải constructor) gán ByPassRemoteTimeCheck=false, RemoteTime=DateTime.MinValue, cooldown10s, elapsed0 và maxcooldown300s. Đây là giá trị init; không được gọi là server time đã hợp lệ ngay khi khởi động. Cần đối chiếu method/consumer trên app0.0.3129 ARM64; chưa là runtime pass.",
+          "conclusion": "RemoteTimeService.Initialize (không phải constructor) gán ByPassRemoteTimeCheck=false, RemoteTime=DateTime.MinValue, cooldown10s, elapsed0 và maxcooldown300s. Đây là giá trị init; không được gọi là server time đã hợp lệ ngay khi khởi động.",
+          "evidence": [
+            "../com.grandgames.magicsort_Unity_20260909_112501/RecoveredNative/PseudoC/Assembly-CSharp/Modules/Contexts/Application/ServerCommunication/Scripts/RemoteTimeService.c:594"
+          ],
+          "reviewed": "2026-11-15",
+          "mode": "file_only_recovered_native_0.0.3063",
+          "remaining": "15/11 — resolved_static_code_historical_build: RemoteTimeService.Initialize (không phải constructor) gán ByPassRemoteTimeCheck=false, RemoteTime=DateTime.MinValue, cooldown10s, elapsed0 và maxcooldown300s. Đây là giá trị init; không được gọi là server time đã hợp lệ ngay khi khởi động. Còn lại: Cần đối chiếu method/consumer trên app0.0.3129 ARM64; chưa là runtime pass."
+        },
+        {
+          "id": "MS-EventsFramework-G005",
+          "feature": "EventsFramework",
+          "source": "gdd/EventsFramework.json#/gaps/4",
+          "original": "Không tìm thấy hệ deeplink riêng cho từng sự kiện (chỉ có FriendsService.TryAddFriendsFromDeeplink)",
+          "current_note": "15/11 — partial_static_code_unresolved: FriendsService.TryAddFriendsFromDeeplink async đọc deeplink data và gửi AutoAddFriend, sau đó analytics FriendsInteraction. Body này là social attribution/add-friend, không có event-navigation dispatch. Chưa thể phủ định event deeplink ở SDK/manifest hoặc module khác chỉ vì một service. Còn lại: Cần route registry/Android intent và handlers ngoàiFriends; hiện chưa có nguồn chứng minh per-event routes hoặc không hỗ trợ.",
+          "status": "partial_static_code_unresolved",
+          "review_status": "preserved_partial_static_code_unresolved",
+          "dependency": "local_code_review",
+          "next_action": "FriendsService.TryAddFriendsFromDeeplink async đọc deeplink data và gửi AutoAddFriend, sau đó analytics FriendsInteraction. Body này là social attribution/add-friend, không có event-navigation dispatch. Chưa thể phủ định event deeplink ở SDK/manifest hoặc module khác chỉ vì một service. Cần route registry/Android intent và handlers ngoàiFriends; hiện chưa có nguồn chứng minh per-event routes hoặc không hỗ trợ.",
+          "conclusion": "FriendsService.TryAddFriendsFromDeeplink async đọc deeplink data và gửi AutoAddFriend, sau đó analytics FriendsInteraction. Body này là social attribution/add-friend, không có event-navigation dispatch. Chưa thể phủ định event deeplink ở SDK/manifest hoặc module khác chỉ vì một service.",
+          "evidence": [
+            "../com.grandgames.magicsort_Unity_20260909_112501/RecoveredNative/PseudoC/Assembly-CSharp/Modules/Contexts/Home/Friends/Scripts/FriendsService.c:4260"
+          ],
+          "reviewed": "2026-11-15",
+          "mode": "file_only_recovered_native_0.0.3063",
+          "remaining": "15/11 — partial_static_code_unresolved: FriendsService.TryAddFriendsFromDeeplink async đọc deeplink data và gửi AutoAddFriend, sau đó analytics FriendsInteraction. Body này là social attribution/add-friend, không có event-navigation dispatch. Chưa thể phủ định event deeplink ở SDK/manifest hoặc module khác chỉ vì một service. Còn lại: Cần route registry/Android intent và handlers ngoàiFriends; hiện chưa có nguồn chứng minh per-event routes hoặc không hỗ trợ."
+        },
+        {
+          "id": "MS-EventsFramework-G006",
+          "feature": "EventsFramework",
+          "source": "gdd/EventsFramework.json#/gaps/5",
+          "original": "[Runtime 2026-09-10] Cơ chế người chơi giả đã xác nhận từ runtime: IsBot trong leaderboard, ladder id tổng hợp Sky Jump, bảng world/country seed 1000 mục (facts/runtime/fake-players.md).",
+          "current_note": "[Runtime 2026-09-10] Cơ chế người chơi giả đã xác nhận từ runtime: IsBot trong leaderboard, ladder id tổng hợp Sky Jump, bảng world/country seed 1000 mục (facts/runtime/fake-players.md).",
+          "status": "historical_evidence_annotation_not_test_result",
+          "review_status": "historical_evidence_annotation_not_test_result",
+          "dependency": "historical_note_requires_qualified_use",
+          "next_action": "Giữ facts/runtime/fake-players.md và IsBot/ladder seed lịch sử; tách fixture/generated rows với tỷ lệ bot production. Không suy toàn bộ leaderboard hiện tại giả từ1000row seed.",
+          "remaining": "[Runtime 2026-09-10] Cơ chế người chơi giả đã xác nhận từ runtime: IsBot trong leaderboard, ladder id tổng hợp Sky Jump, bảng world/country seed 1000 mục (facts/runtime/fake-players.md)."
+        }
+      ],
+      "feature_specific_acceptance_questions": [
+        "Event registration/eligibility/priority/lobby slots/auto-popup",
+        " shared request/state/time lifecycle"
+      ],
+      "next_steps": [
+        "GetServicesInPosition dùng iVar2=0xc, nếu position==1 thì8 rồi dereference HashSet theo byteoffset của LobbyEventMap. Đây là offsets right/left fields trong object32bit; không phải8/12slot như gap gốc gợi ý. Initialize và event map dùng tập service, chưa có hằng maxicon trong body này. Số icon đồng thời cần layout/prefab/controller clipping và eligible services; không lấy byteoffset làmcapacity.",
+        "FriendsService.TryAddFriendsFromDeeplink async đọc deeplink data và gửi AutoAddFriend, sau đó analytics FriendsInteraction. Body này là social attribution/add-friend, không có event-navigation dispatch. Chưa thể phủ định event deeplink ở SDK/manifest hoặc module khác chỉ vì một service. Cần route registry/Android intent và handlers ngoàiFriends; hiện chưa có nguồn chứng minh per-event routes hoặc không hỗ trợ.",
+        "Giữ facts/runtime/fake-players.md và IsBot/ladder seed lịch sử; tách fixture/generated rows với tỷ lệ bot production. Không suy toàn bộ leaderboard hiện tại giả từ1000row seed."
+      ]
+    }
+  },
+  "use_cases": 16,
+  "configs": 28,
+  "new_review_case_count": 0,
+  "reviewed_uc_branch_count": 0,
+  "curated_new_image_count": 0,
+  "segment_ids": [
+    "MS-SEG-052",
+    "MS-SEG-053",
+    "MS-SEG-054",
+    "MS-SEG-055",
+    "MS-SEG-056",
+    "MS-SEG-057",
+    "MS-SEG-058",
+    "MS-SEG-059",
+    "MS-SEG-061",
+    "MS-SEG-113",
+    "MS-SEG-252",
+    "MS-SEG-253",
+    "MS-SEG-254",
+    "MS-SEG-255",
+    "MS-SEG-256",
+    "MS-SEG-257",
+    "MS-SEG-258",
+    "MS-SEG-259"
+  ],
+  "matching_basis": "explicit_gd_config_map_or_exact_model_token_in_gdd_configs_where_key_sources; rootfieldscoped",
+  "unmatched_segment_status": null,
+  "local_document_repairs": [],
+  "sources": [
+    "GameDesign/facts/facts.json (consts/fields/strings của LobbyEventsService, SegmentService, RemoteTimeService, SyncService, ReturnToHomeSequenceService, PopUpService, BoatRushService)",
+    "RecoveredNative/PseudoC/Assembly-CSharp/Modules/Contexts/GamePlay/Loop/Scripts/ReturnToHomeSequenceService.c",
+    "RecoveredNative/PseudoC/Assembly-CSharp/Modules/Contexts/Home/UI/Common/Scripts/LobbyEventController/LobbyEventsService.c",
+    "UnityExport/ExportedProject/Assets/MonoBehaviour/BackendEnvironmentConfig.asset",
+    "UnityExport/ExportedProject/Assets/Resources/defaultconfigs/*.json"
+  ],
+  "source_hashes": {
+    "gdd_sha256": "98c79eed9ed5c82d3e582b15d4ae7334599e6781aa729f939dac5030bf1a21c6",
+    "site_meta_sha256": "7f02ffa42d220a142a0860d75e3365aef44e7b36397e7489a4b58794fa32455e"
+  }
+}

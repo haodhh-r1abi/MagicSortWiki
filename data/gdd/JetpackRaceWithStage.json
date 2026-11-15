@@ -1,0 +1,2218 @@
+{
+  "id": "JetpackRaceWithStage",
+  "name": "Đua Jetpack 3 chặng",
+  "category": "Event",
+  "managers": [
+    "Modules.Contexts.Home.JetpackRaceWithStage.Scripts.JetpackRaceWithStageService",
+    "Modules.Contexts.Home.JetpackRaceWithStage.Scripts.JetpackRaceWithStageDataService",
+    "Modules.Contexts.Home.JetpackRaceWithStage.Scripts.JetpackRaceWithStageStateService",
+    "Modules.Contexts.Home.JetpackRaceWithStage.Scripts.JetpackRaceWithStageRemoteService",
+    "Modules.Contexts.Home.JetpackRaceWithStage.Scripts.JetpackRaceWithStageConfigModel"
+  ],
+  "summary": "Jetpack Race With Stage là bản 3 chặng của Jetpack Race, dùng bộ endpoint riêng /v1/*-jetpack-* và schema flatbuffer magicsort.schemas.v1.liveops.jet_pack_v2. Người chơi đua với một nhóm (có bot) trên bảng leaderboard riêng (leaderboardID tách khỏi tournamentID); thắng level thì tiến 1 nấc, thua thì mất chuỗi. Mỗi chặng (currentStage 1/2/3) có mốc đích riêng (maxReachableStageScore) và bộ thưởng riêng: chặng 1 = 100 Coin + 15' Unlimited Life, chặng 2 = 250 Coin + 30' Unlimited Life, chặng 3 = 500 Coin + 1 Shuffle + 1 Undo + 45' Unlimited Life. Chặng cuối bị giới hạn số lần thắng lặp lại bằng LastStageWinLimit (mặc định 100) để tránh cày vô hạn. Bản này còn có chế độ StreakDisabled (mặc định true) — tắt cơ chế mất chuỗi khi thua, kèm popup giải thích riêng (ShouldShowStreakDisabledPopup). Sự kiện tích hợp trực tiếp với MagicLab (MagicLabEventType = 19) và Wheel of Fortune (IsAvailableForWheelOfFortune).",
+  "unlock": "JetpackRaceWithStageStateService.GetEventState(): Disable(0) nếu IsEnabled == false; ProgressNotEnough(1) nếu level < FirstLevelToShow; NoCache(2); Join(3); InProgress(4); LocalTimeIsUp(5); RemoteTimeIsUp(6); ClaimedLocally(7); LastStageWinLimitReached(8) khi đã đạt trần thắng ở chặng cuối. Client default: IsEnabled=false, EventType=6, MagicLabEventType=19, FirstLevelToShow=80, StreakDisabled=true, LastStageWinLimit=100 (Resources/defaultconfigs/JetpackRaceWithStageConfigModel.json).",
+  "entry_points": [
+    "Nút lobby (IsLobbyIconVisible / IsLobbyIconVisibleAndNotIntroduced)",
+    "Banner lobby (ShouldShowJetpackRaceWithStageBanner)",
+    "Popup tham gia (ShouldShowJoinPopup / CanShowJoinPopupForce); có thể bị khoá nút đóng bởi CloseDisabledInJoinPopup",
+    "Popup đua tự mở khi về lobby / mở app (ShouldOpenAutomaticallyOnLobbyReturn / ShouldOpenAutomaticallyOnSessionStart)",
+    "Popup giải thích chế độ 'không mất chuỗi' (ShouldShowStreakDisabledPopup)",
+    "Popup xác nhận thoát level (ShouldShowAreYouSure)",
+    "Nguồn TryAgain sau khi thua"
+  ],
+  "flow": "InitializeData() nạp cache + CacheProfileImages(). IntervalUpdate → ShouldSendGetRequest() → SendGetRequest()/GetRequest() gọi JetpackRaceWithStageRemoteService.Get(eventType, leaderboardId, score) (hoặc GetWithFlatBuffer) tới jetpackRaceWithStageGetUrl (/v1/get-jetpack-leaderboard). Response JetpackRaceWithStageResponseModel{tournamentID, leaderboardID, tournamentType, startTime, finishTime, isFinished, isClaimed, userScore, maxReachableStageScore, players[], hasUsedLimitlessLife, currentStage}. ChangeTournamentCache(response) ghi JetpackRaceWithStageCacheModel (có thêm LeaderboardId, CurrentStage, EventType). GetEventId() tạo id dễ đọc dạng 'jp_{tournamentType}_{startDate:yyyyMMdd}_{endDate:yyyyMMdd}' (fallback 'jp_unknown_data'). Join: Join() trả JoinResult{ConnectionFail=0, EventEnded=1, Success=2} qua jetpackRaceWithStageJoinUrl (/v1/join-jetpack-leaderboard); CanCloseJoinPopup() đọc CloseDisabledInJoinPopup. Trong đua: WinState → TryIncreaseScore() → DataService.IncreaseScore(), IsSynced = false; nếu đang ở chặng cuối thì TryIncreaseLastStageWinCount() tăng LastStageClaimCount và CheckLastStageWinLimitExceeded() so với LastStageWinLimit → state LastStageWinLimitReached(8). LoseState/QuitState → TryResetScore() (chỉ khi CanResetScore() và IsStreakDisabled() == false). Điểm cũng được đẩy qua jetpackRaceWithStageSetUrl (/v1/set-jetpack-points). Thưởng: GetRewardsByStage(stage) map 1→Stage1RewardModels, 2→Stage2RewardModels, 3→Stage3RewardModels (log lỗi 'JetpackRaceWithStageService: GetRewardsByStage: Invalid stage number' nếu ngoài khoảng); GetRewardModelByStage(stage)/GetRaceRewards()/GetPlayerRewards() dùng bản WithCollection khi Collection bật. Claim: ShouldSendClaimRequest() → SendClaimRequest() (async, có cờ _isClaimInProgress chống bấm hai lần) tới jetpackRaceWithStageClaimUrl (/v1/claim-jetpack-leaderboard); ClaimLocally() + IncreaseWinRecord(). Kết thúc: SendGetNextRaceFinishTimeRequest() gọi /v1/get-jetpack-endtime, lưu NextRaceFinishTime; ScheduleLeaderboardFetchOnTimerEnd() tự fetch lại.",
+  "use_cases": [
+    {
+      "id": "UC-01",
+      "title": "Kiểm tra điều kiện và hiện icon/banner",
+      "actor": "System",
+      "trigger": "Vào lobby / IntervalUpdate",
+      "precondition": "RemoteConfigs sẵn sàng",
+      "steps": [
+        "JetpackRaceWithStageStateService.GetConfig()",
+        "GetEventState() trả Disable(0)/ProgressNotEnough(1)/NoCache(2)/Join(3)/InProgress(4)/LocalTimeIsUp(5)/RemoteTimeIsUp(6)/ClaimedLocally(7)/LastStageWinLimitReached(8)",
+        "IsLobbyIconVisible() / ShouldShowJetpackRaceWithStageBanner() / CanOpenPopUp()"
+      ],
+      "result": "Icon + banner hiện/ẩn",
+      "rules": "Client default: IsEnabled=false, FirstLevelToShow=80, EventType=6",
+      "evidence": "JetpackRaceWithStageStateService.GetEventState; JetpackRaceWithStageStateService.IsLobbyIconVisible; JetpackRaceWithStageStateService.ShouldShowJetpackRaceWithStageBanner; JetpackRaceWithStageStateService.CanOpenPopUp"
+    },
+    {
+      "id": "UC-02",
+      "title": "Fetch bảng đua và chặng hiện tại",
+      "actor": "Server",
+      "trigger": "InitializeData / IntervalUpdate",
+      "precondition": "ShouldSendGetRequest() == true",
+      "steps": [
+        "JetpackRaceWithStageService.TryFetchCurrentEvent() → SendGetRequest() → GetRequest()",
+        "JetpackRaceWithStageRemoteService.Get(eventType, leaderboardId, score) tới jetpackRaceWithStageGetUrl (/v1/get-jetpack-leaderboard); có bản GetWithFlatBuffer",
+        "Response chứa leaderboardID riêng và currentStage",
+        "ChangeTournamentCache(response) + CacheProfileImages()",
+        "GetEventId() dựng id 'jp_{type}_{start:yyyyMMdd}_{end:yyyyMMdd}' cho analytics"
+      ],
+      "result": "Cache đầy đủ: chặng, mốc đích, danh sách người đua",
+      "rules": "Khác bản thường: request dùng leaderboardId thay vì tournamentId",
+      "evidence": "JetpackRaceWithStageService.TryFetchCurrentEvent; JetpackRaceWithStageService.GetRequest; JetpackRaceWithStageRemoteService.Get; JetpackRaceWithStageService.ChangeTournamentCache; JetpackRaceWithStageService.GetEventId; JetpackRaceWithStageService.GetLeaderboardId"
+    },
+    {
+      "id": "UC-03",
+      "title": "Tham gia cuộc đua với kết quả rõ ràng",
+      "actor": "Player",
+      "trigger": "Bấm Join",
+      "precondition": "State Join(3)",
+      "steps": [
+        "JetpackRaceWithStageService.Join() trả Task<JoinResult>",
+        "JetpackRaceWithStageRemoteService.Join(eventType) tới jetpackRaceWithStageJoinUrl (/v1/join-jetpack-leaderboard)",
+        "JoinResult: ConnectionFail(0) — lỗi mạng, EventEnded(1) — sự kiện đã kết thúc, Success(2) — thành công",
+        "CanCloseJoinPopup() đọc CloseDisabledInJoinPopup (nếu false thì bắt buộc phải Join)",
+        "EventSender.SendJetpackRaceWithStageJoinedEvent (jetpack_race_staged_joined) với leaderboard_id, readable_event_id, stage, close_button_enabled"
+      ],
+      "result": "Vào bảng đua, state InProgress(4)",
+      "rules": "Analytics ghi cả close_button_enabled để đo tác động của popup bắt buộc",
+      "evidence": "JetpackRaceWithStageService.Join; JetpackRaceWithStageRemoteService.Join; JetpackRaceWithStageService.CanCloseJoinPopup; JetpackRaceWithStageService.IsJoinPopupIntroduced; EventSender.SendJetpackRaceWithStageJoinedEvent"
+    },
+    {
+      "id": "UC-04",
+      "title": "Thắng level → tiến 1 nấc",
+      "actor": "Player",
+      "trigger": "Hoàn thành level",
+      "precondition": "CanIncreaseScore() == true",
+      "steps": [
+        "JetpackRaceWithStageService.TryIncreaseScore()",
+        "JetpackRaceWithStageDataService.IncreaseScore(); IsSynced = false",
+        "IsPlayerReachedMaxScore() so với GetMaxReachableScore() (maxReachableStageScore của chặng hiện tại)",
+        "IsScoreIncreasedSinceLastSeen() / UpdateLastSeen() / UpdateLastSeenBanner()"
+      ],
+      "result": "Nhân vật tiến lên trên đường đua của chặng hiện tại",
+      "rules": "Mốc đích khác nhau theo chặng, do server gửi",
+      "evidence": "JetpackRaceWithStageService.TryIncreaseScore; JetpackRaceWithStageService.GetMaxReachableScore; JetpackRaceWithStageService.IsPlayerReachedMaxScore; JetpackRaceWithStageService.IsScoreIncreasedSinceLastSeen"
+    },
+    {
+      "id": "UC-05",
+      "title": "Thua level → mất chuỗi (nếu chế độ streak đang bật)",
+      "actor": "Player",
+      "trigger": "LoseState / QuitState",
+      "precondition": "CanResetScore() == true và IsStreakDisabled() == false",
+      "steps": [
+        "JetpackRaceWithStageService.TryResetScore()",
+        "IsStreakDisabled() đọc JetpackRaceWithStageConfigModel.StreakDisabled — nếu true thì KHÔNG reset",
+        "Nếu reset: DataService.ResetScore(), lưu LastScoreBeforeReset; IsPlayerFallDown()/LastScoreBeforeFallDown() cho hoạt ảnh",
+        "EventSender.SendJetpackRaceWithStageLost (jetpack_race_staged_lost) với race_rank, current_race_streak, leaderboard_id, readable_event_id"
+      ],
+      "result": "Chuỗi về 0 (hoặc giữ nguyên nếu StreakDisabled)",
+      "rules": "Client default StreakDisabled = true → mặc định KHÔNG mất chuỗi khi thua",
+      "evidence": "JetpackRaceWithStageService.TryResetScore; JetpackRaceWithStageService.IsStreakDisabled; JetpackRaceWithStageStateService.CanResetScore; JetpackRaceWithStageService.IsPlayerFallDown; EventSender.SendJetpackRaceWithStageLost"
+    },
+    {
+      "id": "UC-06",
+      "title": "Giới thiệu chế độ 'không mất chuỗi'",
+      "actor": "System",
+      "trigger": "Lần đầu vào sự kiện khi StreakDisabled = true",
+      "precondition": "Chưa từng xem tutorial",
+      "steps": [
+        "JetpackRaceWithStageService.ShouldShowStreakDisabledPopup()",
+        "MarkStreakDisabledIntroduced() đặt JetpackRaceWithStageModel.IsStreakDisabledTutorialShowedEverInLifeTime = true"
+      ],
+      "result": "Người chơi hiểu là thua không mất tiến độ → giảm áp lực, tăng số lượt chơi",
+      "rules": "Cờ lưu vĩnh viễn (EverInLifeTime)",
+      "evidence": "JetpackRaceWithStageService.ShouldShowStreakDisabledPopup; JetpackRaceWithStageService.MarkStreakDisabledIntroduced; JetpackRaceWithStageModel.IsStreakDisabledTutorialShowedEverInLifeTime"
+    },
+    {
+      "id": "UC-07",
+      "title": "Chuyển chặng và mốc đích mới",
+      "actor": "System",
+      "trigger": "Hoàn thành chặng, server cập nhật currentStage",
+      "precondition": "Chưa ở chặng cuối",
+      "steps": [
+        "JetpackRaceWithStageService.GetCurrentStage() đọc JetpackRaceWithStageCacheModel.CurrentStage",
+        "maxReachableStageScore mới được server gửi kèm",
+        "GetRewardModelByStage(stage) đổi bộ thưởng hiển thị"
+      ],
+      "result": "Đường đua và mục tiêu mới, thưởng lớn hơn",
+      "rules": "3 chặng: 1, 2, 3 (GetRewardsByStage log lỗi nếu ngoài khoảng)",
+      "evidence": "JetpackRaceWithStageService.GetCurrentStage; JetpackRaceWithStageService.GetRewardModelByStage; JetpackRaceWithStageService.GetRewardsByStage"
+    },
+    {
+      "id": "UC-08",
+      "title": "Giới hạn số lần thắng ở chặng cuối",
+      "actor": "System",
+      "trigger": "Thắng lặp lại ở chặng 3",
+      "precondition": "Đang ở chặng cuối",
+      "steps": [
+        "JetpackRaceWithStageService.TryIncreaseLastStageWinCount() tăng JetpackRaceWithStageModel.LastStageClaimCount",
+        "CheckLastStageWinLimitExceeded() so với JetpackRaceWithStageConfigModel.LastStageWinLimit (mặc định 100)",
+        "Nếu vượt → state LastStageWinLimitReached(8)",
+        "ResetLastStageWinCount() khi sự kiện mới bắt đầu"
+      ],
+      "result": "Chặn cày vô hạn chặng cuối; sự kiện đóng với người chơi đó",
+      "rules": "LastStageWinLimit = 100 (client default, server ghi đè được)",
+      "evidence": "JetpackRaceWithStageService.TryIncreaseLastStageWinCount; JetpackRaceWithStageService.CheckLastStageWinLimitExceeded; JetpackRaceWithStageService.ResetLastStageWinCount; JetpackRaceWithStageModel.LastStageClaimCount"
+    },
+    {
+      "id": "UC-09",
+      "title": "Theo dõi đối thủ trên bảng đua",
+      "actor": "Player",
+      "trigger": "Mở popup / xem banner",
+      "precondition": "Có cache",
+      "steps": [
+        "GetViewModels() / GetLastSeenViewModels() / GetLastSeenBannerViewModels() dựng JetpackRaceWithStageLeaderboardPlayerViewModel",
+        "ArePlayersScoreChanged() phát hiện đối thủ tiến lên",
+        "GetRank() lấy hạng của mình; GetMaxScore() lấy điểm cao nhất bảng"
+      ],
+      "result": "Cảm giác đua trực tiếp với người khác (và bot)",
+      "rules": "JetpackRaceWithStageUserModel có cờ IsBot",
+      "evidence": "JetpackRaceWithStageService.GetViewModels; JetpackRaceWithStageService.GetLastSeenViewModels; JetpackRaceWithStageService.ArePlayersScoreChanged; JetpackRaceWithStageService.GetRank; JetpackRaceWithStageService.GetMaxScore"
+    },
+    {
+      "id": "UC-10",
+      "title": "Nhận thưởng theo chặng",
+      "actor": "Player",
+      "trigger": "Chạm mốc đích và bấm Claim",
+      "precondition": "DidPlayerWin() và ShouldSendClaimRequest()",
+      "steps": [
+        "GetPlayerRewards() → GetRewardsByStage(stage): 1→Stage1RewardModels, 2→Stage2RewardModels, 3→Stage3RewardModels (bản WithCollection nếu Collection bật)",
+        "SendClaimRequest() (async) — cờ _isClaimInProgress chống bấm hai lần",
+        "JetpackRaceWithStageRemoteService.Claim(eventType, leaderboardId, score) tới jetpackRaceWithStageClaimUrl (/v1/claim-jetpack-leaderboard)",
+        "ClaimLocally() → SetClaimedLocally(); IncreaseWinRecord()",
+        "EventSender: jetpack_race_staged_won"
+      ],
+      "result": "Nhận coin/booster/life theo chặng; state ClaimedLocally(7)",
+      "rules": "Chặng 1: 100 Coin + 15' Life. Chặng 2: 250 Coin + 30' Life. Chặng 3: 500 Coin + 1 Shuffle + 1 Undo + 45' Life.",
+      "evidence": "JetpackRaceWithStageService.GetPlayerRewards; JetpackRaceWithStageService.GetRewardsByStage; JetpackRaceWithStageService.SendClaimRequest; JetpackRaceWithStageService.ClaimLocally; JetpackRaceWithStageService.IncreaseWinRecord"
+    },
+    {
+      "id": "UC-11",
+      "title": "Thưởng có Collection pack",
+      "actor": "System",
+      "trigger": "Collection bật khi nhận thưởng chặng 1 hoặc 2",
+      "precondition": "-",
+      "steps": [
+        "GetRewardsByStage dùng Stage1RewardModelsWithCollection / Stage2RewardModelsWithCollection",
+        "JetpackRaceWithStageStateService.ShouldShowCollectibleEarnAnimationOnLobbyReturn() hoãn animation tới lobby"
+      ],
+      "result": "Chặng 1 thêm 1 CollectionPack loại 1; chặng 2 thêm 1 CollectionPack loại 2; chặng 3 giữ nguyên",
+      "rules": "Stage3RewardModelsWithCollection giống Stage3RewardModels (không thêm pack)",
+      "evidence": "JetpackRaceWithStageConfigModel.Stage1RewardModelsWithCollection; JetpackRaceWithStageStateService.ShouldShowCollectibleEarnAnimationOnLobbyReturn"
+    },
+    {
+      "id": "UC-12",
+      "title": "Kết thúc và nối tiếp cuộc đua kế",
+      "actor": "System",
+      "trigger": "Hết giờ hoặc isFinished",
+      "precondition": "-",
+      "steps": [
+        "GetRemainingSeconds() / GetEndDate() / GetStartTimeAsUnix() (ConvertToUtc)",
+        "State → LocalTimeIsUp(5) / RemoteTimeIsUp(6)",
+        "SendGetNextRaceFinishTimeRequest() → GetNextRaceEndTime(eventType) tới jetpackRaceWithStageGetNextRaceFinishTimeUrl (/v1/get-jetpack-endtime); lưu JetpackRaceWithStageModel.NextRaceFinishTime",
+        "GetNextRaceEndDate() cho đồng hồ; ScheduleLeaderboardFetchOnTimerEnd() tự fetch khi hết giờ"
+      ],
+      "result": "Cuộc đua mới bắt đầu liền mạch",
+      "rules": "NextRaceFinishTime được lưu trong model nên còn dùng được khi offline",
+      "evidence": "JetpackRaceWithStageService.GetRemainingSeconds; JetpackRaceWithStageService.SendGetNextRaceFinishTimeRequest; JetpackRaceWithStageRemoteService.GetNextRaceEndTime; JetpackRaceWithStageService.GetNextRaceEndDate; JetpackRaceWithStageService.ScheduleLeaderboardFetchOnTimerEnd"
+    },
+    {
+      "id": "UC-13",
+      "title": "Đóng góp cho MagicLab và Wheel of Fortune",
+      "actor": "System",
+      "trigger": "Thắng cuộc đua",
+      "precondition": "MagicLab / WOF bật",
+      "steps": [
+        "GetMagicLabEventType() trả MagicLabEventType = 19 (client default)",
+        "IsAvailableForWheelOfFortune() / JetpackRaceWithStageStateService.IsAvailableForWheelOfFortune() báo cho WOF biết task JetpackRaceWin có khả dụng không",
+        "WheelOfFortuneService được inject trực tiếp vào .ctor — nếu sự kiện tắt, WOF gọi TryResetTaskProgress(JetpackRaceWin)"
+      ],
+      "result": "Sự kiện là nguồn nhiệm vụ cho MagicLab và WOF",
+      "rules": "WheelOfFortuneTaskType.JetpackRaceWin = 2",
+      "evidence": "JetpackRaceWithStageService.GetMagicLabEventType; JetpackRaceWithStageService.IsAvailableForWheelOfFortune; JetpackRaceWithStageStateService.IsAvailableForWheelOfFortune; JetpackRaceWithStageService..ctor"
+    },
+    {
+      "id": "UC-14",
+      "title": "Popup tự mở theo ngữ cảnh",
+      "actor": "System",
+      "trigger": "Về lobby / mở app / Try Again",
+      "precondition": "State phù hợp",
+      "steps": [
+        "ShouldOpenAutomaticallyOnLobbyReturn(out source) / ShouldOpenAutomaticallyOnSessionStart(out source)",
+        "GetPopUpState() trả Disabled(0)/Join(1)/FirstShowEver(2)/FirstShow(3)/InProgress(4)/Result(5)/JoinIntroduced(6)",
+        "EventSender.SendJetpackRaceWithStageImpression(source) (jetpack_race_staged_screen_impression) kèm stage",
+        "TryMarkForceShowedJoinPopUpForSession() / OnJoinPopupOpened() / MarkEventIntroduced()"
+      ],
+      "result": "Đúng nội dung tại đúng thời điểm",
+      "rules": "JetpackRaceWithStageImpressionSource: None(0), LobbyIcon(1), EventJoin(2), Result(3), StepIncrease(4), TryAgain(5)",
+      "evidence": "JetpackRaceWithStageStateService.ShouldOpenAutomaticallyOnLobbyReturn; JetpackRaceWithStageStateService.ShouldOpenAutomaticallyOnSessionStart; JetpackRaceWithStageStateService.GetPopUpState; EventSender.SendJetpackRaceWithStageImpression"
+    },
+    {
+      "id": "UC-15",
+      "title": "Offline / lỗi request",
+      "actor": "System",
+      "trigger": "Get/Join/Claim thất bại",
+      "precondition": "-",
+      "steps": [
+        "Join() trả JoinResult.ConnectionFail(0) khi mất mạng, EventEnded(1) khi sự kiện đã đóng",
+        "IsSynced = false giữ dấu điểm chưa đẩy; request Get kế tiếp gửi lại",
+        "_isClaimInProgress chống gửi claim trùng khi mạng chậm",
+        "State giữ NoCache(2) nếu chưa có cache"
+      ],
+      "result": "Không mất tiến độ, không nhận thưởng trùng",
+      "rules": "-",
+      "evidence": "JetpackRaceWithStageService.Join; JetpackRaceWithStageService.IsSynced; JetpackRaceWithStageService.SendClaimRequest; JetpackRaceWithStageStateService.ShouldSendGetRequest"
+    },
+    {
+      "id": "UC-16",
+      "title": "Đồng bộ dữ liệu",
+      "actor": "Server",
+      "trigger": "Sync / đổi thiết bị",
+      "precondition": "ISyncable",
+      "steps": [
+        "JetpackRaceWithStageDataService lưu JetpackRaceWithStageModel{WinRecord, JetpackRaceWithStageCache, LastStageClaimCount, HasUsedLimitlessLife, IsEventIntroducedEverInLifeTime, IsStreakDisabledTutorialShowedEverInLifeTime, IsJoinPopupIntroduced, NextRaceFinishTime}",
+        "SerializeModelForSync() / OverwriteModelFromSync(data) / DataSynced()",
+        "LateUpdate() lưu khi dirty"
+      ],
+      "result": "Chuỗi, chặng, số lần thắng chặng cuối giữ nguyên khi đổi máy",
+      "rules": "LastStageClaimCount đồng bộ nên không thể lách giới hạn bằng cách đổi máy",
+      "evidence": "JetpackRaceWithStageDataService.SerializeModelForSync; JetpackRaceWithStageDataService.OverwriteModelFromSync; JetpackRaceWithStageDataService.DataSynced; JetpackRaceWithStageModel"
+    }
+  ],
+  "configs": [
+    {
+      "source": "json default",
+      "key": "IsEnabled",
+      "type": "bool",
+      "value": "false",
+      "meaning": "Bật/tắt sự kiện",
+      "where": "Resources/defaultconfigs/JetpackRaceWithStageConfigModel.json"
+    },
+    {
+      "source": "json default",
+      "key": "EventType",
+      "type": "int",
+      "value": "6",
+      "meaning": "tournamentType gửi backend",
+      "where": "JetpackRaceWithStageConfigModel.json"
+    },
+    {
+      "source": "json default",
+      "key": "MagicLabEventType",
+      "type": "int",
+      "value": "19",
+      "meaning": "Mã sự kiện dùng cho MagicLab",
+      "where": "JetpackRaceWithStageConfigModel.json"
+    },
+    {
+      "source": "json default",
+      "key": "FirstLevelToShow",
+      "type": "int",
+      "value": "80",
+      "meaning": "Level tối thiểu",
+      "where": "JetpackRaceWithStageConfigModel.json"
+    },
+    {
+      "source": "json default",
+      "key": "StreakDisabled",
+      "type": "bool",
+      "value": "true",
+      "meaning": "Tắt cơ chế mất chuỗi khi thua (mặc định là TẮT mất chuỗi)",
+      "where": "JetpackRaceWithStageConfigModel.json"
+    },
+    {
+      "source": "json default",
+      "key": "LastStageWinLimit",
+      "type": "int",
+      "value": "100",
+      "meaning": "Số lần thắng tối đa ở chặng cuối trước khi khoá sự kiện",
+      "where": "JetpackRaceWithStageConfigModel.json"
+    },
+    {
+      "source": "code field",
+      "key": "CloseDisabledInJoinPopup",
+      "type": "bool",
+      "value": "(không có trong json mặc định)",
+      "meaning": "Ẩn nút đóng popup Join, ép người chơi tham gia",
+      "where": "JetpackRaceWithStageConfigModel"
+    },
+    {
+      "source": "json default",
+      "key": "Stage1RewardModels",
+      "type": "reward[]",
+      "value": "100 Coin(1) + Life(2) 00:15:00",
+      "meaning": "Thưởng chặng 1",
+      "where": "JetpackRaceWithStageConfigModel.json"
+    },
+    {
+      "source": "json default",
+      "key": "Stage2RewardModels",
+      "type": "reward[]",
+      "value": "250 Coin(1) + Life(2) 00:30:00",
+      "meaning": "Thưởng chặng 2",
+      "where": "JetpackRaceWithStageConfigModel.json"
+    },
+    {
+      "source": "json default",
+      "key": "Stage3RewardModels",
+      "type": "reward[]",
+      "value": "500 Coin(1) + 1 Shuffle(5) + 1 Undo(4) + Life(2) 00:45:00",
+      "meaning": "Thưởng chặng 3",
+      "where": "JetpackRaceWithStageConfigModel.json"
+    },
+    {
+      "source": "json default",
+      "key": "Stage1RewardModelsWithCollection",
+      "type": "reward[]",
+      "value": "1 CollectionPack(14) loại 1 + 100 Coin + Life 00:15:00",
+      "meaning": "Thưởng chặng 1 khi Collection bật",
+      "where": "JetpackRaceWithStageConfigModel.json"
+    },
+    {
+      "source": "json default",
+      "key": "Stage2RewardModelsWithCollection",
+      "type": "reward[]",
+      "value": "1 CollectionPack(14) loại 2 + 250 Coin + Life 00:30:00",
+      "meaning": "Thưởng chặng 2 khi Collection bật",
+      "where": "JetpackRaceWithStageConfigModel.json"
+    },
+    {
+      "source": "json default",
+      "key": "Stage3RewardModelsWithCollection",
+      "type": "reward[]",
+      "value": "500 Coin + 1 Shuffle + 1 Undo + Life 00:45:00 (giống bản thường)",
+      "meaning": "Chặng 3 không thêm CollectionPack",
+      "where": "JetpackRaceWithStageConfigModel.json"
+    },
+    {
+      "source": "code const",
+      "key": "readable event id format",
+      "type": "string",
+      "value": "jp_{0}_{1:yyyyMMdd}_{2:yyyyMMdd} (fallback 'jp_unknown_data')",
+      "meaning": "Id dễ đọc cho analytics",
+      "where": "JetpackRaceWithStageService.GetEventId"
+    },
+    {
+      "source": "code const",
+      "key": "Log lỗi chặng không hợp lệ",
+      "type": "string",
+      "value": "'JetpackRaceWithStageService: GetRewardsByStage: Invalid stage number'",
+      "meaning": "GetRewardsByStage chỉ chấp nhận 1/2/3",
+      "where": "JetpackRaceWithStageService.GetRewardsByStage"
+    },
+    {
+      "source": "code enum",
+      "key": "JetpackRaceWithStageStateType",
+      "type": "enum",
+      "value": "Disable=0, ProgressNotEnough=1, NoCache=2, Join=3, InProgress=4, LocalTimeIsUp=5, RemoteTimeIsUp=6, ClaimedLocally=7, LastStageWinLimitReached=8",
+      "meaning": "Trạng thái sự kiện",
+      "where": "dump.cs TypeDefIndex 3839"
+    },
+    {
+      "source": "code enum",
+      "key": "JetpackRaceWithStagePopUpState",
+      "type": "enum",
+      "value": "Disabled=0, Join=1, FirstShowEver=2, FirstShow=3, InProgress=4, Result=5, JoinIntroduced=6",
+      "meaning": "Layout popup",
+      "where": "dump.cs TypeDefIndex 3838"
+    },
+    {
+      "source": "code enum",
+      "key": "JetpackRaceWithStageImpressionSource",
+      "type": "enum",
+      "value": "None=0, LobbyIcon=1, EventJoin=2, Result=3, StepIncrease=4, TryAgain=5",
+      "meaning": "Nguồn mở popup",
+      "where": "dump.cs TypeDefIndex 3808"
+    },
+    {
+      "source": "code enum",
+      "key": "JoinResult",
+      "type": "enum",
+      "value": "ConnectionFail=0, EventEnded=1, Success=2",
+      "meaning": "Kết quả gọi Join()",
+      "where": "dump.cs TypeDefIndex 3837"
+    },
+    {
+      "source": "server info",
+      "key": "JetpackRaceWithStageResponseModel",
+      "type": "object",
+      "value": "tournamentID, leaderboardID, tournamentType, startTime, finishTime, isFinished, isClaimed, userScore, maxReachableStageScore, players[], hasUsedLimitlessLife, currentStage",
+      "meaning": "Trạng thái cuộc đua + chặng",
+      "where": "dump.cs TypeDefIndex 3809"
+    },
+    {
+      "source": "server info",
+      "key": "JetpackRaceWithStageResponseUserModel",
+      "type": "object",
+      "value": "publicId, nickName, score, rank, isMe, isBot, imageUrl, imageId",
+      "meaning": "Một người đua",
+      "where": "GameDesign/features/JetpackRaceWithStageResponseUserModel.md"
+    },
+    {
+      "source": "server info",
+      "key": "FlatBuffer schema",
+      "type": "string",
+      "value": "magicsort.schemas.v1.liveops.jet_pack_v2",
+      "meaning": "Biến thể nhị phân (GetWithFlatBuffer / JoinWithFlatBuffer / ClaimWithFlatBuffer / GetNextRaceEndTimeWithFlatBuffer)",
+      "where": "PseudoC/Assembly-CSharp/MagicSort/schemas/v1/liveops/jet_pack_v2/"
+    },
+    {
+      "source": "storage key",
+      "key": "JetpackRaceWithStageModel.{WinRecord, JetpackRaceWithStageCache, LastStageClaimCount, HasUsedLimitlessLife, IsEventIntroducedEverInLifeTime, IsStreakDisabledTutorialShowedEverInLifeTime, IsJoinPopupIntroduced, NextRaceFinishTime}",
+      "type": "object",
+      "value": "-",
+      "meaning": "Dữ liệu lưu và đồng bộ",
+      "where": "dump.cs TypeDefIndex 3804"
+    },
+    {
+      "source": "storage key",
+      "key": "JetpackRaceWithStageCacheModel.{TournamentId, LeaderboardId, TournamentType, StartTime, FinishTime, IsFinished, IsClaimed, IsClaimedLocally, Score, MaxScoreReached, LastSeenScore, LastSeenBannerScore, IsIntroduced, MaxReachableScore, Players, LastSeenPlayers, LastSeenBannerPlayers, LastScoreBeforeReset, CurrentStage, EventType}",
+      "type": "object",
+      "value": "-",
+      "meaning": "Cache cuộc đua",
+      "where": "dump.cs TypeDefIndex 3802"
+    },
+    {
+      "source": "json default",
+      "key": "JetpackRaceWithStageConfigModel.json: Stage1RewardModels[0].CurrencyType",
+      "type": "",
+      "value": "1",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/JetpackRaceWithStageConfigModel.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "JetpackRaceWithStageConfigModel.json: Stage1RewardModels[0].Amount",
+      "type": "",
+      "value": "100",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/JetpackRaceWithStageConfigModel.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "JetpackRaceWithStageConfigModel.json: Stage1RewardModels[1].CurrencyType",
+      "type": "",
+      "value": "2",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/JetpackRaceWithStageConfigModel.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "JetpackRaceWithStageConfigModel.json: Stage1RewardModels[1].Amount",
+      "type": "",
+      "value": "0",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/JetpackRaceWithStageConfigModel.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "JetpackRaceWithStageConfigModel.json: Stage1RewardModels[1].timeSpan",
+      "type": "",
+      "value": "00:15:00",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/JetpackRaceWithStageConfigModel.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "JetpackRaceWithStageConfigModel.json: Stage2RewardModels[0].CurrencyType",
+      "type": "",
+      "value": "1",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/JetpackRaceWithStageConfigModel.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "JetpackRaceWithStageConfigModel.json: Stage2RewardModels[0].Amount",
+      "type": "",
+      "value": "250",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/JetpackRaceWithStageConfigModel.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "JetpackRaceWithStageConfigModel.json: Stage2RewardModels[1].CurrencyType",
+      "type": "",
+      "value": "2",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/JetpackRaceWithStageConfigModel.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "JetpackRaceWithStageConfigModel.json: Stage2RewardModels[1].Amount",
+      "type": "",
+      "value": "0",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/JetpackRaceWithStageConfigModel.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "JetpackRaceWithStageConfigModel.json: Stage2RewardModels[1].timeSpan",
+      "type": "",
+      "value": "00:30:00",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/JetpackRaceWithStageConfigModel.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "JetpackRaceWithStageConfigModel.json: Stage3RewardModels[0].CurrencyType",
+      "type": "",
+      "value": "1",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/JetpackRaceWithStageConfigModel.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "JetpackRaceWithStageConfigModel.json: Stage3RewardModels[0].Amount",
+      "type": "",
+      "value": "500",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/JetpackRaceWithStageConfigModel.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "JetpackRaceWithStageConfigModel.json: Stage3RewardModels[1].CurrencyType",
+      "type": "",
+      "value": "5",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/JetpackRaceWithStageConfigModel.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "JetpackRaceWithStageConfigModel.json: Stage3RewardModels[1].Amount",
+      "type": "",
+      "value": "1",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/JetpackRaceWithStageConfigModel.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "JetpackRaceWithStageConfigModel.json: Stage3RewardModels[2].CurrencyType",
+      "type": "",
+      "value": "4",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/JetpackRaceWithStageConfigModel.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "JetpackRaceWithStageConfigModel.json: Stage3RewardModels[2].Amount",
+      "type": "",
+      "value": "1",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/JetpackRaceWithStageConfigModel.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "JetpackRaceWithStageConfigModel.json: Stage3RewardModels[3].CurrencyType",
+      "type": "",
+      "value": "2",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/JetpackRaceWithStageConfigModel.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "JetpackRaceWithStageConfigModel.json: Stage3RewardModels[3].Amount",
+      "type": "",
+      "value": "0",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/JetpackRaceWithStageConfigModel.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "JetpackRaceWithStageConfigModel.json: Stage3RewardModels[3].timeSpan",
+      "type": "",
+      "value": "00:45:00",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/JetpackRaceWithStageConfigModel.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "JetpackRaceWithStageConfigModel.json: Stage1RewardModelsWithCollection[0].currencyType",
+      "type": "",
+      "value": "14",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/JetpackRaceWithStageConfigModel.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "JetpackRaceWithStageConfigModel.json: Stage1RewardModelsWithCollection[0].amount",
+      "type": "",
+      "value": "1",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/JetpackRaceWithStageConfigModel.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "JetpackRaceWithStageConfigModel.json: Stage1RewardModelsWithCollection[0].CollectionPackType",
+      "type": "",
+      "value": "1",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/JetpackRaceWithStageConfigModel.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "JetpackRaceWithStageConfigModel.json: Stage1RewardModelsWithCollection[1].CurrencyType",
+      "type": "",
+      "value": "1",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/JetpackRaceWithStageConfigModel.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "JetpackRaceWithStageConfigModel.json: Stage1RewardModelsWithCollection[1].Amount",
+      "type": "",
+      "value": "100",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/JetpackRaceWithStageConfigModel.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "JetpackRaceWithStageConfigModel.json: Stage1RewardModelsWithCollection[2].CurrencyType",
+      "type": "",
+      "value": "2",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/JetpackRaceWithStageConfigModel.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "JetpackRaceWithStageConfigModel.json: Stage1RewardModelsWithCollection[2].Amount",
+      "type": "",
+      "value": "0",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/JetpackRaceWithStageConfigModel.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "JetpackRaceWithStageConfigModel.json: Stage1RewardModelsWithCollection[2].timeSpan",
+      "type": "",
+      "value": "00:15:00",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/JetpackRaceWithStageConfigModel.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "JetpackRaceWithStageConfigModel.json: Stage2RewardModelsWithCollection[0].currencyType",
+      "type": "",
+      "value": "14",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/JetpackRaceWithStageConfigModel.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "JetpackRaceWithStageConfigModel.json: Stage2RewardModelsWithCollection[0].amount",
+      "type": "",
+      "value": "1",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/JetpackRaceWithStageConfigModel.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "JetpackRaceWithStageConfigModel.json: Stage2RewardModelsWithCollection[0].CollectionPackType",
+      "type": "",
+      "value": "2",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/JetpackRaceWithStageConfigModel.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "JetpackRaceWithStageConfigModel.json: Stage2RewardModelsWithCollection[1].CurrencyType",
+      "type": "",
+      "value": "1",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/JetpackRaceWithStageConfigModel.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "JetpackRaceWithStageConfigModel.json: Stage2RewardModelsWithCollection[1].Amount",
+      "type": "",
+      "value": "250",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/JetpackRaceWithStageConfigModel.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "JetpackRaceWithStageConfigModel.json: Stage2RewardModelsWithCollection[2].CurrencyType",
+      "type": "",
+      "value": "2",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/JetpackRaceWithStageConfigModel.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "JetpackRaceWithStageConfigModel.json: Stage2RewardModelsWithCollection[2].Amount",
+      "type": "",
+      "value": "0",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/JetpackRaceWithStageConfigModel.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "JetpackRaceWithStageConfigModel.json: Stage2RewardModelsWithCollection[2].timeSpan",
+      "type": "",
+      "value": "00:30:00",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/JetpackRaceWithStageConfigModel.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "JetpackRaceWithStageConfigModel.json: Stage3RewardModelsWithCollection[0].CurrencyType",
+      "type": "",
+      "value": "1",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/JetpackRaceWithStageConfigModel.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "JetpackRaceWithStageConfigModel.json: Stage3RewardModelsWithCollection[0].Amount",
+      "type": "",
+      "value": "500",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/JetpackRaceWithStageConfigModel.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "JetpackRaceWithStageConfigModel.json: Stage3RewardModelsWithCollection[1].CurrencyType",
+      "type": "",
+      "value": "5",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/JetpackRaceWithStageConfigModel.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "JetpackRaceWithStageConfigModel.json: Stage3RewardModelsWithCollection[1].Amount",
+      "type": "",
+      "value": "1",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/JetpackRaceWithStageConfigModel.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "JetpackRaceWithStageConfigModel.json: Stage3RewardModelsWithCollection[2].CurrencyType",
+      "type": "",
+      "value": "4",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/JetpackRaceWithStageConfigModel.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "JetpackRaceWithStageConfigModel.json: Stage3RewardModelsWithCollection[2].Amount",
+      "type": "",
+      "value": "1",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/JetpackRaceWithStageConfigModel.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "JetpackRaceWithStageConfigModel.json: Stage3RewardModelsWithCollection[3].CurrencyType",
+      "type": "",
+      "value": "2",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/JetpackRaceWithStageConfigModel.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "JetpackRaceWithStageConfigModel.json: Stage3RewardModelsWithCollection[3].Amount",
+      "type": "",
+      "value": "0",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/JetpackRaceWithStageConfigModel.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "json default",
+      "key": "JetpackRaceWithStageConfigModel.json: Stage3RewardModelsWithCollection[3].timeSpan",
+      "type": "",
+      "value": "00:45:00",
+      "meaning": "",
+      "where": "Resources/defaultconfigs/JetpackRaceWithStageConfigModel.json (client default, remote config ghi đè)"
+    },
+    {
+      "source": "server cache (historical)",
+      "key": "JetpackRaceWithStageConfigModel (live) = default?",
+      "type": "",
+      "value": "48/157 key trùng default, 109 key khác/thêm",
+      "meaning": "Đối chiếu config server thật (CachedRemoteConfigs) với JetpackRaceWithStageConfigModel.json",
+      "where": "Configs/CachedRemoteConfigs + Firebase RC template 3197 — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server cache (historical)",
+      "key": "JetpackRaceWithStageConfigModel: isEnabled",
+      "type": "",
+      "value": "true",
+      "meaning": "server ghi đè (default = false)",
+      "where": "Configs/CachedRemoteConfigs + Firebase RC template 3197 — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server cache (historical)",
+      "key": "JetpackRaceWithStageConfigModel: lastStageWinLimit",
+      "type": "",
+      "value": "25",
+      "meaning": "server ghi đè (default = 100)",
+      "where": "Configs/CachedRemoteConfigs + Firebase RC template 3197 — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server cache (historical)",
+      "key": "JetpackRaceWithStageConfigModel: closeDisabledInJoinPopup",
+      "type": "",
+      "value": "false",
+      "meaning": "server-only (không có trong default)",
+      "where": "Configs/CachedRemoteConfigs + Firebase RC template 3197 — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server cache (historical)",
+      "key": "JetpackRaceWithStageConfigModel: stage1RewardModels[0].timeSpan",
+      "type": "",
+      "value": "00:00:00",
+      "meaning": "server-only (không có trong default)",
+      "where": "Configs/CachedRemoteConfigs + Firebase RC template 3197 — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server cache (historical)",
+      "key": "JetpackRaceWithStageConfigModel: stage1RewardModels[0].chestType",
+      "type": "",
+      "value": "0",
+      "meaning": "server-only (không có trong default)",
+      "where": "Configs/CachedRemoteConfigs + Firebase RC template 3197 — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server cache (historical)",
+      "key": "JetpackRaceWithStageConfigModel: stage1RewardModels[0].collectionPackType",
+      "type": "",
+      "value": "0",
+      "meaning": "server-only (không có trong default)",
+      "where": "Configs/CachedRemoteConfigs + Firebase RC template 3197 — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server cache (historical)",
+      "key": "JetpackRaceWithStageConfigModel: stage1RewardModels[1].chestType",
+      "type": "",
+      "value": "0",
+      "meaning": "server-only (không có trong default)",
+      "where": "Configs/CachedRemoteConfigs + Firebase RC template 3197 — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server cache (historical)",
+      "key": "JetpackRaceWithStageConfigModel: stage1RewardModels[1].collectionPackType",
+      "type": "",
+      "value": "0",
+      "meaning": "server-only (không có trong default)",
+      "where": "Configs/CachedRemoteConfigs + Firebase RC template 3197 — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server cache (historical)",
+      "key": "JetpackRaceWithStageConfigModel: stage1RewardModels[1].primaryRewards[0].currencyType",
+      "type": "",
+      "value": "13",
+      "meaning": "server-only (không có trong default)",
+      "where": "Configs/CachedRemoteConfigs + Firebase RC template 3197 — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server cache (historical)",
+      "key": "JetpackRaceWithStageConfigModel: stage1RewardModels[1].primaryRewards[0].amount",
+      "type": "",
+      "value": "0",
+      "meaning": "server-only (không có trong default)",
+      "where": "Configs/CachedRemoteConfigs + Firebase RC template 3197 — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server cache (historical)",
+      "key": "JetpackRaceWithStageConfigModel: stage1RewardModels[1].primaryRewards[0].timeSpan",
+      "type": "",
+      "value": "00:00:00",
+      "meaning": "server-only (không có trong default)",
+      "where": "Configs/CachedRemoteConfigs + Firebase RC template 3197 — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server cache (historical)",
+      "key": "JetpackRaceWithStageConfigModel: stage1RewardModels[1].primaryRewards[0].rewards[0].currencyType",
+      "type": "",
+      "value": "2",
+      "meaning": "server-only (không có trong default)",
+      "where": "Configs/CachedRemoteConfigs + Firebase RC template 3197 — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server cache (historical)",
+      "key": "JetpackRaceWithStageConfigModel: stage1RewardModels[1].primaryRewards[0].rewards[0].amount",
+      "type": "",
+      "value": "0",
+      "meaning": "server-only (không có trong default)",
+      "where": "Configs/CachedRemoteConfigs + Firebase RC template 3197 — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server cache (historical)",
+      "key": "JetpackRaceWithStageConfigModel: stage1RewardModels[1].primaryRewards[0].rewards[0].timeSpan",
+      "type": "",
+      "value": "00:15:00",
+      "meaning": "server-only (không có trong default)",
+      "where": "Configs/CachedRemoteConfigs + Firebase RC template 3197 — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server cache (historical)",
+      "key": "JetpackRaceWithStageConfigModel: stage1RewardModels[1].primaryRewards[0].rewards[0].chestType",
+      "type": "",
+      "value": "0",
+      "meaning": "server-only (không có trong default)",
+      "where": "Configs/CachedRemoteConfigs + Firebase RC template 3197 — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server cache (historical)",
+      "key": "JetpackRaceWithStageConfigModel: stage1RewardModels[1].primaryRewards[0].rewards[0].collectionPackType",
+      "type": "",
+      "value": "0",
+      "meaning": "server-only (không có trong default)",
+      "where": "Configs/CachedRemoteConfigs + Firebase RC template 3197 — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server cache (historical)",
+      "key": "JetpackRaceWithStageConfigModel: stage1RewardModels[1].primaryRewards[0].rewards[1].currencyType",
+      "type": "",
+      "value": "21",
+      "meaning": "server-only (không có trong default)",
+      "where": "Configs/CachedRemoteConfigs + Firebase RC template 3197 — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server cache (historical)",
+      "key": "JetpackRaceWithStageConfigModel: stage1RewardModels[1].primaryRewards[0].rewards[1].amount",
+      "type": "",
+      "value": "15",
+      "meaning": "server-only (không có trong default)",
+      "where": "Configs/CachedRemoteConfigs + Firebase RC template 3197 — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server cache (historical)",
+      "key": "JetpackRaceWithStageConfigModel: stage1RewardModels[1].primaryRewards[0].rewards[1].timeSpan",
+      "type": "",
+      "value": "00:00:00",
+      "meaning": "server-only (không có trong default)",
+      "where": "Configs/CachedRemoteConfigs + Firebase RC template 3197 — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server cache (historical)",
+      "key": "JetpackRaceWithStageConfigModel: stage1RewardModels[1].primaryRewards[0].rewards[1].chestType",
+      "type": "",
+      "value": "0",
+      "meaning": "server-only (không có trong default)",
+      "where": "Configs/CachedRemoteConfigs + Firebase RC template 3197 — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server cache (historical)",
+      "key": "JetpackRaceWithStageConfigModel: stage1RewardModels[1].primaryRewards[0].rewards[1].collectionPackType",
+      "type": "",
+      "value": "0",
+      "meaning": "server-only (không có trong default)",
+      "where": "Configs/CachedRemoteConfigs + Firebase RC template 3197 — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server cache (historical)",
+      "key": "JetpackRaceWithStageConfigModel: stage1RewardModels[1].primaryRewards[0].chestType",
+      "type": "",
+      "value": "0",
+      "meaning": "server-only (không có trong default)",
+      "where": "Configs/CachedRemoteConfigs + Firebase RC template 3197 — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server cache (historical)",
+      "key": "JetpackRaceWithStageConfigModel: stage1RewardModels[1].primaryRewards[0].collectionPackType",
+      "type": "",
+      "value": "0",
+      "meaning": "server-only (không có trong default)",
+      "where": "Configs/CachedRemoteConfigs + Firebase RC template 3197 — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server cache (historical)",
+      "key": "JetpackRaceWithStageConfigModel: stage2RewardModels[0].timeSpan",
+      "type": "",
+      "value": "00:00:00",
+      "meaning": "server-only (không có trong default)",
+      "where": "Configs/CachedRemoteConfigs + Firebase RC template 3197 — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server cache (historical)",
+      "key": "JetpackRaceWithStageConfigModel: stage2RewardModels[0].chestType",
+      "type": "",
+      "value": "0",
+      "meaning": "server-only (không có trong default)",
+      "where": "Configs/CachedRemoteConfigs + Firebase RC template 3197 — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server cache (historical)",
+      "key": "JetpackRaceWithStageConfigModel: stage2RewardModels[0].collectionPackType",
+      "type": "",
+      "value": "0",
+      "meaning": "server-only (không có trong default)",
+      "where": "Configs/CachedRemoteConfigs + Firebase RC template 3197 — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server cache (historical)",
+      "key": "JetpackRaceWithStageConfigModel: stage2RewardModels[1].chestType",
+      "type": "",
+      "value": "0",
+      "meaning": "server-only (không có trong default)",
+      "where": "Configs/CachedRemoteConfigs + Firebase RC template 3197 — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server cache (historical)",
+      "key": "JetpackRaceWithStageConfigModel: stage2RewardModels[1].collectionPackType",
+      "type": "",
+      "value": "0",
+      "meaning": "server-only (không có trong default)",
+      "where": "Configs/CachedRemoteConfigs + Firebase RC template 3197 — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server cache (historical)",
+      "key": "JetpackRaceWithStageConfigModel: stage2RewardModels[1].primaryRewards[0].currencyType",
+      "type": "",
+      "value": "13",
+      "meaning": "server-only (không có trong default)",
+      "where": "Configs/CachedRemoteConfigs + Firebase RC template 3197 — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server cache (historical)",
+      "key": "JetpackRaceWithStageConfigModel: stage2RewardModels[1].primaryRewards[0].amount",
+      "type": "",
+      "value": "0",
+      "meaning": "server-only (không có trong default)",
+      "where": "Configs/CachedRemoteConfigs + Firebase RC template 3197 — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server cache (historical)",
+      "key": "JetpackRaceWithStageConfigModel: stage2RewardModels[1].primaryRewards[0].timeSpan",
+      "type": "",
+      "value": "00:00:00",
+      "meaning": "server-only (không có trong default)",
+      "where": "Configs/CachedRemoteConfigs + Firebase RC template 3197 — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server cache (historical)",
+      "key": "JetpackRaceWithStageConfigModel: stage2RewardModels[1].primaryRewards[0].rewards[0].currencyType",
+      "type": "",
+      "value": "2",
+      "meaning": "server-only (không có trong default)",
+      "where": "Configs/CachedRemoteConfigs + Firebase RC template 3197 — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server cache (historical)",
+      "key": "JetpackRaceWithStageConfigModel: stage2RewardModels[1].primaryRewards[0].rewards[0].amount",
+      "type": "",
+      "value": "0",
+      "meaning": "server-only (không có trong default)",
+      "where": "Configs/CachedRemoteConfigs + Firebase RC template 3197 — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server cache (historical)",
+      "key": "JetpackRaceWithStageConfigModel: stage2RewardModels[1].primaryRewards[0].rewards[0].timeSpan",
+      "type": "",
+      "value": "00:30:00",
+      "meaning": "server-only (không có trong default)",
+      "where": "Configs/CachedRemoteConfigs + Firebase RC template 3197 — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server cache (historical)",
+      "key": "JetpackRaceWithStageConfigModel: stage2RewardModels[1].primaryRewards[0].rewards[0].chestType",
+      "type": "",
+      "value": "0",
+      "meaning": "server-only (không có trong default)",
+      "where": "Configs/CachedRemoteConfigs + Firebase RC template 3197 — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server cache (historical)",
+      "key": "JetpackRaceWithStageConfigModel: stage2RewardModels[1].primaryRewards[0].rewards[0].collectionPackType",
+      "type": "",
+      "value": "0",
+      "meaning": "server-only (không có trong default)",
+      "where": "Configs/CachedRemoteConfigs + Firebase RC template 3197 — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server cache (historical)",
+      "key": "JetpackRaceWithStageConfigModel: stage2RewardModels[1].primaryRewards[0].rewards[1].currencyType",
+      "type": "",
+      "value": "21",
+      "meaning": "server-only (không có trong default)",
+      "where": "Configs/CachedRemoteConfigs + Firebase RC template 3197 — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server cache (historical)",
+      "key": "JetpackRaceWithStageConfigModel: stage2RewardModels[1].primaryRewards[0].rewards[1].amount",
+      "type": "",
+      "value": "30",
+      "meaning": "server-only (không có trong default)",
+      "where": "Configs/CachedRemoteConfigs + Firebase RC template 3197 — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server cache (historical)",
+      "key": "JetpackRaceWithStageConfigModel: stage2RewardModels[1].primaryRewards[0].rewards[1].timeSpan",
+      "type": "",
+      "value": "00:00:00",
+      "meaning": "server-only (không có trong default)",
+      "where": "Configs/CachedRemoteConfigs + Firebase RC template 3197 — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server cache (historical)",
+      "key": "JetpackRaceWithStageConfigModel: stage2RewardModels[1].primaryRewards[0].rewards[1].chestType",
+      "type": "",
+      "value": "0",
+      "meaning": "server-only (không có trong default)",
+      "where": "Configs/CachedRemoteConfigs + Firebase RC template 3197 — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server cache (historical)",
+      "key": "JetpackRaceWithStageConfigModel: stage2RewardModels[1].primaryRewards[0].rewards[1].collectionPackType",
+      "type": "",
+      "value": "0",
+      "meaning": "server-only (không có trong default)",
+      "where": "Configs/CachedRemoteConfigs + Firebase RC template 3197 — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server cache (historical)",
+      "key": "JetpackRaceWithStageConfigModel: stage2RewardModels[1].primaryRewards[0].chestType",
+      "type": "",
+      "value": "0",
+      "meaning": "server-only (không có trong default)",
+      "where": "Configs/CachedRemoteConfigs + Firebase RC template 3197 — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server cache (historical)",
+      "key": "JetpackRaceWithStageConfigModel: stage2RewardModels[1].primaryRewards[0].collectionPackType",
+      "type": "",
+      "value": "0",
+      "meaning": "server-only (không có trong default)",
+      "where": "Configs/CachedRemoteConfigs + Firebase RC template 3197 — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server cache (historical)",
+      "key": "JetpackRaceWithStageConfigModel: stage3RewardModels[0].timeSpan",
+      "type": "",
+      "value": "00:00:00",
+      "meaning": "server-only (không có trong default)",
+      "where": "Configs/CachedRemoteConfigs + Firebase RC template 3197 — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server cache (historical)",
+      "key": "JetpackRaceWithStageConfigModel: stage3RewardModels[0].chestType",
+      "type": "",
+      "value": "0",
+      "meaning": "server-only (không có trong default)",
+      "where": "Configs/CachedRemoteConfigs + Firebase RC template 3197 — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server cache (historical)",
+      "key": "JetpackRaceWithStageConfigModel: stage3RewardModels[0].collectionPackType",
+      "type": "",
+      "value": "0",
+      "meaning": "server-only (không có trong default)",
+      "where": "Configs/CachedRemoteConfigs + Firebase RC template 3197 — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server cache (historical)",
+      "key": "JetpackRaceWithStageConfigModel: stage3RewardModels[1].timeSpan",
+      "type": "",
+      "value": "00:00:00",
+      "meaning": "server-only (không có trong default)",
+      "where": "Configs/CachedRemoteConfigs + Firebase RC template 3197 — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server cache (historical)",
+      "key": "JetpackRaceWithStageConfigModel: stage3RewardModels[1].chestType",
+      "type": "",
+      "value": "0",
+      "meaning": "server-only (không có trong default)",
+      "where": "Configs/CachedRemoteConfigs + Firebase RC template 3197 — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server cache (historical)",
+      "key": "JetpackRaceWithStageConfigModel: stage3RewardModels[1].collectionPackType",
+      "type": "",
+      "value": "0",
+      "meaning": "server-only (không có trong default)",
+      "where": "Configs/CachedRemoteConfigs + Firebase RC template 3197 — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server cache (historical)",
+      "key": "JetpackRaceWithStageConfigModel: stage3RewardModels[2].timeSpan",
+      "type": "",
+      "value": "00:00:00",
+      "meaning": "server-only (không có trong default)",
+      "where": "Configs/CachedRemoteConfigs + Firebase RC template 3197 — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server cache (historical)",
+      "key": "JetpackRaceWithStageConfigModel: stage3RewardModels[2].chestType",
+      "type": "",
+      "value": "0",
+      "meaning": "server-only (không có trong default)",
+      "where": "Configs/CachedRemoteConfigs + Firebase RC template 3197 — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server cache (historical)",
+      "key": "JetpackRaceWithStageConfigModel: stage3RewardModels[2].collectionPackType",
+      "type": "",
+      "value": "0",
+      "meaning": "server-only (không có trong default)",
+      "where": "Configs/CachedRemoteConfigs + Firebase RC template 3197 — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server cache (historical)",
+      "key": "JetpackRaceWithStageConfigModel: stage3RewardModels[3].chestType",
+      "type": "",
+      "value": "0",
+      "meaning": "server-only (không có trong default)",
+      "where": "Configs/CachedRemoteConfigs + Firebase RC template 3197 — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server cache (historical)",
+      "key": "JetpackRaceWithStageConfigModel: stage3RewardModels[3].collectionPackType",
+      "type": "",
+      "value": "0",
+      "meaning": "server-only (không có trong default)",
+      "where": "Configs/CachedRemoteConfigs + Firebase RC template 3197 — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server cache (historical)",
+      "key": "JetpackRaceWithStageConfigModel: stage1RewardModelsWithCollection[0].timeSpan",
+      "type": "",
+      "value": "00:00:00",
+      "meaning": "server-only (không có trong default)",
+      "where": "Configs/CachedRemoteConfigs + Firebase RC template 3197 — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server cache (historical)",
+      "key": "JetpackRaceWithStageConfigModel: stage1RewardModelsWithCollection[0].chestType",
+      "type": "",
+      "value": "0",
+      "meaning": "server-only (không có trong default)",
+      "where": "Configs/CachedRemoteConfigs + Firebase RC template 3197 — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server cache (historical)",
+      "key": "JetpackRaceWithStageConfigModel: stage1RewardModelsWithCollection[1].timeSpan",
+      "type": "",
+      "value": "00:00:00",
+      "meaning": "server-only (không có trong default)",
+      "where": "Configs/CachedRemoteConfigs + Firebase RC template 3197 — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server cache (historical)",
+      "key": "JetpackRaceWithStageConfigModel: stage1RewardModelsWithCollection[1].chestType",
+      "type": "",
+      "value": "0",
+      "meaning": "server-only (không có trong default)",
+      "where": "Configs/CachedRemoteConfigs + Firebase RC template 3197 — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server cache (historical)",
+      "key": "JetpackRaceWithStageConfigModel: stage1RewardModelsWithCollection[1].collectionPackType",
+      "type": "",
+      "value": "0",
+      "meaning": "server-only (không có trong default)",
+      "where": "Configs/CachedRemoteConfigs + Firebase RC template 3197 — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server cache (historical)",
+      "key": "JetpackRaceWithStageConfigModel: stage1RewardModelsWithCollection[2].chestType",
+      "type": "",
+      "value": "0",
+      "meaning": "server-only (không có trong default)",
+      "where": "Configs/CachedRemoteConfigs + Firebase RC template 3197 — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server cache (historical)",
+      "key": "JetpackRaceWithStageConfigModel: stage1RewardModelsWithCollection[2].collectionPackType",
+      "type": "",
+      "value": "0",
+      "meaning": "server-only (không có trong default)",
+      "where": "Configs/CachedRemoteConfigs + Firebase RC template 3197 — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server cache (historical)",
+      "key": "JetpackRaceWithStageConfigModel: stage1RewardModelsWithCollection[2].primaryRewards[0].currencyType",
+      "type": "",
+      "value": "13",
+      "meaning": "server-only (không có trong default)",
+      "where": "Configs/CachedRemoteConfigs + Firebase RC template 3197 — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server cache (historical)",
+      "key": "JetpackRaceWithStageConfigModel: stage1RewardModelsWithCollection[2].primaryRewards[0].amount",
+      "type": "",
+      "value": "0",
+      "meaning": "server-only (không có trong default)",
+      "where": "Configs/CachedRemoteConfigs + Firebase RC template 3197 — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server cache (historical)",
+      "key": "JetpackRaceWithStageConfigModel: stage1RewardModelsWithCollection[2].primaryRewards[0].timeSpan",
+      "type": "",
+      "value": "00:00:00",
+      "meaning": "server-only (không có trong default)",
+      "where": "Configs/CachedRemoteConfigs + Firebase RC template 3197 — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server cache (historical)",
+      "key": "JetpackRaceWithStageConfigModel: stage1RewardModelsWithCollection[2].primaryRewards[0].rewards[0].currencyType",
+      "type": "",
+      "value": "2",
+      "meaning": "server-only (không có trong default)",
+      "where": "Configs/CachedRemoteConfigs + Firebase RC template 3197 — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server cache (historical)",
+      "key": "JetpackRaceWithStageConfigModel: stage1RewardModelsWithCollection[2].primaryRewards[0].rewards[0].amount",
+      "type": "",
+      "value": "0",
+      "meaning": "server-only (không có trong default)",
+      "where": "Configs/CachedRemoteConfigs + Firebase RC template 3197 — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server cache (historical)",
+      "key": "JetpackRaceWithStageConfigModel: stage1RewardModelsWithCollection[2].primaryRewards[0].rewards[0].timeSpan",
+      "type": "",
+      "value": "00:15:00",
+      "meaning": "server-only (không có trong default)",
+      "where": "Configs/CachedRemoteConfigs + Firebase RC template 3197 — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server cache (historical)",
+      "key": "JetpackRaceWithStageConfigModel: stage1RewardModelsWithCollection[2].primaryRewards[0].rewards[0].chestType",
+      "type": "",
+      "value": "0",
+      "meaning": "server-only (không có trong default)",
+      "where": "Configs/CachedRemoteConfigs + Firebase RC template 3197 — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server cache (historical)",
+      "key": "JetpackRaceWithStageConfigModel: stage1RewardModelsWithCollection[2].primaryRewards[0].rewards[0].collectionPackType",
+      "type": "",
+      "value": "0",
+      "meaning": "server-only (không có trong default)",
+      "where": "Configs/CachedRemoteConfigs + Firebase RC template 3197 — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server cache (historical)",
+      "key": "JetpackRaceWithStageConfigModel: stage1RewardModelsWithCollection[2].primaryRewards[0].rewards[1].currencyType",
+      "type": "",
+      "value": "21",
+      "meaning": "server-only (không có trong default)",
+      "where": "Configs/CachedRemoteConfigs + Firebase RC template 3197 — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server cache (historical)",
+      "key": "JetpackRaceWithStageConfigModel: stage1RewardModelsWithCollection[2].primaryRewards[0].rewards[1].amount",
+      "type": "",
+      "value": "15",
+      "meaning": "server-only (không có trong default)",
+      "where": "Configs/CachedRemoteConfigs + Firebase RC template 3197 — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server cache (historical)",
+      "key": "JetpackRaceWithStageConfigModel: stage1RewardModelsWithCollection[2].primaryRewards[0].rewards[1].timeSpan",
+      "type": "",
+      "value": "00:00:00",
+      "meaning": "server-only (không có trong default)",
+      "where": "Configs/CachedRemoteConfigs + Firebase RC template 3197 — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server cache (historical)",
+      "key": "JetpackRaceWithStageConfigModel: stage1RewardModelsWithCollection[2].primaryRewards[0].rewards[1].chestType",
+      "type": "",
+      "value": "0",
+      "meaning": "server-only (không có trong default)",
+      "where": "Configs/CachedRemoteConfigs + Firebase RC template 3197 — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server cache (historical)",
+      "key": "JetpackRaceWithStageConfigModel: stage1RewardModelsWithCollection[2].primaryRewards[0].rewards[1].collectionPackType",
+      "type": "",
+      "value": "0",
+      "meaning": "server-only (không có trong default)",
+      "where": "Configs/CachedRemoteConfigs + Firebase RC template 3197 — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server cache (historical)",
+      "key": "JetpackRaceWithStageConfigModel: stage1RewardModelsWithCollection[2].primaryRewards[0].chestType",
+      "type": "",
+      "value": "0",
+      "meaning": "server-only (không có trong default)",
+      "where": "Configs/CachedRemoteConfigs + Firebase RC template 3197 — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server cache (historical)",
+      "key": "JetpackRaceWithStageConfigModel: stage1RewardModelsWithCollection[2].primaryRewards[0].collectionPackType",
+      "type": "",
+      "value": "0",
+      "meaning": "server-only (không có trong default)",
+      "where": "Configs/CachedRemoteConfigs + Firebase RC template 3197 — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server cache (historical)",
+      "key": "JetpackRaceWithStageConfigModel: stage2RewardModelsWithCollection[0].timeSpan",
+      "type": "",
+      "value": "00:00:00",
+      "meaning": "server-only (không có trong default)",
+      "where": "Configs/CachedRemoteConfigs + Firebase RC template 3197 — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server cache (historical)",
+      "key": "JetpackRaceWithStageConfigModel: stage2RewardModelsWithCollection[0].chestType",
+      "type": "",
+      "value": "0",
+      "meaning": "server-only (không có trong default)",
+      "where": "Configs/CachedRemoteConfigs + Firebase RC template 3197 — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server cache (historical)",
+      "key": "JetpackRaceWithStageConfigModel: stage2RewardModelsWithCollection[1].timeSpan",
+      "type": "",
+      "value": "00:00:00",
+      "meaning": "server-only (không có trong default)",
+      "where": "Configs/CachedRemoteConfigs + Firebase RC template 3197 — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server cache (historical)",
+      "key": "JetpackRaceWithStageConfigModel: stage2RewardModelsWithCollection[1].chestType",
+      "type": "",
+      "value": "0",
+      "meaning": "server-only (không có trong default)",
+      "where": "Configs/CachedRemoteConfigs + Firebase RC template 3197 — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server cache (historical)",
+      "key": "JetpackRaceWithStageConfigModel: stage2RewardModelsWithCollection[1].collectionPackType",
+      "type": "",
+      "value": "0",
+      "meaning": "server-only (không có trong default)",
+      "where": "Configs/CachedRemoteConfigs + Firebase RC template 3197 — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server cache (historical)",
+      "key": "JetpackRaceWithStageConfigModel: stage2RewardModelsWithCollection[2].chestType",
+      "type": "",
+      "value": "0",
+      "meaning": "server-only (không có trong default)",
+      "where": "Configs/CachedRemoteConfigs + Firebase RC template 3197 — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server cache (historical)",
+      "key": "JetpackRaceWithStageConfigModel: stage2RewardModelsWithCollection[2].collectionPackType",
+      "type": "",
+      "value": "0",
+      "meaning": "server-only (không có trong default)",
+      "where": "Configs/CachedRemoteConfigs + Firebase RC template 3197 — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server cache (historical)",
+      "key": "JetpackRaceWithStageConfigModel: stage2RewardModelsWithCollection[2].primaryRewards[0].currencyType",
+      "type": "",
+      "value": "13",
+      "meaning": "server-only (không có trong default)",
+      "where": "Configs/CachedRemoteConfigs + Firebase RC template 3197 — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server cache (historical)",
+      "key": "JetpackRaceWithStageConfigModel: stage2RewardModelsWithCollection[2].primaryRewards[0].amount",
+      "type": "",
+      "value": "0",
+      "meaning": "server-only (không có trong default)",
+      "where": "Configs/CachedRemoteConfigs + Firebase RC template 3197 — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server cache (historical)",
+      "key": "JetpackRaceWithStageConfigModel: stage2RewardModelsWithCollection[2].primaryRewards[0].timeSpan",
+      "type": "",
+      "value": "00:00:00",
+      "meaning": "server-only (không có trong default)",
+      "where": "Configs/CachedRemoteConfigs + Firebase RC template 3197 — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server cache (historical)",
+      "key": "JetpackRaceWithStageConfigModel: stage2RewardModelsWithCollection[2].primaryRewards[0].rewards[0].currencyType",
+      "type": "",
+      "value": "2",
+      "meaning": "server-only (không có trong default)",
+      "where": "Configs/CachedRemoteConfigs + Firebase RC template 3197 — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server cache (historical)",
+      "key": "JetpackRaceWithStageConfigModel: stage2RewardModelsWithCollection[2].primaryRewards[0].rewards[0].amount",
+      "type": "",
+      "value": "0",
+      "meaning": "server-only (không có trong default)",
+      "where": "Configs/CachedRemoteConfigs + Firebase RC template 3197 — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server cache (historical)",
+      "key": "JetpackRaceWithStageConfigModel: stage2RewardModelsWithCollection[2].primaryRewards[0].rewards[0].timeSpan",
+      "type": "",
+      "value": "00:30:00",
+      "meaning": "server-only (không có trong default)",
+      "where": "Configs/CachedRemoteConfigs + Firebase RC template 3197 — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server cache (historical)",
+      "key": "JetpackRaceWithStageConfigModel: stage2RewardModelsWithCollection[2].primaryRewards[0].rewards[0].chestType",
+      "type": "",
+      "value": "0",
+      "meaning": "server-only (không có trong default)",
+      "where": "Configs/CachedRemoteConfigs + Firebase RC template 3197 — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server cache (historical)",
+      "key": "JetpackRaceWithStageConfigModel: stage2RewardModelsWithCollection[2].primaryRewards[0].rewards[0].collectionPackType",
+      "type": "",
+      "value": "0",
+      "meaning": "server-only (không có trong default)",
+      "where": "Configs/CachedRemoteConfigs + Firebase RC template 3197 — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server cache (historical)",
+      "key": "JetpackRaceWithStageConfigModel: stage2RewardModelsWithCollection[2].primaryRewards[0].rewards[1].currencyType",
+      "type": "",
+      "value": "21",
+      "meaning": "server-only (không có trong default)",
+      "where": "Configs/CachedRemoteConfigs + Firebase RC template 3197 — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server cache (historical)",
+      "key": "JetpackRaceWithStageConfigModel: stage2RewardModelsWithCollection[2].primaryRewards[0].rewards[1].amount",
+      "type": "",
+      "value": "30",
+      "meaning": "server-only (không có trong default)",
+      "where": "Configs/CachedRemoteConfigs + Firebase RC template 3197 — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server cache (historical)",
+      "key": "JetpackRaceWithStageConfigModel: stage2RewardModelsWithCollection[2].primaryRewards[0].rewards[1].timeSpan",
+      "type": "",
+      "value": "00:00:00",
+      "meaning": "server-only (không có trong default)",
+      "where": "Configs/CachedRemoteConfigs + Firebase RC template 3197 — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server cache (historical)",
+      "key": "JetpackRaceWithStageConfigModel: stage2RewardModelsWithCollection[2].primaryRewards[0].rewards[1].chestType",
+      "type": "",
+      "value": "0",
+      "meaning": "server-only (không có trong default)",
+      "where": "Configs/CachedRemoteConfigs + Firebase RC template 3197 — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server cache (historical)",
+      "key": "JetpackRaceWithStageConfigModel: stage2RewardModelsWithCollection[2].primaryRewards[0].rewards[1].collectionPackType",
+      "type": "",
+      "value": "0",
+      "meaning": "server-only (không có trong default)",
+      "where": "Configs/CachedRemoteConfigs + Firebase RC template 3197 — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server cache (historical)",
+      "key": "JetpackRaceWithStageConfigModel: stage2RewardModelsWithCollection[2].primaryRewards[0].chestType",
+      "type": "",
+      "value": "0",
+      "meaning": "server-only (không có trong default)",
+      "where": "Configs/CachedRemoteConfigs + Firebase RC template 3197 — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server cache (historical)",
+      "key": "JetpackRaceWithStageConfigModel: stage2RewardModelsWithCollection[2].primaryRewards[0].collectionPackType",
+      "type": "",
+      "value": "0",
+      "meaning": "server-only (không có trong default)",
+      "where": "Configs/CachedRemoteConfigs + Firebase RC template 3197 — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server cache (historical)",
+      "key": "JetpackRaceWithStageConfigModel: stage3RewardModelsWithCollection[0].timeSpan",
+      "type": "",
+      "value": "00:00:00",
+      "meaning": "server-only (không có trong default)",
+      "where": "Configs/CachedRemoteConfigs + Firebase RC template 3197 — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server cache (historical)",
+      "key": "JetpackRaceWithStageConfigModel: stage3RewardModelsWithCollection[0].chestType",
+      "type": "",
+      "value": "0",
+      "meaning": "server-only (không có trong default)",
+      "where": "Configs/CachedRemoteConfigs + Firebase RC template 3197 — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server cache (historical)",
+      "key": "JetpackRaceWithStageConfigModel: stage3RewardModelsWithCollection[0].collectionPackType",
+      "type": "",
+      "value": "0",
+      "meaning": "server-only (không có trong default)",
+      "where": "Configs/CachedRemoteConfigs + Firebase RC template 3197 — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server cache (historical)",
+      "key": "JetpackRaceWithStageConfigModel: stage3RewardModelsWithCollection[1].timeSpan",
+      "type": "",
+      "value": "00:00:00",
+      "meaning": "server-only (không có trong default)",
+      "where": "Configs/CachedRemoteConfigs + Firebase RC template 3197 — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server cache (historical)",
+      "key": "JetpackRaceWithStageConfigModel: stage3RewardModelsWithCollection[1].chestType",
+      "type": "",
+      "value": "0",
+      "meaning": "server-only (không có trong default)",
+      "where": "Configs/CachedRemoteConfigs + Firebase RC template 3197 — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server cache (historical)",
+      "key": "JetpackRaceWithStageConfigModel: stage3RewardModelsWithCollection[1].collectionPackType",
+      "type": "",
+      "value": "0",
+      "meaning": "server-only (không có trong default)",
+      "where": "Configs/CachedRemoteConfigs + Firebase RC template 3197 — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server cache (historical)",
+      "key": "JetpackRaceWithStageConfigModel: stage3RewardModelsWithCollection[2].timeSpan",
+      "type": "",
+      "value": "00:00:00",
+      "meaning": "server-only (không có trong default)",
+      "where": "Configs/CachedRemoteConfigs + Firebase RC template 3197 — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server cache (historical)",
+      "key": "JetpackRaceWithStageConfigModel: stage3RewardModelsWithCollection[2].chestType",
+      "type": "",
+      "value": "0",
+      "meaning": "server-only (không có trong default)",
+      "where": "Configs/CachedRemoteConfigs + Firebase RC template 3197 — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server cache (historical)",
+      "key": "JetpackRaceWithStageConfigModel: stage3RewardModelsWithCollection[2].collectionPackType",
+      "type": "",
+      "value": "0",
+      "meaning": "server-only (không có trong default)",
+      "where": "Configs/CachedRemoteConfigs + Firebase RC template 3197 — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server cache (historical)",
+      "key": "JetpackRaceWithStageConfigModel: stage3RewardModelsWithCollection[3].chestType",
+      "type": "",
+      "value": "0",
+      "meaning": "server-only (không có trong default)",
+      "where": "Configs/CachedRemoteConfigs + Firebase RC template 3197 — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server cache (historical)",
+      "key": "JetpackRaceWithStageConfigModel: stage3RewardModelsWithCollection[3].collectionPackType",
+      "type": "",
+      "value": "0",
+      "meaning": "server-only (không có trong default)",
+      "where": "Configs/CachedRemoteConfigs + Firebase RC template 3197 — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server instance (historical)",
+      "key": "JetpackRaceWithStageModel (instance)",
+      "type": "",
+      "value": "7 key, xem facts/runtime/event_instances/JetpackRaceWithStageModel.json",
+      "meaning": "Dữ liệu phiên event đang chạy (ngày, mốc, thưởng, đối thủ)",
+      "where": "PlayerPrefs JetpackRaceWithStageModel (instance event đang chạy) — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server instance (historical)",
+      "key": "JetpackRaceWithStageModel: winRecord",
+      "type": "",
+      "value": "0",
+      "meaning": "",
+      "where": "PlayerPrefs JetpackRaceWithStageModel (instance event đang chạy) — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server instance (historical)",
+      "key": "JetpackRaceWithStageModel: lastStageClaimCount",
+      "type": "",
+      "value": "0",
+      "meaning": "",
+      "where": "PlayerPrefs JetpackRaceWithStageModel (instance event đang chạy) — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server instance (historical)",
+      "key": "JetpackRaceWithStageModel: hasUsedLimitlessLife",
+      "type": "",
+      "value": "false",
+      "meaning": "",
+      "where": "PlayerPrefs JetpackRaceWithStageModel (instance event đang chạy) — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server instance (historical)",
+      "key": "JetpackRaceWithStageModel: isEventIntroducedEverInLifeTime",
+      "type": "",
+      "value": "false",
+      "meaning": "",
+      "where": "PlayerPrefs JetpackRaceWithStageModel (instance event đang chạy) — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server instance (historical)",
+      "key": "JetpackRaceWithStageModel: isStreakDisabledTutorialShowedEverInLifeTime",
+      "type": "",
+      "value": "false",
+      "meaning": "",
+      "where": "PlayerPrefs JetpackRaceWithStageModel (instance event đang chạy) — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server instance (historical)",
+      "key": "JetpackRaceWithStageModel: isJoinPopupIntroduced",
+      "type": "",
+      "value": "false",
+      "meaning": "",
+      "where": "PlayerPrefs JetpackRaceWithStageModel (instance event đang chạy) — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "server instance (historical)",
+      "key": "JetpackRaceWithStageModel: nextRaceFinishTime",
+      "type": "",
+      "value": "0",
+      "meaning": "",
+      "where": "PlayerPrefs JetpackRaceWithStageModel (instance event đang chạy) — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    }
+  ],
+  "rewards": [
+    {
+      "context": "Về đích chặng 1",
+      "reward": "100 Coin + Unlimited Life 15 phút (bản Collection thêm 1 CollectionPack loại 1)",
+      "evidence": "JetpackRaceWithStageConfigModel.json Stage1RewardModels"
+    },
+    {
+      "context": "Về đích chặng 2",
+      "reward": "250 Coin + Unlimited Life 30 phút (bản Collection thêm 1 CollectionPack loại 2)",
+      "evidence": "JetpackRaceWithStageConfigModel.json Stage2RewardModels"
+    },
+    {
+      "context": "Về đích chặng 3",
+      "reward": "500 Coin + 1 Shuffle + 1 Undo + Unlimited Life 45 phút",
+      "evidence": "JetpackRaceWithStageConfigModel.json Stage3RewardModels"
+    },
+    {
+      "context": "Đạt trần LastStageWinLimit",
+      "reward": "Không còn thưởng, sự kiện khoá (state LastStageWinLimitReached)",
+      "evidence": "JetpackRaceWithStageService.CheckLastStageWinLimitExceeded"
+    }
+  ],
+  "backend": [
+    {
+      "command": "jetpackRaceWithStageGetUrl = {base}/v1/get-jetpack-leaderboard",
+      "direction": "client→server",
+      "purpose": "Lấy bảng đua, chặng và mốc đích"
+    },
+    {
+      "command": "jetpackRaceWithStageSetUrl = {base}/v1/set-jetpack-points",
+      "direction": "client→server",
+      "purpose": "Đẩy điểm"
+    },
+    {
+      "command": "jetpackRaceWithStageJoinUrl = {base}/v1/join-jetpack-leaderboard",
+      "direction": "client→server",
+      "purpose": "Tham gia (trả JoinResult)"
+    },
+    {
+      "command": "jetpackRaceWithStageClaimUrl = {base}/v1/claim-jetpack-leaderboard",
+      "direction": "client→server",
+      "purpose": "Nhận thưởng chặng"
+    },
+    {
+      "command": "jetpackRaceWithStageGetNextRaceFinishTimeUrl = {base}/v1/get-jetpack-endtime",
+      "direction": "client→server",
+      "purpose": "Lấy thời điểm kết thúc cuộc đua kế"
+    },
+    {
+      "command": "Sync JetpackRaceWithStageModel",
+      "direction": "client↔server",
+      "purpose": "Đồng bộ chuỗi, chặng, LastStageClaimCount"
+    }
+  ],
+  "ui": [
+    {
+      "element": "Popup đua",
+      "class": "Modules.Contexts.Home.JetpackRaceWithStage.Scripts.UI.JetpackRaceWithStagePopUp",
+      "purpose": "Đường đua theo chặng"
+    },
+    {
+      "element": "ViewModel",
+      "class": "JetpackRaceWithStageLeaderboardPlayerViewModel",
+      "purpose": "Một người đua"
+    },
+    {
+      "element": "Banner lobby",
+      "class": "JetpackRaceWithStage banner (ShouldShowJetpackRaceWithStageBanner)",
+      "purpose": "Nhắc tiến độ"
+    },
+    {
+      "element": "Popup Join",
+      "class": "JetpackRaceWithStage Join popup (CanCloseJoinPopup)",
+      "purpose": "Mời/ép tham gia"
+    },
+    {
+      "element": "Popup StreakDisabled",
+      "class": "JetpackRaceWithStage StreakDisabled popup",
+      "purpose": "Giải thích chế độ không mất chuỗi"
+    },
+    {
+      "element": "Are You Sure",
+      "class": "JetpackRaceWithStage AreYouSure view",
+      "purpose": "Cảnh báo khi thoát level"
+    }
+  ],
+  "analytics": [
+    {
+      "event": "jetpack_race_staged_joined",
+      "params": "tournament_id, leaderboard_id, readable_event_id, stage, close_button_enabled, progress, start_time, remaining_duration",
+      "when": "EventSender.SendJetpackRaceWithStageJoinedEvent"
+    },
+    {
+      "event": "jetpack_race_staged_screen_impression",
+      "params": "tournament_id, leaderboard_id, readable_event_id, stage, impression_source, progress, remaining_duration",
+      "when": "EventSender.SendJetpackRaceWithStageImpression(source)"
+    },
+    {
+      "event": "jetpack_race_staged_info_impression",
+      "params": "tournament_id, stage, progress, remaining_duration",
+      "when": "Mở popup thông tin"
+    },
+    {
+      "event": "jetpack_race_staged_lost",
+      "params": "tournament_id, leaderboard_id, readable_event_id, race_rank, current_race_streak, progress, remaining_duration",
+      "when": "EventSender.SendJetpackRaceWithStageLost"
+    },
+    {
+      "event": "jetpack_race_staged_won",
+      "params": "tournament_id, leaderboard_id, readable_event_id, stage, race_rank, progress",
+      "when": "Thắng và nhận thưởng"
+    }
+  ],
+  "storage_keys": [
+    "JetpackRaceWithStageModel.WinRecord",
+    "JetpackRaceWithStageModel.LastStageClaimCount",
+    "JetpackRaceWithStageModel.HasUsedLimitlessLife",
+    "JetpackRaceWithStageModel.IsEventIntroducedEverInLifeTime",
+    "JetpackRaceWithStageModel.IsStreakDisabledTutorialShowedEverInLifeTime",
+    "JetpackRaceWithStageModel.IsJoinPopupIntroduced",
+    "JetpackRaceWithStageModel.NextRaceFinishTime",
+    "JetpackRaceWithStageCacheModel.LeaderboardId",
+    "JetpackRaceWithStageCacheModel.CurrentStage",
+    "JetpackRaceWithStageCacheModel.Score",
+    "JetpackRaceWithStageCacheModel.MaxReachableScore",
+    "JetpackRaceWithStageCacheModel.LastScoreBeforeReset"
+  ],
+  "related_features": [
+    "JetpackRace",
+    "SkyJumpWithStage",
+    "MagicLab",
+    "WheelOfFortune",
+    "Collection",
+    "EventsFramework"
+  ],
+  "gaps": [
+    "maxReachableStageScore của từng chặng do server, client không có mặc định.",
+    "15/11 — partial_actual_evidence: Default thiếu CloseDisabledInJoinPopup; cả cache09/10 và10/10 có closeDisabledInJoinPopup=false. Giá trị cache không chứng minh constructor fallback khi field absent hoặc runtime15/11. Còn lại: Đọc constructor cùng deserializer/caller CloseDisabledInJoinPopup; ghi fallback theo build, rồi kiểm join popup khi event hợp lệ.",
+    "Cách server quyết định chuyển chặng (đủ điểm hay hết thời gian) không đọc được từ client.",
+    "Quan hệ chạy song song/loại trừ với JetpackRace bản thường không rõ (EventType khác nhau: 4 vs 6).",
+    "[Runtime 2026-09-10] Config server LIVE đã đọc trực tiếp từ cache máy (không cần request); các hàng 'server live' là giá trị server ghi đè/thêm so với default.",
+    "[Runtime 2026-09-10] Instance phiên event đang chạy đã đọc (JetpackRaceWithStageModel); phần từng ghi 'do server gửi' nay có giá trị thật trong các hàng 'server instance'."
+  ],
+  "sources": [
+    "GameDesign/features/JetpackRaceWithStageService.md",
+    "GameDesign/features/JetpackRaceWithStageStateService.md",
+    "GameDesign/features/JetpackRaceWithStageDataService.md",
+    "GameDesign/features/JetpackRaceWithStageConfigModel.md",
+    "RecoveredNative/PseudoC/Assembly-CSharp/Modules/Contexts/Home/JetpackRaceWithStage/Scripts/*.c",
+    "RecoveredNative/Il2CppDumper/dump.cs (TypeDefIndex 3802-3839)",
+    "UnityExport/ExportedProject/Assets/Resources/defaultconfigs/JetpackRaceWithStageConfigModel.json",
+    "UnityExport/ExportedProject/Assets/MonoBehaviour/BackendEnvironmentConfig.asset",
+    "RecoveredNative/strings-by-type.tsv (EventSender.SendJetpackRaceWithStage*)"
+  ],
+  "related_feature_aliases": [
+    {
+      "original": "LobbyEventsService",
+      "feature": "EventsFramework"
+    }
+  ],
+  "audit_provenance": {
+    "review_date": "2026-11-15",
+    "mode": "offline_existing_files",
+    "code_build": "0.0.3063 ARMv7",
+    "runtime_build_observed_historically": "0.0.3129 ARM64 (audit 2026-10-18); not rechecked 2026-11-15",
+    "new_playtests": 0,
+    "uc_status": "See facts/audit_20261115/uc_registry.json; image reference is not pass",
+    "workbook_status": "Existing XLSX is historical; JSON and local web include 2026-11-15 corrections",
+    "static_review": "facts/local_code_gap_results_20261115.json; facts/local_asset_gap_results_20261115.json; facts/final_data_gap_decisions_20261115.json; facts/core_body_gap_decisions_20261115.json; facts/remaining_asset_gap_decisions_20261115.json"
+  },
+  "static_review_20261115": {
+    "date": "2026-11-15",
+    "scope": "Historical code/assets 0.0.3063, dated caches, device 0.0.3129 cached bundles and explicitly scoped runtime evidence. Not full runtime pass.",
+    "findings": [
+      {
+        "kind": "final_data",
+        "source_report": "facts/final_data_gap_decisions_20261115.json",
+        "id": "MS-FDG-009",
+        "gap_ids": [
+          "MS-JetpackRaceWithStage-G002"
+        ],
+        "title": "CloseDisabledInJoinPopup không xuất hiện trong file JSON mặc định — chỉ có trong class config, nên giá trị mặc định thực tế không xác định.",
+        "status": "partial_actual_evidence",
+        "conclusion": "Default thiếu CloseDisabledInJoinPopup; cả cache09/10 và10/10 có closeDisabledInJoinPopup=false. Giá trị cache không chứng minh constructor fallback khi field absent hoặc runtime15/11.",
+        "evidence": [
+          "facts/local_asset_review_20261115/config_catalog.json"
+        ],
+        "remaining": "CloseDisabledInJoinPopup thiếu trong default; hai cache tháng9/10 có closeDisabledInJoinPopup=false. Chưa xác minh constructor/serializer fallback khi field thiếu hoặc effective runtime mới.",
+        "next_action": "Đọc constructor cùng deserializer/caller CloseDisabledInJoinPopup; ghi fallback theo build, rồi kiểm join popup khi event hợp lệ.",
+        "scope": "question-specific source/observed branch only; no full-UC or production claim",
+        "source_records": [
+          {
+            "snapshot": "default0.0.3063",
+            "model": "JetpackRaceWithStageConfigModel",
+            "source": "Resources\\defaultconfigs\\JetpackRaceWithStageConfigModel.json",
+            "root": "UnityExport Assets 0.0.3063",
+            "sha256": "de05a667a9738d160b2fce26fce193418d32ebaac842f679dd9f19683d88978a",
+            "line": 1,
+            "build": "0.0.3063 ARMv7"
+          },
+          {
+            "snapshot": "cache20260910",
+            "model": "JetpackRaceWithStageConfigModel",
+            "source": "facts\\runtime\\server_configs\\jetpackRaceWithStageConfigModel.json",
+            "root": "GameDesign",
+            "sha256": "a10c267f66dc1c44e5546ac70aa7961516b16d69ac7cb3897de6ba8db0f366e7",
+            "line": 1,
+            "build": "snapshot provenance at path"
+          },
+          {
+            "snapshot": "cache20261010",
+            "model": "JetpackRaceWithStageConfigModel",
+            "source": "facts\\runtime\\test_20261010\\before\\CachedRemoteConfigs",
+            "root": "GameDesign",
+            "sha256": "433164d4877b2dee55d2bbd79ef2fe83d3fe9519492fe15e3cb0926daf216050",
+            "line": 1,
+            "build": "snapshot provenance at path"
+          }
+        ]
+      },
+      {
+        "kind": "asset",
+        "source_report": "facts/local_asset_gap_results_20261115.json",
+        "id": "MS-JetpackRaceWithStage-G002",
+        "status": "partial_static_reconciliation",
+        "conclusion": "Default thiếu CloseDisabledInJoinPopup; cả cache09/10 và10/10 có closeDisabledInJoinPopup=false. Giá trị cache không chứng minh constructor fallback khi field absent hoặc runtime15/11.",
+        "evidence": [
+          {
+            "snapshot": "default0.0.3063",
+            "model": "JetpackRaceWithStageConfigModel",
+            "source": "Resources\\defaultconfigs\\JetpackRaceWithStageConfigModel.json",
+            "root": "UnityExport Assets 0.0.3063",
+            "sha256": "de05a667a9738d160b2fce26fce193418d32ebaac842f679dd9f19683d88978a",
+            "line": 1,
+            "build": "0.0.3063 ARMv7"
+          },
+          {
+            "snapshot": "cache20260910",
+            "model": "JetpackRaceWithStageConfigModel",
+            "source": "facts\\runtime\\server_configs\\jetpackRaceWithStageConfigModel.json",
+            "root": "GameDesign",
+            "sha256": "a10c267f66dc1c44e5546ac70aa7961516b16d69ac7cb3897de6ba8db0f366e7",
+            "line": 1,
+            "build": "snapshot provenance at path"
+          },
+          {
+            "snapshot": "cache20261010",
+            "model": "JetpackRaceWithStageConfigModel",
+            "source": "facts\\runtime\\test_20261010\\before\\CachedRemoteConfigs",
+            "root": "GameDesign",
+            "sha256": "433164d4877b2dee55d2bbd79ef2fe83d3fe9519492fe15e3cb0926daf216050",
+            "line": 1,
+            "build": "snapshot provenance at path"
+          }
+        ],
+        "data": "config_catalog.json",
+        "scope": "static_export0.0.3063_or_historical_cache_not_runtime_pass",
+        "reviewed": "2026-11-15",
+        "next_action": "Đọc constructor cùng deserializer/caller CloseDisabledInJoinPopup; ghi fallback theo build, rồi kiểm join popup khi event hợp lệ.",
+        "remaining": "CloseDisabledInJoinPopup thiếu trong default; hai cache tháng9/10 có closeDisabledInJoinPopup=false. Chưa xác minh constructor/serializer fallback khi field thiếu hoặc effective runtime mới.",
+        "superseded_or_refined_by": "MS-FDG-009"
+      }
+    ]
+  },
+  "acceptance_review_20261115": {
+    "source": "facts/feature_acceptance_20261115.json",
+    "feature_id": "JetpackRaceWithStage",
+    "scope": "All eleven dossier dimensions reviewed; full_feature_verified is not implied; read per-dimension gaps and actual runtime evidence."
+  },
+  "segment_ab_review_20261115": {
+    "status": "not_identified_in_sources",
+    "segment_ids": [],
+    "matching_basis": "explicit_gd_config_map_or_exact_model_token_in_gdd_configs_where_key_sources; rootfieldscoped",
+    "rows": [],
+    "classifications": {},
+    "assignment_verified": false,
+    "uplift_verified": false,
+    "note": "No matchingrow does not prove no segmentation/AB. Rewardbucketfalsepositives remain explicitly classified."
+  },
+  "continuation_review_20261116": {
+    "date": "2026-11-16",
+    "build": "0.0.3129 ARM64 host APK",
+    "build_scope": "Host APK version3129 matches LAST observed installed version15/11 only; installed bytes/live device16/11 not verified.",
+    "runtime_status": "device_unavailable",
+    "runtime_case_ids": [],
+    "current_apk_model_links": {
+      "feature": "JetpackRaceWithStage",
+      "models": [
+        {
+          "model": "JetpackRaceWithStageConfigModel",
+          "current_default_file": "facts/review_20261116/public_current_config_3129/defaults/JetpackRaceWithStageConfigModel.json",
+          "resource_path": "defaultconfigs/jetpackracewithstageconfigmodel",
+          "sha256": "de05a667a9738d160b2fce26fce193418d32ebaac842f679dd9f19683d88978a",
+          "matching_basis": [
+            "gdd/JetpackRaceWithStage.json#/configs",
+            "gdd/JetpackRaceWithStage.json#/sources",
+            "gdd/JetpackRaceWithStage.json#/managers"
+          ],
+          "scope": "Packaged default3129, not effective server config.",
+          "site_data_path": "data/current_config_3129/defaults/JetpackRaceWithStageConfigModel.json",
+          "original_source_sha256": "de05a667a9738d160b2fce26fce193418d32ebaac842f679dd9f19683d88978a",
+          "public_artifact_sha256": "6411f145e6679ff17f4f510d78f07a06fa58f69eb1c51f22f9af97687ee1e61e",
+          "sha256_scope": "sha256 is original raw model; public_artifact_sha256 is the sanitized download"
+        }
+      ],
+      "status": "exact_model_source_association",
+      "distribution": "sanitized_public",
+      "public_mapping_pending": false
+    },
+    "current_packaged_defaults": [
+      {
+        "model": "JetpackRaceWithStageConfigModel",
+        "source": "facts/review_20261116/public_current_config_3129/defaults/JetpackRaceWithStageConfigModel.json",
+        "site_data_path": "data/current_config_3129/defaults/JetpackRaceWithStageConfigModel.json",
+        "public_artifact_sha256": "6411f145e6679ff17f4f510d78f07a06fa58f69eb1c51f22f9af97687ee1e61e",
+        "original_source_sha256": "de05a667a9738d160b2fce26fce193418d32ebaac842f679dd9f19683d88978a",
+        "source_class": "static_asset",
+        "build": "0.0.3129 host APK",
+        "scope": "Sanitized packaged default fullvalues only; not effective remote/selected config or runtime.",
+        "values": {
+          "IsEnabled": false,
+          "EventType": 6,
+          "MagicLabEventType": 19,
+          "FirstLevelToShow": 80,
+          "StreakDisabled": true,
+          "LastStageWinLimit": 100,
+          "Stage1RewardModels": [
+            {
+              "CurrencyType": 1,
+              "Amount": 100
+            },
+            {
+              "CurrencyType": 2,
+              "Amount": 0,
+              "timeSpan": "00:15:00"
+            }
+          ],
+          "Stage2RewardModels": [
+            {
+              "CurrencyType": 1,
+              "Amount": 250
+            },
+            {
+              "CurrencyType": 2,
+              "Amount": 0,
+              "timeSpan": "00:30:00"
+            }
+          ],
+          "Stage3RewardModels": [
+            {
+              "CurrencyType": 1,
+              "Amount": 500
+            },
+            {
+              "CurrencyType": 5,
+              "Amount": 1
+            },
+            {
+              "CurrencyType": 4,
+              "Amount": 1
+            },
+            {
+              "CurrencyType": 2,
+              "Amount": 0,
+              "timeSpan": "00:45:00"
+            }
+          ],
+          "Stage1RewardModelsWithCollection": [
+            {
+              "currencyType": 14,
+              "amount": 1,
+              "CollectionPackType": 1
+            },
+            {
+              "CurrencyType": 1,
+              "Amount": 100
+            },
+            {
+              "CurrencyType": 2,
+              "Amount": 0,
+              "timeSpan": "00:15:00"
+            }
+          ],
+          "Stage2RewardModelsWithCollection": [
+            {
+              "currencyType": 14,
+              "amount": 1,
+              "CollectionPackType": 2
+            },
+            {
+              "CurrencyType": 1,
+              "Amount": 250
+            },
+            {
+              "CurrencyType": 2,
+              "Amount": 0,
+              "timeSpan": "00:30:00"
+            }
+          ],
+          "Stage3RewardModelsWithCollection": [
+            {
+              "CurrencyType": 1,
+              "Amount": 500
+            },
+            {
+              "CurrencyType": 5,
+              "Amount": 1
+            },
+            {
+              "CurrencyType": 4,
+              "Amount": 1
+            },
+            {
+              "CurrencyType": 2,
+              "Amount": 0,
+              "timeSpan": "00:45:00"
+            }
+          ]
+        }
+      }
+    ],
+    "native_finding_ids": [],
+    "documentation_source_coverage": {
+      "dossier_present": true,
+      "use_case_catalog_count": 16,
+      "config_catalog_rows": 186,
+      "current_apk_default_model_links": 1,
+      "current_native_findings": 0,
+      "scope": "Documentation/source coverage only; not complete runtime verification."
+    },
+    "runtime_completion": {
+      "date": "2026-11-16",
+      "status": "device_unavailable",
+      "executed_case_count": 0,
+      "full_feature_runtime_verified": false
+    },
+    "planned_branch": "Nếu stage variant hiện, xem intro no-loss và ladder theo stage, info/close; ghi điều kiện streak được UI mô tả.",
+    "target_uc_ids": [
+      "UC-01",
+      "UC-06",
+      "UC-09",
+      "UC-15"
+    ],
+    "execution_phase": "noncore_first",
+    "core_or_levels_last": false,
+    "actionability_full_json": "facts/continuation_20261116/current/feature_actionability.json",
+    "actionability_site_data_path": "data/continuation_20261116/feature_actionability.json",
+    "source_classes": [
+      "static_asset"
+    ],
+    "full_feature_verified": false
+  }
+}

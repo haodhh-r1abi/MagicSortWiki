@@ -1,0 +1,519 @@
+{
+  "id": "HomeUI",
+  "title": "Màn hình chính (Home UI)",
+  "tagline": "Trung tâm điều hướng: dải trang vuốt ngang, nút Play, vạc hiện số level, hai cột icon sự kiện và toolbar tooltip đa dụng.",
+  "infobox": [
+    [
+      "Loại",
+      "Meta"
+    ],
+    [
+      "Mở khóa",
+      "Có ngay sau màn loading"
+    ],
+    [
+      "Tham gia",
+      "Cá nhân"
+    ],
+    [
+      "Điều kiện / phụ thuộc",
+      "Bố cục đổi theo remote config IsNewLobbyIconsEnabled, IsBackgroundAndShelvesEnabled, IsSmallBackgroundEnable, ColorVariant"
+    ],
+    [
+      "Manager",
+      "HomeController"
+    ]
+  ],
+  "description": [
+    "Code0.0.3063 mô tả các page route theo SwipePageManager; UI0.0.3129 ngày15/11 có thanh dưới Shop/Leaderboard/Home/Teams/Collection và Settings dạng popup bánh răng. Không coi tên enum page là bố cục đã quan sát.",
+    "Trang Home ở giữa có nút Play lớn, vạc phép hiển thị số level và độ khó, thanh tiền tệ trên cùng và hai cột icon sự kiện trái phải.",
+    "Vị trí icon sự kiện được sắp xếp lại mỗi khi trạng thái sự kiện đổi, và cả cột dịch chỗ khi có thanh tiến độ Magic Streak.",
+    "Toolbar là bong bóng tooltip đa dụng bật lên từ bất kỳ icon nào, có 10 ngữ cảnh và 7 màu thân.",
+    "Kích thước thân toolbar tự đổi theo số phần thưởng hiển thị, xếp thành một hoặc hai hàng, và mũi tên tự chọn hướng lên hay xuống.",
+    "Home có cơ chế phát hiện người chơi rảnh tay để popup và việc khởi động lại chỉ chen vào lúc không làm phiền.",
+    "Toàn bộ UI có thể trượt ra ngoài màn hình bằng một animation chung trước khi chuyển cảnh vào level.",
+    "Có bộ scaler riêng cho màn hình nhỏ, co giãn cả dải trang lẫn kích thước camera.",
+    "Home không gọi backend trực tiếp; mọi dữ liệu đến từ các service khác."
+  ],
+  "notes": [
+    "Lưu ý: danh sách trang khác nhau khi Journey bật hoặc tắt, nên phải tra chỉ số qua PageType chứ không dùng số cứng.",
+    "Lưu ý: kéo quá biên trái phải bị hãm bằng hệ số ScrollResistance = 5 thay vì chặn cứng.",
+    "Lưu ý: chỉ mỗi CurrencyType có một controller hiển thị riêng, và dùng ISecondUpdate thay vì Update để tiết kiệm.",
+    "Lưu ý: toolbar tự kéo vào trong màn hình khi icon nằm sát mép, theo hệ số OutOfScreenOffsetFactor = 0.2.",
+    "Lưu ý: thuộc tính Requester lưu icon nào đang mở toolbar, nên bấm lại chính icon đó sẽ đóng bong bóng.",
+    "Lưu ý: số popup mỗi phiên và mỗi lần về Home bị giới hạn bằng cặp cờ remote config riêng.",
+    "Constructor native 0.0.3063: SmallScreenScaleLimit=0.9; MinimumScaleRatio=0.95; CameraSizeForSmallScreen=10.8. Chưa đo scaler thực tế trên mọi thiết bị dùng app 0.0.3129.",
+    "Lưu ý: asset ToolbarConfig có nhiều ToolbarTextModel; GDD chỉ trích hai mục đầu làm ví dụ (gaps)."
+  ],
+  "how_it_works": [
+    "Khi vào Home, controller lưu vị trí gốc của thanh trên, hai cột icon, gốc nút Play và thanh Magic Streak để sau này trả về đúng chỗ (Initialize).",
+    "Nền Home được chọn theo remote config IsBackgroundAndShelvesEnabled và IsSmallBackgroundEnable (UpdateHomeBackground).",
+    "Biến thể icon lobby áp theo cờ IsNewLobbyIconsEnabled, với 4 loại biến thể: sprite, kích thước, vị trí và tắt object.",
+    "Số level được đặt lên vạc kèm màu theo độ khó (PrepareHomeUi, CauldronController.Prepare).",
+    "Sau khi thắng, hiệu ứng đổi số chạy sau 1.25 giây với level thường hoặc 0.1 giây với level khó; level siêu khó có khói phát sau 1.3 giây và chờ thêm 1.4 giây.",
+    "Vuốt ngang được đo theo quãng dịch chuyển: vượt ngưỡng 0.2 thì nhảy sang trang kế, không thì trượt về trang gần nhất (SwipeThreshold).",
+    "Mỗi lần đổi trang, các controller liên quan nhận OnPageSelected(PageType) để tự làm mới nội dung.",
+    "Trang kế bên được nạp trước khi sắp lộ ra và chỉ khởi tạo một lần nhờ danh sách trang đã peek (TryUpdatePeekPages).",
+    "Icon sự kiện được xếp lại vào các ô trống của cột trái (Left=0) và cột phải (Right=1) mỗi khi trạng thái sự kiện đổi (RepositionButtons).",
+    "Bấm một icon sẽ gửi ToolbarModel gồm Requester, vị trí, text, RewardModel, ngữ cảnh và màu, rồi thân bong bóng được dựng theo ngữ cảnh đó.",
+    "Bề ngang thân toolbar chọn theo số phần thưởng (1.75, 3.1, 4.5, 6.15) và chiều cao theo số hàng (1.6 hoặc 2.65); phần thưởng cách nhau 1.5 theo X và 1.2 theo Y.",
+    "Toolbar dạng chữ dùng kích thước cố định (6, 2) hoặc (6, 3.2) cho hai hàng, với kiểu chữ riêng theo từng ngữ cảnh.",
+    "Toolbar mở bằng animation phóng từ tỉ lệ 0.4 trong 0.125 giây, và đóng khi người chơi chạm ra ngoài (CheckForInput trong LateUpdate).",
+    "Thanh tiền tệ nghe sự kiện từ kho đồ, chạy tween số khi số dư đổi và cập nhật đồng hồ đếm ngược mỗi giây cho các vật phẩm có thời hạn.",
+    "Trước khi mở popup hoặc khởi động lại game, hệ thống chờ người chơi rảnh tay bằng cách hỏi các nguồn ngắt như bộ vuốt trang (WaitForPlayerToBeIdle).",
+    "Khi vào level, toàn bộ UI trượt ra ngoài màn hình khoảng cách 7 trong 0.4 giây rồi mới chuyển cảnh (HideUI)."
+  ],
+  "reward_tables": [
+    {
+      "title": "CÁC TRANG TRONG SWIPE MENU (PageType)",
+      "columns": [
+        "Giá trị",
+        "Trang",
+        "Ghi chú"
+      ],
+      "rows": [
+        [
+          "0",
+          "None",
+          "Giá trị rỗng"
+        ],
+        [
+          "1",
+          "Shop",
+          "Cửa hàng"
+        ],
+        [
+          "2",
+          "Leaderboard",
+          "Bảng xếp hạng"
+        ],
+        [
+          "3",
+          "Home",
+          "Trang giữa, có nút Play và vạc"
+        ],
+        [
+          "4",
+          "Teams",
+          "Đội và chat"
+        ],
+        [
+          "5",
+          "Settings",
+          "Cài đặt"
+        ],
+        [
+          "6",
+          "Journey",
+          "Chỉ có khi Journey bật"
+        ],
+        [
+          "7",
+          "Collection",
+          "Chỉ có khi Collection bật"
+        ]
+      ]
+    },
+    {
+      "title": "NGỮ CẢNH VÀ MÀU CỦA TOOLBAR",
+      "columns": [
+        "Nhóm",
+        "Giá trị",
+        "Ghi chú"
+      ],
+      "rows": [
+        [
+          "ToolbarContext",
+          "SkyJump=0, Tower=1, JetpackRace=2, Daily=3, EndlessPortal=4, PlainText=5, Null=6, MagicPass=7, TeamQuest=8, BoatRush=9",
+          "Quyết định hàm dựng thân toolbar"
+        ],
+        [
+          "ToolbarAssetColor",
+          "Purple=0, Green=1, Pink=2, Gold=3, Orange=4, DarkGreen=5, Brown=6",
+          "Bộ sprite thân và mũi tên"
+        ],
+        [
+          "ToolbarDirection",
+          "Default=0, Up=1, Down=2",
+          "Hướng mũi tên"
+        ],
+        [
+          "Bề ngang thân theo số phần thưởng",
+          "1 nội dung 1.75; 2 nội dung 3.1; 3 nội dung 4.5; 4 nội dung 6.15",
+          "XSizeFor1..4Content"
+        ],
+        [
+          "Chiều cao thân theo số hàng",
+          "1 hàng 1.6; 2 hàng 2.65",
+          "YSizeFor1Row / YSizeFor2Row"
+        ],
+        [
+          "Kích thước cố định cho toolbar chữ",
+          "(6, 2) một hàng; (6, 3.2) hai hàng",
+          "ToolbarConstantSize / ToolbarConstantSizeDoubleRow"
+        ],
+        [
+          "Kiểu chữ ToolbarContext 0 (SkyJump)",
+          "TextMinMaxSize (5.5, 1.7), FontSize 3.7, offset (0, 2), padding (0.3, 0.2)",
+          "ToolbarTextModels"
+        ],
+        [
+          "Kiểu chữ ToolbarContext 2 (JetpackRace)",
+          "TextMinMaxSize (5.5, 0.5), FontSize 3, offset (0, 0.65), padding (0, 0)",
+          "ToolbarTextModels"
+        ]
+      ]
+    },
+    {
+      "title": "HẰNG SỐ HOẠT ẢNH CỦA HOME (HomeAnimationsConfig)",
+      "columns": [
+        "Tham số",
+        "Giá trị",
+        "Ý nghĩa"
+      ],
+      "rows": [
+        [
+          "OnRegularLevelWinsLevelTextChangeDelay",
+          "1.25 giây",
+          "Độ trễ đổi số level sau khi thắng level thường"
+        ],
+        [
+          "OnHardLevelWinsLevelTextChangeDelay",
+          "0.1 giây",
+          "Độ trễ đổi số level sau khi thắng level khó"
+        ],
+        [
+          "IntervalBeforeSmokeParticles",
+          "1.3 giây",
+          "Chờ trước khi phát khói"
+        ],
+        [
+          "AfterSuperHardSmokeDelay",
+          "1.4 giây",
+          "Độ trễ sau hiệu ứng khói của level siêu khó"
+        ],
+        [
+          "UIOutsideOffset",
+          "7",
+          "Khoảng trượt UI ra ngoài màn hình"
+        ],
+        [
+          "UIHideDuration",
+          "0.4 giây",
+          "Thời lượng ẩn UI"
+        ],
+        [
+          "SwipeThreshold",
+          "0.2",
+          "Ngưỡng quãng vuốt để nhảy sang trang kế"
+        ],
+        [
+          "ScrollResistance",
+          "5",
+          "Hệ số hãm khi kéo quá biên"
+        ],
+        [
+          "StartScale",
+          "0.4",
+          "Tỉ lệ bắt đầu khi mở toolbar"
+        ],
+        [
+          "ToolbarWithTextScaleDuration",
+          "0.125 giây",
+          "Thời lượng animation mở toolbar chữ"
+        ],
+        [
+          "OutOfScreenOffsetFactor",
+          "0.2",
+          "Hệ số kéo toolbar vào trong màn hình"
+        ]
+      ]
+    }
+  ],
+  "key_numbers": [
+    {
+      "label": "Số trang tối đa trong SwipeMenu",
+      "value": "7 trang có giá trị (Shop … Collection)",
+      "source": "PageType"
+    },
+    {
+      "label": "Ngưỡng vuốt đổi trang",
+      "value": "0.2",
+      "source": "SwipePageManager.SwipeThreshold"
+    },
+    {
+      "label": "Hệ số hãm khi kéo quá biên",
+      "value": "5",
+      "source": "SwipePageManager.ScrollResistance"
+    },
+    {
+      "label": "Số ngữ cảnh toolbar",
+      "value": "10 (SkyJump=0 … BoatRush=9)",
+      "source": "ToolbarContext"
+    },
+    {
+      "label": "Số màu toolbar",
+      "value": "7 (Purple=0 … Brown=6)",
+      "source": "ToolbarAssetColor"
+    },
+    {
+      "label": "Số hướng mũi tên toolbar",
+      "value": "3 (Default=0, Up=1, Down=2)",
+      "source": "ToolbarDirection"
+    },
+    {
+      "label": "Bề ngang thân toolbar",
+      "value": "1.75 / 3.1 / 4.5 / 6.15 theo 1–4 nội dung",
+      "source": "ToolbarConfig.XSizeFor1..4Content"
+    },
+    {
+      "label": "Chiều cao thân toolbar",
+      "value": "1.6 (1 hàng) và 2.65 (2 hàng)",
+      "source": "ToolbarConfig.YSizeFor1Row / YSizeFor2Row"
+    },
+    {
+      "label": "Khoảng cách giữa phần thưởng trong toolbar",
+      "value": "X 1.5, Y 1.2",
+      "source": "ToolbarConfig.XDistanceBetweenContents / YDistanceBetweenContents"
+    },
+    {
+      "label": "Kích thước cố định toolbar chữ",
+      "value": "(6, 2) và (6, 3.2)",
+      "source": "ToolbarConfig.ToolbarConstantSize / ToolbarConstantSizeDoubleRow"
+    },
+    {
+      "label": "Tỉ lệ bắt đầu khi mở toolbar",
+      "value": "0.4",
+      "source": "ToolbarConfig.StartScale"
+    },
+    {
+      "label": "Thời lượng animation mở toolbar chữ",
+      "value": "0.125 giây",
+      "source": "ToolbarConfig.ToolbarWithTextScaleDuration"
+    },
+    {
+      "label": "Hệ số kéo toolbar vào trong màn hình",
+      "value": "0.2",
+      "source": "ToolbarConfig.OutOfScreenOffsetFactor"
+    },
+    {
+      "label": "Độ trễ đổi số level sau thắng level thường",
+      "value": "1.25 giây",
+      "source": "HomeAnimationsConfig.OnRegularLevelWinsLevelTextChangeDelay"
+    },
+    {
+      "label": "Độ trễ đổi số level sau thắng level khó",
+      "value": "0.1 giây",
+      "source": "HomeAnimationsConfig.OnHardLevelWinsLevelTextChangeDelay"
+    },
+    {
+      "label": "Chờ trước khi phát khói",
+      "value": "1.3 giây",
+      "source": "HomeAnimationsConfig.IntervalBeforeSmokeParticles"
+    },
+    {
+      "label": "Độ trễ sau khói level siêu khó",
+      "value": "1.4 giây",
+      "source": "HomeAnimationsConfig.AfterSuperHardSmokeDelay"
+    },
+    {
+      "label": "Khoảng trượt UI ra ngoài màn hình",
+      "value": "7",
+      "source": "HomeAnimationsConfig.UIOutsideOffset"
+    },
+    {
+      "label": "Thời lượng ẩn UI",
+      "value": "0.4 giây",
+      "source": "HomeAnimationsConfig.UIHideDuration"
+    },
+    {
+      "label": "Số cột icon sự kiện",
+      "value": "2 (Left=0, Right=1)",
+      "source": "LobbyIconPositionType"
+    },
+    {
+      "label": "Số loại biến thể icon lobby",
+      "value": "4 (SpriteRenderer, Size, Position, DisableGameObjects)",
+      "source": "LobbyIconVariantController"
+    },
+    {
+      "label": "Bù vị trí phần tử toolbar",
+      "value": "PostToolBarElementsOffset (0, 0.1, 0)",
+      "source": "ToolbarConfig.asset"
+    },
+    {
+      "label": "Số trường của ToolbarModel",
+      "value": "10",
+      "source": "ToolbarModel"
+    }
+  ],
+  "config_highlights": [
+    {
+      "key": "SwipePageManager.SwipeThreshold",
+      "value": "0.2",
+      "meaning": "Ngưỡng quãng vuốt để nhảy sang trang kế"
+    },
+    {
+      "key": "SwipePageManager.ScrollResistance",
+      "value": "5",
+      "meaning": "Hệ số hãm khi kéo quá biên trái phải"
+    },
+    {
+      "key": "PageType",
+      "value": "None=0, Shop=1, Leaderboard=2, Home=3, Teams=4, Settings=5, Journey=6, Collection=7",
+      "meaning": "Các trang trong SwipeMenu"
+    },
+    {
+      "key": "ToolbarContext",
+      "value": "SkyJump=0, Tower=1, JetpackRace=2, Daily=3, EndlessPortal=4, PlainText=5, Null=6, MagicPass=7, TeamQuest=8, BoatRush=9",
+      "meaning": "Ngữ cảnh quyết định cách dựng thân toolbar"
+    },
+    {
+      "key": "ToolbarDirection",
+      "value": "Default=0, Up=1, Down=2",
+      "meaning": "Hướng mũi tên toolbar"
+    },
+    {
+      "key": "ToolbarAssetColor",
+      "value": "Purple=0, Green=1, Pink=2, Gold=3, Orange=4, DarkGreen=5, Brown=6",
+      "meaning": "Bộ sprite thân và mũi tên toolbar"
+    },
+    {
+      "key": "LobbyIconPositionType",
+      "value": "Left=0, Right=1",
+      "meaning": "Cột đặt icon sự kiện ở Home"
+    },
+    {
+      "key": "ToolbarConfig.XDistanceBetweenContents / YDistanceBetweenContents",
+      "value": "1.5 / 1.2",
+      "meaning": "Khoảng cách giữa các phần thưởng trong toolbar"
+    },
+    {
+      "key": "ToolbarConfig.XSizeFor1..4Content",
+      "value": "1.75 / 3.1 / 4.5 / 6.15",
+      "meaning": "Bề ngang thân toolbar theo số phần thưởng"
+    },
+    {
+      "key": "ToolbarConfig.YSizeFor1Row / YSizeFor2Row",
+      "value": "1.6 / 2.65",
+      "meaning": "Chiều cao thân theo số hàng"
+    },
+    {
+      "key": "ToolbarConfig.ToolbarConstantSize / ToolbarConstantSizeDoubleRow",
+      "value": "(6, 2) / (6, 3.2)",
+      "meaning": "Kích thước cố định cho toolbar dạng chữ"
+    },
+    {
+      "key": "ToolbarConfig.StartScale",
+      "value": "0.4",
+      "meaning": "Tỉ lệ bắt đầu của animation mở toolbar"
+    },
+    {
+      "key": "ToolbarConfig.ToolbarWithTextScaleDuration",
+      "value": "0.125",
+      "meaning": "Thời lượng animation mở toolbar chữ"
+    },
+    {
+      "key": "ToolbarConfig.OutOfScreenOffsetFactor",
+      "value": "0.2",
+      "meaning": "Hệ số kéo toolbar vào trong màn hình khi icon sát mép"
+    },
+    {
+      "key": "ToolbarConfig.PostToolBarElementsOffset / PlusSignScale / ContentEndScale",
+      "value": "(0, 0.1, 0) / (1, 1, 1) / (1, 1, 1)",
+      "meaning": "Bù vị trí và tỉ lệ phần tử trong toolbar"
+    },
+    {
+      "key": "ToolbarConfig ToolbarTextModels (SkyJump)",
+      "value": "TextMinMaxSize (5.5, 1.7), TextFontSize 3.7, offset (0, 2), padding (0.3, 0.2)",
+      "meaning": "Kiểu chữ riêng cho ngữ cảnh SkyJump"
+    },
+    {
+      "key": "ToolbarConfig ToolbarTextModels (JetpackRace)",
+      "value": "TextMinMaxSize (5.5, 0.5), TextFontSize 3, offset (0, 0.65), padding (0, 0)",
+      "meaning": "Kiểu chữ riêng cho ngữ cảnh JetpackRace"
+    },
+    {
+      "key": "HomeAnimationsConfig.OnRegularLevelWinsLevelTextChangeDelay",
+      "value": "1.25",
+      "meaning": "Giây trễ đổi số level sau khi thắng level thường"
+    },
+    {
+      "key": "HomeAnimationsConfig.OnHardLevelWinsLevelTextChangeDelay",
+      "value": "0.1",
+      "meaning": "Giây trễ đổi số level sau khi thắng level khó"
+    },
+    {
+      "key": "HomeAnimationsConfig.IntervalBeforeSmokeParticles",
+      "value": "1.3",
+      "meaning": "Giây chờ trước khi phát khói"
+    },
+    {
+      "key": "HomeAnimationsConfig.AfterSuperHardSmokeDelay",
+      "value": "1.4",
+      "meaning": "Giây trễ sau hiệu ứng khói của level siêu khó"
+    },
+    {
+      "key": "HomeAnimationsConfig.UIOutsideOffset / UIHideDuration",
+      "value": "7 / 0.4",
+      "meaning": "Khoảng trượt ra ngoài màn hình và thời lượng ẩn UI"
+    },
+    {
+      "key": "HomeScaleConfig",
+      "value": "Constructor native 0.0.3063: SmallScreenScaleLimit=0.9; MinimumScaleRatio=0.95; CameraSizeForSmallScreen=10.8. Chưa đo scaler thực tế trên mọi thiết bị dùng app 0.0.3129.",
+      "meaning": "Ba giá trị ctor 0.0.3063 đã đọc; không mặc định là scaler được áp dụng cho mọi màn hình."
+    },
+    {
+      "key": "IsNewLobbyIconsEnabled",
+      "value": "server",
+      "meaning": "Bật bộ icon lobby mới, dùng cho A/B"
+    },
+    {
+      "key": "IsBackgroundAndShelvesEnabled / IsSmallBackgroundEnable",
+      "value": "server",
+      "meaning": "Biến thể nền Home"
+    },
+    {
+      "key": "ColorVariant",
+      "value": "server",
+      "meaning": "Biến thể màu giao diện"
+    },
+    {
+      "key": "HomeReturnPopupShowLimit / IsHomeReturnPopupShowLimitEnabled",
+      "value": "server",
+      "meaning": "Giới hạn số popup khi quay về Home"
+    },
+    {
+      "key": "SessionStartPopUpShowLimit / IsSessionStartPopupShowLimitEnabled",
+      "value": "server",
+      "meaning": "Giới hạn số popup đầu phiên"
+    },
+    {
+      "key": "IsNoInternetPopupEnable",
+      "value": "server",
+      "meaning": "Bật popup báo mất mạng, localize 'NoInternetConnection!'"
+    },
+    {
+      "key": "ToolbarModel",
+      "value": "Requester, SpawnPositionTransform, Text, RewardModel, Parent, DownwardsToolbar, HorizontalToolbar, RightmostToolbar, ToolbarContext, ToolbarAssetColor",
+      "meaning": "Yêu cầu mở toolbar"
+    },
+    {
+      "key": "Asset hoạt ảnh của Home",
+      "value": "NavigationManagerAnimationConfig, PlayButtonAnimationConfig, LoadingCircgleAnimationConfig, LobbyIconCollectibleAnimationConfig, ToolbarCurrencyViewFactory",
+      "meaning": "Animation và factory cho điều hướng, nút Play, loading, icon lobby và tiền tệ"
+    }
+  ],
+  "tips": [
+    "Toolbar dùng chung một service với 10 ngữ cảnh giúp mọi sự kiện có tooltip đồng bộ mà không phải viết UI riêng.",
+    "Độ trễ đổi số level khác nhau giữa level thường và level khó khiến level khó có nhịp ăn mừng riêng.",
+    "Chờ người chơi rảnh tay trước khi chen popup là cách tôn trọng thao tác đang dở của người chơi.",
+    "Nạp trước trang kế bên khi vuốt giúp dải trang mượt mà không phải khởi tạo hết mọi trang từ đầu.",
+    "Việc giữ vị trí gốc của từng nhóm UI cho phép animation ẩn hiện dùng chung cho mọi trạng thái Home."
+  ],
+  "categories": [
+    "Meta",
+    "Cơ chế lõi",
+    "Tiến trình"
+  ]
+}

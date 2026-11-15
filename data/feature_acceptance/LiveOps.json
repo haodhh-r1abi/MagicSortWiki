@@ -1,0 +1,1820 @@
+{
+  "id": "LiveOps",
+  "feature": "LiveOps",
+  "name": "LiveOps & Remote Config",
+  "category": "LiveOps",
+  "category_label": "Live-ops & hạ tầng",
+  "core_levels_last": false,
+  "acceptance_status": "documented_with_explicit_remaining_scope",
+  "full_feature_verified": false,
+  "checks": {
+    "purpose": {
+      "status": "documented_static_scope",
+      "source": "gdd/LiveOps.json#/summary",
+      "claim_excerpt": "LiveOps là lớp hạ tầng cho phép vận hành đổi gần như mọi thông số của Magic Sort mà không phải build lại app. Có hai nguồn config chạy song song: (1) Firebase Remote Config — khoảng 82 khoá, mỗi khoá là một chuỗi JSON được deserialize thành một *ConfigModel (bật/tắt sự kiện, kinh tế, quảng cáo, cửa hàng, cờ A/B); (2) backend riêng của Grand Games (get-level-config-v2, get-daily-level-config) — trả"
+    },
+    "unlock": {
+      "status": "described_historical_conditions_runtime_boundary_unverified",
+      "source": "gdd/LiveOps.json#/unlock",
+      "content": "Luôn chạy. Thứ tự bắt buộc lúc khởi động: FirebaseInitializer.InitializeFirebase → FirebaseRemoteConfigFetcher.InitializeAsync → FirebaseRemoteConfigResolver.ResolveAndGetConfigService → GrandRemoteRegularLevelsConfigResolver.FetchAndResolveConfig, tất cả gói trong RemoteConfigHandler.InitFirebaseAndEventSenderAndGetRemoteConfigs."
+    },
+    "entry_flow": {
+      "status": "documented_paths_not_all_executed",
+      "entry_points": [
+        "Màn Loading khi mở app (LoadingCircleManager, LoadingCatAnimationManager, CustomWarningTextManager, NoInternetConnectionTextManager)",
+        "Popup Soft Update / Force Update (TryShowSoftUpdateCommand ở cuối chuỗi return-to-home)",
+        "Popup No Internet (Modules.Contexts.Application.Events.Scripts.Sessions.NoInternetConnectionPopUp)",
+        "Không có UI trực tiếp cho remote config — tác động gián tiếp lên mọi tính năng"
+      ],
+      "flow_source": "gdd/LiveOps.json#/flow",
+      "acceptance_scope": "Default/cache/Firebase source priority, root flags, refresh/error/fallback và experiment assignment/version"
+    },
+    "config": {
+      "status": "source_bound_catalog_present",
+      "gdd_rows": 65,
+      "full_leaf_rows_associated": 248,
+      "snapshots": {
+        "default_0.0.3063": 41,
+        "cache_20260910": 68,
+        "cache_20261010": 68,
+        "firebase_20260910": 71
+      },
+      "models": [
+        {
+          "model": "AccountDeleteEnabled",
+          "matching_basis": [
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/LiveOps.json#/configs/59/key_where"
+            }
+          ]
+        },
+        {
+          "model": "appUpdateConfigModel",
+          "matching_basis": [
+            {
+              "kind": "explicit_gd_config_model_map",
+              "source": "gd_config.json#/defaultconfigs/map/LiveOps"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/LiveOps.json#/configs/2/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/LiveOps.json#/configs/22/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/LiveOps.json#/configs/23/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/LiveOps.json#/configs/24/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/LiveOps.json#/configs/25/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/LiveOps.json#/configs/26/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/LiveOps.json#/configs/29/key_where"
+            }
+          ]
+        },
+        {
+          "model": "ColorVariant",
+          "matching_basis": [
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/LiveOps.json#/configs/35/key_where"
+            }
+          ]
+        },
+        {
+          "model": "gameEconomyModel",
+          "matching_basis": [
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/LiveOps.json#/configs/5/key_where"
+            }
+          ]
+        },
+        {
+          "model": "HomeReturnPopupShowLimit",
+          "matching_basis": [
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/LiveOps.json#/configs/41/key_where"
+            }
+          ]
+        },
+        {
+          "model": "httpConfig",
+          "matching_basis": [
+            {
+              "kind": "explicit_gd_config_model_map",
+              "source": "gd_config.json#/defaultconfigs/map/LiveOps"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/LiveOps.json#/configs/3/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/LiveOps.json#/configs/27/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/LiveOps.json#/configs/30/key_where"
+            }
+          ]
+        },
+        {
+          "model": "InGameBoosterVariant",
+          "matching_basis": [
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/LiveOps.json#/configs/56/key_where"
+            }
+          ]
+        },
+        {
+          "model": "IsAndroidIapVerificationEnabled",
+          "matching_basis": [
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/LiveOps.json#/configs/44/key_where"
+            }
+          ]
+        },
+        {
+          "model": "IsAppleSignInEnabled",
+          "matching_basis": [
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/LiveOps.json#/configs/50/key_where"
+            }
+          ]
+        },
+        {
+          "model": "IsBackgroundAndShelvesEnabled",
+          "matching_basis": [
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/LiveOps.json#/configs/53/key_where"
+            }
+          ]
+        },
+        {
+          "model": "IsFlatBuffer",
+          "matching_basis": [
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/LiveOps.json#/configs/48/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/LiveOps.json#/configs/62/key_where"
+            }
+          ]
+        },
+        {
+          "model": "IsForcedNamePopupEnabled",
+          "matching_basis": [
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/LiveOps.json#/configs/45/key_where"
+            }
+          ]
+        },
+        {
+          "model": "IsGameCenterEnabled",
+          "matching_basis": [
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/LiveOps.json#/configs/49/key_where"
+            }
+          ]
+        },
+        {
+          "model": "IsHomeReturnPopupShowLimitEnabled",
+          "matching_basis": [
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/LiveOps.json#/configs/42/key_where"
+            }
+          ]
+        },
+        {
+          "model": "IsMusicEnabled",
+          "matching_basis": [
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/LiveOps.json#/configs/47/key_where"
+            }
+          ]
+        },
+        {
+          "model": "IsNewBlockerVisualsEnabled",
+          "matching_basis": [
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/LiveOps.json#/configs/52/key_where"
+            }
+          ]
+        },
+        {
+          "model": "IsNewBottleParticlesEnabled",
+          "matching_basis": [
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/LiveOps.json#/configs/55/key_where"
+            }
+          ]
+        },
+        {
+          "model": "IsNewBottleVisualsEnabled",
+          "matching_basis": [
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/LiveOps.json#/configs/51/key_where"
+            }
+          ]
+        },
+        {
+          "model": "IsNewLobbyIconsEnabled",
+          "matching_basis": [
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/LiveOps.json#/configs/54/key_where"
+            }
+          ]
+        },
+        {
+          "model": "IsNewTryAgainFlowEnabled",
+          "matching_basis": [
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/LiveOps.json#/configs/36/key_where"
+            }
+          ]
+        },
+        {
+          "model": "IsNoInternetPopupEnable",
+          "matching_basis": [
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/LiveOps.json#/configs/46/key_where"
+            }
+          ]
+        },
+        {
+          "model": "IsOgPlayStyle",
+          "matching_basis": [
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/LiveOps.json#/configs/33/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/LiveOps.json#/configs/63/key_where"
+            }
+          ]
+        },
+        {
+          "model": "IsRevealBoosterEnabled",
+          "matching_basis": [
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/LiveOps.json#/configs/37/key_where"
+            }
+          ]
+        },
+        {
+          "model": "IsScreenOffsetEnabled",
+          "matching_basis": [
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/LiveOps.json#/configs/64/key_where"
+            }
+          ]
+        },
+        {
+          "model": "IsSessionStartPopupShowLimitEnabled",
+          "matching_basis": [
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/LiveOps.json#/configs/40/key_where"
+            }
+          ]
+        },
+        {
+          "model": "IsSmallBackgroundEnable",
+          "matching_basis": [
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/LiveOps.json#/configs/34/key_where"
+            }
+          ]
+        },
+        {
+          "model": "IsVibrationOn",
+          "matching_basis": [
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/LiveOps.json#/configs/32/key_where"
+            }
+          ]
+        },
+        {
+          "model": "IsWelcomeBackEnabled",
+          "matching_basis": [
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/LiveOps.json#/configs/39/key_where"
+            }
+          ]
+        },
+        {
+          "model": "LevelEndPopupsAbGroup",
+          "matching_basis": [
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/LiveOps.json#/configs/43/key_where"
+            }
+          ]
+        },
+        {
+          "model": "MegaShuffleEmptyBottleProbability",
+          "matching_basis": [
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/LiveOps.json#/configs/58/key_where"
+            }
+          ]
+        },
+        {
+          "model": "MegaShuffleRetryCount",
+          "matching_basis": [
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/LiveOps.json#/configs/57/key_where"
+            }
+          ]
+        },
+        {
+          "model": "rateUsConfig",
+          "matching_basis": [
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/LiveOps.json#/configs/6/key_where"
+            }
+          ]
+        },
+        {
+          "model": "RestorePurchaseEnabled",
+          "matching_basis": [
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/LiveOps.json#/configs/60/key_where"
+            }
+          ]
+        },
+        {
+          "model": "serverCommunicationModel",
+          "matching_basis": [
+            {
+              "kind": "explicit_gd_config_model_map",
+              "source": "gd_config.json#/defaultconfigs/map/LiveOps"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/LiveOps.json#/configs/4/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/LiveOps.json#/configs/28/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/LiveOps.json#/configs/31/key_where"
+            }
+          ]
+        },
+        {
+          "model": "SessionStartPopUpShowLimit",
+          "matching_basis": [
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/LiveOps.json#/configs/38/key_where"
+            }
+          ]
+        },
+        {
+          "model": "applicationVersion",
+          "matching_basis": [
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/LiveOps.json#/configs/61/key_where"
+            }
+          ]
+        },
+        {
+          "model": "rootLevelConfigModel",
+          "matching_basis": [
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/LiveOps.json#/configs/7/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/LiveOps.json#/configs/32/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/LiveOps.json#/configs/33/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/LiveOps.json#/configs/34/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/LiveOps.json#/configs/35/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/LiveOps.json#/configs/36/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/LiveOps.json#/configs/37/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/LiveOps.json#/configs/38/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/LiveOps.json#/configs/39/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/LiveOps.json#/configs/40/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/LiveOps.json#/configs/41/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/LiveOps.json#/configs/42/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/LiveOps.json#/configs/43/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/LiveOps.json#/configs/44/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/LiveOps.json#/configs/45/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/LiveOps.json#/configs/46/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/LiveOps.json#/configs/47/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/LiveOps.json#/configs/48/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/LiveOps.json#/configs/49/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/LiveOps.json#/configs/50/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/LiveOps.json#/configs/51/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/LiveOps.json#/configs/52/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/LiveOps.json#/configs/53/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/LiveOps.json#/configs/54/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/LiveOps.json#/configs/55/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/LiveOps.json#/configs/56/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/LiveOps.json#/configs/57/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/LiveOps.json#/configs/58/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/LiveOps.json#/configs/59/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/LiveOps.json#/configs/60/key_where"
+            }
+          ]
+        }
+      ],
+      "declared_models_without_catalog_data": [],
+      "placeholder_rows_requiring_source_review": [],
+      "exact_placeholder_snapshot_values": [],
+      "dossier_abbreviated_values": [],
+      "note": "Model association uses explicitmap or exacttoken citations; fieldpresence does not prove allproductiondata. GDDsummaryrows and fullcatalogrows have separate counts. Abbreviated source summaries are not full arrays; catalog/source links remain authoritative."
+    },
+    "reward": {
+      "status": "delegated_or_no_direct_reward_in_this_scope",
+      "entries": 0,
+      "tables_in_site_meta": 5,
+      "source": "gdd/LiveOps.json#/rewards"
+    },
+    "use_cases": {
+      "status": "specified_not_executed_in15nov_ledger",
+      "specified": 16,
+      "reviewed_uc_branch_count": 0,
+      "reviewed_uc_ids": [],
+      "not_reviewed_in_new_ledger": [
+        "UC-01",
+        "UC-02",
+        "UC-03",
+        "UC-04",
+        "UC-05",
+        "UC-06",
+        "UC-07",
+        "UC-08",
+        "UC-09",
+        "UC-10",
+        "UC-11",
+        "UC-12",
+        "UC-13",
+        "UC-14",
+        "UC-15",
+        "UC-16"
+      ],
+      "full_uc_pass_claimed": false
+    },
+    "screenshots": {
+      "historical_gallery_entries": 0,
+      "historical_uc_with_image_reference": 0,
+      "curated_new_images": [],
+      "curated_new_image_count": 0,
+      "status": "not_present_in_reviewed_gallery",
+      "source": "screens/web/screens.json#/LiveOps",
+      "note": "Image presence does not prove execution result or completeness."
+    },
+    "runtime_actual": {
+      "status": "not_observed_in15nov_ledger",
+      "case_count": 0,
+      "cases": [],
+      "mode": "offline_existing_fixture",
+      "build": "0.0.3129 ARM64"
+    },
+    "segment_ab": {
+      "status": "reviewed_rows_associated_assignment_not_proven",
+      "segment_ids": [
+        "MS-SEG-083",
+        "MS-SEG-084",
+        "MS-SEG-085",
+        "MS-SEG-109",
+        "MS-SEG-110",
+        "MS-SEG-111",
+        "MS-SEG-158",
+        "MS-SEG-159",
+        "MS-SEG-160"
+      ],
+      "matching_basis": "explicit_gd_config_map_or_exact_model_token_in_gdd_configs_where_key_sources; rootfieldscoped",
+      "rows": [
+        {
+          "snapshot": "cache_20260910",
+          "model": "rootLevelConfigModel",
+          "key": "colorVariant",
+          "value": 2,
+          "type": "int",
+          "source": "facts/runtime/server_configs/rootLevelConfigModel.json",
+          "classification": "config_candidate_not_backend_assignment_proof",
+          "review_id": "MS-SEG-083",
+          "review_classification": "variant_config",
+          "review_status": "missing_experiment_assignment_and_outcome",
+          "consumer": {
+            "source": "com.grandgames.magicsort_Unity_20260909_112501/RecoveredNative/PseudoC/Assembly-CSharp/Modules/Contexts/Application/FirebaseNS/Scripts/FirebaseRemoteConfigResolver.c",
+            "line": 863,
+            "marker": "/* \"ColorVariant\" */",
+            "build": "0.0.3063 ARMv7",
+            "evidence": "recovered_native_historical_version"
+          },
+          "interpretation": "Giá trị variant được cache/default/Firebase; chưa có experimentID hoặc traffic split.",
+          "next_action": "Cần experimentID, variant, allocation, activation timestamp, consumer effect và đối chứng cùng điều kiện.",
+          "assignment_proof": false,
+          "uplift_proof": false,
+          "matching_basis": [
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/LiveOps.json#/configs/7/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/LiveOps.json#/configs/32/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/LiveOps.json#/configs/33/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/LiveOps.json#/configs/34/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/LiveOps.json#/configs/35/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/LiveOps.json#/configs/36/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/LiveOps.json#/configs/37/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/LiveOps.json#/configs/38/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/LiveOps.json#/configs/39/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/LiveOps.json#/configs/40/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/LiveOps.json#/configs/41/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/LiveOps.json#/configs/42/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/LiveOps.json#/configs/43/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/LiveOps.json#/configs/44/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/LiveOps.json#/configs/45/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/LiveOps.json#/configs/46/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/LiveOps.json#/configs/47/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/LiveOps.json#/configs/48/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/LiveOps.json#/configs/49/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/LiveOps.json#/configs/50/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/LiveOps.json#/configs/51/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/LiveOps.json#/configs/52/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/LiveOps.json#/configs/53/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/LiveOps.json#/configs/54/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/LiveOps.json#/configs/55/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/LiveOps.json#/configs/56/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/LiveOps.json#/configs/57/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/LiveOps.json#/configs/58/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/LiveOps.json#/configs/59/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/LiveOps.json#/configs/60/key_where"
+            }
+          ]
+        },
+        {
+          "snapshot": "cache_20260910",
+          "model": "rootLevelConfigModel",
+          "key": "levelEndPopupsAbGroup",
+          "value": 0,
+          "type": "int",
+          "source": "facts/runtime/server_configs/rootLevelConfigModel.json",
+          "classification": "config_candidate_not_backend_assignment_proof",
+          "review_id": "MS-SEG-084",
+          "review_classification": "variant_config",
+          "review_status": "missing_experiment_assignment_and_outcome",
+          "consumer": {
+            "source": "com.grandgames.magicsort_Unity_20260909_112501/RecoveredNative/PseudoC/Assembly-CSharp/Modules/Contexts/Application/FirebaseNS/Scripts/FirebaseRemoteConfigResolver.c",
+            "line": 863,
+            "marker": "/* \"ColorVariant\" */",
+            "build": "0.0.3063 ARMv7",
+            "evidence": "recovered_native_historical_version"
+          },
+          "interpretation": "Giá trị variant được cache/default/Firebase; chưa có experimentID hoặc traffic split.",
+          "next_action": "Cần experimentID, variant, allocation, activation timestamp, consumer effect và đối chứng cùng điều kiện.",
+          "assignment_proof": false,
+          "uplift_proof": false,
+          "matching_basis": [
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/LiveOps.json#/configs/7/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/LiveOps.json#/configs/32/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/LiveOps.json#/configs/33/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/LiveOps.json#/configs/34/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/LiveOps.json#/configs/35/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/LiveOps.json#/configs/36/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/LiveOps.json#/configs/37/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/LiveOps.json#/configs/38/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/LiveOps.json#/configs/39/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/LiveOps.json#/configs/40/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/LiveOps.json#/configs/41/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/LiveOps.json#/configs/42/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/LiveOps.json#/configs/43/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/LiveOps.json#/configs/44/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/LiveOps.json#/configs/45/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/LiveOps.json#/configs/46/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/LiveOps.json#/configs/47/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/LiveOps.json#/configs/48/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/LiveOps.json#/configs/49/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/LiveOps.json#/configs/50/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/LiveOps.json#/configs/51/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/LiveOps.json#/configs/52/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/LiveOps.json#/configs/53/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/LiveOps.json#/configs/54/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/LiveOps.json#/configs/55/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/LiveOps.json#/configs/56/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/LiveOps.json#/configs/57/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/LiveOps.json#/configs/58/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/LiveOps.json#/configs/59/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/LiveOps.json#/configs/60/key_where"
+            }
+          ]
+        },
+        {
+          "snapshot": "cache_20260910",
+          "model": "rootLevelConfigModel",
+          "key": "inGameBoosterVariant",
+          "value": 0,
+          "type": "int",
+          "source": "facts/runtime/server_configs/rootLevelConfigModel.json",
+          "classification": "config_candidate_not_backend_assignment_proof",
+          "review_id": "MS-SEG-085",
+          "review_classification": "variant_config",
+          "review_status": "missing_experiment_assignment_and_outcome",
+          "consumer": {
+            "source": "com.grandgames.magicsort_Unity_20260909_112501/RecoveredNative/PseudoC/Assembly-CSharp/Modules/Contexts/Application/Inventory/Scripts/InventoryService.c",
+            "line": 388,
+            "marker": "_InGameBoosterVariant_k__BackingField",
+            "build": "0.0.3063 ARMv7",
+            "evidence": "recovered_native_historical_version"
+          },
+          "interpretation": "Giá trị variant được cache/default/Firebase; chưa có experimentID hoặc traffic split.",
+          "next_action": "Cần experimentID, variant, allocation, activation timestamp, consumer effect và đối chứng cùng điều kiện.",
+          "assignment_proof": false,
+          "uplift_proof": false,
+          "matching_basis": [
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/LiveOps.json#/configs/7/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/LiveOps.json#/configs/32/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/LiveOps.json#/configs/33/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/LiveOps.json#/configs/34/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/LiveOps.json#/configs/35/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/LiveOps.json#/configs/36/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/LiveOps.json#/configs/37/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/LiveOps.json#/configs/38/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/LiveOps.json#/configs/39/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/LiveOps.json#/configs/40/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/LiveOps.json#/configs/41/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/LiveOps.json#/configs/42/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/LiveOps.json#/configs/43/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/LiveOps.json#/configs/44/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/LiveOps.json#/configs/45/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/LiveOps.json#/configs/46/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/LiveOps.json#/configs/47/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/LiveOps.json#/configs/48/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/LiveOps.json#/configs/49/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/LiveOps.json#/configs/50/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/LiveOps.json#/configs/51/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/LiveOps.json#/configs/52/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/LiveOps.json#/configs/53/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/LiveOps.json#/configs/54/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/LiveOps.json#/configs/55/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/LiveOps.json#/configs/56/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/LiveOps.json#/configs/57/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/LiveOps.json#/configs/58/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/LiveOps.json#/configs/59/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/LiveOps.json#/configs/60/key_where"
+            }
+          ]
+        },
+        {
+          "snapshot": "cache_20261010",
+          "model": "rootLevelConfigModel",
+          "key": "colorVariant",
+          "value": 2,
+          "type": "int",
+          "source": "facts/runtime/test_20261010/before/CachedRemoteConfigs",
+          "classification": "config_candidate_not_backend_assignment_proof",
+          "review_id": "MS-SEG-109",
+          "review_classification": "variant_config",
+          "review_status": "missing_experiment_assignment_and_outcome",
+          "consumer": {
+            "source": "com.grandgames.magicsort_Unity_20260909_112501/RecoveredNative/PseudoC/Assembly-CSharp/Modules/Contexts/Application/FirebaseNS/Scripts/FirebaseRemoteConfigResolver.c",
+            "line": 863,
+            "marker": "/* \"ColorVariant\" */",
+            "build": "0.0.3063 ARMv7",
+            "evidence": "recovered_native_historical_version"
+          },
+          "interpretation": "Giá trị variant được cache/default/Firebase; chưa có experimentID hoặc traffic split.",
+          "next_action": "Cần experimentID, variant, allocation, activation timestamp, consumer effect và đối chứng cùng điều kiện.",
+          "assignment_proof": false,
+          "uplift_proof": false,
+          "matching_basis": [
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/LiveOps.json#/configs/7/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/LiveOps.json#/configs/32/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/LiveOps.json#/configs/33/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/LiveOps.json#/configs/34/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/LiveOps.json#/configs/35/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/LiveOps.json#/configs/36/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/LiveOps.json#/configs/37/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/LiveOps.json#/configs/38/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/LiveOps.json#/configs/39/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/LiveOps.json#/configs/40/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/LiveOps.json#/configs/41/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/LiveOps.json#/configs/42/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/LiveOps.json#/configs/43/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/LiveOps.json#/configs/44/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/LiveOps.json#/configs/45/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/LiveOps.json#/configs/46/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/LiveOps.json#/configs/47/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/LiveOps.json#/configs/48/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/LiveOps.json#/configs/49/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/LiveOps.json#/configs/50/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/LiveOps.json#/configs/51/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/LiveOps.json#/configs/52/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/LiveOps.json#/configs/53/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/LiveOps.json#/configs/54/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/LiveOps.json#/configs/55/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/LiveOps.json#/configs/56/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/LiveOps.json#/configs/57/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/LiveOps.json#/configs/58/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/LiveOps.json#/configs/59/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/LiveOps.json#/configs/60/key_where"
+            }
+          ]
+        },
+        {
+          "snapshot": "cache_20261010",
+          "model": "rootLevelConfigModel",
+          "key": "levelEndPopupsAbGroup",
+          "value": 0,
+          "type": "int",
+          "source": "facts/runtime/test_20261010/before/CachedRemoteConfigs",
+          "classification": "config_candidate_not_backend_assignment_proof",
+          "review_id": "MS-SEG-110",
+          "review_classification": "variant_config",
+          "review_status": "missing_experiment_assignment_and_outcome",
+          "consumer": {
+            "source": "com.grandgames.magicsort_Unity_20260909_112501/RecoveredNative/PseudoC/Assembly-CSharp/Modules/Contexts/Application/FirebaseNS/Scripts/FirebaseRemoteConfigResolver.c",
+            "line": 863,
+            "marker": "/* \"ColorVariant\" */",
+            "build": "0.0.3063 ARMv7",
+            "evidence": "recovered_native_historical_version"
+          },
+          "interpretation": "Giá trị variant được cache/default/Firebase; chưa có experimentID hoặc traffic split.",
+          "next_action": "Cần experimentID, variant, allocation, activation timestamp, consumer effect và đối chứng cùng điều kiện.",
+          "assignment_proof": false,
+          "uplift_proof": false,
+          "matching_basis": [
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/LiveOps.json#/configs/7/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/LiveOps.json#/configs/32/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/LiveOps.json#/configs/33/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/LiveOps.json#/configs/34/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/LiveOps.json#/configs/35/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/LiveOps.json#/configs/36/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/LiveOps.json#/configs/37/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/LiveOps.json#/configs/38/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/LiveOps.json#/configs/39/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/LiveOps.json#/configs/40/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/LiveOps.json#/configs/41/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/LiveOps.json#/configs/42/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/LiveOps.json#/configs/43/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/LiveOps.json#/configs/44/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/LiveOps.json#/configs/45/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/LiveOps.json#/configs/46/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/LiveOps.json#/configs/47/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/LiveOps.json#/configs/48/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/LiveOps.json#/configs/49/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/LiveOps.json#/configs/50/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/LiveOps.json#/configs/51/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/LiveOps.json#/configs/52/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/LiveOps.json#/configs/53/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/LiveOps.json#/configs/54/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/LiveOps.json#/configs/55/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/LiveOps.json#/configs/56/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/LiveOps.json#/configs/57/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/LiveOps.json#/configs/58/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/LiveOps.json#/configs/59/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/LiveOps.json#/configs/60/key_where"
+            }
+          ]
+        },
+        {
+          "snapshot": "cache_20261010",
+          "model": "rootLevelConfigModel",
+          "key": "inGameBoosterVariant",
+          "value": 0,
+          "type": "int",
+          "source": "facts/runtime/test_20261010/before/CachedRemoteConfigs",
+          "classification": "config_candidate_not_backend_assignment_proof",
+          "review_id": "MS-SEG-111",
+          "review_classification": "variant_config",
+          "review_status": "missing_experiment_assignment_and_outcome",
+          "consumer": {
+            "source": "com.grandgames.magicsort_Unity_20260909_112501/RecoveredNative/PseudoC/Assembly-CSharp/Modules/Contexts/Application/Inventory/Scripts/InventoryService.c",
+            "line": 388,
+            "marker": "_InGameBoosterVariant_k__BackingField",
+            "build": "0.0.3063 ARMv7",
+            "evidence": "recovered_native_historical_version"
+          },
+          "interpretation": "Giá trị variant được cache/default/Firebase; chưa có experimentID hoặc traffic split.",
+          "next_action": "Cần experimentID, variant, allocation, activation timestamp, consumer effect và đối chứng cùng điều kiện.",
+          "assignment_proof": false,
+          "uplift_proof": false,
+          "matching_basis": [
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/LiveOps.json#/configs/7/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/LiveOps.json#/configs/32/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/LiveOps.json#/configs/33/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/LiveOps.json#/configs/34/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/LiveOps.json#/configs/35/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/LiveOps.json#/configs/36/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/LiveOps.json#/configs/37/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/LiveOps.json#/configs/38/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/LiveOps.json#/configs/39/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/LiveOps.json#/configs/40/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/LiveOps.json#/configs/41/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/LiveOps.json#/configs/42/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/LiveOps.json#/configs/43/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/LiveOps.json#/configs/44/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/LiveOps.json#/configs/45/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/LiveOps.json#/configs/46/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/LiveOps.json#/configs/47/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/LiveOps.json#/configs/48/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/LiveOps.json#/configs/49/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/LiveOps.json#/configs/50/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/LiveOps.json#/configs/51/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/LiveOps.json#/configs/52/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/LiveOps.json#/configs/53/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/LiveOps.json#/configs/54/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/LiveOps.json#/configs/55/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/LiveOps.json#/configs/56/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/LiveOps.json#/configs/57/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/LiveOps.json#/configs/58/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/LiveOps.json#/configs/59/key_where"
+            },
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/LiveOps.json#/configs/60/key_where"
+            }
+          ]
+        },
+        {
+          "snapshot": "firebase_20260910",
+          "model": "ColorVariant",
+          "key": "",
+          "value": "2",
+          "type": "str",
+          "source": "facts/runtime/decoded/firebase_rc.json",
+          "classification": "config_candidate_not_backend_assignment_proof",
+          "review_id": "MS-SEG-158",
+          "review_classification": "variant_config",
+          "review_status": "missing_experiment_assignment_and_outcome",
+          "consumer": {
+            "source": "com.grandgames.magicsort_Unity_20260909_112501/RecoveredNative/PseudoC/Assembly-CSharp/Modules/Contexts/Application/FirebaseNS/Scripts/FirebaseRemoteConfigResolver.c",
+            "line": 863,
+            "marker": "/* \"ColorVariant\" */",
+            "build": "0.0.3063 ARMv7",
+            "evidence": "recovered_native_historical_version"
+          },
+          "interpretation": "Giá trị variant được cache/default/Firebase; chưa có experimentID hoặc traffic split.",
+          "next_action": "Cần experimentID, variant, allocation, activation timestamp, consumer effect và đối chứng cùng điều kiện.",
+          "assignment_proof": false,
+          "uplift_proof": false,
+          "matching_basis": [
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/LiveOps.json#/configs/35/key_where"
+            }
+          ]
+        },
+        {
+          "snapshot": "firebase_20260910",
+          "model": "InGameBoosterVariant",
+          "key": "",
+          "value": "0",
+          "type": "str",
+          "source": "facts/runtime/decoded/firebase_rc.json",
+          "classification": "config_candidate_not_backend_assignment_proof",
+          "review_id": "MS-SEG-159",
+          "review_classification": "variant_config",
+          "review_status": "missing_experiment_assignment_and_outcome",
+          "consumer": {
+            "source": "com.grandgames.magicsort_Unity_20260909_112501/RecoveredNative/PseudoC/Assembly-CSharp/Modules/Contexts/Application/Inventory/Scripts/InventoryService.c",
+            "line": 388,
+            "marker": "_InGameBoosterVariant_k__BackingField",
+            "build": "0.0.3063 ARMv7",
+            "evidence": "recovered_native_historical_version"
+          },
+          "interpretation": "Giá trị variant được cache/default/Firebase; chưa có experimentID hoặc traffic split.",
+          "next_action": "Cần experimentID, variant, allocation, activation timestamp, consumer effect và đối chứng cùng điều kiện.",
+          "assignment_proof": false,
+          "uplift_proof": false,
+          "matching_basis": [
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/LiveOps.json#/configs/56/key_where"
+            }
+          ]
+        },
+        {
+          "snapshot": "firebase_20260910",
+          "model": "LevelEndPopupsAbGroup",
+          "key": "",
+          "value": "0",
+          "type": "str",
+          "source": "facts/runtime/decoded/firebase_rc.json",
+          "classification": "config_candidate_not_backend_assignment_proof",
+          "review_id": "MS-SEG-160",
+          "review_classification": "variant_config",
+          "review_status": "missing_experiment_assignment_and_outcome",
+          "consumer": {
+            "source": "com.grandgames.magicsort_Unity_20260909_112501/RecoveredNative/PseudoC/Assembly-CSharp/Modules/Contexts/Application/FirebaseNS/Scripts/FirebaseRemoteConfigResolver.c",
+            "line": 863,
+            "marker": "/* \"ColorVariant\" */",
+            "build": "0.0.3063 ARMv7",
+            "evidence": "recovered_native_historical_version"
+          },
+          "interpretation": "Giá trị variant được cache/default/Firebase; chưa có experimentID hoặc traffic split.",
+          "next_action": "Cần experimentID, variant, allocation, activation timestamp, consumer effect và đối chứng cùng điều kiện.",
+          "assignment_proof": false,
+          "uplift_proof": false,
+          "matching_basis": [
+            {
+              "kind": "exact_model_token_in_dossier_source_or_config",
+              "source": "gdd/LiveOps.json#/configs/43/key_where"
+            }
+          ]
+        }
+      ],
+      "classifications": {
+        "variant_config": 9
+      },
+      "assignment_verified": false,
+      "uplift_verified": false,
+      "note": "No matchingrow does not prove no segmentation/AB. Rewardbucketfalsepositives remain explicitly classified."
+    },
+    "storage_backend_analytics": {
+      "storage_keys": {
+        "entries": 6,
+        "status": "documented_static_contract_runtime_not_verified",
+        "source": "gdd/LiveOps.json#/storage_keys"
+      },
+      "backend": {
+        "entries": 9,
+        "status": "documented_static_contract_runtime_not_verified",
+        "source": "gdd/LiveOps.json#/backend"
+      },
+      "analytics": {
+        "entries": 12,
+        "status": "documented_static_contract_runtime_not_verified",
+        "source": "gdd/LiveOps.json#/analytics"
+      }
+    },
+    "remaining_next_step": {
+      "gap_count": 9,
+      "static_scoped_resolutions": 0,
+      "remaining_count": 9,
+      "all_gap_dispositions": [
+        {
+          "id": "MS-LiveOps-G001",
+          "feature": "LiveOps",
+          "source": "gdd/LiveOps.json#/gaps/0",
+          "original": "Giá trị thật của các khoá Firebase trên môi trường production không nằm trong client — chỉ có bản mặc định trong Resources/defaultconfigs (đa số IsEnabled=false)",
+          "current_note": "15/11 — partial_static_reconciliation: Đã đối chiếu 303 source/model record: 60 default, 60 cache 10/09, 60 cache 10/10, 110 key Firebase 10/09 và 13 cache instance đọc 15/11; catalog 29.699 leaf có nguồn/hash. Vì vậy mô tả chỉ có default không còn đúng. Các snapshot lịch sử không chứng minh giá trị production hiện tại hoặc assignment server. Còn lại: Cần response remote mới có environment/build/account/cohort/timestamp để xác minh production hiện tại; không đưa fixture hiện tại lên mạng.",
+          "status": "partial_static_reconciliation",
+          "review_status": "preserved_partial_static_reconciliation",
+          "dependency": "local_config_reconciliation",
+          "next_action": "Cần response remote mới có environment/build/account/cohort/timestamp để xác minh production hiện tại; không đưa fixture hiện tại lên mạng.",
+          "conclusion": "Đã đối chiếu 303 source/model record: 60 default, 60 cache 10/09, 60 cache 10/10, 110 key Firebase 10/09 và 13 cache instance đọc 15/11; catalog 29.699 leaf có nguồn/hash. Vì vậy mô tả chỉ có default không còn đúng. Các snapshot lịch sử không chứng minh giá trị production hiện tại hoặc assignment server.",
+          "evidence": [
+            "facts/audit_20261115/config_sources.json",
+            "facts/audit_20261115/config_leaves.json",
+            "facts/audit_20261115/config_diff.json"
+          ],
+          "reviewed": "2026-11-15",
+          "mode": "local_catalog_crosscheck_not_fresh_remote",
+          "source_record_counts": {
+            "default_0.0.3063": 60,
+            "cache_20260910": 60,
+            "cache_20261010": 60,
+            "firebase_20260910": 110,
+            "instance_cache_observed_20261115": 13
+          },
+          "remaining": "15/11 — partial_static_reconciliation: Đã đối chiếu 303 source/model record: 60 default, 60 cache 10/09, 60 cache 10/10, 110 key Firebase 10/09 và 13 cache instance đọc 15/11; catalog 29.699 leaf có nguồn/hash. Vì vậy mô tả chỉ có default không còn đúng. Các snapshot lịch sử không chứng minh giá trị production hiện tại hoặc assignment server. Còn lại: Cần response remote mới có environment/build/account/cohort/timestamp để xác minh production hiện tại; không đưa fixture hiện tại lên mạng."
+        },
+        {
+          "id": "MS-LiveOps-G002",
+          "feature": "LiveOps",
+          "source": "gdd/LiveOps.json#/gaps/1",
+          "original": "RootLevelConfigModel.json rỗng, nên toàn bộ cờ root-level không có giá trị mặc định đọc được",
+          "current_note": "15/11 — partial_actual_evidence: Default model không tìm thấy ở Resources/defaultconfigs; cache có model tương ứng; fallback resolver chưa xác minh. Còn lại: Trace Firebase/root resolver và constructor field defaults; giữ riêng trường absent trong default với giá trị cache.",
+          "status": "partial_actual_evidence",
+          "review_status": "preserved_partial_actual_evidence",
+          "dependency": "local_config_reconciliation",
+          "next_action": "Default model không tìm thấy ở Resources/defaultconfigs; cache có model tương ứng; fallback resolver chưa xác minh. Trace Firebase/root resolver và constructor field defaults; giữ riêng trường absent trong default với giá trị cache.",
+          "conclusion": "Default model không tìm thấy ở Resources/defaultconfigs; cache có model tương ứng; fallback resolver chưa xác minh.",
+          "evidence": [
+            "facts/local_asset_review_20261115/config_catalog.json"
+          ],
+          "remaining": "15/11 — partial_actual_evidence: Default model không tìm thấy ở Resources/defaultconfigs; cache có model tương ứng; fallback resolver chưa xác minh. Còn lại: Trace Firebase/root resolver và constructor field defaults; giữ riêng trường absent trong default với giá trị cache.",
+          "source_records": [
+            {
+              "snapshot": "cache20260910",
+              "model": "RootLevelConfigModel",
+              "source": "facts\\runtime\\server_configs\\rootLevelConfigModel.json",
+              "root": "GameDesign",
+              "sha256": "d2727cef6e6dc5661af6926ffa600e1cf98cbe093515095f11b2c0551c8ffac8",
+              "line": 1,
+              "build": "snapshot provenance at path"
+            },
+            {
+              "snapshot": "cache20261010",
+              "model": "RootLevelConfigModel",
+              "source": "facts\\runtime\\test_20261010\\before\\CachedRemoteConfigs",
+              "root": "GameDesign",
+              "sha256": "433164d4877b2dee55d2bbd79ef2fe83d3fe9519492fe15e3cb0926daf216050",
+              "line": 1,
+              "build": "snapshot provenance at path"
+            }
+          ],
+          "reviewed": "2026-11-15",
+          "scope": "question-specific source/observed branch only; no full-UC or production claim",
+          "full_uc_pass": false
+        },
+        {
+          "id": "MS-LiveOps-G003",
+          "feature": "LiveOps",
+          "source": "gdd/LiveOps.json#/gaps/2",
+          "original": "Tham số cụ thể của policy Polly (số lần retry, backoff) nằm trong HttpRequestPolicyFactory.Get; pseudo-C chưa cho ra con số",
+          "current_note": "15/11 — partial_static_code_unresolved: HttpRequestPolicyFactory.Get dùng per-request timeout khi TimeOut>0, retry khi Retry>0; WaitAndRetryAsync dùng Retry của ProxyFactoryParams; handle HttpRequestException/TimeoutRejectedException hoặc response.StatusCode>499. Lambda sleepduration tính0.75×attempt rồi FromSeconds. Có outer timeout wrap. Decompiler float/double và input global-timeout không recover sạch nên chưa chốt toàn bộ số timer/backoff từ body này. Còn lại: Cần ARM disassembly/caller params để chốt Retry/TimeOut/GlobalTimeOut thực, kiểm floating ABI; chưa gọi đầy đủ policy resolved.",
+          "status": "partial_static_code_unresolved",
+          "review_status": "preserved_partial_static_code_unresolved",
+          "dependency": "local_code_review",
+          "next_action": "HttpRequestPolicyFactory.Get dùng per-request timeout khi TimeOut>0, retry khi Retry>0; WaitAndRetryAsync dùng Retry của ProxyFactoryParams; handle HttpRequestException/TimeoutRejectedException hoặc response.StatusCode>499. Lambda sleepduration tính0.75×attempt rồi FromSeconds. Có outer timeout wrap. Decompiler float/double và input global-timeout không recover sạch nên chưa chốt toàn bộ số timer/backoff từ body này. Cần ARM disassembly/caller params để chốt Retry/TimeOut/GlobalTimeOut thực, kiểm floating ABI; chưa gọi đầy đủ policy resolved.",
+          "conclusion": "HttpRequestPolicyFactory.Get dùng per-request timeout khi TimeOut>0, retry khi Retry>0; WaitAndRetryAsync dùng Retry của ProxyFactoryParams; handle HttpRequestException/TimeoutRejectedException hoặc response.StatusCode>499. Lambda sleepduration tính0.75×attempt rồi FromSeconds. Có outer timeout wrap. Decompiler float/double và input global-timeout không recover sạch nên chưa chốt toàn bộ số timer/backoff từ body này.",
+          "evidence": [
+            "../com.grandgames.magicsort_Unity_20260909_112501/RecoveredNative/PseudoC/Assembly-CSharp/Modules/Infrastructure/Network/Http/HttpRequestPolicyFactory.c:105",
+            "../com.grandgames.magicsort_Unity_20260909_112501/RecoveredNative/PseudoC/Assembly-CSharp/Modules/Infrastructure/Network/Http/HttpRequestPolicyFactory.c:48",
+            "../com.grandgames.magicsort_Unity_20260909_112501/RecoveredNative/PseudoC/Assembly-CSharp/Modules/Infrastructure/Network/Http/HttpRequestPolicyFactory.c:64"
+          ],
+          "reviewed": "2026-11-15",
+          "mode": "file_only_recovered_native_0.0.3063",
+          "remaining": "15/11 — partial_static_code_unresolved: HttpRequestPolicyFactory.Get dùng per-request timeout khi TimeOut>0, retry khi Retry>0; WaitAndRetryAsync dùng Retry của ProxyFactoryParams; handle HttpRequestException/TimeoutRejectedException hoặc response.StatusCode>499. Lambda sleepduration tính0.75×attempt rồi FromSeconds. Có outer timeout wrap. Decompiler float/double và input global-timeout không recover sạch nên chưa chốt toàn bộ số timer/backoff từ body này. Còn lại: Cần ARM disassembly/caller params để chốt Retry/TimeOut/GlobalTimeOut thực, kiểm floating ABI; chưa gọi đầy đủ policy resolved."
+        },
+        {
+          "id": "MS-LiveOps-G004",
+          "feature": "LiveOps",
+          "source": "gdd/LiveOps.json#/gaps/3",
+          "original": "HttpProxyFactoryParams.RetryCount/TimeOut/GlobalTimeOut được gán ở nơi dựng HttpProxyFactory, chưa xác định được giá trị",
+          "current_note": "15/11 — partial_static_code_unresolved: HttpProxyFactoryParams constructor gán RetryCount3/TimeOut50/GlobalTimeOut50. ProxyFactoryParams riêng gán Retry3/TimeOut5.0. Đây là hai layer defaults khác nhau; chưa chứng minh mọi factory caller giữ nguyên hoặc đơn vị50 của trường int nếu chưa trace conversion. Còn lại: Đọc CreateForLogin/Create và nơi dựng params để xác minh override/units/context; không gộp hai timeout default thành một giá trị runtime.",
+          "status": "partial_static_code_unresolved",
+          "review_status": "preserved_partial_static_code_unresolved",
+          "dependency": "local_code_review",
+          "next_action": "HttpProxyFactoryParams constructor gán RetryCount3/TimeOut50/GlobalTimeOut50. ProxyFactoryParams riêng gán Retry3/TimeOut5.0. Đây là hai layer defaults khác nhau; chưa chứng minh mọi factory caller giữ nguyên hoặc đơn vị50 của trường int nếu chưa trace conversion. Đọc CreateForLogin/Create và nơi dựng params để xác minh override/units/context; không gộp hai timeout default thành một giá trị runtime.",
+          "conclusion": "HttpProxyFactoryParams constructor gán RetryCount3/TimeOut50/GlobalTimeOut50. ProxyFactoryParams riêng gán Retry3/TimeOut5.0. Đây là hai layer defaults khác nhau; chưa chứng minh mọi factory caller giữ nguyên hoặc đơn vị50 của trường int nếu chưa trace conversion.",
+          "evidence": [
+            "../com.grandgames.magicsort_Unity_20260909_112501/RecoveredNative/PseudoC/Assembly-CSharp/Modules/Infrastructure/Network/Http/HttpProxyFactoryParams.c:115",
+            "../com.grandgames.magicsort_Unity_20260909_112501/RecoveredNative/PseudoC/Assembly-CSharp/Modules/Infrastructure/Network/Http/ProxyFactoryParams.c:90"
+          ],
+          "reviewed": "2026-11-15",
+          "mode": "file_only_recovered_native_0.0.3063",
+          "remaining": "15/11 — partial_static_code_unresolved: HttpProxyFactoryParams constructor gán RetryCount3/TimeOut50/GlobalTimeOut50. ProxyFactoryParams riêng gán Retry3/TimeOut5.0. Đây là hai layer defaults khác nhau; chưa chứng minh mọi factory caller giữ nguyên hoặc đơn vị50 của trường int nếu chưa trace conversion. Còn lại: Đọc CreateForLogin/Create và nơi dựng params để xác minh override/units/context; không gộp hai timeout default thành một giá trị runtime."
+        },
+        {
+          "id": "MS-LiveOps-G005",
+          "feature": "LiveOps",
+          "source": "gdd/LiveOps.json#/gaps/4",
+          "original": "Không chép Adjust app token / Facebook app id (nằm trong AdjustInitializer..ctor) và các key SDK trong Resources/*.asset",
+          "current_note": "Không chép Adjust app token / Facebook app id (nằm trong AdjustInitializer..ctor) và các key SDK trong Resources/*.asset",
+          "status": "qualified_note_not_runtime_verification",
+          "review_status": "qualified_note_not_runtime_verification",
+          "dependency": "intentional_omission_or_scope_note",
+          "next_action": "Lược bỏ token/appID/SDK keys chủ động; giữ field/provider/callsite.",
+          "remaining": "Không chép Adjust app token / Facebook app id (nằm trong AdjustInitializer..ctor) và các key SDK trong Resources/*.asset"
+        },
+        {
+          "id": "MS-LiveOps-G006",
+          "feature": "LiveOps",
+          "source": "gdd/LiveOps.json#/gaps/5",
+          "original": "[Runtime 2026-09-10] Config server LIVE đã đọc trực tiếp từ cache máy (không cần request); các hàng 'server live' là giá trị server ghi đè/thêm so với default.",
+          "current_note": "[Runtime 2026-09-10] Config server LIVE đã đọc trực tiếp từ cache máy (không cần request); các hàng 'server live' là giá trị server ghi đè/thêm so với default.",
+          "status": "historical_evidence_annotation_not_test_result",
+          "review_status": "historical_evidence_annotation_not_test_result",
+          "dependency": "historical_note_requires_qualified_use",
+          "next_action": "Ghi chú cache đã đọc tháng9, từ LIVE phải hiểu snapshot lịch sử. Đối chiếu config catalog/source, giữ default/cache/production hiện tại riêng; không coi là fresh fetch15/11.",
+          "remaining": "[Runtime 2026-09-10] Config server LIVE đã đọc trực tiếp từ cache máy (không cần request); các hàng 'server live' là giá trị server ghi đè/thêm so với default."
+        },
+        {
+          "id": "MS-LiveOps-G007",
+          "feature": "LiveOps",
+          "source": "gdd/LiveOps.json#/gaps/6",
+          "original": "[Runtime 2026-09-10] Model server-only rootLevelConfigModel (không có trong Resources/defaultconfigs) đã đọc từ cache live.",
+          "current_note": "[Runtime 2026-09-10] Model server-only rootLevelConfigModel (không có trong Resources/defaultconfigs) đã đọc từ cache live.",
+          "status": "historical_evidence_annotation_not_test_result",
+          "review_status": "historical_evidence_annotation_not_test_result",
+          "dependency": "historical_note_requires_qualified_use",
+          "next_action": "Ghi chú model cache lịch sử đã có; xác minh schema/source và default-path theo đúng build. Server-only không chứng minh không có default ở mọi version.",
+          "remaining": "[Runtime 2026-09-10] Model server-only rootLevelConfigModel (không có trong Resources/defaultconfigs) đã đọc từ cache live."
+        },
+        {
+          "id": "MS-LiveOps-G008",
+          "feature": "LiveOps",
+          "source": "gdd/LiveOps.json#/gaps/7",
+          "original": "[Runtime 2026-09-10] Model server-only applicationVersion (không có trong Resources/defaultconfigs) đã đọc từ cache live.",
+          "current_note": "[Runtime 2026-09-10] Model server-only applicationVersion (không có trong Resources/defaultconfigs) đã đọc từ cache live.",
+          "status": "historical_evidence_annotation_not_test_result",
+          "review_status": "historical_evidence_annotation_not_test_result",
+          "dependency": "historical_note_requires_qualified_use",
+          "next_action": "Ghi chú model cache lịch sử đã có; xác minh schema/source và default-path theo đúng build. Server-only không chứng minh không có default ở mọi version.",
+          "remaining": "[Runtime 2026-09-10] Model server-only applicationVersion (không có trong Resources/defaultconfigs) đã đọc từ cache live."
+        },
+        {
+          "id": "MS-LiveOps-G009",
+          "feature": "LiveOps",
+          "source": "gdd/LiveOps.json#/gaps/8",
+          "original": "[Runtime 2026-09-10] Cờ AB/tinh chỉnh server-only đọc từ Firebase Remote Config (template 3197).",
+          "current_note": "[Runtime 2026-09-10] Cờ AB/tinh chỉnh server-only đọc từ Firebase Remote Config (template 3197).",
+          "status": "historical_evidence_annotation_not_test_result",
+          "review_status": "historical_evidence_annotation_not_test_result",
+          "dependency": "historical_note_requires_qualified_use",
+          "next_action": "Ghi chú Firebase template3197 lịch sử, chưa có experiment assignment/traffic/outcome; dùng bài21 và row classifications, không gọi mọi key là A/B.",
+          "remaining": "[Runtime 2026-09-10] Cờ AB/tinh chỉnh server-only đọc từ Firebase Remote Config (template 3197)."
+        }
+      ],
+      "feature_specific_acceptance_questions": [
+        "Default/cache/Firebase source priority, root flags, refresh/error/fallback và experiment assignment/version"
+      ],
+      "next_steps": [
+        "Cần response remote mới có environment/build/account/cohort/timestamp để xác minh production hiện tại; không đưa fixture hiện tại lên mạng.",
+        "Default model không tìm thấy ở Resources/defaultconfigs; cache có model tương ứng; fallback resolver chưa xác minh. Trace Firebase/root resolver và constructor field defaults; giữ riêng trường absent trong default với giá trị cache.",
+        "HttpRequestPolicyFactory.Get dùng per-request timeout khi TimeOut>0, retry khi Retry>0; WaitAndRetryAsync dùng Retry của ProxyFactoryParams; handle HttpRequestException/TimeoutRejectedException hoặc response.StatusCode>499. Lambda sleepduration tính0.75×attempt rồi FromSeconds. Có outer timeout wrap. Decompiler float/double và input global-timeout không recover sạch nên chưa chốt toàn bộ số timer/backoff từ body này. Cần ARM disassembly/caller params để chốt Retry/TimeOut/GlobalTimeOut thực, kiểm floating ABI; chưa gọi đầy đủ policy resolved.",
+        "HttpProxyFactoryParams constructor gán RetryCount3/TimeOut50/GlobalTimeOut50. ProxyFactoryParams riêng gán Retry3/TimeOut5.0. Đây là hai layer defaults khác nhau; chưa chứng minh mọi factory caller giữ nguyên hoặc đơn vị50 của trường int nếu chưa trace conversion. Đọc CreateForLogin/Create và nơi dựng params để xác minh override/units/context; không gộp hai timeout default thành một giá trị runtime.",
+        "Lược bỏ token/appID/SDK keys chủ động; giữ field/provider/callsite.",
+        "Ghi chú cache đã đọc tháng9, từ LIVE phải hiểu snapshot lịch sử. Đối chiếu config catalog/source, giữ default/cache/production hiện tại riêng; không coi là fresh fetch15/11.",
+        "Ghi chú model cache lịch sử đã có; xác minh schema/source và default-path theo đúng build. Server-only không chứng minh không có default ở mọi version.",
+        "Ghi chú model cache lịch sử đã có; xác minh schema/source và default-path theo đúng build. Server-only không chứng minh không có default ở mọi version.",
+        "Ghi chú Firebase template3197 lịch sử, chưa có experiment assignment/traffic/outcome; dùng bài21 và row classifications, không gọi mọi key là A/B."
+      ]
+    }
+  },
+  "use_cases": 16,
+  "configs": 65,
+  "new_review_case_count": 0,
+  "reviewed_uc_branch_count": 0,
+  "curated_new_image_count": 0,
+  "segment_ids": [
+    "MS-SEG-083",
+    "MS-SEG-084",
+    "MS-SEG-085",
+    "MS-SEG-109",
+    "MS-SEG-110",
+    "MS-SEG-111",
+    "MS-SEG-158",
+    "MS-SEG-159",
+    "MS-SEG-160"
+  ],
+  "matching_basis": "explicit_gd_config_map_or_exact_model_token_in_gdd_configs_where_key_sources; rootfieldscoped",
+  "unmatched_segment_status": null,
+  "local_document_repairs": [],
+  "sources": [
+    "GameDesign/facts/facts.json (FirebaseRemoteConfigResolver, FirebaseConfigPersistenceService, GrandConfigPersistenceService, UpdateService, HttpProxy, AssetManager, WebSocketManager)",
+    "UnityExport/ExportedProject/Assets/Resources/defaultconfigs/*.json",
+    "UnityExport/ExportedProject/Assets/MonoBehaviour/BackendEnvironmentConfig.asset",
+    "UnityExport/ExportedProject/Assets/MonoBehaviour/AssetBundleVersions.asset",
+    "RecoveredNative/PseudoC/Assembly-CSharp/Modules/Contexts/Application/UpdateService.c"
+  ],
+  "source_hashes": {
+    "gdd_sha256": "3258c064bfa88189a416f8b080dc49a7ba80df89dfe300eb377432538e5270b3",
+    "site_meta_sha256": "0b0de29d55538f3e5c2a68e2f408cd0e635f1cfaf5ee67bf724414ac98535169"
+  }
+}

@@ -1,0 +1,1115 @@
+{
+  "id": "MagicStreak",
+  "title": "Magic Streak (GAE — mũ phép)",
+  "tagline": "Chuỗi thắng liên tiếp đẩy hệ số nhân lên 1 → 5 → 10 → 25 → 100; bảng thưởng chọn theo phân khúc chi tiêu.",
+  "infobox": [
+    [
+      "Loại",
+      "Sự kiện solo"
+    ],
+    [
+      "Mở khóa",
+      "Level 25 (MagicStreakGaeConfigModel.FirstLevelToShow, mặc định client)"
+    ],
+    [
+      "Thời lượng",
+      "Theo startTime → finishTime của sự kiện do server gửi"
+    ],
+    [
+      "Chu kỳ / lịch",
+      "Từng đợt, EventType = 1; hết giờ tự fetch đợt kế (ScheduleEventFetchOnTimerEnd)"
+    ],
+    [
+      "Tham gia",
+      "Người chơi đơn"
+    ],
+    [
+      "Vật phẩm thu thập",
+      "Key / mũ phép (hat)"
+    ],
+    [
+      "Tiền tệ",
+      "Coin, Limitless Life, Shuffle, Extra Bottle, gói thẻ Collection"
+    ],
+    [
+      "Thưởng chính",
+      "20 mốc; mốc cuối 10.000 key trả 10.000 coin (grand prize)"
+    ],
+    [
+      "Điều kiện / phụ thuộc",
+      "MagicStreakGaeConfigModel.IsEnable = true, có cache sự kiện; bảng mốc theo segment"
+    ],
+    [
+      "Manager",
+      "MagicStreakGaeService (kèm MagicStreakGaeDataService, MagicStreakGaeStateService, MagicStreakGaeRemoteService)"
+    ]
+  ],
+  "description": [
+    "Magic Streak (bản GAE — Grand Adventure Event) là sự kiện chuỗi thắng có hệ số nhân điểm.",
+    "Mỗi lần thắng level liên tiếp, hệ số nhân leo theo 5 bậc 1 → 5 → 10 → 25 → 100; thắng 5 ván liên tiếp là đã đạt hệ số cao nhất.",
+    "Điểm cộng vào thanh tiến độ (đơn vị key / mũ phép) bằng đúng hệ số hiện tại.",
+    "Thua level thì hệ số nhân về 1 nhưng điểm đã tích KHÔNG mất — thiết kế 'mất mát mềm', khác Broom Streak và Tower Win Streak.",
+    "Thanh tiến độ có 20 mốc; mốc cuối cần 10.000 key và trả 10.000 coin.",
+    "Bảng mốc được chọn theo phân khúc chi tiêu: RewardStepsW (whale), RewardStepsDH (dolphin/hamsi), RewardStepsNPP (non-purchaser/poor).",
+    "Có thêm ba bản Collection tương ứng, thay một số mốc bằng gói thẻ Collection loại 1–5 khi Collection đang chạy.",
+    "Phân khúc non-purchaser/poor có ngưỡng key thấp hơn rõ rệt ở hầu hết mốc, nhưng mốc cuối vẫn là 10.000 key.",
+    "Sự kiện đếm số lần dùng Play-On giữa các mốc và cộng dồn, gửi lên analytics để đo mức chi tiêu giữ chuỗi.",
+    "Đạt mốc trong Magic Streak còn tính vào nhiệm vụ của Magic Lab và Wheel Of Fortune."
+  ],
+  "notes": [
+    "Lưu ý: mặc định client IsEnable = false, FirstLevelToShow = 25, EventType = 1 — server ghi đè.",
+    "Lưu ý: NeededKeyCount là số key cộng thêm cho từng mốc, không phải tổng tích luỹ.",
+    "Lưu ý: popup xác nhận thoát level cảnh báo sẽ mất hệ số nhân, thúc đẩy dùng booster hoặc Play-On.",
+    "Lưu ý: ánh xạ segment sang bảng là (suy luận) — pseudo-C chỉ cho thấy 5 chuỗi được so sánh: whale, dolphin, hamsi, poor, non-purchaser.",
+    "Lưu ý: segment rỗng thì rơi về bảng mặc định.",
+    "Lưu ý: toàn bộ tính điểm nằm ở client nên chơi offline vẫn tích luỹ được, đồng bộ lại qua SerializeModelForSync.",
+    "Lưu ý: trong bản trích GDD, RewardStepsWithCollectionDH chỉ liệt kê tới mốc 10 — phần còn lại xem appendix/default-configs.md.",
+    "Lưu ý: cơ chế trao thưởng thực tế không xuất hiện trực tiếp trong MagicStreakGaeService, có thể do UI gọi (gaps)."
+  ],
+  "how_it_works": [
+    "Initialize() gọi CacheMultipliers() nạp StreakMultipliers = [1, 5, 10, 25, 100] từ config.",
+    "InitializeData/IntervalUpdate kiểm tra ShouldSendRequest(), rồi TryFetchCurrentEvent() gọi SendRequest tới magicStreakGaeUrl (/v1/get-gae-event); có bản FlatBuffer với schema magicsort.schemas.v1.liveops.gae.",
+    "Response mang eventID, eventType, startTime, finishTime, segment; ChangeEventCache ghi MagicStreakGaeLiveOpModel và MagicStreakGaeModel.Segment.",
+    "GetRewardSteps() so segment với 5 chuỗi phân khúc để chọn RewardStepsW, RewardStepsDH hay RewardStepsNPP (hoặc bản WithCollection khi Collection bật).",
+    "Trạng thái do GetState() trả: Disable(0), ProgressNotEnough(1), NoCache(2), InProgress(3), LocalTimeIsUp(4), RemoteTimeIsUp(5), NotIntroducedEverInLifeTime(6), AllStepsClaimed(7), NotIntroduced(8).",
+    "Lần đầu: MarkIntroduced() và MarkIntroducedEverInLifeTime() ghi hai cờ riêng, bắn magic_streak_gae_info_impression và magic_streak_gae_joined.",
+    "Thắng level: OnLevelWin() → IncreaseScoreAndStreakMultiplier() cộng điểm bằng hệ số hiện tại rồi tăng StreakMultiplierIndex (tối đa 4 ứng với hệ số 100).",
+    "TryIncreaseWinMagicStreakGaeCount() tăng MagicStreakGaeWinCount; analytics magic_streak_gae_hat_collected gửi current_hat_count, current_multiplier, multiplier_rank.",
+    "Thua hoặc bỏ level: OnLevelLose() → ResetStreakMultiplier() đưa StreakMultiplierIndex về 0, ProgressBarRewardScore giữ nguyên.",
+    "Mua Play-On trong level: TryIncreasePlayOnCount() tăng PlayOnCountBetweenSteps và CumulativePlayOnCount, gửi kèm analytics khi vượt mốc.",
+    "Tổng điểm đạt NeededKeyCount → OnStepReached(rewardStep, stepRank), GetEarnedRewardsAndSendStepCompletedEvent() trả thưởng và bắn magic_streak_gae_completed.",
+    "ClearPlayOnCountBetweenSteps() reset bộ đếm Play-On sau khi qua mốc.",
+    "Về lobby, CacheLastSeenProgressBarValues() lưu trạng thái cũ; GetAnimationType(steps) chọn NoAnimation(0), OnlyProgressBar(1) hay Reward(3) để chạy hoạt ảnh đúng đoạn.",
+    "Đạt mốc 20: IsOnGrandPrize() báo đang ở mốc cuối; nhận xong thì IsAllStepsAreClaimed() = true và IsLastRewardClaimed được đánh dấu, state chuyển AllStepsClaimed(7).",
+    "Hết giờ: state chuyển LocalTimeIsUp(4) hoặc RemoteTimeIsUp(5), bắn magic_streak_gae_finished; ScheduleEventFetchOnTimerEnd() tự fetch đợt kế và ResetRewardScoreAndStreakMultiplierIndex() khi đợt mới bắt đầu."
+  ],
+  "reward_tables": [
+    {
+      "title": "BẢNG MỐC PHÂN KHÚC WHALE (RewardStepsW)",
+      "columns": [
+        "Mốc",
+        "NeededKeyCount",
+        "Phần thưởng"
+      ],
+      "rows": [
+        [
+          "Mốc 1",
+          "5",
+          "30 phút Limitless Life"
+        ],
+        [
+          "Mốc 2",
+          "200",
+          "100 coin"
+        ],
+        [
+          "Mốc 3",
+          "400",
+          "30 phút Limitless Life"
+        ],
+        [
+          "Mốc 4",
+          "500",
+          "200 coin"
+        ],
+        [
+          "Mốc 5",
+          "600",
+          "1 giờ Limitless Life"
+        ],
+        [
+          "Mốc 6",
+          "1000",
+          "1 Extra Bottle"
+        ],
+        [
+          "Mốc 7",
+          "1400",
+          "300 coin"
+        ],
+        [
+          "Mốc 8",
+          "900",
+          "2 giờ Limitless Life"
+        ],
+        [
+          "Mốc 9",
+          "1800",
+          "400 coin"
+        ],
+        [
+          "Mốc 10",
+          "1200",
+          "3 giờ Limitless Life"
+        ],
+        [
+          "Mốc 11",
+          "1600",
+          "2 Shuffle"
+        ],
+        [
+          "Mốc 12",
+          "1300",
+          "4 giờ Limitless Life"
+        ],
+        [
+          "Mốc 13",
+          "2500",
+          "2 Extra Bottle"
+        ],
+        [
+          "Mốc 14",
+          "3000",
+          "500 coin"
+        ],
+        [
+          "Mốc 15",
+          "2100",
+          "5 giờ Limitless Life"
+        ],
+        [
+          "Mốc 16",
+          "3800",
+          "1000 coin"
+        ],
+        [
+          "Mốc 17",
+          "2500",
+          "1 Extra Bottle"
+        ],
+        [
+          "Mốc 18",
+          "1900",
+          "250 coin"
+        ],
+        [
+          "Mốc 19",
+          "3000",
+          "6 giờ Limitless Life"
+        ],
+        [
+          "Mốc 20 (grand prize)",
+          "10000",
+          "10000 coin"
+        ]
+      ]
+    },
+    {
+      "title": "BẢNG MỐC PHÂN KHÚC DOLPHIN / HAMSI (RewardStepsDH)",
+      "columns": [
+        "Mốc",
+        "NeededKeyCount",
+        "Phần thưởng"
+      ],
+      "rows": [
+        [
+          "Mốc 1",
+          "5",
+          "30 phút Limitless Life"
+        ],
+        [
+          "Mốc 2",
+          "200",
+          "100 coin"
+        ],
+        [
+          "Mốc 3",
+          "400",
+          "30 phút Limitless Life"
+        ],
+        [
+          "Mốc 4",
+          "500",
+          "200 coin"
+        ],
+        [
+          "Mốc 5",
+          "300",
+          "1 giờ Limitless Life"
+        ],
+        [
+          "Mốc 6",
+          "700",
+          "1 Extra Bottle"
+        ],
+        [
+          "Mốc 7",
+          "900",
+          "300 coin"
+        ],
+        [
+          "Mốc 8",
+          "700",
+          "2 giờ Limitless Life"
+        ],
+        [
+          "Mốc 9",
+          "1000",
+          "400 coin"
+        ],
+        [
+          "Mốc 10",
+          "800",
+          "3 giờ Limitless Life"
+        ],
+        [
+          "Mốc 11",
+          "1100",
+          "2 Shuffle"
+        ],
+        [
+          "Mốc 12",
+          "1200",
+          "4 giờ Limitless Life"
+        ],
+        [
+          "Mốc 13",
+          "1800",
+          "2 Extra Bottle"
+        ],
+        [
+          "Mốc 14",
+          "2600",
+          "2000 coin"
+        ],
+        [
+          "Mốc 15",
+          "1300",
+          "5 giờ Limitless Life"
+        ],
+        [
+          "Mốc 16",
+          "1600",
+          "250 coin"
+        ],
+        [
+          "Mốc 17",
+          "1900",
+          "1 Extra Bottle"
+        ],
+        [
+          "Mốc 18",
+          "1800",
+          "500 coin"
+        ],
+        [
+          "Mốc 19",
+          "1500",
+          "6 giờ Limitless Life"
+        ],
+        [
+          "Mốc 20 (grand prize)",
+          "10000",
+          "10000 coin"
+        ]
+      ]
+    },
+    {
+      "title": "BẢNG MỐC PHÂN KHÚC NON-PURCHASER / POOR (RewardStepsNPP)",
+      "columns": [
+        "Mốc",
+        "NeededKeyCount",
+        "Phần thưởng"
+      ],
+      "rows": [
+        [
+          "Mốc 1",
+          "5",
+          "30 phút Limitless Life"
+        ],
+        [
+          "Mốc 2",
+          "200",
+          "100 coin"
+        ],
+        [
+          "Mốc 3",
+          "300",
+          "30 phút Limitless Life"
+        ],
+        [
+          "Mốc 4",
+          "400",
+          "200 coin"
+        ],
+        [
+          "Mốc 5",
+          "300",
+          "1 giờ Limitless Life"
+        ],
+        [
+          "Mốc 6",
+          "500",
+          "1 Extra Bottle"
+        ],
+        [
+          "Mốc 7",
+          "500",
+          "300 coin"
+        ],
+        [
+          "Mốc 8",
+          "300",
+          "2 giờ Limitless Life"
+        ],
+        [
+          "Mốc 9",
+          "600",
+          "400 coin"
+        ],
+        [
+          "Mốc 10",
+          "400",
+          "3 giờ Limitless Life"
+        ],
+        [
+          "Mốc 11",
+          "800",
+          "2 Shuffle"
+        ],
+        [
+          "Mốc 12",
+          "700",
+          "4 giờ Limitless Life"
+        ],
+        [
+          "Mốc 13",
+          "800",
+          "2 Extra Bottle"
+        ],
+        [
+          "Mốc 14",
+          "1600",
+          "2000 coin"
+        ],
+        [
+          "Mốc 15",
+          "400",
+          "5 giờ Limitless Life"
+        ],
+        [
+          "Mốc 16",
+          "800",
+          "500 coin"
+        ],
+        [
+          "Mốc 17",
+          "700",
+          "1 Extra Bottle"
+        ],
+        [
+          "Mốc 18",
+          "1000",
+          "600 coin"
+        ],
+        [
+          "Mốc 19",
+          "400",
+          "6 giờ Limitless Life"
+        ],
+        [
+          "Mốc 20 (grand prize)",
+          "10000",
+          "10000 coin"
+        ]
+      ]
+    },
+    {
+      "title": "BẢNG COLLECTION — WHALE (RewardStepsWithCollectionW)",
+      "columns": [
+        "Mốc",
+        "NeededKeyCount",
+        "Phần thưởng"
+      ],
+      "rows": [
+        [
+          "Mốc 1",
+          "5",
+          "30 phút Limitless Life"
+        ],
+        [
+          "Mốc 2",
+          "200",
+          "1 gói thẻ Collection loại 1"
+        ],
+        [
+          "Mốc 3",
+          "400",
+          "30 phút Limitless Life"
+        ],
+        [
+          "Mốc 4",
+          "500",
+          "1 gói thẻ Collection loại 2"
+        ],
+        [
+          "Mốc 5",
+          "600",
+          "1 giờ Limitless Life"
+        ],
+        [
+          "Mốc 6",
+          "1000",
+          "1 Extra Bottle"
+        ],
+        [
+          "Mốc 7",
+          "1400",
+          "1 gói thẻ Collection loại 3"
+        ],
+        [
+          "Mốc 8",
+          "900",
+          "2 giờ Limitless Life"
+        ],
+        [
+          "Mốc 9",
+          "1800",
+          "400 coin"
+        ],
+        [
+          "Mốc 10",
+          "1200",
+          "1 gói thẻ Collection loại 3"
+        ],
+        [
+          "Mốc 11",
+          "1600",
+          "2 Shuffle"
+        ],
+        [
+          "Mốc 12",
+          "1300",
+          "1 gói thẻ Collection loại 4"
+        ],
+        [
+          "Mốc 13",
+          "2500",
+          "2 Extra Bottle"
+        ],
+        [
+          "Mốc 14",
+          "3000",
+          "1 gói thẻ Collection loại 4"
+        ],
+        [
+          "Mốc 15",
+          "2100",
+          "5 giờ Limitless Life"
+        ],
+        [
+          "Mốc 16",
+          "3800",
+          "1000 coin"
+        ],
+        [
+          "Mốc 17",
+          "2500",
+          "1 gói thẻ Collection loại 4"
+        ],
+        [
+          "Mốc 18",
+          "1900",
+          "250 coin"
+        ],
+        [
+          "Mốc 19",
+          "3000",
+          "1 gói thẻ Collection loại 5"
+        ],
+        [
+          "Mốc 20 (grand prize)",
+          "10000",
+          "10000 coin"
+        ]
+      ]
+    },
+    {
+      "title": "BẢNG COLLECTION — NON-PURCHASER / POOR (RewardStepsWithCollectionNPP)",
+      "columns": [
+        "Mốc",
+        "NeededKeyCount",
+        "Phần thưởng"
+      ],
+      "rows": [
+        [
+          "Mốc 1",
+          "5",
+          "30 phút Limitless Life"
+        ],
+        [
+          "Mốc 2",
+          "200",
+          "1 gói thẻ Collection loại 1"
+        ],
+        [
+          "Mốc 3",
+          "300",
+          "30 phút Limitless Life"
+        ],
+        [
+          "Mốc 4",
+          "400",
+          "1 gói thẻ Collection loại 2"
+        ],
+        [
+          "Mốc 5",
+          "300",
+          "1 giờ Limitless Life"
+        ],
+        [
+          "Mốc 6",
+          "500",
+          "1 Extra Bottle"
+        ],
+        [
+          "Mốc 7",
+          "500",
+          "1 gói thẻ Collection loại 3"
+        ],
+        [
+          "Mốc 8",
+          "300",
+          "2 giờ Limitless Life"
+        ],
+        [
+          "Mốc 9",
+          "600",
+          "400 coin"
+        ],
+        [
+          "Mốc 10",
+          "400",
+          "1 gói thẻ Collection loại 3"
+        ],
+        [
+          "Mốc 11",
+          "800",
+          "2 Shuffle"
+        ],
+        [
+          "Mốc 12",
+          "700",
+          "1 gói thẻ Collection loại 4"
+        ],
+        [
+          "Mốc 13",
+          "800",
+          "2 Extra Bottle"
+        ],
+        [
+          "Mốc 14",
+          "1600",
+          "1 gói thẻ Collection loại 4"
+        ],
+        [
+          "Mốc 15",
+          "400",
+          "5 giờ Limitless Life"
+        ],
+        [
+          "Mốc 16",
+          "800",
+          "500 coin"
+        ],
+        [
+          "Mốc 17",
+          "700",
+          "1 gói thẻ Collection loại 4"
+        ],
+        [
+          "Mốc 18",
+          "1000",
+          "600 coin"
+        ],
+        [
+          "Mốc 19",
+          "400",
+          "1 gói thẻ Collection loại 5"
+        ],
+        [
+          "Mốc 20 (grand prize)",
+          "10000",
+          "10000 coin"
+        ]
+      ]
+    },
+    {
+      "title": "DEFAULT 0.0.3063 — RewardStepsWithCollectionDH, đủ 20 mốc",
+      "columns": [
+        "Mốc",
+        "NeededKeyCount",
+        "RewardModel (JSON gốc, không cộng nhánh khác)"
+      ],
+      "rows": [
+        [
+          "1",
+          "5",
+          "{\"CurrencyType\":2,\"Amount\":0,\"timeSpan\":\"00:30:00\"}"
+        ],
+        [
+          "2",
+          "200",
+          "{\"CurrencyType\":14,\"Amount\":1,\"CollectionPackType\":1}"
+        ],
+        [
+          "3",
+          "400",
+          "{\"CurrencyType\":2,\"Amount\":0,\"timeSpan\":\"00:30:00\"}"
+        ],
+        [
+          "4",
+          "500",
+          "{\"CurrencyType\":14,\"Amount\":1,\"CollectionPackType\":2}"
+        ],
+        [
+          "5",
+          "300",
+          "{\"CurrencyType\":2,\"Amount\":0,\"timeSpan\":\"01:00:00\"}"
+        ],
+        [
+          "6",
+          "700",
+          "{\"CurrencyType\":6,\"Amount\":1}"
+        ],
+        [
+          "7",
+          "900",
+          "{\"CurrencyType\":14,\"Amount\":1,\"CollectionPackType\":3}"
+        ],
+        [
+          "8",
+          "700",
+          "{\"CurrencyType\":2,\"Amount\":0,\"timeSpan\":\"02:00:00\"}"
+        ],
+        [
+          "9",
+          "1000",
+          "{\"CurrencyType\":1,\"Amount\":400}"
+        ],
+        [
+          "10",
+          "800",
+          "{\"CurrencyType\":14,\"Amount\":1,\"CollectionPackType\":3}"
+        ],
+        [
+          "11",
+          "1100",
+          "{\"CurrencyType\":5,\"Amount\":2}"
+        ],
+        [
+          "12",
+          "1200",
+          "{\"CurrencyType\":14,\"Amount\":1,\"CollectionPackType\":4}"
+        ],
+        [
+          "13",
+          "1800",
+          "{\"CurrencyType\":6,\"Amount\":2}"
+        ],
+        [
+          "14",
+          "2600",
+          "{\"CurrencyType\":14,\"Amount\":1,\"CollectionPackType\":4}"
+        ],
+        [
+          "15",
+          "1300",
+          "{\"CurrencyType\":2,\"Amount\":0,\"timeSpan\":\"05:00:00\"}"
+        ],
+        [
+          "16",
+          "1600",
+          "{\"CurrencyType\":1,\"Amount\":250}"
+        ],
+        [
+          "17",
+          "1900",
+          "{\"CurrencyType\":14,\"Amount\":1,\"CollectionPackType\":4}"
+        ],
+        [
+          "18",
+          "1800",
+          "{\"CurrencyType\":1,\"Amount\":500}"
+        ],
+        [
+          "19",
+          "1500",
+          "{\"CurrencyType\":14,\"Amount\":1,\"CollectionPackType\":5}"
+        ],
+        [
+          "20",
+          "10000",
+          "{\"CurrencyType\":1,\"Amount\":10000}"
+        ]
+      ]
+    },
+    {
+      "title": "BẬC HỆ SỐ NHÂN (StreakMultipliers)",
+      "columns": [
+        "Bậc (index)",
+        "Hệ số",
+        "Đạt khi"
+      ],
+      "rows": [
+        [
+          "0",
+          "×1",
+          "Khởi điểm hoặc sau khi thua"
+        ],
+        [
+          "1",
+          "×5",
+          "Sau 1 trận thắng"
+        ],
+        [
+          "2",
+          "×10",
+          "Sau 2 trận thắng liên tiếp"
+        ],
+        [
+          "3",
+          "×25",
+          "Sau 3 trận thắng liên tiếp"
+        ],
+        [
+          "4",
+          "×100",
+          "Sau 4 trận thắng liên tiếp (bậc cao nhất)"
+        ]
+      ]
+    },
+    {
+      "title": "MÁY TRẠNG THÁI (MagicStreakGaeStateType)",
+      "columns": [
+        "Giá trị",
+        "Trạng thái",
+        "Ý nghĩa"
+      ],
+      "rows": [
+        [
+          "0",
+          "Disable",
+          "Server tắt tính năng"
+        ],
+        [
+          "1",
+          "ProgressNotEnough",
+          "Level dưới FirstLevelToShow"
+        ],
+        [
+          "2",
+          "NoCache",
+          "Chưa có dữ liệu sự kiện"
+        ],
+        [
+          "3",
+          "InProgress",
+          "Đang chạy"
+        ],
+        [
+          "4",
+          "LocalTimeIsUp",
+          "Client tính là hết giờ"
+        ],
+        [
+          "5",
+          "RemoteTimeIsUp",
+          "Server báo hết giờ"
+        ],
+        [
+          "6",
+          "NotIntroducedEverInLifeTime",
+          "Chưa từng xem trong đời tài khoản"
+        ],
+        [
+          "7",
+          "AllStepsClaimed",
+          "Đã nhận hết 20 mốc"
+        ],
+        [
+          "8",
+          "NotIntroduced",
+          "Chưa xem giới thiệu đợt này"
+        ]
+      ]
+    },
+    {
+      "title": "SỰ KIỆN ANALYTICS",
+      "columns": [
+        "Event",
+        "Tham số chính",
+        "Khi nào"
+      ],
+      "rows": [
+        [
+          "magic_streak_gae_joined",
+          "tournament_id, segment, tournament_start_time, tournament_end_time, remaining_duration",
+          "Sự kiện mới bắt đầu"
+        ],
+        [
+          "magic_streak_gae_hat_collected",
+          "current_hat_count, current_multiplier, multiplier_rank, current_streak, level_id",
+          "Thắng level và cộng key"
+        ],
+        [
+          "magic_streak_gae_completed",
+          "current_step, total_completed_step, step_rewards, playoncount_between_steps, playoncount_cumulative, total_collected_hat_count",
+          "Vượt một mốc"
+        ],
+        [
+          "magic_streak_gae_reward_claim",
+          "current_step, step_rewards, total_collected_hat_count",
+          "Nhận thưởng mốc"
+        ],
+        [
+          "magic_streak_gae_popup_impression",
+          "impression_source, current_step, current_multiplier",
+          "Mở popup sự kiện"
+        ],
+        [
+          "magic_streak_gae_info_impression",
+          "tournament_id, current_step",
+          "Mở popup thông tin"
+        ],
+        [
+          "magic_streak_gae_finished",
+          "tournament_id, segment, total_completed_step, total_collected_hat_count, playoncount_cumulative",
+          "Sự kiện kết thúc"
+        ]
+      ]
+    }
+  ],
+  "key_numbers": [
+    {
+      "label": "Số mốc mỗi bảng",
+      "value": "20",
+      "source": "MagicStreakGaeConfigModel.json: RewardStepsW/DH/NPP"
+    },
+    {
+      "label": "Bậc hệ số nhân",
+      "value": "[1, 5, 10, 25, 100]",
+      "source": "MagicStreakGaeConfigModel.json: StreakMultipliers"
+    },
+    {
+      "label": "Level mở khoá",
+      "value": "25",
+      "source": "MagicStreakGaeConfigModel.json: FirstLevelToShow"
+    },
+    {
+      "label": "Bật/tắt mặc định",
+      "value": "IsEnable = false",
+      "source": "MagicStreakGaeConfigModel.json"
+    },
+    {
+      "label": "Loại sự kiện",
+      "value": "EventType = 1",
+      "source": "MagicStreakGaeConfigModel.json"
+    },
+    {
+      "label": "Key mốc đầu",
+      "value": "5",
+      "source": "RewardStepsW[0].NeededKeyCount"
+    },
+    {
+      "label": "Key mốc cuối (grand prize)",
+      "value": "10000 ở cả ba phân khúc",
+      "source": "RewardStepsW/DH/NPP[19].NeededKeyCount"
+    },
+    {
+      "label": "Grand prize",
+      "value": "10000 coin",
+      "source": "RewardStepsW[19].RewardModel"
+    },
+    {
+      "label": "Tổng key bảng whale",
+      "value": "5+200+400+500+600+1000+1400+900+1800+1200+1600+1300+2500+3000+2100+3800+2500+1900+3000+10000",
+      "source": "RewardStepsW NeededKeyCount"
+    },
+    {
+      "label": "Số bảng mốc trong client",
+      "value": "6 (3 phân khúc × bản thường và bản Collection)",
+      "source": "MagicStreakGaeConfigModel"
+    },
+    {
+      "label": "Chuỗi phân khúc được so sánh",
+      "value": "'whale', 'dolphin', 'hamsi', 'poor', 'non-purchaser'",
+      "source": "MagicStreakGaeService.GetRewardSteps"
+    },
+    {
+      "label": "Số trạng thái sự kiện",
+      "value": "9 (0–8)",
+      "source": "MagicStreakGaeStateType"
+    },
+    {
+      "label": "Kiểu hoạt ảnh",
+      "value": "NoAnimation=0, OnlyProgressBar=1, Reward=3",
+      "source": "MagicStreakGaeAnimationType"
+    },
+    {
+      "label": "Endpoint sự kiện",
+      "value": "magicStreakGaeUrl = {base}/v1/get-gae-event",
+      "source": "MagicStreakGaeRemoteService.SendRequest"
+    },
+    {
+      "label": "Schema FlatBuffer",
+      "value": "magicsort.schemas.v1.liveops.gae (GetGAEEventResponse)",
+      "source": "PseudoC/Assembly-CSharp/MagicSort/schemas/v1/liveops/gae"
+    },
+    {
+      "label": "Thưởng Limitless Life trải dài",
+      "value": "30 phút → 6 giờ",
+      "source": "RewardStepsW RewardModel.timeSpan"
+    },
+    {
+      "label": "Thưởng coin trải dài",
+      "value": "100 → 10000 coin",
+      "source": "RewardStepsW RewardModel.Amount"
+    },
+    {
+      "label": "Mốc coin lớn nhất trước grand prize",
+      "value": "2000 coin ở mốc 14 (bảng DH và NPP)",
+      "source": "RewardStepsDH[13] / RewardStepsNPP[13]"
+    },
+    {
+      "label": "Nhiệm vụ đóng góp cho meta",
+      "value": "WheelOfFortuneTaskType.MagicStreakStepReach = 3",
+      "source": "MagicStreakGaeService.IsAvailableForWheelOfFortune"
+    },
+    {
+      "label": "Trường dữ liệu lưu",
+      "value": "9 trường trong MagicStreakGaeModel",
+      "source": "MagicStreakGaeDataService.SerializeModelForSync"
+    },
+    {
+      "label": "Chỉ số Play-On theo dõi",
+      "value": "PlayOnCountBetweenSteps và CumulativePlayOnCount",
+      "source": "MagicStreakGaeService.TryIncreasePlayOnCount"
+    }
+  ],
+  "config_highlights": [
+    {
+      "key": "MagicStreakGaeConfigModel.json: IsEnable",
+      "value": "false",
+      "meaning": "Bật/tắt Magic Streak GAE"
+    },
+    {
+      "key": "MagicStreakGaeConfigModel.json: FirstLevelToShow",
+      "value": "25",
+      "meaning": "Level tối thiểu, mở rất sớm"
+    },
+    {
+      "key": "MagicStreakGaeConfigModel.json: EventType",
+      "value": "1",
+      "meaning": "eventType gửi backend"
+    },
+    {
+      "key": "MagicStreakGaeConfigModel.json: StreakMultipliers",
+      "value": "[1, 5, 10, 25, 100]",
+      "meaning": "5 bậc hệ số nhân điểm theo chuỗi thắng"
+    },
+    {
+      "key": "RewardStepsW — NeededKeyCount",
+      "value": "5, 200, 400, 500, 600, 1000, 1400, 900, 1800, 1200, 1600, 1300, 2500, 3000, 2100, 3800, 2500, 1900, 3000, 10000",
+      "meaning": "Ngưỡng key từng mốc cho phân khúc whale"
+    },
+    {
+      "key": "RewardStepsW — phần thưởng",
+      "value": "Limitless Life 30'→6h, coin 100→10000, Extra Bottle, Shuffle",
+      "meaning": "Lộ trình thưởng bảng whale"
+    },
+    {
+      "key": "RewardStepsDH — NeededKeyCount",
+      "value": "5, 200, 400, 500, 300, 700, 900, 700, 1000, 800, 1100, 1200, 1800, 2600, 1300, 1600, 1900, 1800, 1500, 10000",
+      "meaning": "Ngưỡng key phân khúc dolphin/hamsi"
+    },
+    {
+      "key": "RewardStepsNPP — NeededKeyCount",
+      "value": "5, 200, 300, 400, 300, 500, 500, 300, 600, 400, 800, 700, 800, 1600, 400, 800, 700, 1000, 400, 10000",
+      "meaning": "Ngưỡng key phân khúc non-purchaser/poor, thấp hơn rõ rệt"
+    },
+    {
+      "key": "RewardStepsWithCollectionW / ...DH / ...NPP",
+      "value": "Thay một số mốc bằng gói thẻ Collection loại 1–5",
+      "meaning": "Ba bảng bản Collection"
+    },
+    {
+      "key": "Chuỗi phân khúc",
+      "value": "'whale', 'dolphin', 'hamsi', 'poor', 'non-purchaser'",
+      "meaning": "Segment quyết định bảng mốc nào được dùng"
+    },
+    {
+      "key": "MagicStreakGaeStateType",
+      "value": "Disable=0, ProgressNotEnough=1, NoCache=2, InProgress=3, LocalTimeIsUp=4, RemoteTimeIsUp=5, NotIntroducedEverInLifeTime=6, AllStepsClaimed=7, NotIntroduced=8",
+      "meaning": "Trạng thái sự kiện"
+    },
+    {
+      "key": "MagicStreakGaeAnimationType",
+      "value": "NoAnimation=0, OnlyProgressBar=1, Reward=3",
+      "meaning": "Kiểu hoạt ảnh khi về lobby"
+    },
+    {
+      "key": "MagicStreakGaeResponseModel",
+      "value": "eventID, eventType, startTime, finishTime, segment (server)",
+      "meaning": "Khung thời gian và phân khúc do server quyết định"
+    },
+    {
+      "key": "MagicStreakGaeRewardStepModel",
+      "value": "NeededKeyCount, RewardModel",
+      "meaning": "Một mốc trên thanh tiến độ"
+    },
+    {
+      "key": "FlatBuffer schema",
+      "value": "magicsort.schemas.v1.liveops.gae (GetGAEEventResponse)",
+      "meaning": "Biến thể nhị phân của response"
+    },
+    {
+      "key": "MagicStreakGaeModel",
+      "value": "IsEventIntroducedEverInLifeTime, IsEventIntroduced, ProgressBarRewardScore, StreakMultiplierIndex, MagicStreakGaeWinCount, CachedLiveOpModel, Segment, CumulativePlayOnCount, PlayOnCountBetweenSteps",
+      "meaning": "Dữ liệu lưu và đồng bộ"
+    },
+    {
+      "key": "MagicStreakGaeLiveOpModel",
+      "value": "TournamentId, StartTime, FinishTime, IsLastRewardClaimed",
+      "meaning": "Cache sự kiện"
+    },
+    {
+      "key": "MagicStreakGaeSpriteConfig",
+      "value": "Lớp MagicStreakGaeSpriteConfig có GUID 8fe3689ca867e293d412f8f0c51c184c, khớp MagicStreakSpriteConfig.asset trong export 0.0.3063. Asset chứa 6 tham chiếu Background, RankBackground và Tip ở trạng thái locked/unlocked. Đường dẫn và hash đầy đủ nằm trong asset_catalog và ui_class_prefab_proof.",
+      "meaning": "6 sprite nền/rank/tip locked/unlocked trongasset đã resolve."
+    },
+    {
+      "key": "magicStreakGaeUrl",
+      "value": "{base}/v1/get-gae-event",
+      "meaning": "Endpoint lấy sự kiện GAE và phân khúc"
+    },
+    {
+      "key": "Log lỗi remote",
+      "value": "'MagicStreakGaeRemoteService … failed: Response is null.'",
+      "meaning": "Thông báo khi response rỗng"
+    },
+    {
+      "key": "CurrencyType trong bảng thưởng",
+      "value": "1 = coin, 2 = Limitless Life (kèm timeSpan), 5 = Shuffle, 6 = Extra Bottle, 14 = gói thẻ Collection",
+      "meaning": "Ánh xạ mã tiền tệ (14 là suy luận từ CollectionPackType)"
+    },
+    {
+      "key": "WheelOfFortuneTaskType.MagicStreakStepReach",
+      "value": "3",
+      "meaning": "Đạt mốc Magic Streak tính vào nhiệm vụ Wheel Of Fortune và Magic Lab"
+    }
+  ],
+  "tips": [
+    "Đây là ví dụ rõ nhất về phân khúc hoá phần thưởng: cùng một sự kiện nhưng ba lộ trình khác nhau theo mức chi tiêu.",
+    "Không mất điểm khi thua khiến người chơi luôn thấy tiến bộ, nhưng mất hệ số nhân tạo áp lực mua Play-On.",
+    "Việc đếm riêng Play-On giữa các mốc cho phép vận hành đo chính xác chi phí giữ chuỗi ở từng đoạn lộ trình.",
+    "Grand prize 10.000 coin cần 10.000 key ở mọi phân khúc — điểm neo chung giữ nguyên độ khó của mục tiêu lớn nhất.",
+    "Bản Collection đổi coin và Limitless Life thành gói thẻ, chuyển giá trị sang meta đang chạy."
+  ],
+  "categories": [
+    "Sự kiện",
+    "Live-ops",
+    "Kinh tế",
+    "Tiến trình"
+  ]
+}

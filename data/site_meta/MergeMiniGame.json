@@ -1,0 +1,711 @@
+{
+  "id": "MergeMiniGame",
+  "title": "Merge Bakery (Merge Mini Game)",
+  "tagline": "Mini-game merge-2 trên bàn 7×7: tiêu Energy bấm máy phát, ghép vật phẩm lên cấp để lấy Grand Prize.",
+  "infobox": [
+    [
+      "Loại",
+      "Sự kiện solo"
+    ],
+    [
+      "Mở khóa",
+      "Level 100 (MergeMiniGameConfigModel.FirstLevelToShow, mặc định client)"
+    ],
+    [
+      "Thời lượng",
+      "Theo StartTime → FinishTime của mùa do server gửi"
+    ],
+    [
+      "Chu kỳ / lịch",
+      "Từng mùa, EventType = 18 (mặc định client)"
+    ],
+    [
+      "Tham gia",
+      "Người chơi đơn, phải bấm nút tham gia (JoinEvent)"
+    ],
+    [
+      "Vật phẩm thu thập",
+      "Vật phẩm merge theo 5 set, tối đa 49 ô trên bàn"
+    ],
+    [
+      "Tiền tệ",
+      "Energy (CurrencyType.MergeMiniGameEnergy = 21), coin, unlimited life"
+    ],
+    [
+      "Thưởng chính",
+      "Thưởng CollectibleItem, thưởng chặng, và Grand Prize ở cấp cao nhất"
+    ],
+    [
+      "Điều kiện / phụ thuộc",
+      "IsEnabled = true và đã tải xong bundle 'merge_mini_game_bundle'"
+    ],
+    [
+      "Manager",
+      "MergeMiniGameService (kèm MergeMiniGameDataService, MergeMiniGameStateService, MergeMiniGameRemoteService, MergeMiniGameController)"
+    ]
+  ],
+  "description": [
+    "Merge Bakery là mini-game merge-2 chạy trên bàn 7×7 gồm 49 ô, tối đa 5 chuỗi (set) vật phẩm.",
+    "Người chơi tiêu Energy để bấm máy phát (GeneratorItem) sinh vật phẩm cấp thấp, rồi kéo hai vật cùng loại cùng cấp vào nhau để nâng cấp.",
+    "Mỗi chuỗi có nhiều cấp; cấp cao nhất là Grand Prize — mục tiêu lớn nhất của sự kiện.",
+    "Bàn còn có BubbleItem (bọc vật phẩm, phải merge cạnh mới mở), BlockItem (ô khoá, merge gần đó để phá) và CollectibleItem (double-tap để nhận thưởng thật).",
+    "Energy kiếm từ level chính theo độ khó: 1 với Regular, 2 với Hard, 3 với Super Hard, nhân thêm FirstTryMultiplier khi thắng ngay lần đầu.",
+    "Energy là một loại tiền tệ trong InventoryService nên có thể nhận từ Magic Pass, Mini Game và các sự kiện khác.",
+    "Hệ số nhân 1x / 2x / 4x mở khoá theo chặng (chặng 4 và chặng 8 mặc định), cho phép bấm máy phát ra nhiều vật cùng lúc.",
+    "Vật phẩm sinh dư khi bàn đầy được xếp vào Scatter Queue và thả xuống khi có ô trống, không bị mất.",
+    "Toàn bộ định nghĩa vật phẩm, vật phụ và bàn khởi đầu do server gửi trong MergeMiniGameEventInfoResponse.",
+    "Popup có thể tự ép mở khi người chơi đã tích đủ Energy, nhưng giới hạn tối đa 2 lần mỗi mùa."
+  ],
+  "notes": [
+    "Lưu ý: mặc định client IsEnabled = false, EventType = 18, FirstLevelToShow = 100 — server ghi đè.",
+    "Lưu ý: FirstTryMultiplier mặc định = 0 trong file client, tức chưa cấu hình thưởng thêm cho first-try.",
+    "Lưu ý: trước khi vượt AutoOpenEnergyCountThreshold (9) thì ngưỡng ép mở là 50 Energy, sau đó là 100 Energy.",
+    "Lưu ý: nút máy phát chặn khi không đủ Energy ('No Energy!') hoặc hết ô trống ('No Space!').",
+    "Lưu ý: popup 'New Item Found!' chỉ hiện từ chặng 5 trở đi (FirstStageToShowNewItemFound).",
+    "Lưu ý: cảnh báo trước khi thoát — 'You will lose your energy if you quit!'.",
+    "Lưu ý: bàn, hàng đợi và tiến độ đều nằm trong cache nên khôi phục nguyên trạng qua các phiên và giữa các thiết bị.",
+    "Lưu ý: số set, số cấp mỗi set, nội dung thưởng từng cấp và số chặng thật đều do server gửi (server).",
+    "Lưu ý: sprite vật phẩm nằm trong bundle 'merge_mini_game_bundle' tải từ CDN; chưa tải xong thì trạng thái là AssetsNotReady (8)."
+  ],
+  "how_it_works": [
+    "Initialize() đặt bundle id 'merge_mini_game_bundle'; IsEligible() kiểm tra IsEnabled và level ≥ FirstLevelToShow.",
+    "NeedToDownloadAssets() và CheckAndResolveAssetDependency() tải bundle; chưa xong thì trạng thái AssetsNotReady (8) và icon lobby ẩn.",
+    "Khi ShouldStartNewEvent() và không có popup 'MergeMiniGamePopUp' đang mở, GetEventInfo(eventType) trả ItemDefinitions, ScatterDefinitions, InitialBoard, Rewards, RewardsWithCollection.",
+    "StartNewEvent() dựng định nghĩa vật phẩm, định nghĩa vật phụ và 49 ô bàn từ InitialBoard; readable event id có dạng \"mb_{0}_{1:yyyyMMdd}\".",
+    "Người chơi bấm tham gia: JoinEvent() đặt IsJoined = true và cấp InitialEnergyCount (5 Energy mặc định).",
+    "Thắng level: TryIncreaseEnergyCount(difficulty, isFirstTry) cộng 1/2/3 Energy theo Regular/Hard/SuperHard, nhân FirstTryMultiplier khi thắng lần đầu.",
+    "Về Home, ShouldShowCollectibleEarnAnimationOnLobbyReturn() phát hoạt ảnh Energy bay vào icon lobby.",
+    "Trong bàn: CanTapGeneratorButton() kiểm tra đủ Energy và GetEmptySpaceCount() > 0 trước khi cho bấm máy phát.",
+    "GetItem(setID, level, canProduceScatteredProducts) trả ItemSpawnResult; GetMultiplier() quyết định sinh 1, 2 hay 4 vật một lần; IncreaseSpendEnergyCount cộng TotalSpendEnergy.",
+    "Kéo thả để merge: MergeItems(from, to, itemModel) tạo vật cấp Level + 1, TryIncreaseProgress(setID, level) cập nhật MergeProgress và CurrentStage.",
+    "Vật phụ sinh kèm đi vào Scatter Queue; khi có ô trống, TryGetItemFromScatterQueue() thả xuống (NoPendingCell = −1 khi chưa có ô chờ); MergeStuckChecker phát hiện bí nước và MergeHintController gợi ý cặp có thể merge.",
+    "Double-tap CollectibleItem: OnItemCollected(setId, levelId, cellIndex) trao thưởng với CurrencyEarnReason.MergeMiniGameCollectibleItem (57).",
+    "Hoàn thành chặng: GetStageReward(stageIndex) trao với CurrencyEarnReason.MergeMiniGameStageCompleted (58); đạt chặng 4 mở 2x, chặng 8 mở 4x.",
+    "Merge tới cấp cuối: HasReachedFinalStage() = true, GiveGrandPrizeRewardInQueue() trao Grand Prize với CurrencyEarnReason.MergeMiniGameGrandPrize (59).",
+    "Hết giờ: AutoOpenEnabledOnFinish = true nên TryClaimEventAutomatically() chạy, ClaimEvent() bắn merge_event_finished kèm board_state và các tổng kết, rồi ClearBoard()."
+  ],
+  "reward_tables": [
+    {
+      "title": "NGUỒN PHẦN THƯỞNG CỦA MERGE BAKERY",
+      "columns": [
+        "Nguồn",
+        "Điều kiện",
+        "Phần thưởng"
+      ],
+      "rows": [
+        [
+          "CollectibleItem trên bàn",
+          "Double-tap vật loại CollectibleItem (2)",
+          "Coin, unlimited life… theo MergeMiniGameItemModel.Reward (server) — lý do 57"
+        ],
+        [
+          "Hoàn thành chặng",
+          "Tiến độ chuỗi đạt mốc chặng",
+          "Rewards[stageIndex] hoặc RewardsWithCollection[stageIndex] (server) — lý do 58"
+        ],
+        [
+          "Grand Prize",
+          "Merge tới cấp cao nhất của chuỗi",
+          "Phần thưởng lớn nhất của sự kiện (server) — lý do 59"
+        ],
+        [
+          "Energy",
+          "Thắng level chính và các sự kiện khác",
+          "1 / 2 / 3 Energy theo Regular / Hard / Super Hard"
+        ],
+        [
+          "Energy khởi điểm",
+          "Bấm tham gia sự kiện",
+          "5 Energy (InitialEnergyCount)"
+        ]
+      ]
+    },
+    {
+      "title": "ENERGY NHẬN THEO ĐỘ KHÓ LEVEL",
+      "columns": [
+        "Độ khó",
+        "Khoá cấu hình",
+        "Energy"
+      ],
+      "rows": [
+        [
+          "Regular",
+          "NormalLevelEnergyCount",
+          "1 Energy"
+        ],
+        [
+          "Hard",
+          "HardLevelEnergyCount",
+          "2 Energy"
+        ],
+        [
+          "Super Hard",
+          "SuperHardLevelEnergyCount",
+          "3 Energy"
+        ],
+        [
+          "Thắng ngay lần đầu",
+          "FirstTryMultiplier",
+          "×0 (mặc định client, chưa cấu hình)"
+        ]
+      ]
+    },
+    {
+      "title": "MỞ KHÓA HỆ SỐ NHÂN MÁY PHÁT",
+      "columns": [
+        "Hệ số",
+        "Chặng mở khoá",
+        "Ghi chú"
+      ],
+      "rows": [
+        [
+          "1x",
+          "Mặc định",
+          "Sinh 1 vật mỗi lần bấm"
+        ],
+        [
+          "2x",
+          "Chặng 4 (Multiplier2xUnlockStage)",
+          "Text 'New Multiplier is available now!'"
+        ],
+        [
+          "4x",
+          "Chặng 8 (Multiplier4xUnlockStage)",
+          "ShouldSetMaxMultiplier tự đặt hệ số cao nhất"
+        ]
+      ]
+    },
+    {
+      "title": "NĂM LOẠI VẬT PHẨM TRÊN BÀN (MergeMiniGameItemType)",
+      "columns": [
+        "Giá trị",
+        "Loại",
+        "Vai trò"
+      ],
+      "rows": [
+        [
+          "0",
+          "ProgressItem",
+          "Vật phẩm thường, merge để lên cấp"
+        ],
+        [
+          "1",
+          "GeneratorItem",
+          "Máy phát, bấm để sinh vật phẩm (tốn Energy)"
+        ],
+        [
+          "2",
+          "CollectibleItem",
+          "Double-tap để nhận thưởng thật"
+        ],
+        [
+          "3",
+          "BubbleItem",
+          "Bọc vật phẩm, merge ngay cạnh để làm vỡ bọc"
+        ],
+        [
+          "4",
+          "BlockItem",
+          "Ô khoá, merge gần đó để mở khoá"
+        ]
+      ]
+    },
+    {
+      "title": "CẤU HÌNH MẶC ĐỊNH (MergeMiniGameConfigModel.json)",
+      "columns": [
+        "Khoá",
+        "Giá trị mặc định",
+        "Ý nghĩa"
+      ],
+      "rows": [
+        [
+          "IsEnabled",
+          "false",
+          "Bật/tắt mini-game"
+        ],
+        [
+          "EventType",
+          "18",
+          "Loại sự kiện gửi lên GetEventInfo"
+        ],
+        [
+          "FirstLevelToShow",
+          "100",
+          "Level tối thiểu để mở"
+        ],
+        [
+          "InitialEnergyCount",
+          "5",
+          "Energy tặng khi tham gia"
+        ],
+        [
+          "NormalLevelEnergyCount",
+          "1",
+          "Energy khi thắng level Regular"
+        ],
+        [
+          "HardLevelEnergyCount",
+          "2",
+          "Energy khi thắng level Hard"
+        ],
+        [
+          "SuperHardLevelEnergyCount",
+          "3",
+          "Energy khi thắng level Super Hard"
+        ],
+        [
+          "FirstTryMultiplier",
+          "0",
+          "Hệ số nhân khi thắng ngay lần đầu"
+        ],
+        [
+          "AutoOpenEnabledOnFinish",
+          "true",
+          "Tự nhận thưởng khi hết giờ"
+        ],
+        [
+          "AutoOpenEnergyCountBeforeThreshold",
+          "50",
+          "Energy cần để ép mở popup trước ngưỡng"
+        ],
+        [
+          "AutoOpenEnergyCountAfterThreshold",
+          "100",
+          "Energy cần để ép mở popup sau ngưỡng"
+        ],
+        [
+          "AutoOpenEnergyCountThreshold",
+          "9",
+          "Mốc tiến độ đổi ngưỡng ép mở"
+        ],
+        [
+          "Multiplier2xUnlockStage",
+          "4",
+          "Chặng mở hệ số 2x"
+        ],
+        [
+          "Multiplier4xUnlockStage",
+          "8",
+          "Chặng mở hệ số 4x"
+        ],
+        [
+          "ForceOpenCount",
+          "2",
+          "Số lần tối đa được ép mở popup"
+        ],
+        [
+          "FirstStageToShowNewItemFound",
+          "5",
+          "Chặng bắt đầu hiện popup 'New Item Found!'"
+        ]
+      ]
+    },
+    {
+      "title": "MÁY TRẠNG THÁI (MergeMiniGameStateType)",
+      "columns": [
+        "Giá trị",
+        "Trạng thái",
+        "Ý nghĩa"
+      ],
+      "rows": [
+        [
+          "0",
+          "NoCachedEvent",
+          "Chưa có cache sự kiện"
+        ],
+        [
+          "1",
+          "NotIntroduced",
+          "Chưa xem giới thiệu"
+        ],
+        [
+          "2",
+          "InProgress",
+          "Đang chạy"
+        ],
+        [
+          "3",
+          "TimeIsUp",
+          "Hết giờ"
+        ],
+        [
+          "4",
+          "Claimed",
+          "Đã nhận thưởng"
+        ],
+        [
+          "5",
+          "ClaimedAndTimeIsUp",
+          "Đã nhận và đã hết giờ"
+        ],
+        [
+          "6",
+          "InsufficientLevel",
+          "Level dưới FirstLevelToShow"
+        ],
+        [
+          "7",
+          "Disable",
+          "Server tắt tính năng"
+        ],
+        [
+          "8",
+          "AssetsNotReady",
+          "Chưa tải xong bundle"
+        ]
+      ]
+    },
+    {
+      "title": "SÁU BƯỚC HƯỚNG DẪN (MergeTutorialType)",
+      "columns": [
+        "Giá trị",
+        "Bước",
+        "Nội dung"
+      ],
+      "rows": [
+        [
+          "0",
+          "GeneratorButtonTutorial",
+          "'Tap to Generator Button to spawn items!'"
+        ],
+        [
+          "1",
+          "MergeItemTutorial",
+          "'Merge 2 items to upgrade!'"
+        ],
+        [
+          "2",
+          "EventInfoTutorial",
+          "Giới thiệu sự kiện lúc bắt đầu"
+        ],
+        [
+          "3",
+          "GeneratorItemTutorial",
+          "'Tap to spawn items'"
+        ],
+        [
+          "4",
+          "RewardedTutorial",
+          "3 bước MergeMiniGameRewardedInfoStep1..3"
+        ],
+        [
+          "5",
+          "BubbleTutorial",
+          "'Uncover bubble item by merging it!'"
+        ]
+      ]
+    },
+    {
+      "title": "LÝ DO ÉP MỞ POPUP (MergeMiniGameForceOpenReason)",
+      "columns": [
+        "Giá trị",
+        "Lý do",
+        "Ghi chú"
+      ],
+      "rows": [
+        [
+          "0",
+          "None",
+          "-"
+        ],
+        [
+          "1",
+          "NotIntroduced",
+          "Chưa từng xem sự kiện"
+        ],
+        [
+          "2",
+          "Finished",
+          "Sự kiện vừa kết thúc"
+        ],
+        [
+          "3",
+          "EnoughEnergy",
+          "Đã tích đủ Energy theo ngưỡng auto-open"
+        ]
+      ]
+    }
+  ],
+  "key_numbers": [
+    {
+      "label": "Số ô trên bàn",
+      "value": "49 (0x31, bàn 7×7)",
+      "source": "MergeMiniGameDataService.CellCount"
+    },
+    {
+      "label": "Số chuỗi vật phẩm tối đa",
+      "value": "5",
+      "source": "MergeMiniGameDataService.SetCount"
+    },
+    {
+      "label": "Level mở khoá",
+      "value": "100",
+      "source": "MergeMiniGameConfigModel.json: FirstLevelToShow"
+    },
+    {
+      "label": "Loại sự kiện",
+      "value": "EventType = 18",
+      "source": "MergeMiniGameConfigModel.json"
+    },
+    {
+      "label": "Bật/tắt mặc định",
+      "value": "IsEnabled = false",
+      "source": "MergeMiniGameConfigModel.json"
+    },
+    {
+      "label": "Energy khởi điểm",
+      "value": "5",
+      "source": "MergeMiniGameConfigModel.json: InitialEnergyCount"
+    },
+    {
+      "label": "Energy theo độ khó",
+      "value": "1 / 2 / 3 (Regular / Hard / Super Hard)",
+      "source": "MergeMiniGameConfigModel.json"
+    },
+    {
+      "label": "Hệ số first-try",
+      "value": "0 (mặc định client)",
+      "source": "MergeMiniGameConfigModel.json: FirstTryMultiplier"
+    },
+    {
+      "label": "Ngưỡng Energy ép mở popup",
+      "value": "50 trước ngưỡng, 100 sau ngưỡng",
+      "source": "AutoOpenEnergyCountBeforeThreshold / AfterThreshold"
+    },
+    {
+      "label": "Mốc đổi ngưỡng ép mở",
+      "value": "9",
+      "source": "MergeMiniGameConfigModel.json: AutoOpenEnergyCountThreshold"
+    },
+    {
+      "label": "Số lần tối đa ép mở popup",
+      "value": "2",
+      "source": "MergeMiniGameConfigModel.json: ForceOpenCount"
+    },
+    {
+      "label": "Chặng mở hệ số 2x / 4x",
+      "value": "4 / 8",
+      "source": "Multiplier2xUnlockStage / Multiplier4xUnlockStage"
+    },
+    {
+      "label": "Chặng bắt đầu hiện 'New Item Found!'",
+      "value": "5",
+      "source": "FirstStageToShowNewItemFound"
+    },
+    {
+      "label": "Tự nhận thưởng khi hết giờ",
+      "value": "true",
+      "source": "AutoOpenEnabledOnFinish"
+    },
+    {
+      "label": "Loại tiền tệ Energy",
+      "value": "CurrencyType.MergeMiniGameEnergy = 21 (analytics 'merge_energy')",
+      "source": "Modules.Contexts.Application.Inventory.Scripts.CurrencyType"
+    },
+    {
+      "label": "Lý do nhận thưởng",
+      "value": "CollectibleItem = 57, StageCompleted = 58, GrandPrize = 59",
+      "source": "CurrencyEarnReason"
+    },
+    {
+      "label": "Số loại vật phẩm trên bàn",
+      "value": "5",
+      "source": "MergeMiniGameItemType"
+    },
+    {
+      "label": "Số trạng thái sự kiện",
+      "value": "9 (0–8)",
+      "source": "MergeMiniGameStateType"
+    },
+    {
+      "label": "Số bước tutorial",
+      "value": "6",
+      "source": "MergeTutorialType"
+    },
+    {
+      "label": "Giá trị đánh dấu không có ô chờ",
+      "value": "−1",
+      "source": "MergeMiniGameService.NoPendingCell"
+    },
+    {
+      "label": "Asset bundle",
+      "value": "\"merge_mini_game_bundle\"",
+      "source": "MergeMiniGameService.Initialize"
+    },
+    {
+      "label": "Định dạng readable event id",
+      "value": "\"mb_{0}_{1:yyyyMMdd}\" (fallback \"mb_unknown_data\")",
+      "source": "MergeMiniGameService.GetReadableEventId"
+    },
+    {
+      "label": "Khoá lưu/đồng bộ",
+      "value": "\"MergeMiniGameModel\"",
+      "source": "MergeMiniGameDataService.GetSyncName"
+    }
+  ],
+  "config_highlights": [
+    {
+      "key": "MergeMiniGameConfigModel.json: IsEnabled",
+      "value": "false",
+      "meaning": "Bật/tắt mini-game (client default, remote config ghi đè)"
+    },
+    {
+      "key": "MergeMiniGameConfigModel.json: EventType",
+      "value": "18",
+      "meaning": "Loại sự kiện gửi lên GetEventInfo"
+    },
+    {
+      "key": "MergeMiniGameConfigModel.json: FirstLevelToShow",
+      "value": "100",
+      "meaning": "Level tối thiểu để mở"
+    },
+    {
+      "key": "MergeMiniGameConfigModel.json: InitialEnergyCount",
+      "value": "5",
+      "meaning": "Energy tặng khi tham gia"
+    },
+    {
+      "key": "MergeMiniGameConfigModel.json: NormalLevelEnergyCount / HardLevelEnergyCount / SuperHardLevelEnergyCount",
+      "value": "1 / 2 / 3",
+      "meaning": "Energy nhận theo độ khó level"
+    },
+    {
+      "key": "MergeMiniGameConfigModel.json: FirstTryMultiplier",
+      "value": "0",
+      "meaning": "Hệ số nhân Energy khi thắng ngay lần đầu"
+    },
+    {
+      "key": "MergeMiniGameConfigModel.json: AutoOpenEnabledOnFinish",
+      "value": "true",
+      "meaning": "Tự nhận thưởng khi hết giờ"
+    },
+    {
+      "key": "MergeMiniGameConfigModel.json: AutoOpenEnergyCountBeforeThreshold / AfterThreshold / Threshold",
+      "value": "50 / 100 / 9",
+      "meaning": "Ngưỡng Energy để tự mở popup, khác nhau trước và sau mốc tiến độ"
+    },
+    {
+      "key": "MergeMiniGameConfigModel.json: Multiplier2xUnlockStage / Multiplier4xUnlockStage",
+      "value": "4 / 8",
+      "meaning": "Chặng mở khoá hệ số nhân máy phát"
+    },
+    {
+      "key": "MergeMiniGameConfigModel.json: ForceOpenCount",
+      "value": "2",
+      "meaning": "Số lần tối đa được ép mở popup"
+    },
+    {
+      "key": "MergeMiniGameConfigModel.json: FirstStageToShowNewItemFound",
+      "value": "5",
+      "meaning": "Từ chặng nào bắt đầu hiện popup 'New Item Found!'"
+    },
+    {
+      "key": "MergeMiniGameDataService.CellCount",
+      "value": "0x31 = 49",
+      "meaning": "Số ô trên bàn merge (7×7)"
+    },
+    {
+      "key": "MergeMiniGameDataService.SetCount",
+      "value": "5",
+      "meaning": "Số chuỗi vật phẩm tối đa"
+    },
+    {
+      "key": "MergeMiniGameService.NoPendingCell",
+      "value": "−1",
+      "meaning": "Không có ô nào đang chờ thả vật từ Scatter Queue"
+    },
+    {
+      "key": "Bundle id",
+      "value": "\"merge_mini_game_bundle\"",
+      "meaning": "Asset bundle của mini-game, tải từ CDN"
+    },
+    {
+      "key": "MergeMiniGameItemType",
+      "value": "ProgressItem=0, GeneratorItem=1, CollectibleItem=2, BubbleItem=3, BlockItem=4",
+      "meaning": "5 loại vật phẩm trên bàn"
+    },
+    {
+      "key": "MergeMiniGameStateType",
+      "value": "NoCachedEvent=0, NotIntroduced=1, InProgress=2, TimeIsUp=3, Claimed=4, ClaimedAndTimeIsUp=5, InsufficientLevel=6, Disable=7, AssetsNotReady=8",
+      "meaning": "Máy trạng thái sự kiện"
+    },
+    {
+      "key": "MergeMiniGameForceOpenReason",
+      "value": "None=0, NotIntroduced=1, Finished=2, EnoughEnergy=3",
+      "meaning": "Lý do ép mở popup"
+    },
+    {
+      "key": "MergeTutorialType",
+      "value": "GeneratorButtonTutorial=0, MergeItemTutorial=1, EventInfoTutorial=2, GeneratorItemTutorial=3, RewardedTutorial=4, BubbleTutorial=5",
+      "meaning": "6 bước hướng dẫn"
+    },
+    {
+      "key": "MergeMiniGamePopUpImpressionSource / MergeMiniGameInfoPopUpImpressionSource",
+      "value": "LobbyButton=0, Force=1 / InfoButton=0, Force=1",
+      "meaning": "Nguồn mở popup"
+    },
+    {
+      "key": "CurrencyType.MergeMiniGameEnergy",
+      "value": "21",
+      "meaning": "Energy là một loại tiền tệ trong InventoryService"
+    },
+    {
+      "key": "CurrencyEarnReason",
+      "value": "MergeMiniGameCollectibleItem=57, MergeMiniGameStageCompleted=58, MergeMiniGameGrandPrize=59",
+      "meaning": "Ba nguồn thưởng của mini-game"
+    },
+    {
+      "key": "MergeMiniGameEventInfoResponse.ItemDefinitions",
+      "value": "MergeItemDefinitionModel { MergeItem, ItemsToGenerate, Reward } (server)",
+      "meaning": "Toàn bộ chuỗi vật phẩm: cấp nào sinh ra gì, cấp nào cho thưởng gì"
+    },
+    {
+      "key": "MergeMiniGameEventInfoResponse.ScatterDefinitions",
+      "value": "ScatterDefinitionModel { Level, SetId, Items } (server)",
+      "meaning": "Vật phụ sinh ra khi merge lên từng cấp"
+    },
+    {
+      "key": "MergeMiniGameEventInfoResponse.InitialBoard",
+      "value": "Bố cục 49 ô (server)",
+      "meaning": "Bàn khởi đầu do server đặt"
+    },
+    {
+      "key": "MergeMiniGameEventInfoResponse.Rewards / RewardsWithCollection",
+      "value": "List<RewardModel> (server)",
+      "meaning": "Thưởng theo chặng, có biến thể khi Collection đang chạy"
+    },
+    {
+      "key": "ScatterQueueCache",
+      "value": "ItemQueue, PreviousCount, PendingPopulatedScatterCellIndex",
+      "meaning": "Hàng đợi vật phụ, tồn tại qua các phiên chơi"
+    },
+    {
+      "key": "MergeMiniGameCacheModel",
+      "value": "EventId, EventType, StartTime, FinishTime, IsClaimed, IsJoined, IsIntroduced, BoardState, ScatterQueue, MergeProgress, LastShownStage, Multiplier, ForceOpenCount, TotalSpendEnergy, TotalCollectedCoinAmount",
+      "meaning": "Toàn bộ trạng thái mùa hiện tại"
+    },
+    {
+      "key": "MergeMiniGameModel (cờ lifetime)",
+      "value": "IsEventIntroducedEverInLifeTime, EventStartTutorialCompleted, GeneratorItemTutorialCompleted, RewardedTutorialCompleted, BubbleTutorialCompleted",
+      "meaning": "Cờ tutorial cả đời tài khoản, không reset theo mùa"
+    },
+    {
+      "key": "MergeItemSpriteConfig",
+      "value": "sets (MergeItemSet { SetId, Entries }), energyCurrencyRenderer, coinCurrencyRenderer",
+      "meaning": "Cache merge_mini_game_bundle_v4 có 184 sprite đã giải mã và 172 liên kết GUID–renderer. Hình vật phẩm đầy đủ trong gói đã có ở gallery nguồn."
+    }
+  ],
+  "tips": [
+    "Merge-2 là cơ chế 'trò chơi trong trò chơi' đưa người chơi quay lại nhiều lần trong ngày mà không tốn mạng chơi level.",
+    "Gắn Energy vào hệ tiền tệ chung cho phép mọi sự kiện khác trở thành nguồn cấp nhiên liệu cho mini-game này.",
+    "Scatter Queue giải quyết vấn đề kinh điển của merge game: bàn đầy thì vật mới không bị mất.",
+    "Hệ số nhân mở theo chặng giảm số thao tác lặp lại đúng lúc người chơi bắt đầu thấy mệt.",
+    "Giới hạn 2 lần ép mở popup mỗi mùa giữ cân bằng giữa nhắc nhở và làm phiền."
+  ],
+  "categories": [
+    "Sự kiện",
+    "Live-ops",
+    "Meta",
+    "Cơ chế lõi"
+  ]
+}

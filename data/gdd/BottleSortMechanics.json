@@ -1,0 +1,1334 @@
+{
+  "id": "BottleSortMechanics",
+  "name": "Cơ chế đổ màu (Bottle Sort)",
+  "category": "Core",
+  "managers": [
+    "Modules.Contexts.GamePlay.BoardItems.Scripts.Bottle.BottleItem",
+    "Modules.Contexts.GamePlay.Board.Common.Scripts.BottleCollection",
+    "Modules.Contexts.GamePlay.Board.Common.Scripts.BottleCollections",
+    "Modules.Contexts.GamePlay.Systems.Scripts.InputSystemNS.Selection",
+    "Modules.Contexts.GamePlay.Systems.Scripts.InputSystemNS.SelectionSystem",
+    "Modules.Contexts.GamePlay.Systems.Scripts.InputSystemNS.GameplayInputSystem",
+    "Modules.Contexts.GamePlay.Systems.Scripts.WinOrStuck.LevelWinOrStuckSystem",
+    "Modules.Contexts.GamePlay.BoardItems.Scripts.Common.ColorNS.ColorService",
+    "Modules.Infrastructure.UI.Common.Scripts.SortingService"
+  ],
+  "summary": "Đây là lõi gameplay của Magic Sort: bàn chơi gồm nhiều chai xếp thành hàng, mỗi chai có số ô (Height) chứa các khối nước màu. Người chơi tap chai nguồn rồi tap chai đích; nước màu trên cùng của chai nguồn sẽ chảy sang nếu chai đích trống hoặc có cùng màu ở trên cùng và còn chỗ. Chai đầy toàn một màu sẽ được 'hoàn thành' (đóng nắp và biến mất khỏi bàn). Thắng khi mọi chai đều hoàn thành/trống; thua chỉ khi bàn hết nước đi hợp lệ (Stuck) hoặc hết giờ ở chế độ Daily. Điểm khác biệt của Magic Sort so với water-sort truyền thống: chai không đứng yên — chai nguồn bay sang cạnh chai đích, nghiêng theo góc phụ thuộc lượng nước và chiều cao chai (rotationsByHeights), nhiều khối nước cùng màu liền nhau được gộp (TryMergeColors) và đổ trong một lần; bàn có thể chia thành nhiều 'BottleCollection' (nhiều đợt) trong cùng một level; và có ô Question Mark che giấu màu cho tới khi lộ ra.",
+  "unlock": "Có từ level 1. Bảng màu và số chai thay đổi theo cấu hình level; các biến thể hình ảnh bật/tắt bằng RootLevelConfigModel (IsNewBottleVisualsEnabled, IsNewBottleParticlesEnabled, IsBackgroundAndShelvesEnabled, ColorVariant chọn ColorPalette A/B).",
+  "entry_points": [
+    "Bàn chơi trong scene GamePlay (BottleCollection.GenerateBottles)",
+    "Daily Level dùng cùng cơ chế với chai cao 12 ô",
+    "Level Editor (Modules.LevelEditor.WaterSort) dựng bàn từ preset"
+  ],
+  "flow": "BottleCollections.GenerateBottleCollections(levelAndLevelConfigModel, isDaily) đọc danh sách BottleItemModel và tạo một hoặc nhiều BottleCollection. Mỗi BottleCollection.SortBottleModels xếp model thành các hàng theo toạ độ Y, FindMaxBottleHeight tìm chiều cao lớn nhất để chọn cấu hình camera/animation, rồi GenerateBottles dựng từng BottleItem: AddBottle(x, y, bottleHeight) → Prepare(...) và AddWaterItem/InsertWaterItem cho từng khối nước với ColorId, sau đó gắn các blocker (Curtain, Plaster, Clay, Tag, Ice, Generator, Woodbox, Carpet, Toggle, Ivy, Frog, MagicSeal, Duck, Safe, Mosaic, Bag, Firework, Rainbow, Icicle, ChargeableBottle, Snitch) và kệ (AddShelvesIfNeeded). GameplayInputSystem.OnTouchDown lấy toạ độ thế giới → BottleCollection.GetIntersectedBottle(worldPosition, InputMode, out bottle). Lần tap đầu: Selection.CanSelectAsOrigin(bottle) → SelectAsOrigin, chai nhô lên (PlayBottleSelectedAnimation). Lần tap thứ hai: Selection.CanSelectAsTarget(target, origin) kiểm tra BottleItem.IsSelectableAsTarget(originBottle, waterColorId); nếu hợp lệ → SelectAsTarget, SelectionResult.GetSelectionResult tính WaterHeightToMove và chiều cao nước trước/sau của cả hai chai, chai nguồn bay sang, nghiêng theo RotationSteps (GetRotationStepsToDropTheWater) và WaterLine nối hai miệng chai để đổ; ApplySelection cập nhật dữ liệu (RemoveWater/AddWater), CompleteSelection kết thúc và chai nguồn quay về chỗ cũ (OnOriginBottleReturnToInitialPosition). Nếu tap lại chính chai đó hoặc chai không hợp lệ thì Deselect / TryCancel / ReverseSelection. Sau mỗi lượt, BottleItem.TryComplete kiểm tra ShouldComplete: chai đầy đủ một màu (chiều cao nước trên cùng == Height) — hoặc khi lượng màu đó còn lại trên bàn vừa khít — thì Complete() và bắn OnBottleCompleted cho BottleCollection và các chai bên cạnh (mở khoá blocker phụ thuộc). LevelWinOrStuckSystem.FrameUpdate liên tục gọi CheckAndApplyLevelWinOrHasNoMove: khi IsBoardStopped() (không còn animation) mà BottleCollections.IsCollectionCleared() thì thắng (hoặc NextBottleCollection nếu chưa phải collection cuối); nếu HasNoMove() thì TrySolveSpecialStuck() thử gỡ (ví dụ Generator còn sinh nước), thất bại thì báo StuckType.NoMove. CheckAndApplyTimeIsUp() xử lý hết giờ ở Daily (StuckType.TimeIsUp).",
+  "use_cases": [
+    {
+      "id": "UC-01",
+      "title": "Dựng bàn chơi từ model level",
+      "actor": "System",
+      "trigger": "StartLevel",
+      "precondition": "Có LevelAndLevelConfigModel với danh sách BottleItemModel",
+      "steps": [
+        "BottleCollections.GenerateBottleCollections(levelAndLevelConfigModel, isDaily) tạo danh sách BottleCollection (level nhiều đợt sẽ có nhiều collection)",
+        "BottleCollection.SortBottleModels xếp model thành List<List<BottleItemModel>> theo hàng; FindMaxBottleHeight chọn cấu hình theo chiều cao lớn nhất",
+        "GetColorsInLevel / GetColorAmountsInLevel / GetColorCountsInLevel thống kê số khối mỗi màu (dùng cho luật hoàn thành chai và cho Mega Shuffle)",
+        "GenerateBottles(bottlesModels, remapColors, levelDifficultyType): với remapColors = true thì ConvertColorIds đổi ColorId sang bảng màu hiện hành (ColorService.GetColorAndColorId)",
+        "AddBottle(x, y, bottleHeight) → BottleItem.Prepare(viewOffset, initialSortingOrder, height, bottleAndWaterVariant, frontSortOrder, backSortOrder, bottleAnimationConfig, sorting, isCompletable, bottleCollection, isLongBottle)",
+        "AddWaterItem / InsertWaterItem / AddQuestionMarkItem điền nội dung; AddShelvesIfNeeded thêm kệ",
+        "SetLeftBottle/SetRightBottle nối hàng xóm để xử lý blocker liên chai"
+      ],
+      "result": "Bàn chơi hoàn chỉnh, camera căn theo BottleCollectionCameraConfig phù hợp (thường / new background / zoom)",
+      "rules": "DefaultBottleHeight = 4 ô (level thường) và 12 ô (Daily); DistanceBetweenRowsAsUnit = 4 (thường) / 12 (Daily). ConfigsByBottleHeight có 12 mục BottleAnimationConfig, các asset tồn tại cho chiều cao 1, 4 (2 biến thể), 5, 8, 10, 11, 12, 15, 16, 18 unit.",
+      "evidence": "BottleCollections.GenerateBottleCollections; BottleCollection.GenerateBottles; BottleCollection.SortBottleModels; BottleCollection.AddBottle; BottleItem.Prepare; ConfigsBottleCollectionPlacementConfigRegular.asset"
+    },
+    {
+      "id": "UC-02",
+      "title": "Chọn chai nguồn (tap lần 1)",
+      "actor": "Player",
+      "trigger": "Chạm vào một chai",
+      "precondition": "GameplayInputSystem đang Activate, InputMode = WaterSortSelection",
+      "steps": [
+        "GameplayInputSystem.OnTouchDown(worldPosition) → BottleCollection.GetIntersectedBottle(worldPosition, inputMode, out bottle) (BottleItem.IsIntersect dùng Bounds)",
+        "SelectionSystem.OnSelectionInput(bottleCollection, bottleItem) tạo Selection mới",
+        "Selection.CanSelectAsOrigin(bottle) → BottleItem.IsSelectableAsOrigin(): chai không trống, không đang bị animation khoá (AnimationLock), không bị blocker chặn (duyệt danh sách _blockers)",
+        "SelectAsOrigin → BottleItem.OnSelectAsOrigin(selection): PlayBottleSelectedAnimation nâng chai lên (_bottleSelectionAnimationHeight = 1 unit, 0.7 cho bàn 3 hàng, thời lượng 0.09s), SortingService đặt sorting layer 'BottlesClicked'",
+        "GamePlayInputHistory.AddBottleClick(bottleId) ghi lịch sử; nếu tap chỗ trống thì AddFalseClick()"
+      ],
+      "result": "Chai nguồn được đánh dấu, chờ tap thứ hai",
+      "rules": "Nếu tap lại chính chai đang chọn → Deselect (PlayBottleDeSelectedAnimation). SortingService: SelectedBottleOriginSortOrder = 1500, SelectedBottleTargetSortOrder = 1000, layer 'BottlesClicked'.",
+      "evidence": "GameplayInputSystem.OnTouchDown; SelectionSystem.OnSelectionInput; Selection.CanSelectAsOrigin; BottleItem.IsSelectableAsOrigin; BottleItem.OnSelectAsOrigin; GamePlayInputHistory.AddBottleClick"
+    },
+    {
+      "id": "UC-03",
+      "title": "Chọn chai đích và kiểm tra luật đổ màu",
+      "actor": "Player",
+      "trigger": "Chạm chai thứ hai khi đã có chai nguồn",
+      "precondition": "Selection.IsSelectedOriginBottle = true",
+      "steps": [
+        "Selection.CanSelectAsTarget(targetBottle, originBottle) → BottleItem.IsSelectableAsTarget(originBottle, waterColorId)",
+        "Loại trừ: chai đích chính là chai nguồn; chai đích đã IsCompleted; chai đích đầy (IsFull)",
+        "So màu: lấy GetTopWaterColorAndColorId() của chai đích; nếu chai trống thì coi như ColorId.NONE (12) và luôn nhận; nếu khác màu nước đang đổ → false",
+        "Duyệt _blockers của chai đích: blocker nào đang chặn (ví dụ Curtain/Plaster/Clay/MagicSeal/Woodbox) → false",
+        "Luật vật cản đặc biệt cùng màu: nếu chai đích có blocker Clay (ItemType = 5) thì BottleCollection.HasDifferentBottleWithClayAndSameColor(origin, target) chặn; tương tự HasDifferentBottleWithIceAndSameColor cho Ice",
+        "Duyệt _outItems (vật đang bám ngoài chai) — nếu có vật cản đang chiếm chỗ thì từ chối",
+        "Hợp lệ → SelectAsTarget(targetBottle) và BottleItem.OnSelectAsTarget(selection)"
+      ],
+      "result": "Cặp nguồn–đích được xác lập; nếu không hợp lệ, chai đích chỉ nháy phản hồi và selection bị huỷ",
+      "rules": "Quy tắc water-sort chuẩn: đổ được khi đích trống HOẶC màu trên cùng của đích trùng màu đang đổ VÀ đích còn ô trống. Magic Sort bổ sung tầng kiểm tra blocker và luật 'cùng màu ở chai khác' của Clay/Ice.",
+      "evidence": "Selection.CanSelectAsTarget; BottleItem.IsSelectableAsTarget; BottleItem.IsSelectableAsTargetExceptAnimation; BottleCollection.HasDifferentBottleWithClayAndSameColor; BottleCollection.HasDifferentBottleWithIceAndSameColor"
+    },
+    {
+      "id": "UC-04",
+      "title": "Tính lượng nước được đổ",
+      "actor": "System",
+      "trigger": "Sau khi chọn được chai đích",
+      "precondition": "-",
+      "steps": [
+        "BottleItem.GetTopWater() lấy khối nước trên cùng của chai nguồn; GetTopWaterHeight() cho biết bao nhiêu ô cùng màu liền nhau",
+        "BottleItem.GetTopWaterHeightIfTheSameColorId(colorId) trên chai đích và GetEmptyCellCount() cho biết còn bao nhiêu ô",
+        "SelectionResult.GetSelectionResult(originBottleTopWater, cells, targetBottle) trả về WaterColorAndColorId, WaterHeightToMove, TargetBottleWaterHeightOld/New, OriginBottleWaterHeightOld/New",
+        "WaterHeightToMove = min(chiều cao khối màu trên cùng của nguồn, số ô trống của đích)",
+        "BottleItem.GetRotationStepsToDropTheWater(isLeft) trả RotationSteps (FirstStep, SecondStep) — góc nghiêng lấy theo bảng _rotationsByHeights của BottleAnimationConfig"
+      ],
+      "result": "Toàn bộ khối màu trên cùng được đổ một lần (không phải từng ô), tối đa bằng chỗ trống của chai đích",
+      "rules": "Với chai 4 unit, bảng góc nghiêng theo lượng nước là 35 / 65 / 80 / 85 / 100 / 105 độ; chai 2 unit dùng 45 / 60 / 105; chai 1 unit có bảng riêng.",
+      "evidence": "SelectionResult.GetSelectionResult; BottleItem.GetTopWaterHeight; BottleItem.GetEmptyCellCount; BottleItem.GetRotationStepsToDropTheWater; BottleAnimationConfigFor4UnitVar0.asset"
+    },
+    {
+      "id": "UC-05",
+      "title": "Thực hiện đổ nước (animation + dữ liệu)",
+      "actor": "System",
+      "trigger": "Selection hợp lệ",
+      "precondition": "-",
+      "steps": [
+        "BottleCollection.OnAnyMoveStarted(originBottle, targetBottle, waterColorId) khoá bàn và thông báo blocker",
+        "Chai nguồn bay lên và sang cạnh chai đích (BottleItem.OnBottleMove(pourableHeight, isLeft, moveDuration)), _riseHeight = 1.85, _riseBottleDuration = 0.5s, cộng thêm _extraRiseBottleDurationByWaterDropHeight = 0.15s cho mỗi bậc rơi",
+        "WaterLine nối miệng hai chai được vẽ trong _waterLineDuration = 0.6s; BottleItem.RotateWaters(rotation) làm mặt nước nghiêng theo chai",
+        "Selection.ApplySelection: chai nguồn BottleItem.RemoveWater(height) / DecreaseWaterHeight, chai đích AddWater(height, colorId, isVisible) và PlayRegularWaterFillingAnimation (Daily dùng DailyPlayWaterFillingAnimation)",
+        "BottleItem.TryMergeColors() gộp các khối nước liền nhau cùng màu và cùng độ hiển thị; UpdateBottleWaters / UpdateSortOrders / UpdateFillAmountsWithoutAnimation làm mới hiển thị",
+        "BottleItem.OnPouringCompletedToTargetBottle(selection), sau đó chai nguồn OnOriginBottleReturnToInitialPosition (thời lượng tối thiểu _moveToInitialPositionMinDuration = 0.3s, tới đích tối thiểu 0.2s)",
+        "BottleCollection.OnAnyMoveFinished() mở khoá; LevelStats tăng total_move_count",
+        "Nếu bị huỷ giữa chừng: Selection.ReverseSelection() / TryCancel() và BottleCollection.OnReverseSelection"
+      ],
+      "result": "Nước chuyển sang chai đích, bàn cập nhật; SelectionSystem lưu Selection vào _selectionHistory phục vụ Undo",
+      "rules": "SortingService điều phối lớp vẽ trong lúc đổ: WaterFirstSortOrder = 200, BottleBackFirstSortOrder = 1, BottleFrontFirstSortOrder = 2000, BlockerBackSortOrder = 500, BlockerFrontSortOrder = 3000, SnitchSortOrder = 3100; layer 'BottlesSitting'/'BottlesAnimating'/'BottlesClicked'.",
+      "evidence": "Selection.ApplySelection; Selection.CompleteSelection; BottleItem.OnBottleMove; BottleItem.RemoveWater; BottleItem.AddWater; BottleItem.TryMergeColors; BottleCollection.OnAnyMoveStarted; BottleCollection.OnAnyMoveFinished; SortingService"
+    },
+    {
+      "id": "UC-06",
+      "title": "Hoàn thành một chai",
+      "actor": "System",
+      "trigger": "Sau khi đổ xong một lượt",
+      "precondition": "Chai có _isCompletable = true",
+      "steps": [
+        "BottleItem.TryComplete() → ShouldComplete(): _isCompletable && !IsEmpty() && chiều cao khối nước trên cùng == Height (đầy nguyên chai một màu)",
+        "Base = isCompletable && !IsCompleted && !IsEmpty && topWater.Height==Height && IsAllWatersVisible. Không có long bottle trên board→base. Có long bottle→base && (collection.GetColorCount(topColor)==Height || IsLongBottle). Không có nhánh hoàn thành chai chưa đầy chỉ vì màu còn ít.",
+        "Complete(): đặt IsCompleted = true, chạy BottleCompleteAnimationController (đóng nắp, WinParticle)",
+        "BottleItem.OnBottleCompleted() và các chai hàng xóm nhận OnNeighbourBottleCompleted() để cập nhật blocker liên chai",
+        "BottleCollection.OnBottleCompleted(completedBottle, waterColorId) cập nhật thống kê, kích hoạt Duck/Mosaic/Safe/Bag nếu đúng màu",
+        "LevelStats tăng bottles_completed"
+      ],
+      "result": "Chai bị khoá lại, không thể chọn làm nguồn hay đích nữa; giải phóng không gian tâm lý cho người chơi",
+      "rules": "IsAllVisibleSameColor / IsAllWatersSameColor / IsAllVisibleSameColorAndNotFull là các hàm phụ trợ kiểm tra đồng màu; CanComplete() trả false ngay nếu _isCompletable = false (chai đặc biệt như ChargeableBottle/Generator).",
+      "evidence": "BottleItem.TryComplete; BottleItem.ShouldComplete; BottleItem.Complete; BottleItem.OnBottleCompleted; BottleItem.OnNeighbourBottleCompleted; BottleCollection.OnBottleCompleted; BottleCollection.GetColorCount"
+    },
+    {
+      "id": "UC-07",
+      "title": "Kiểm tra thắng level",
+      "actor": "System",
+      "trigger": "Mỗi frame khi bàn dừng animation",
+      "precondition": "-",
+      "steps": [
+        "LevelWinOrStuckSystem.FrameUpdate(elapsedSeconds) → CheckAndApplyLevelWinOrHasNoMove()",
+        "IsBoardStopped(): không còn animation nào chạy (IsThereAnyAnimationRunning = false) và không có selection đang xử lý",
+        "BottleCollections.IsCollectionCleared() kiểm tra collection hiện tại đã sạch",
+        "Nếu chưa phải collection cuối (IsLastCollection() = false) → NextBottleCollection() nạp đợt chai kế tiếp",
+        "Nếu là đợt cuối → ILevelManager.WinLevel()",
+        "IsAlreadyInStuckOrWinOrLoseState() chặn gọi trùng"
+      ],
+      "result": "Thắng level hoặc chuyển sang đợt chai tiếp theo trong cùng level",
+      "rules": "Có method BottleCollections.TryGetPreviousBottleCollection, nhưng chưa đủ bằng chứng để kết luận Undo quay lại collection trước. Cần đọc caller/body chuyển đợt và chạy fixture 2 collection; trạng thái UNRESOLVED (MS-I02).",
+      "evidence": "LevelWinOrStuckSystem.CheckAndApplyLevelWinOrHasNoMove; LevelWinOrStuckSystem.IsBoardStopped; BottleCollections.IsCollectionCleared; BottleCollections.NextBottleCollection; BottleCollections.IsLastCollection"
+    },
+    {
+      "id": "UC-08",
+      "title": "Phát hiện bàn kẹt (hết nước đi)",
+      "actor": "System",
+      "trigger": "Bàn dừng nhưng chưa thắng",
+      "precondition": "-",
+      "steps": [
+        "LevelWinOrStuckSystem.HasNoMove(): duyệt mọi cặp (chai nguồn, chai đích) kiểm tra IsSelectableAsOriginExceptAnimation và IsSelectableAsTargetExceptAnimation",
+        "BottleCollections.IsCollectionStuck() xác nhận cho collection hiện tại",
+        "LevelWinOrStuckSystem.TrySolveSpecialStuck(): thử các lối thoát đặc biệt (Generator còn sinh nước, Toggle có thể đảo, Frog/Duck có thể hành động) trước khi kết luận",
+        "Không gỡ được → LevelWinOrStuckSystem.IsLevelStuck() = true → ILevelManager.StuckLevel(StuckType.NoMove)",
+        "GameplayInputSystem.OnLevelStuck() khoá input"
+      ],
+      "result": "Mở StuckPopup mời Play On (xem tính năng LevelFlow)",
+      "rules": "RequestLevelWinOrStuckCheck() cho phép hệ thống khác (booster, generator) yêu cầu kiểm tra lại ngay",
+      "evidence": "LevelWinOrStuckSystem.HasNoMove; LevelWinOrStuckSystem.TrySolveSpecialStuck; LevelWinOrStuckSystem.IsLevelStuck; BottleCollections.IsCollectionStuck; GameplayInputSystem.OnLevelStuck"
+    },
+    {
+      "id": "UC-09",
+      "title": "Hết giờ ở Daily Level",
+      "actor": "System",
+      "trigger": "LevelTimer đếm về 0",
+      "precondition": "Đang chơi Daily",
+      "steps": [
+        "LevelWinOrStuckSystem.CheckAndApplyTimeIsUp() gọi IsTimeUp() dựa trên LevelTimer",
+        "ILevelManager.StuckLevel(StuckType.TimeIsUp)",
+        "LevelStats ghi _lastTimeIsUpStuckRemainingTime và remaining_time"
+      ],
+      "result": "Mở popup kẹt dạng hết giờ, cho phép mua thêm thời gian/Play On",
+      "rules": "GrandRemoteDailyLevelsConfig.PlayOnDurationInSeconds quy định thời gian cộng thêm khi Play On ở Daily",
+      "evidence": "LevelWinOrStuckSystem.CheckAndApplyTimeIsUp; LevelWinOrStuckSystem.IsTimeUp; StuckType.TimeIsUp; GrandRemoteDailyLevelsConfig.PlayOnDurationInSeconds"
+    },
+    {
+      "id": "UC-10",
+      "title": "Hoàn tác nước đi cuối (Undo)",
+      "actor": "Player",
+      "trigger": "Bấm booster Undo hoặc nhận Undo từ Play On",
+      "precondition": "SelectionSystem.HasSelectionHistory() = true",
+      "steps": [
+        "SelectionSystem.ReverseLastSelection() lấy Selection cuối trong _selectionHistory",
+        "BottleItem.OnBeforeUndoLastWaterPour(waterHeight) trên chai đích rồi UndoLastWaterPour(waterHeight, topWaterColorId) trả nước về",
+        "BottleItem.UndoLastWaterFill(waterHeight) trên chai nguồn khôi phục khối nước",
+        "STATIC: Shuffle.MoveNext (RVA 0x19B6D3C) gọi ResetSelectionHistory sau khi nhận target khác null. Chưa xác nhận ResetSelectionHistory tại ranh giới collection; không khẳng định có hay không Undo qua đợt từ tên method.",
+        "LevelStats tăng undo_used"
+      ],
+      "result": "Bàn trở lại trạng thái trước nước đi cuối",
+      "rules": "Phạm vi Undo qua ranh giới BottleCollection chưa kết luận. OBSERVED 10/10: Undo ngay sau Shuffle không làm đổi bàn hoặc trừ item; sau nước đổ mới, Undo giảm 9.998→9.997 và trả về trạng thái sau Shuffle. Case này không chứng minh luật đổi collection hoặc Mega Shuffle.",
+      "evidence": "SelectionSystem.ReverseLastSelection; SelectionSystem.HasSelectionHistory; SelectionSystem.ResetSelectionHistory; BottleItem.UndoLastWaterPour; BottleItem.UndoLastWaterFill; BoosterManager.<Shuffle>d__15.MoveNext RVA 0x19B6D3C; analysis/14-implementation-design.md MS-I02; analysis/15-demo-walkthrough.md"
+    },
+    {
+      "id": "UC-11",
+      "title": "Ô Question Mark che giấu màu",
+      "actor": "System",
+      "trigger": "Level có ô dấu hỏi trong model chai",
+      "precondition": "-",
+      "steps": [
+        "BottleCollection.AddQuestionMarkItem(bottle, index, isDaily) thay khối nước bằng QuestionMarkItem",
+        "BottleItem.UpdateColorVisibilities() và HidesWaterColors() giữ màu ẩn",
+        "Khi khối nước phía trên bị lấy đi, RevealBottleCells() lộ dần màu thật; BottleItem.ToggleInvisibleWaters điều khiển hiển thị",
+        "Booster Reveal (CurrencyType.Reveal = 19) và BottleItem.Reveal()/CanReveal() cho phép lộ chủ động",
+        "LevelStats đếm _questionMarkCount và _questionMarkOpened; BottleItem.GetQuestionMarkCount()"
+      ],
+      "result": "Người chơi phải phán đoán; tăng độ khó và tạo nhu cầu dùng booster Reveal",
+      "rules": "Booster Reveal bật/tắt bằng RootLevelConfigModel.IsRevealBoosterEnabled; giá GameEconomyModel.RevealPrice. SortingService.GetQuestionMarkSortOrder(indexOfWater) sắp lớp vẽ.",
+      "evidence": "BottleCollection.AddQuestionMarkItem; BottleItem.RevealBottleCells; BottleItem.CanReveal; BottleItem.GetQuestionMarkCount; BottleItem.HidesWaterColors"
+    },
+    {
+      "id": "UC-12",
+      "title": "Bảng màu và biến thể màu",
+      "actor": "System",
+      "trigger": "Khởi tạo ColorService",
+      "precondition": "-",
+      "steps": [
+        "ColorService.Initialize() chọn _currentColorPalette trong ba ColorPalette: mặc định, VariantA, VariantB (theo RootLevelConfigModel.ColorVariant)",
+        "ColorService.GetColorAndColorId(ColorId) / (int index) trả ColorAndColorId (màu hiển thị + id logic)",
+        "BottleCollection.ConvertColorIds ánh xạ lại ColorId của level sang danh sách màu thực dùng khi remapColors = true",
+        "ColorService.GetBlackColorAndColorId() dành cho ô đen (ColorId.BLACK = -1) dùng trong Level Editor",
+        "BottleCollectionUtil.AdjustBlackColorInEditorModeWithConstantCount phân bổ ô đen thành màu khác ở chế độ editor"
+      ],
+      "result": "Cùng một seed level có thể hiển thị bằng bộ màu khác nhau để AB test độ khó thị giác",
+      "rules": "ColorId có 24 giá trị: BLACK=-1, LBLUE=0, DBLUE=1, ORANGE=2, LGREEN=3, DGREEN=4, WHITE=5, WINE=6, BROWN=7, YELLOW=8, VIOLET=9, PINK=10, RED=11, NONE=12, GRAY=13, RAINBOW1=14, RAINBOW2=15, RAINBOW3=16, EMERALD=17, MUSTARD=18, DPINK=19, MINT=20, LAVENDER=21, BEIGE=22. Mỗi màu có một ColorConfig asset riêng.",
+      "evidence": "ColorService.Initialize; ColorService.GetColorAndColorId; ColorService.GetAvailableColorsForEditorMode; BottleCollection.ConvertColorIds; BottleCollectionUtil.AdjustBlackColorInEditorModeWithConstantCount"
+    },
+    {
+      "id": "UC-13",
+      "title": "Thêm chai phụ (Extra Bottle / Magic Bottle)",
+      "actor": "Player | System",
+      "trigger": "Dùng booster ExtraBottle hoặc nhận Play On ExtraBottle/ExtraTinyBottle; hoặc Magic Bottle từ meta",
+      "precondition": "BottleCollection.IsBottlesCountReachedMax() = false",
+      "steps": [
+        "BottleCollection.GetExtraBottleIndex() tìm vị trí trống (GetRowIndexWithLeastBottle, HasRowLongBottle)",
+        "AddExtraBottle(delay) thêm chai rỗng chiều cao mặc định; AddBottleWithCustomHeight(delay, height) cho chai nhỏ (Tiny Bottle)",
+        "AddBottleAsMagicBottle() thêm chai đặc biệt do tính năng Magic Bottle, chạy MagicBottleRevealAnimation",
+        "BottlePositionAdjuster / BottleCollectionCameraConfig căn lại bố cục và camera",
+        "LevelStats tăng extrabottle_used"
+      ],
+      "result": "Bàn có thêm chỗ trống, thường gỡ được thế kẹt",
+      "rules": "Số chai tối đa trong hàng do GetMaxBottleCountInRow(); _maxBottleCount giới hạn tổng số chai. Giá booster: GameEconomyModel.ExtraBottlePrice, mở khoá tại ExtraBottleUnlockAtLevel.",
+      "evidence": "BottleCollection.AddExtraBottle; BottleCollection.AddBottleWithCustomHeight; BottleCollection.AddBottleAsMagicBottle; BottleCollection.IsBottlesCountReachedMax; BottleCollection.GetExtraBottleIndex"
+    },
+    {
+      "id": "UC-14",
+      "title": "Xáo trộn nội dung chai (Shuffle booster)",
+      "actor": "Player",
+      "trigger": "Bấm booster Shuffle rồi chọn chai",
+      "precondition": "BottleItem.CanShuffle() = true",
+      "steps": [
+        "InputMode chuyển sang BottleSelection; WaitForSelection chờ target, chưa trừ item. STATIC: Shuffle.MoveNext RVA 0x19B6D3C thoát trước Spend nếu target null; target hợp lệ mới ResetSelectionHistory, Spend item/coin rồi thi hành Shuffle. OBSERVED 10/10: mở chọn và huỷ giữ 9.999; chọn hợp lệ giảm còn 9.998.",
+        "BottleItem.OnShuffleSelected() / OnShuffleDeselected() cho phản hồi hình ảnh",
+        "BottleItem.GetShuffledWaters() và GetWaterItemsWithSpecificTopColor(topWaterAndColor) tạo thứ tự mới",
+        "BottleItem.Shuffle(colorOrders) → ChangeWaterOrders + ShuffleAnimation (BottleShuffleAnimationConfig)",
+        "UpdateBottleData(watersInside, watersOutside, tryRevealQuestionMarks) ghi lại dữ liệu",
+        "LevelStats tăng shuffle_used"
+      ],
+      "result": "Thứ tự màu trong chai được đảo, thường mở ra nước đi mới",
+      "rules": "Khác với Mega Shuffle (trộn toàn bàn, xem LevelFlow UC-08). Giá: GameEconomyModel.ShufflePrice; mở khoá tại ShuffleUnlockAtLevel.",
+      "evidence": "BottleItem.CanShuffle; BottleItem.Shuffle; BottleItem.GetShuffledWaters; BottleItem.ChangeWaterOrders; GameplayInputSystem.WaitForSelection; BoosterManager.<Shuffle>d__15.MoveNext RVA 0x19B6D3C; analysis/15-demo-walkthrough.md"
+    },
+    {
+      "id": "UC-15",
+      "title": "Chai bị blocker che phủ",
+      "actor": "System",
+      "trigger": "Level có blocker gắn lên chai",
+      "precondition": "-",
+      "steps": [
+        "BottleItem.AddBlocker(ABlockerItem) / RemoveBlocker; AddOutItem/RemoveOutItem cho vật nằm ngoài chai",
+        "BottleItem.HasBlocker(ItemType) và HasOverlayBlocker() dùng trong IsSelectableAsOrigin/AsTarget",
+        "GetHighestPriorityBlocker() chọn blocker phải phá trước",
+        "BottleItem.TryGetFirstBlockedWaterIndexFromTheBottom(out index) và CacheBlockedIndexes() xác định các ô bị khoá; _firstUnblockedCellIndex quyết định ô nào dùng được",
+        "SortingService.GetBlockerFrontSorting/GetBlockerBackSorting xếp lớp vẽ trước/sau chai"
+      ],
+      "result": "Chai bị khoá một phần hoặc toàn bộ cho tới khi blocker bị phá (xem tính năng Obstacles)",
+      "rules": "OverlayBlockerModel là loại phủ toàn chai (Curtain/Woodbox); BlockerModel là loại gắn từng ô (Plaster/Clay/MagicSeal/Ice)",
+      "evidence": "BottleItem.AddBlocker; BottleItem.HasBlocker; BottleItem.HasOverlayBlocker; BottleItem.GetHighestPriorityBlocker; BottleItem.CacheBlockedIndexes; BottleItem.TryGetFirstBlockedWaterIndexFromTheBottom"
+    },
+    {
+      "id": "UC-16",
+      "title": "Bàn nhiều đợt chai trong một level",
+      "actor": "System",
+      "trigger": "Level được cấu hình nhiều BottleCollection",
+      "precondition": "-",
+      "steps": [
+        "BottleCollections.GenerateBottleCollections tạo danh sách; _currentBottleCollectionIndex bắt đầu ở 0",
+        "Khi IsCollectionCleared() và chưa IsLastCollection() → NextBottleCollection() tăng chỉ số và hiện đợt kế tiếp",
+        "Có TryGetPreviousBottleCollection(out bottleCollection) trong mã; chưa xác nhận caller dùng nó để hoàn tác qua ranh giới đợt. Tên API không đồng nghĩa với khả năng Undo của người chơi.",
+        "GetBottleCollectionIndex() dùng cho hiển thị tiến độ",
+        "Deinitialize() dọn khi rời level"
+      ],
+      "result": "Level dài chia thành nhiều màn nhỏ, tăng cảm giác tiến bộ",
+      "rules": "Mega Shuffle nhận cả BottleCollections để chỉ trộn collection hiện tại",
+      "evidence": "BottleCollections.NextBottleCollection; BottleCollections.IsLastCollection; BottleCollections.TryGetPreviousBottleCollection; BottleCollections.GetBottleCollectionIndex"
+    },
+    {
+      "id": "UC-17",
+      "title": "Chai dài và kệ (Long Bottle / Shelf)",
+      "actor": "System",
+      "trigger": "Level dùng ItemType.LongBottle (21) hoặc ItemType.Shelf (22)",
+      "precondition": "-",
+      "steps": [
+        "BottleItem.Prepare nhận isLongBottle; IsLongBottle ảnh hưởng luật ShouldComplete",
+        "BottleCollection.HasRowLongBottle(rowIndex) và BottleCollections.HasLongBottle() điều chỉnh bố cục hàng",
+        "BottleCollection.AddShelvesIfNeeded(levelDifficultyType) đặt ShelfItem theo ShelfConfig; ShelfUtil hỗ trợ căn chỉnh",
+        "BottleCollection.HasBoardLongBottles() quyết định chọn cấu hình camera 'TallBottles' (FailFlowAnimationTallBottlesConfig, GameUIViewTallBottlesConfig)"
+      ],
+      "result": "Bàn có chai cao/dài với dung tích lớn hơn, UI và camera co giãn theo",
+      "rules": "Chiều cao chai có asset cấu hình cho 1, 4, 5, 8, 10, 11, 12, 15, 16, 18 unit; kệ chỉ xuất hiện khi RootLevelConfigModel.IsBackgroundAndShelvesEnabled",
+      "evidence": "BottleItem.IsLongBottle; BottleCollection.HasRowLongBottle; BottleCollection.AddShelvesIfNeeded; BottleCollections.HasLongBottle; BottleCollection.HasBoardLongBottles"
+    },
+    {
+      "id": "UC-18",
+      "title": "Ghi nhận thao tác sai và lịch sử tap",
+      "actor": "System",
+      "trigger": "Người chơi chạm chỗ trống hoặc chai không hợp lệ",
+      "precondition": "-",
+      "steps": [
+        "GamePlayInputHistory.AddFalseClick() tăng _falseClickCount",
+        "GamePlayInputHistory.AddBottleClick(bottleId) ghi id chai vào _bottleClickHistory",
+        "GameplayInputSystem.GetInputHistory() gọi GetBottleClickHistoryShorten() nén thành chuỗi ngắn",
+        "GameplayInputSystem.OnClickedToUIOnBottleSelection() xử lý trường hợp chạm nhầm UI khi đang chọn chai bằng booster",
+        "ClearHistory() khi bắt đầu level mới"
+      ],
+      "result": "Chuỗi lịch sử gửi kèm analytics để phân tích hành vi và phát hiện bàn khó hiểu",
+      "rules": "-",
+      "evidence": "GamePlayInputHistory.AddFalseClick; GamePlayInputHistory.GetBottleClickHistoryShorten; GameplayInputSystem.GetInputHistory; GameplayInputSystem.OnClickedToUIOnBottleSelection"
+    },
+    {
+      "id": "UC-19",
+      "title": "Khoá/mở input trong quá trình chơi",
+      "actor": "System",
+      "trigger": "Animation dài, popup mở, level kết thúc",
+      "precondition": "-",
+      "steps": [
+        "GameplayInputSystem.Deactivate() khi mở popup hoặc chạy sequence; Activate() khi trở lại",
+        "SelectionSystem.TryCancelAllSelections() huỷ mọi selection đang chạy khi cần dừng gấp",
+        "BottleItem.AnimationLock (Lock) và _involvedSelectionLockAsOrigin/_involvedSelectionLockAsTarget chặn chọn trùng",
+        "SelectionSystem.IsSelectionRunning() / GetRunningSelections() cho hệ thống khác biết bàn đang bận",
+        "GameplayInputSystem.OnTouchCancel(position) xử lý huỷ chạm"
+      ],
+      "result": "Không xảy ra thao tác chồng chéo làm hỏng trạng thái bàn",
+      "rules": "Magic Sort cho phép nhiều selection chạy song song (danh sách _selectionsRunning) nên khoá theo từng chai chứ không khoá toàn bàn",
+      "evidence": "GameplayInputSystem.Activate; GameplayInputSystem.Deactivate; SelectionSystem.TryCancelAllSelections; SelectionSystem.IsSelectionRunning; BottleItem.IsBottleSelectionRunning"
+    },
+    {
+      "id": "UC-20",
+      "title": "Đổ nước từ đáy chai (Generator / hiệu ứng đặc biệt)",
+      "actor": "System",
+      "trigger": "Generator sinh nước, Rainbow/Firework kích hoạt",
+      "precondition": "-",
+      "steps": [
+        "BottleItem.AddWaterFromBottom(height, colorId) chèn nước vào đáy thay vì đỉnh; InsertWaterItem(index, height, waterItem)",
+        "PlayWaterFillAnimationFromBottom(insertedHeight, newHeight, colorId, withParticle, isForGenerator)",
+        "PlayGeneratorFillAnimation / PlayGeneratorFillAnimationFromBottom / PlayGeneratorExplosionAnimation cho hiệu ứng máy sinh nước",
+        "GetFirstEmptyCellIndexFromTheBottom() xác định vị trí chèn",
+        "Sau đó RequestLevelWinOrStuckCheck() để đánh giá lại trạng thái bàn"
+      ],
+      "result": "Nội dung chai thay đổi ngoài luồng tap thông thường, có thể gỡ hoặc gây kẹt",
+      "rules": "SortingService.GetGeneratorAnimationSorting điều phối lớp vẽ",
+      "evidence": "BottleItem.AddWaterFromBottom; BottleItem.InsertWaterItem; BottleItem.PlayGeneratorFillAnimation; BottleItem.GetFirstEmptyCellIndexFromTheBottom; LevelWinOrStuckSystem.RequestLevelWinOrStuckCheck"
+    }
+  ],
+  "configs": [
+    {
+      "source": "asset",
+      "key": "BottleCollectionPlacementConfig.DefaultBottleHeight",
+      "type": "int",
+      "value": "4 (Regular) / 12 (Daily)",
+      "meaning": "Số ô mặc định của một chai",
+      "where": "Assets/MonoBehaviour/ConfigsBottleCollectionPlacementConfigRegular.asset, ...Daily.asset"
+    },
+    {
+      "source": "asset",
+      "key": "BottleCollectionPlacementConfig.DistanceBetweenRowsAsUnit",
+      "type": "int",
+      "value": "4 (Regular) / 12 (Daily)",
+      "meaning": "Khoảng cách giữa các hàng chai tính theo unit",
+      "where": "cùng asset trên"
+    },
+    {
+      "source": "asset",
+      "key": "ConfigsByBottleHeight.BottleAnimationConfigs",
+      "type": "List<BottleAnimationConfig>",
+      "value": "12 mục (một mục null)",
+      "meaning": "Cấu hình animation theo chiều cao và biến thể chai",
+      "where": "Assets/MonoBehaviour/ConfigsByBottleHeight.asset"
+    },
+    {
+      "source": "asset",
+      "key": "Các BottleAnimationConfig có sẵn",
+      "type": "asset",
+      "value": "1, 4 (Var0 + VarBase), 5, 8, 10, 11, 12, 15, 16, 18 unit + MagicBottleAnimationConfig + ChargeableBottleAnimationConfig",
+      "meaning": "Các chiều cao chai được hỗ trợ",
+      "where": "Assets/MonoBehaviour/BottleAnimationConfigFor*Unit.asset"
+    },
+    {
+      "source": "asset",
+      "key": "BottleAnimationConfig._riseHeight",
+      "type": "float",
+      "value": "1.85",
+      "meaning": "Độ cao chai nhấc lên khi đổ (chai 4 unit)",
+      "where": "BottleAnimationConfigFor4UnitVar0.asset"
+    },
+    {
+      "source": "asset",
+      "key": "BottleAnimationConfig._riseBottleDuration",
+      "type": "float",
+      "value": "0.5 s",
+      "meaning": "Thời gian nhấc chai",
+      "where": "BottleAnimationConfigFor4UnitVar0.asset"
+    },
+    {
+      "source": "asset",
+      "key": "BottleAnimationConfig._extraRiseBottleDurationByWaterDropHeight",
+      "type": "float",
+      "value": "0.15 s",
+      "meaning": "Thời gian cộng thêm theo độ cao rơi của nước",
+      "where": "BottleAnimationConfigFor4UnitVar0.asset"
+    },
+    {
+      "source": "asset",
+      "key": "BottleAnimationConfig._waterLineDuration",
+      "type": "float",
+      "value": "0.6 s",
+      "meaning": "Thời gian dòng nước nối giữa hai chai",
+      "where": "BottleAnimationConfigFor4UnitVar0.asset"
+    },
+    {
+      "source": "asset",
+      "key": "BottleAnimationConfig._moveToTargetMinDuration / _moveToInitialPositionMinDuration",
+      "type": "float",
+      "value": "0.2 s / 0.3 s",
+      "meaning": "Thời gian tối thiểu bay tới đích và bay về",
+      "where": "BottleAnimationConfigFor4UnitVar0.asset"
+    },
+    {
+      "source": "asset",
+      "key": "BottleAnimationConfig._bottleSelectionAnimationDuration / Height",
+      "type": "float",
+      "value": "0.09 s / 1 unit (0.7 cho bàn 3 hàng)",
+      "meaning": "Hiệu ứng nhô chai khi chọn",
+      "where": "BottleAnimationConfigFor4UnitVar0.asset"
+    },
+    {
+      "source": "asset",
+      "key": "BottleAnimationConfig._rotationsByHeights",
+      "type": "float[]",
+      "value": "35, 65, 80, 85, 100, 105 (độ)",
+      "meaning": "Góc nghiêng chai 4 unit theo lượng nước đổ",
+      "where": "BottleAnimationConfigFor4UnitVar0.asset"
+    },
+    {
+      "source": "asset",
+      "key": "BottleAnimationConfig._rotationsByHeightsFor2UnitBottle",
+      "type": "float[]",
+      "value": "45, 60, 105 (độ)",
+      "meaning": "Góc nghiêng chai 2 unit",
+      "where": "BottleAnimationConfigFor4UnitVar0.asset"
+    },
+    {
+      "source": "code enum",
+      "key": "ColorId",
+      "type": "enum",
+      "value": "BLACK=-1, LBLUE=0, DBLUE=1, ORANGE=2, LGREEN=3, DGREEN=4, WHITE=5, WINE=6, BROWN=7, YELLOW=8, VIOLET=9, PINK=10, RED=11, NONE=12, GRAY=13, RAINBOW1=14, RAINBOW2=15, RAINBOW3=16, EMERALD=17, MUSTARD=18, DPINK=19, MINT=20, LAVENDER=21, BEIGE=22",
+      "meaning": "Mã màu nước (24 giá trị)",
+      "where": "BoardItems/Scripts/Common/ColorNS/ColorId.cs"
+    },
+    {
+      "source": "asset",
+      "key": "ColorConfig assets",
+      "type": "asset",
+      "value": "Beige, Black, Brown, DBlue, DGreen, DPink, Emerald, Gray, LBlue, LGreen, Lavender, Mint, Mustard, Orange, Pink, Red, Violet, White (+ palette VariantA/VariantB)",
+      "meaning": "Màu hiển thị của từng ColorId",
+      "where": "Assets/MonoBehaviour/*ColorConfig.asset"
+    },
+    {
+      "source": "code enum",
+      "key": "ItemType",
+      "type": "enum",
+      "value": "None=0, Bottle=1, Water=2, QuestionMark=3, Curtain=4, Clay=5, Plaster=6, Tag=7, Ice=8, Generator=9, Woodbox=10, WoodboxKey=11, Carpet=12, Snitch=13, Toggle=14, Ivy=15, Frog=16, MagicSeal=17, Duck=18, DuckHouse=19, Safe=20, LongBottle=21, Shelf=22, Bag=23, Firework=24, Rainbow=25, Icicle=26, Mosaic=27, ChargeableBottle=28",
+      "meaning": "Danh mục mọi loại item đặt lên bàn",
+      "where": "BoardItems/Scripts/Generation/ItemType.cs"
+    },
+    {
+      "source": "code enum",
+      "key": "ItemPartType",
+      "type": "enum",
+      "value": "None=0, WaterLine=1, Blob=2, FrogPath=3, Shadow=4",
+      "meaning": "Thành phần phụ vẽ kèm item",
+      "where": "BoardItems/Scripts/Generation/ItemPartType.cs"
+    },
+    {
+      "source": "code enum",
+      "key": "InputMode",
+      "type": "enum",
+      "value": "None=0, WaterSortSelection=1, BottleSelection=2, ItemSelection=3",
+      "meaning": "Chế độ nhận chạm (chơi thường / chọn chai cho booster / chọn item)",
+      "where": "Systems/Scripts/InputSystemNS/InputMode.cs"
+    },
+    {
+      "source": "code enum",
+      "key": "BottlePresetType",
+      "type": "enum",
+      "value": "DeterBottle=1, Luck=2, PartialLuck=3",
+      "meaning": "Kiểu preset chai khi vẽ level trong Level Editor",
+      "where": "Modules/LevelEditor/WaterSort/UI/Scripts/Drawing/BottlePresetType.cs"
+    },
+    {
+      "source": "code const",
+      "key": "SortingService.DefaultSortingLayer / BottleSittingSortingLayer / BottleAnimatingSortingLayer / BottleSelectedSortingLayer / PopUpSortingLayer",
+      "type": "string",
+      "value": "\"Default\", \"BottlesSitting\", \"BottlesAnimating\", \"BottlesClicked\", \"PopUp\"",
+      "meaning": "Các sorting layer của bàn chơi",
+      "where": "SortingService"
+    },
+    {
+      "source": "code const",
+      "key": "SortingService.BottleBackFirstSortOrder",
+      "type": "int",
+      "value": "1",
+      "meaning": "Sort order mặt sau chai",
+      "where": "SortingService"
+    },
+    {
+      "source": "code const",
+      "key": "SortingService.WaterFirstSortOrder",
+      "type": "int",
+      "value": "200",
+      "meaning": "Sort order khối nước đầu tiên",
+      "where": "SortingService"
+    },
+    {
+      "source": "code const",
+      "key": "SortingService.BlockerBackSortOrder / BlockerFrontSortOrder",
+      "type": "int",
+      "value": "500 / 3000",
+      "meaning": "Sort order vật cản sau/trước chai",
+      "where": "SortingService"
+    },
+    {
+      "source": "code const",
+      "key": "SortingService.BottleFrontFirstSortOrder",
+      "type": "int",
+      "value": "2000",
+      "meaning": "Sort order mặt trước chai",
+      "where": "SortingService"
+    },
+    {
+      "source": "code const",
+      "key": "SortingService.SnitchSortOrder",
+      "type": "int",
+      "value": "3100",
+      "meaning": "Sort order của Snitch (lớp trên cùng bàn)",
+      "where": "SortingService"
+    },
+    {
+      "source": "code const",
+      "key": "SortingService.SelectedBottleOriginSortOrder / SelectedBottleTargetSortOrder",
+      "type": "int",
+      "value": "1500 / 1000",
+      "meaning": "Sort order chai nguồn/đích khi đang đổ",
+      "where": "SortingService"
+    },
+    {
+      "source": "code const",
+      "key": "SortingService.BottleSittingSortOrder / BottleAnimatingSortOrder",
+      "type": "int",
+      "value": "1000 / 1000",
+      "meaning": "Sort order chai đứng yên / đang chạy animation",
+      "where": "SortingService"
+    },
+    {
+      "source": "config class",
+      "key": "GameplayConfigs",
+      "type": "ScriptableObject",
+      "value": "BottleCollectionCameraConfig, BottleCollectionCameraConfigNewBackground, BottleCollectionZoomedCameraConfig, BottleCollectionZoomedAndNewBackgroundCameraConfig, FailFlowAnimationTallBottlesConfig, GameUIViewTallBottlesConfig, GameUIViewTallBottlesAndNewBackgroundCameraConfig, ConfigsByBottleHeight, LevelEntranceAnimationConfig, InLevelBoosterAnimationConfig, IceConfig, BottleCollectionPlacementConfig",
+      "meaning": "Gói cấu hình gameplay (bản Regular và bản Daily riêng)",
+      "where": "Assets/MonoBehaviour/GameplayConfigs.asset, GameplayConfigsDaily.asset"
+    },
+    {
+      "source": "config class",
+      "key": "WaterViewConfig / WaterRegularRiseConfig / WaterDailyRiseConfig / WaterRegularRotationConfig / WaterParticleConfig / WaterPivotPositionsByBottleHeight / WaterSpriteByBottleHeight / DurationsByHeight",
+      "type": "ScriptableObject",
+      "value": "asset",
+      "meaning": "Toàn bộ tham số hoạt hoạ mặt nước theo chiều cao chai",
+      "where": "BoardItems/Scripts/Water/Configs"
+    },
+    {
+      "source": "Default/code0.0.3063 and historical caches20260910/20261010; per-snapshot source/hash in snapshot_values; not effective-runtime proof",
+      "key": "RootLevelConfigModel.ColorVariant",
+      "type": "int",
+      "value": "cache_20260910: 2; cache_20261010: 2",
+      "meaning": "Chọn ColorPalette mặc định / VariantA / VariantB [15/11: giá trị theo snapshot cụ thể; thiếu field khác với false/0. Không xác nhận assignment hoặc effective runtime.]",
+      "where": "ColorService.Initialize",
+      "previous_unresolved_value": "server",
+      "snapshot_values": [
+        {
+          "snapshot": "cache_20260910",
+          "model": "rootLevelConfigModel",
+          "key": "colorVariant",
+          "value": 2,
+          "type": "int",
+          "source": "facts/runtime/server_configs/rootLevelConfigModel.json",
+          "value_type": "int",
+          "source_sha256": "d2727cef6e6dc5661af6926ffa600e1cf98cbe093515095f11b2c0551c8ffac8",
+          "field_present": true
+        },
+        {
+          "snapshot": "cache_20261010",
+          "model": "rootLevelConfigModel",
+          "key": "colorVariant",
+          "value": 2,
+          "type": "int",
+          "source": "facts/runtime/test_20261010/before/CachedRemoteConfigs",
+          "value_type": "int",
+          "source_sha256": "433164d4877b2dee55d2bbd79ef2fe83d3fe9519492fe15e3cb0926daf216050",
+          "field_present": true
+        }
+      ],
+      "snapshot_review_id": "MS-CFG-BottleSortMechanics-0028"
+    },
+    {
+      "source": "server info",
+      "key": "RootLevelConfigModel.IsNewBottleVisualsEnabled / IsNewBottleParticlesEnabled / IsNewBlockerVisualsEnabled",
+      "type": "bool",
+      "value": "server",
+      "meaning": "Bộ hình ảnh chai/hạt/vật cản mới (AB test)",
+      "where": "BottleCollection.GetBottleAndWaterVariant, GetIsNewParticlesEnabled, GetBlockerVariant"
+    },
+    {
+      "source": "server info",
+      "key": "RootLevelConfigModel.IsBackgroundAndShelvesEnabled / IsSmallBackgroundEnable",
+      "type": "bool",
+      "value": "server",
+      "meaning": "Bật nền mới và kệ đỡ chai",
+      "where": "BottleCollection.AddShelvesIfNeeded, InLevelBackgroundController"
+    },
+    {
+      "source": "Default/code0.0.3063 and historical caches20260910/20261010; per-snapshot source/hash in snapshot_values; not effective-runtime proof",
+      "key": "RootLevelConfigModel.IsRevealBoosterEnabled",
+      "type": "bool",
+      "value": "cache_20260910: false; cache_20261010: false",
+      "meaning": "Bật booster Reveal cho ô dấu hỏi [15/11: giá trị theo snapshot cụ thể; thiếu field khác với false/0. Không xác nhận assignment hoặc effective runtime.]",
+      "where": "BottleItem.CanReveal",
+      "previous_unresolved_value": "server",
+      "snapshot_values": [
+        {
+          "snapshot": "cache_20260910",
+          "model": "rootLevelConfigModel",
+          "key": "isRevealBoosterEnabled",
+          "value": false,
+          "type": "bool",
+          "source": "facts/runtime/server_configs/rootLevelConfigModel.json",
+          "value_type": "bool",
+          "source_sha256": "d2727cef6e6dc5661af6926ffa600e1cf98cbe093515095f11b2c0551c8ffac8",
+          "field_present": true
+        },
+        {
+          "snapshot": "cache_20261010",
+          "model": "rootLevelConfigModel",
+          "key": "isRevealBoosterEnabled",
+          "value": false,
+          "type": "bool",
+          "source": "facts/runtime/test_20261010/before/CachedRemoteConfigs",
+          "value_type": "bool",
+          "source_sha256": "433164d4877b2dee55d2bbd79ef2fe83d3fe9519492fe15e3cb0926daf216050",
+          "field_present": true
+        }
+      ],
+      "snapshot_review_id": "MS-CFG-BottleSortMechanics-0031"
+    },
+    {
+      "source": "server info",
+      "key": "GameEconomyModel.ShufflePrice / ExtraBottlePrice / RevealPrice / MegaShufflePrice / UndoPrice",
+      "type": "int",
+      "value": "server",
+      "meaning": "Giá các thao tác hỗ trợ trên bàn",
+      "where": "FirebaseRemoteConfigs.GameEconomyModel"
+    },
+    {
+      "source": "AB test",
+      "key": "Firebase RC: ColorVariant",
+      "type": "",
+      "value": "2",
+      "meaning": "cờ AB/tinh chỉnh server-only (giá trị nhánh máy này)",
+      "where": "Configs/CachedRemoteConfigs + Firebase RC template 3197 — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "AB test",
+      "key": "Firebase RC: IsBackgroundAndShelvesEnabled",
+      "type": "",
+      "value": "false",
+      "meaning": "cờ AB/tinh chỉnh server-only (giá trị nhánh máy này)",
+      "where": "Configs/CachedRemoteConfigs + Firebase RC template 3197 — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "AB test",
+      "key": "Firebase RC: IsFastAndZoomedGamePlay",
+      "type": "",
+      "value": "true",
+      "meaning": "cờ AB/tinh chỉnh server-only (giá trị nhánh máy này)",
+      "where": "Configs/CachedRemoteConfigs + Firebase RC template 3197 — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "AB test",
+      "key": "Firebase RC: IsOldBackgroundEnabled",
+      "type": "",
+      "value": "true",
+      "meaning": "cờ AB/tinh chỉnh server-only (giá trị nhánh máy này)",
+      "where": "Configs/CachedRemoteConfigs + Firebase RC template 3197 — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "AB test",
+      "key": "Firebase RC: IsShelfEnabled",
+      "type": "",
+      "value": "false",
+      "meaning": "cờ AB/tinh chỉnh server-only (giá trị nhánh máy này)",
+      "where": "Configs/CachedRemoteConfigs + Firebase RC template 3197 — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "AB test",
+      "key": "Firebase RC: IsSmallBackgroundEnable",
+      "type": "",
+      "value": "true",
+      "meaning": "cờ AB/tinh chỉnh server-only (giá trị nhánh máy này)",
+      "where": "Configs/CachedRemoteConfigs + Firebase RC template 3197 — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "AB test",
+      "key": "Firebase RC: IsZoomed3RowsEnabled",
+      "type": "",
+      "value": "false",
+      "meaning": "cờ AB/tinh chỉnh server-only (giá trị nhánh máy này)",
+      "where": "Configs/CachedRemoteConfigs + Firebase RC template 3197 — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    },
+    {
+      "source": "AB test",
+      "key": "Firebase RC: MapBackEndColors",
+      "type": "",
+      "value": "true",
+      "meaning": "cờ AB/tinh chỉnh server-only (giá trị nhánh máy này)",
+      "where": "Configs/CachedRemoteConfigs + Firebase RC template 3197 — đọc từ LDPlayer 2026-09-10, segment non-purchaser, level 320 (spoof)"
+    }
+  ],
+  "rewards": [],
+  "backend": [
+    {
+      "command": "magicsort.schemas.v1.level (BottleItemModel/WaterItemModel/CellModel)",
+      "direction": "server→client",
+      "purpose": "Mô tả bố cục chai, nước, blocker của mỗi level; giải mã bằng BottleCollectionConverter / BottleItemModelListConverter / ItemModelConverter"
+    },
+    {
+      "command": "RootLevelConfigModel (Firebase)",
+      "direction": "server→client",
+      "purpose": "Các cờ AB về hình ảnh chai, bảng màu, kệ, booster Reveal"
+    }
+  ],
+  "ui": [
+    {
+      "element": "Bàn chai",
+      "class": "Modules.Contexts.GamePlay.Board.Common.Scripts.BottleCollection",
+      "purpose": "Hiển thị và quản lý toàn bộ chai trên bàn"
+    },
+    {
+      "element": "Chai",
+      "class": "Modules.Contexts.GamePlay.BoardItems.Scripts.Bottle.BottleItem / BottleView",
+      "purpose": "Một chai với nước, nắp, mask, outline"
+    },
+    {
+      "element": "Khối nước",
+      "class": "Modules.Contexts.GamePlay.BoardItems.Scripts.Water.WaterItem / WaterView / WaterShapeRendererRegular / WaterShapeRendererDaily",
+      "purpose": "Vẽ mặt nước, hiệu ứng nghiêng và dâng"
+    },
+    {
+      "element": "Đường nước nối hai chai",
+      "class": "WaterLineStartView (ItemPartType.WaterLine)",
+      "purpose": "Dòng nước chảy giữa miệng chai nguồn và đích"
+    },
+    {
+      "element": "Hiệu ứng hoàn thành chai",
+      "class": "BottleCompleteAnimationController / WinParticle",
+      "purpose": "Phản hồi khi chai được xếp xong"
+    },
+    {
+      "element": "Chọn chai cho booster",
+      "class": "RegularSelectionAnimationHandler / DailySelectionAnimationHandler / SelectionSuccessAnimation",
+      "purpose": "Hiệu ứng chọn chai theo từng chế độ"
+    }
+  ],
+  "analytics": [
+    {
+      "event": "level_first_bottle_click / level_first_move_click",
+      "params": "progress",
+      "when": "Lần chạm chai và nước đi đầu tiên của level"
+    },
+    {
+      "event": "Chỉ số bàn chơi trong LevelStats",
+      "params": "total_move_count, bottles_completed, empty_bottle_count, initial_empty_bottle_count, initial_filled_bottle_count, undo_used, shuffle_used, extrabottle_used, moves2, progress",
+      "when": "Gửi kèm mọi event level_*"
+    },
+    {
+      "event": "Chuỗi lịch sử tap",
+      "params": "GamePlayInputHistory.GetBottleClickHistoryShorten(), GetFalseClickCount()",
+      "when": "Kết thúc level"
+    }
+  ],
+  "storage_keys": [],
+  "related_features": [
+    "LevelFlow",
+    "Obstacles",
+    "Boosters",
+    "LevelGeneration",
+    "DailyLevel",
+    "Tutorial"
+  ],
+  "gaps": [
+    "15/11 — partial_actual_evidence: Bàn351 tăng12→13chai và đổi bố trí khiExtraBottle. Còn lại: Thựcthi đúng câu hỏi còn lại trên fixture phù hợp; không nâng một nhánh thànhfullUCpass.",
+    "15/11 — resolved_static_code_historical_build: Base = isCompletable && !IsCompleted && !IsEmpty && topWater.Height==Height && IsAllWatersVisible. Không có long bottle trên board→base. Có long bottle→base && (collection.GetColorCount(topColor)==Height || IsLongBottle). Không có nhánh hoàn thành chai chưa đầy chỉ vì màu còn ít. Còn lại: Đối chiếu nhánh này trên app0.0.3129 ARM64; chưa là runtime pass.",
+    "15/11 — resolved_static_snapshot: Resolve 114 palette entry qua hai scene:default/A/B mỗi19color. Full gradient RGBA và ColorId có trong catalog; đây là asset0.0.3063, không khẳng định palette0.0.3129. Còn lại: Kiểm chứng effective config/asset và nhánh runtime trên đúng build nếu cần.",
+    "15/11 — partial_static_code_unresolved: HasNoMove chỉ scan khi !EditorMode,!IsOgPlayStyle và state1/7. Scan origin/target qua IsSelectable...ExceptAnimation, bỏ chuyển một màu sang chai trống có chiều cao đủ chứa origin; cộng empty-cell capacity của target hợp lệ. Có target và topWaterHeight<=capacity→false; topcell MagicSeal(raw17) dùng height1. Scan tiếp empty completable targets và chai all-visible-same-color-not-full trước true. TrySolveSpecialStuck chỉ chạy khi AreBottlesWithoutBlockersSingleColored, duyệt blockers, dispatch ISpecialStuckResolver interface khi blocker implement. Còn lại: Đã đọc predicate đầy đủ; từng resolver/blocker và race animation cần board fixture/runtime, chưa chứng minh mọi stuck recovery thành công.",
+    "[Runtime 2026-09-10] Cờ AB/tinh chỉnh server-only đọc từ Firebase Remote Config (template 3197).",
+    "15/11 — partial_actual_evidence: Undo/pour vàShuffle được quan sát trong mộtcollection. Còn lại: Thựcthi đúng câu hỏi còn lại trên fixture phù hợp; không nâng một nhánh thànhfullUCpass."
+  ],
+  "sources": [
+    "UnityExport/.../GamePlay/BoardItems/Scripts/Bottle/BottleItem.cs, ConfigsByBottleHeight.cs, BottleByHeight.cs, RotationSteps.cs, GameplayConfigs.cs",
+    "UnityExport/.../GamePlay/Board/Common/Scripts/BottleCollection.cs, BottleCollections.cs, BottleCollectionUtil.cs",
+    "UnityExport/.../GamePlay/Systems/Scripts/InputSystemNS/*.cs, WinOrStuck/LevelWinOrStuckSystem.cs",
+    "UnityExport/.../GamePlay/BoardItems/Scripts/Common/ColorNS/ColorId.cs, ColorService.cs, ColorConfig.cs",
+    "UnityExport/.../Modules/Infrastructure/UI/Common/Scripts/SortingService.cs",
+    "Assets/MonoBehaviour/ConfigsBottleCollectionPlacementConfigRegular.asset, ...Daily.asset, ConfigsByBottleHeight.asset, BottleAnimationConfigFor4UnitVar0.asset, GameplayConfigs.asset",
+    "RecoveredNative/PseudoC/.../BoardItems/Scripts/Bottle/BottleItem.c (IsSelectableAsTarget, ShouldComplete, CanComplete)"
+  ],
+  "audit_provenance": {
+    "review_date": "2026-11-15",
+    "mode": "offline_existing_files",
+    "code_build": "0.0.3063 ARMv7",
+    "runtime_build_observed_historically": "0.0.3129 ARM64 (audit 2026-10-18); not rechecked 2026-11-15",
+    "new_playtests": 2,
+    "uc_status": "See facts/audit_20261115/uc_registry.json; image reference is not pass",
+    "workbook_status": "Existing XLSX is historical; JSON and local web include 2026-11-15 corrections",
+    "static_review": "facts/local_code_gap_results_20261115.json; facts/local_asset_gap_results_20261115.json; facts/final_data_gap_decisions_20261115.json; facts/core_body_gap_decisions_20261115.json; facts/remaining_asset_gap_decisions_20261115.json"
+  },
+  "runtime_review_20261115": [
+    {
+      "id": "MS-R15-CORE01",
+      "feature": "BottleSortMechanics",
+      "uc": [
+        "UC-01",
+        "UC-02",
+        "UC-03",
+        "UC-05",
+        "UC-11"
+      ],
+      "title": "Đổ hợp lệ, đổ khác màu và lộ ô dấu hỏi",
+      "precondition": "App 0.0.3129 ARM64, UID offline, tài nguyên fixture có sẵn; level 351 rồi 352. Nguồn code 0.0.3063 được phân biệt riêng.",
+      "steps": [
+        "Chai1 → chai9 trống",
+        "Chai2 màu xám → chai9 màu cam",
+        "Chai5 màu cam → chai9 màu cam"
+      ],
+      "expected": "Chỉ chuyển nước ở nhánh hợp lệ, mở màu nằm dưới lớp vừa đổ.",
+      "actual": "Lần đầu cam chuyển vào chai9, chai1 lộ đỏ; đổ xám lên cam bị từ chối, board không đổi; cam từ chai5 nhập chai9 và lộ xanh lá. Không tiêu coin/booster.",
+      "status": "verified_observed_branch",
+      "limitations": "Chai đánh số từ trái sang phải, hàng trên rồi hàng dưới. Một seed có dấu hỏi/Generator, chưa đại diện mọi obstacle hoặc cơ chế multi-wave.",
+      "images": [
+        "CORE01_prelevel",
+        "CORE02_pour_empty",
+        "CORE03_invalid_color",
+        "CORE04_pour_same"
+      ],
+      "before": "CORE01_prelevel",
+      "after": "CORE04_pour_same",
+      "currency_unchanged": true,
+      "build": "0.0.3129 ARM64",
+      "mode": "offline_existing_fixture",
+      "date": "2026-11-15",
+      "ledger": {
+        "before": "CORE01_prelevel.json",
+        "after": "CORE04_pour_same.json"
+      }
+    },
+    {
+      "id": "MS-R15-CORE06",
+      "feature": "BottleSortMechanics",
+      "uc": [
+        "UC-20"
+      ],
+      "title": "Generator tạo màu tiếp theo khi chai rỗng",
+      "precondition": "App 0.0.3129 ARM64, UID offline, tài nguyên fixture có sẵn; level 351 rồi 352. Nguồn code 0.0.3063 được phân biệt riêng.",
+      "steps": [
+        "Đổ chai nhỏ cam sang chai cam",
+        "Đợi animation",
+        "Đổ chai nhỏ xanh lá sang chai xanh lá"
+      ],
+      "expected": "Đối chiếu serialized OBIM với màu sinh và UI.",
+      "actual": "Chai nhỏ cam sinh xám, chai nhỏ xanh lá sinh nâu; đai số1 biến mất sau khi phát màu cuối. Source OBIM.Id=18 được converter ánh xạ GeneratorItemModel, NC=[10]/[11].",
+      "status": "verified_observed_branch",
+      "limitations": "Một màu dự trữ mỗi Generator. Không dùng ItemType enum18 để diễn giải serialized discriminator18. Màu enum code cũ khác palette runtime; giữ CI số và ảnh.",
+      "images": [
+        "CORE13_solver_step4",
+        "CORE14_generator_pour",
+        "CORE15_generator_ready",
+        "CORE16_generator_second"
+      ],
+      "before": "CORE13_solver_step4",
+      "after": "CORE16_generator_second",
+      "currency_unchanged": true,
+      "build": "0.0.3129 ARM64",
+      "mode": "offline_existing_fixture",
+      "date": "2026-11-15",
+      "ledger": {
+        "before": "CORE13_solver_step4.json",
+        "after": "CORE16_generator_second.json"
+      }
+    }
+  ],
+  "static_review_20261115": {
+    "date": "2026-11-15",
+    "scope": "Historical code/assets 0.0.3063, dated caches, device 0.0.3129 cached bundles and explicitly scoped runtime evidence. Not full runtime pass.",
+    "findings": [
+      {
+        "kind": "core_body",
+        "source_report": "facts/core_body_gap_decisions_20261115.json",
+        "id": "MS-CORE-BODY-03",
+        "gap_ids": [
+          "MS-BottleSortMechanics-G002"
+        ],
+        "title": "ShouldComplete đầy chai và long-board",
+        "conclusion": "Base = isCompletable && !IsCompleted && !IsEmpty && topWater.Height==Height && IsAllWatersVisible. Không có long bottle trên board→base. Có long bottle→base && (collection.GetColorCount(topColor)==Height || IsLongBottle). Không có nhánh hoàn thành chai chưa đầy chỉ vì màu còn ít.",
+        "evidence": [
+          {
+            "file": "../com.grandgames.magicsort_Unity_20260909_112501/RecoveredNative/PseudoC/Assembly-CSharp/Modules/Contexts/GamePlay/BoardItems/Scripts/Bottle/BottleItem.c",
+            "line": 5650,
+            "end_line": 5715,
+            "method": "// ===== BottleItem :: private bool ShouldComplete()   [RVA 0x174A924, ok]",
+            "sha256": "e4fb405af0fe63ffe36bf9962b8dcc383461779d50d702a035481df96f08635a",
+            "body_checked": true,
+            "build": "0.0.3063 ARMv7",
+            "required_body_tokens": []
+          }
+        ],
+        "status": "resolved_static_code_historical_build",
+        "remaining": "Đối chiếu nhánh này trên app0.0.3129 ARM64; chưa là runtime pass.",
+        "runtime_verified": false,
+        "scope": "recovered_native_0.0.3063_only"
+      },
+      {
+        "kind": "core_body",
+        "source_report": "facts/core_body_gap_decisions_20261115.json",
+        "id": "MS-CORE-BODY-04",
+        "gap_ids": [
+          "MS-BottleSortMechanics-G004"
+        ],
+        "title": "No-move và special resolver",
+        "conclusion": "HasNoMove chỉ scan khi !EditorMode,!IsOgPlayStyle và state1/7. Scan origin/target qua IsSelectable...ExceptAnimation, bỏ chuyển một màu sang chai trống có chiều cao đủ chứa origin; cộng empty-cell capacity của target hợp lệ. Có target và topWaterHeight<=capacity→false; topcell MagicSeal(raw17) dùng height1. Scan tiếp empty completable targets và chai all-visible-same-color-not-full trước true. TrySolveSpecialStuck chỉ chạy khi AreBottlesWithoutBlockersSingleColored, duyệt blockers, dispatch ISpecialStuckResolver interface khi blocker implement.",
+        "evidence": [
+          {
+            "file": "../com.grandgames.magicsort_Unity_20260909_112501/RecoveredNative/PseudoC/Assembly-CSharp/Modules/Contexts/GamePlay/Systems/Scripts/WinOrStuck/LevelWinOrStuckSystem.c",
+            "line": 1091,
+            "end_line": 1450,
+            "method": "// ===== LevelWinOrStuckSystem :: public bool HasNoMove(",
+            "sha256": "c2bb3abd9bc3d383eb6cd88afbd61c075d5fedf6400abfa319da51bf0d9bc561",
+            "body_checked": true,
+            "build": "0.0.3063 ARMv7",
+            "required_body_tokens": []
+          },
+          {
+            "file": "../com.grandgames.magicsort_Unity_20260909_112501/RecoveredNative/PseudoC/Assembly-CSharp/Modules/Contexts/GamePlay/Systems/Scripts/WinOrStuck/LevelWinOrStuckSystem.c",
+            "line": 1788,
+            "end_line": 1913,
+            "method": "// ===== LevelWinOrStuckSystem :: public void TrySolveSpecialStuck()   [RVA 0xE3BD34, ok]",
+            "sha256": "c2bb3abd9bc3d383eb6cd88afbd61c075d5fedf6400abfa319da51bf0d9bc561",
+            "body_checked": true,
+            "build": "0.0.3063 ARMv7",
+            "required_body_tokens": []
+          }
+        ],
+        "status": "partial_static_code_unresolved",
+        "remaining": "Đã đọc predicate đầy đủ; từng resolver/blocker và race animation cần board fixture/runtime, chưa chứng minh mọi stuck recovery thành công.",
+        "runtime_verified": false,
+        "scope": "recovered_native_0.0.3063_only"
+      },
+      {
+        "kind": "final_data",
+        "source_report": "facts/final_data_gap_decisions_20261115.json",
+        "id": "MS-FDG-033",
+        "gap_ids": [
+          "MS-BottleSortMechanics-G001"
+        ],
+        "title": "Không đọc được giá trị chính xác của _maxBottleCount và GetMaxBottleCountInRow (tính động theo bố cục hàng trong pseudo-C).",
+        "status": "partial_actual_evidence",
+        "conclusion": "Bàn351 tăng12→13chai và đổi bố trí khiExtraBottle.",
+        "evidence": [
+          "facts/review_cases_20261115.json#MS-R15-CORE04"
+        ],
+        "remaining": "Không suy _maxBottleCount/GetMaxBottleCountInRow từ mộtboard; côngthứcmax còn mở.",
+        "next_action": "Thựcthi đúng câu hỏi còn lại trên fixture phù hợp; không nâng một nhánh thànhfullUCpass.",
+        "scope": "question-specific source/observed branch only; no full-UC or production claim",
+        "source_records": []
+      },
+      {
+        "kind": "final_data",
+        "source_report": "facts/final_data_gap_decisions_20261115.json",
+        "id": "MS-FDG-034",
+        "gap_ids": [
+          "MS-BottleSortMechanics-G006"
+        ],
+        "title": "[Đối chiếu 10/10/2026] Undo xuyên collection: UNRESOLVED. Cần body/caller của chuyển collection và fixture tối thiểu 2 collection; bỏ hai kết luận cũ trái nhau.",
+        "status": "partial_actual_evidence",
+        "conclusion": "Undo/pour vàShuffle được quan sát trong mộtcollection.",
+        "evidence": [
+          "facts/review_cases_20261115.json#MS-R15-CORE02",
+          "facts/review_cases_20261115.json#MS-R15-CORE03"
+        ],
+        "remaining": "Không có bằng chứngUndo xuyêncollection hoặc ngoại suyMegaShuffle; giữ câu hỏi mở.",
+        "next_action": "Thựcthi đúng câu hỏi còn lại trên fixture phù hợp; không nâng một nhánh thànhfullUCpass.",
+        "scope": "question-specific source/observed branch only; no full-UC or production claim",
+        "source_records": []
+      },
+      {
+        "kind": "asset",
+        "source_report": "facts/local_asset_gap_results_20261115.json",
+        "id": "MS-BottleSortMechanics-G003",
+        "status": "resolved_static_snapshot",
+        "conclusion": "Resolve 114 palette entry qua hai scene:default/A/B mỗi19color. Full gradient RGBA và ColorId có trong catalog; đây là asset0.0.3063, không khẳng định palette0.0.3129.",
+        "evidence": [
+          {
+            "source": "Scenes\\GamePlayScene.unity",
+            "root": "UnityExport Assets 0.0.3063",
+            "sha256": "32bdb5295faf4903a2d7aec627d5e30ee06be0833aac62fdebc71763a3a71b23",
+            "line": 246405,
+            "build": "0.0.3063 ARMv7"
+          },
+          {
+            "source": "Scenes\\GamePlayScene.unity",
+            "root": "UnityExport Assets 0.0.3063",
+            "sha256": "32bdb5295faf4903a2d7aec627d5e30ee06be0833aac62fdebc71763a3a71b23",
+            "line": 246405,
+            "build": "0.0.3063 ARMv7"
+          },
+          {
+            "source": "Scenes\\GamePlayScene.unity",
+            "root": "UnityExport Assets 0.0.3063",
+            "sha256": "32bdb5295faf4903a2d7aec627d5e30ee06be0833aac62fdebc71763a3a71b23",
+            "line": 246405,
+            "build": "0.0.3063 ARMv7"
+          },
+          {
+            "source": "Scenes\\DailyScene.unity",
+            "root": "UnityExport Assets 0.0.3063",
+            "sha256": "c1a37ac5c1fc3e37d6d89f4c4f0f06db898ee96e769f8a086f563d357cd549e3",
+            "line": 23456,
+            "build": "0.0.3063 ARMv7"
+          },
+          {
+            "source": "Scenes\\DailyScene.unity",
+            "root": "UnityExport Assets 0.0.3063",
+            "sha256": "c1a37ac5c1fc3e37d6d89f4c4f0f06db898ee96e769f8a086f563d357cd549e3",
+            "line": 23456,
+            "build": "0.0.3063 ARMv7"
+          },
+          {
+            "source": "Scenes\\DailyScene.unity",
+            "root": "UnityExport Assets 0.0.3063",
+            "sha256": "c1a37ac5c1fc3e37d6d89f4c4f0f06db898ee96e769f8a086f563d357cd549e3",
+            "line": 23456,
+            "build": "0.0.3063 ARMv7"
+          }
+        ],
+        "data": "color_palettes.json",
+        "scope": "static_export0.0.3063_or_historical_cache_not_runtime_pass",
+        "reviewed": "2026-11-15",
+        "next_action": "Kiểm chứng effective config/asset và nhánh runtime trên đúng build nếu cần."
+      }
+    ]
+  },
+  "acceptance_review_20261115": {
+    "source": "facts/feature_acceptance_20261115.json",
+    "feature_id": "BottleSortMechanics",
+    "scope": "All eleven dossier dimensions reviewed; full_feature_verified is not implied; read per-dimension gaps and actual runtime evidence."
+  },
+  "segment_ab_review_20261115": {
+    "status": "reviewed_rows_associated_assignment_not_proven",
+    "segment_ids": [
+      "MS-SEG-083",
+      "MS-SEG-109",
+      "MS-SEG-158"
+    ],
+    "matching_basis": "explicit_gd_config_map_or_exact_model_token_in_gdd_configs_where_key_sources; rootfieldscoped",
+    "rows": [
+      {
+        "snapshot": "cache_20260910",
+        "model": "rootLevelConfigModel",
+        "key": "colorVariant",
+        "value": 2,
+        "type": "int",
+        "source": "facts/runtime/server_configs/rootLevelConfigModel.json",
+        "classification": "config_candidate_not_backend_assignment_proof",
+        "review_id": "MS-SEG-083",
+        "review_classification": "variant_config",
+        "review_status": "missing_experiment_assignment_and_outcome",
+        "consumer": {
+          "source": "com.grandgames.magicsort_Unity_20260909_112501/RecoveredNative/PseudoC/Assembly-CSharp/Modules/Contexts/Application/FirebaseNS/Scripts/FirebaseRemoteConfigResolver.c",
+          "line": 863,
+          "marker": "/* \"ColorVariant\" */",
+          "build": "0.0.3063 ARMv7",
+          "evidence": "recovered_native_historical_version"
+        },
+        "interpretation": "Giá trị variant được cache/default/Firebase; chưa có experimentID hoặc traffic split.",
+        "next_action": "Cần experimentID, variant, allocation, activation timestamp, consumer effect và đối chứng cùng điều kiện.",
+        "assignment_proof": false,
+        "uplift_proof": false,
+        "matching_basis": [
+          {
+            "kind": "exact_model_token_in_dossier_source_or_config",
+            "source": "gdd/BottleSortMechanics.json#/configs/28/key_where"
+          },
+          {
+            "kind": "exact_model_token_in_dossier_source_or_config",
+            "source": "gdd/BottleSortMechanics.json#/configs/29/key_where"
+          },
+          {
+            "kind": "exact_model_token_in_dossier_source_or_config",
+            "source": "gdd/BottleSortMechanics.json#/configs/30/key_where"
+          },
+          {
+            "kind": "exact_model_token_in_dossier_source_or_config",
+            "source": "gdd/BottleSortMechanics.json#/configs/31/key_where"
+          }
+        ]
+      },
+      {
+        "snapshot": "cache_20261010",
+        "model": "rootLevelConfigModel",
+        "key": "colorVariant",
+        "value": 2,
+        "type": "int",
+        "source": "facts/runtime/test_20261010/before/CachedRemoteConfigs",
+        "classification": "config_candidate_not_backend_assignment_proof",
+        "review_id": "MS-SEG-109",
+        "review_classification": "variant_config",
+        "review_status": "missing_experiment_assignment_and_outcome",
+        "consumer": {
+          "source": "com.grandgames.magicsort_Unity_20260909_112501/RecoveredNative/PseudoC/Assembly-CSharp/Modules/Contexts/Application/FirebaseNS/Scripts/FirebaseRemoteConfigResolver.c",
+          "line": 863,
+          "marker": "/* \"ColorVariant\" */",
+          "build": "0.0.3063 ARMv7",
+          "evidence": "recovered_native_historical_version"
+        },
+        "interpretation": "Giá trị variant được cache/default/Firebase; chưa có experimentID hoặc traffic split.",
+        "next_action": "Cần experimentID, variant, allocation, activation timestamp, consumer effect và đối chứng cùng điều kiện.",
+        "assignment_proof": false,
+        "uplift_proof": false,
+        "matching_basis": [
+          {
+            "kind": "exact_model_token_in_dossier_source_or_config",
+            "source": "gdd/BottleSortMechanics.json#/configs/28/key_where"
+          },
+          {
+            "kind": "exact_model_token_in_dossier_source_or_config",
+            "source": "gdd/BottleSortMechanics.json#/configs/29/key_where"
+          },
+          {
+            "kind": "exact_model_token_in_dossier_source_or_config",
+            "source": "gdd/BottleSortMechanics.json#/configs/30/key_where"
+          },
+          {
+            "kind": "exact_model_token_in_dossier_source_or_config",
+            "source": "gdd/BottleSortMechanics.json#/configs/31/key_where"
+          }
+        ]
+      },
+      {
+        "snapshot": "firebase_20260910",
+        "model": "ColorVariant",
+        "key": "",
+        "value": "2",
+        "type": "str",
+        "source": "facts/runtime/decoded/firebase_rc.json",
+        "classification": "config_candidate_not_backend_assignment_proof",
+        "review_id": "MS-SEG-158",
+        "review_classification": "variant_config",
+        "review_status": "missing_experiment_assignment_and_outcome",
+        "consumer": {
+          "source": "com.grandgames.magicsort_Unity_20260909_112501/RecoveredNative/PseudoC/Assembly-CSharp/Modules/Contexts/Application/FirebaseNS/Scripts/FirebaseRemoteConfigResolver.c",
+          "line": 863,
+          "marker": "/* \"ColorVariant\" */",
+          "build": "0.0.3063 ARMv7",
+          "evidence": "recovered_native_historical_version"
+        },
+        "interpretation": "Giá trị variant được cache/default/Firebase; chưa có experimentID hoặc traffic split.",
+        "next_action": "Cần experimentID, variant, allocation, activation timestamp, consumer effect và đối chứng cùng điều kiện.",
+        "assignment_proof": false,
+        "uplift_proof": false,
+        "matching_basis": [
+          {
+            "kind": "exact_model_token_in_dossier_source_or_config",
+            "source": "gdd/BottleSortMechanics.json#/configs/28/key_where"
+          },
+          {
+            "kind": "exact_model_token_in_dossier_source_or_config",
+            "source": "gdd/BottleSortMechanics.json#/configs/33/key_where"
+          }
+        ]
+      }
+    ],
+    "classifications": {
+      "variant_config": 3
+    },
+    "assignment_verified": false,
+    "uplift_verified": false,
+    "note": "No matchingrow does not prove no segmentation/AB. Rewardbucketfalsepositives remain explicitly classified."
+  },
+  "continuation_review_20261116": {
+    "date": "2026-11-16",
+    "build": "0.0.3129 ARM64 host APK",
+    "build_scope": "Host APK version3129 matches LAST observed installed version15/11 only; installed bytes/live device16/11 not verified.",
+    "runtime_status": "device_unavailable",
+    "runtime_case_ids": [],
+    "current_apk_model_links": {
+      "feature": "BottleSortMechanics",
+      "models": [
+        {
+          "model": "GameEconomyModel",
+          "current_default_file": "facts/review_20261116/public_current_config_3129/defaults/GameEconomyModel.json",
+          "resource_path": "defaultconfigs/gameeconomymodel",
+          "sha256": "a32421a6f1e34e66cc5dcf1943c56a1c3efeacd8f3b762401b3c067e9960ca9b",
+          "matching_basis": [
+            "gdd/BottleSortMechanics.json#/configs"
+          ],
+          "scope": "Packaged default3129, not effective server config.",
+          "site_data_path": "data/current_config_3129/defaults/GameEconomyModel.json",
+          "original_source_sha256": "a32421a6f1e34e66cc5dcf1943c56a1c3efeacd8f3b762401b3c067e9960ca9b",
+          "public_artifact_sha256": "2027b6e23169a78b572e5778d87be378571cf217c876e5cbe386963ad0f27598",
+          "sha256_scope": "sha256 is original raw model; public_artifact_sha256 is the sanitized download"
+        }
+      ],
+      "status": "exact_model_source_association",
+      "distribution": "sanitized_public",
+      "public_mapping_pending": false
+    },
+    "current_packaged_defaults": [
+      {
+        "model": "GameEconomyModel",
+        "source": "facts/review_20261116/public_current_config_3129/defaults/GameEconomyModel.json",
+        "site_data_path": "data/current_config_3129/defaults/GameEconomyModel.json",
+        "public_artifact_sha256": "2027b6e23169a78b572e5778d87be378571cf217c876e5cbe386963ad0f27598",
+        "original_source_sha256": "a32421a6f1e34e66cc5dcf1943c56a1c3efeacd8f3b762401b3c067e9960ca9b",
+        "source_class": "static_asset",
+        "build": "0.0.3129 host APK",
+        "scope": "Sanitized packaged default fullvalues only; not effective remote/selected config or runtime.",
+        "values": {
+          "refillPrice": 900,
+          "PlayOnPrice": 900,
+          "SecondPlayOnPrice": 1900,
+          "ThirdSecondPlayOnPrice": 2300,
+          "refillDurationAsMinutes": 30,
+          "maxLifeAmount": 5,
+          "initialCoin": 1000,
+          "initialUndoAmount": 3,
+          "initialShuffleAmount": 3,
+          "initialExtraBottleAmount": 3,
+          "initialFourthBoosterAmount": 3,
+          "undoUnlockAtLevel": 15,
+          "shuffleUnlockAtLevel": 15,
+          "extraBottleUnlockAtLevel": 15,
+          "UndoPrice": 300,
+          "ShufflePrice": 300,
+          "ExtraBottlePrice": 900,
+          "MegaShufflePrice": 900,
+          "RevealPrice": 900,
+          "RegularLevelWinCoinReward": 20,
+          "HardLevelWinCoinReward": 60,
+          "SuperHardLevelWinCoinReward": 100,
+          "IsFirstPlayOnFree": false,
+          "Hierarchy": 10000,
+          "PlayOnConfigModels": [
+            {
+              "PlayOnType": 0,
+              "Price": 900
+            },
+            {
+              "PlayOnType": 0,
+              "Price": 1900
+            },
+            {
+              "PlayOnType": 0,
+              "Price": 2300
+            }
+          ]
+        }
+      }
+    ],
+    "native_finding_ids": [],
+    "documentation_source_coverage": {
+      "dossier_present": true,
+      "use_case_catalog_count": 20,
+      "config_catalog_rows": 41,
+      "current_apk_default_model_links": 1,
+      "current_native_findings": 0,
+      "scope": "Documentation/source coverage only; not complete runtime verification."
+    },
+    "runtime_completion": {
+      "date": "2026-11-16",
+      "status": "device_unavailable",
+      "executed_case_count": 0,
+      "full_feature_runtime_verified": false
+    },
+    "planned_branch": "Cuối lượt core: chọn level thực mới, kiểm lượng rót nhiều ô, chai đầy và selection cancel, ghi board/tap timeline.",
+    "target_uc_ids": [
+      "UC-04",
+      "UC-08",
+      "UC-09"
+    ],
+    "execution_phase": "core_and_levels_last",
+    "core_or_levels_last": true,
+    "actionability_full_json": "facts/continuation_20261116/current/feature_actionability.json",
+    "actionability_site_data_path": "data/continuation_20261116/feature_actionability.json",
+    "source_classes": [
+      "static_asset"
+    ],
+    "full_feature_verified": false
+  }
+}
