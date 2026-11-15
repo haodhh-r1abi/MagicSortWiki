@@ -1,7 +1,7 @@
 {
   "id": "SuperCharger",
   "title": "Super Charger (trợ thủ nạp năng lượng)",
-  "tagline": "Trợ thủ nạp dần trong ván, khi đầy sẽ tự sắp xếp tối ưu nhiều chai hoặc tạo một chai mini đặc biệt.",
+  "tagline": "Trợ thủ nạp năng lượng trong bàn: BestSort cần bấm khi ready, ChargeableBottle dùng tự động theo strategy; heuristic không bảo đảm lời giải tối ưu toàn bàn.",
   "infobox": [
     [
       "Loại",
@@ -25,7 +25,7 @@
     ],
     [
       "Thưởng chính",
-      "BestSort: sắp xếp lại tới 4 chai; ChargeableBottle: một chai mini dùng một lần"
+      "BestSort: heuristic trên tập ứng viên với cap mặc định 4; ChargeableBottle: tạo hoặc nạp chai mini theo charge, tự dùng theo strategy."
     ],
     [
       "Điều kiện / phụ thuộc",
@@ -39,8 +39,8 @@
   "description": [
     "Super Charger là trợ thủ dùng trong level: người chơi phải thắng đủ số level ở Home để kích hoạt nó.",
     "Trong mỗi ván có một nút Super Charger nạp dần theo tiến trình chơi — theo số nước đi hoặc theo số chai hoàn thành, tuỳ cấu hình.",
-    "Khi nút đầy, người chơi bấm để dùng một lần phép thuật; hiệu quả tuỳ biến thể SuperChargerType.",
-    "Biến thể BestSort (Type = 2, mặc định) tự sắp xếp lại nhiều chai cùng lúc cho tối ưu.",
+    "Khi đủ năng lượng, BestSort chờ nút dùng; ChargeableBottle có ShouldUseAutomatically. Hai nhánh không dùng cùng một điều kiện bấm.",
+    "BestSort (Type = 2 mặc định) chọn một tập chai theo cap và chạy heuristic; không chứng minh sắp xếp tối ưu toàn bộ puzzle.",
     "Biến thể ChargeableBottle (Type = 1) tạo hoặc nạp một chai mini đặc biệt trên bàn, dùng tự động.",
     "Trạng thái kích hoạt là 'sống đến khi thua': thua một ván là mất Super Charger và phải làm lại tiến độ.",
     "Game có popup Are You Sure cảnh báo trước khi người chơi bỏ ván để không mất trợ thủ.",
@@ -56,7 +56,7 @@
     "Lưu ý: Biến thể ChargeableBottle dùng tự động (ShouldUseAutomatically() trả true); BestSort phải bấm nút.",
     "Lưu ý: Nếu bàn kẹt sau khi dùng, TryRescueFromStuck thêm một chai và ghi cờ _addedBottleForStuck vào analytics supercharger_used.",
     "Lưu ý: ForceTutorialShowCount không có trong file mặc định nên chưa biết giá trị vận hành thực tế (gap).",
-    "Lưu ý: Heuristic của BestSortSolver chỉ đọc được tên 5 pha, không có hằng số chấm điểm (gap)."
+    "Đã đọc 5 pha và nhánh RandomReverse: chỉ ở solution đủ gate, colors.Count > 1 và Random.Range(0,2) == 0 mới reverse. Phần scoring và nhánh lồng khác vẫn chưa đầy đủ."
   ],
   "how_it_works": [
     "Ở Home, mỗi lần thắng level SuperChargerService.TryIncreaseProgress() tăng SuperChargerModel.Progress thêm 1 (chỉ khi EventShownInLifeTime đã bật).",
@@ -101,7 +101,7 @@
         [
           "2",
           "BestSort (mặc định)",
-          "Sắp xếp lại tới 4 chai, hoàn thành ngay các chai đủ 4 đơn vị cùng màu; thêm 1 chai cứu nếu bàn kẹt"
+          "Áp solution heuristic lên tập chai hợp lệ, cap mặc định 4; xử lý completion và nhánh thêm chai cứu theo gate sau hiệu ứng. Không bảo đảm giải xong toàn bàn."
         ]
       ]
     },
@@ -387,7 +387,7 @@
     {
       "key": "SuperChargerConfigModel.json: ChargeMatchCount",
       "value": "[1]",
-      "meaning": "Số lần match hoặc chai cần cho mỗi nấc nạp"
+      "meaning": "Goal theo từng lần dùng: bắt đầu index 0, tăng theo useCount và kẹp phần tử cuối; không phải tổng cộng dồn."
     },
     {
       "key": "SuperChargerConfigModel.json: BestSortMaxEffectedBottleCap",
@@ -484,8 +484,8 @@
     "Cơ chế 'mất khi thua' biến Super Charger thành phần thưởng cho chuỗi thắng, tăng áp lực giữ streak.",
     "CheckMoveIsRepetitive chỉ đọc state hiện tại: reject khi (origin water list.Count==1 && target empty && !origin.HasBlocker(9)) OR (origin.Height==1 && !origin.HasBlocker(9)) OR target.EmptyCellCount<origin.TopWaterHeight. Không đọc SelectionSystem/history và không có history-depth N trong body; không được diễn giải thành undo/qua-lại filter. (Mã0.0.3063; chưa xác nhận runtime0.0.3129.)",
     "Giới hạn 4 chai giữ sức mạnh của BestSort ở mức hữu ích mà không phá vỡ độ khó của level.",
-    "Cơ chế cứu bàn kẹt sau khi dùng tránh tình huống trợ thủ lại làm người chơi thua ngay.",
-    "Hai biến thể dùng chung hạ tầng cho phép A/B test hai kiểu trợ thủ hoàn toàn khác nhau bằng một khoá config."
+    "Có nhánh TryRescueFromStuck sau BestSort; cần kiểm gate/kết quả thực tế, không bảo đảm mọi bàn kẹt đều được cứu.",
+    "Hai strategy dùng chung hạ tầng và selector config; chưa có assignment hoặc comparative runtime để khẳng định một A/B đã chạy."
   ],
   "categories": [
     "Cơ chế lõi",

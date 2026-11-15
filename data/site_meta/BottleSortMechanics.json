@@ -3,17 +3,35 @@
   "title": "Cơ chế đổ màu (Bottle Sort Mechanics)",
   "tagline": "Lõi gameplay: tap chai nguồn rồi chai đích, đổ nước cùng màu cho tới khi mọi chai xếp xong.",
   "infobox": [
-    ["Loại", "Cơ chế lõi"],
-    ["Mở khóa", "Có từ level 1"],
-    ["Tham gia", "Cá nhân"],
-    ["Vật phẩm thu thập", "Khối nước 24 mã màu (ColorId)"],
-    ["Điều kiện / phụ thuộc", "RootLevelConfigModel: ColorVariant, IsNewBottleVisualsEnabled, IsBackgroundAndShelvesEnabled, IsRevealBoosterEnabled"],
-    ["Manager", "BottleItem, BottleCollection, BottleCollections, SelectionSystem, GameplayInputSystem, LevelWinOrStuckSystem, ColorService, SortingService"]
+    [
+      "Loại",
+      "Cơ chế lõi"
+    ],
+    [
+      "Mở khóa",
+      "Có từ level 1"
+    ],
+    [
+      "Tham gia",
+      "Cá nhân"
+    ],
+    [
+      "Vật phẩm thu thập",
+      "Khối nước 24 mã màu (ColorId)"
+    ],
+    [
+      "Điều kiện / phụ thuộc",
+      "RootLevelConfigModel: ColorVariant, IsNewBottleVisualsEnabled, IsBackgroundAndShelvesEnabled, IsRevealBoosterEnabled"
+    ],
+    [
+      "Manager",
+      "BottleItem, BottleCollection, BottleCollections, SelectionSystem, GameplayInputSystem, LevelWinOrStuckSystem, ColorService, SortingService"
+    ]
   ],
   "description": [
     "Bàn chơi gồm nhiều chai xếp thành hàng, mỗi chai có số ô (Height) chứa các khối nước màu.",
     "Người chơi tap chai nguồn rồi tap chai đích; nước màu trên cùng chảy sang nếu đích trống hoặc cùng màu ở trên cùng và còn chỗ.",
-    "Chai đầy nguyên một màu được 'hoàn thành': đóng nắp, chạy hiệu ứng thắng và biến khỏi bàn.",
+    "Chai đủ điều kiện hoàn thành được đóng nắp, chạy hiệu ứng và khóa chọn. Round 2 vẫn thấy chai đã cap trên bàn; không mô tả mọi chai hoàn thành đều biến mất.",
     "Thắng khi mọi chai đều hoàn thành hoặc trống; thua chỉ khi bàn hết nước đi hợp lệ hoặc hết giờ ở Daily.",
     "Khác water-sort truyền thống, chai không đứng yên: chai nguồn bay lên và sang cạnh chai đích rồi nghiêng theo lượng nước.",
     "Nhiều khối nước cùng màu liền nhau được gộp (TryMergeColors) và đổ trong một lần.",
@@ -23,14 +41,14 @@
     "Chai thường cao 4 ô, chai Daily cao 12 ô; hệ thống có cấu hình hoạt ảnh riêng cho 10 chiều cao khác nhau."
   ],
   "notes": [
-    "Lưu ý: chai trống được coi như ColorId.NONE (12) nên luôn nhận nước bất kỳ màu nào.",
+    "Chai trống có ColorId.NONE trong đường chọn màu, nhưng vẫn phải qua sức chứa, blocker và lock trước khi nhận nước.",
     "Lưu ý: WaterHeightToMove = min(chiều cao khối màu trên cùng của nguồn, số ô trống của đích).",
-    "Lưu ý: chai vẫn có thể hoàn thành khi chưa đầy, nếu số khối còn lại của màu đó trên toàn bàn vừa khít lượng trong chai.",
+    "ShouldComplete 0.0.3063 vẫn yêu cầu full height và mọi nước visible; board có chai dài còn kiểm tổng lượng màu hoặc IsLongBottle. Không có nhánh cap chai chưa đầy chỉ vì màu còn ít.",
     "Lưu ý: chai đặc biệt như ChargeableBottle hoặc Generator có _isCompletable = false nên không bao giờ 'hoàn thành'.",
     "Lưu ý: Clay và Ice có luật riêng — HasDifferentBottleWithClayAndSameColor / HasDifferentBottleWithIceAndSameColor chặn đổ khi có chai khác cùng màu mang vật cản đó.",
-    "Lưu ý: Undo chỉ lùi được trong cùng BottleCollection; lịch sử bị xóa khi qua đợt mới hoặc sau Mega Shuffle.",
+    "Undo qua ranh giới BottleCollection và sau Mega Shuffle còn cần caller/fixture riêng; không suy từ việc có TryGetPreviousBottleCollection rằng Undo luôn xuyên hoặc luôn bị chặn.",
     "Lưu ý: Magic Sort cho phép nhiều selection chạy song song nên khóa theo từng chai chứ không khóa toàn bàn.",
-    "Lưu ý: khi bàn kẹt, TrySolveSpecialStuck() thử các lối thoát đặc biệt (Generator còn sinh nước, Toggle đảo được, Frog/Duck hành động) trước khi kết luận thua.",
+    "HasNoMove và TrySolveSpecialStuck có gate riêng trong mã 0.0.3063; special resolver chỉ được dispatch cho blocker implement interface khi predicate chung thỏa. Chưa chứng minh mọi Generator/Frog/Duck đều được helper này cứu.",
     "Lưu ý: giá trị _maxBottleCount và GetMaxBottleCountInRow tính động theo bố cục hàng, chưa đọc được số cụ thể (gap)."
   ],
   "how_it_works": [
@@ -46,161 +64,620 @@
     "GetRotationStepsToDropTheWater(isLeft) chọn góc nghiêng từ bảng _rotationsByHeights: chai 4 unit dùng 35, 65, 80, 85, 100, 105 độ; chai 2 unit dùng 45, 60, 105 độ.",
     "WaterLine nối miệng hai chai vẽ trong 0,6 giây; ApplySelection gọi RemoveWater trên nguồn và AddWater trên đích, rồi TryMergeColors gộp khối cùng màu.",
     "CompleteSelection kết thúc; chai nguồn quay về chỗ cũ trong tối thiểu 0,3 giây (OnOriginBottleReturnToInitialPosition).",
-    "TryComplete() kiểm ShouldComplete: chai có thể hoàn thành, không trống và chiều cao khối trên cùng bằng Height; Complete() đóng nắp và bắn OnBottleCompleted cho hàng xóm.",
+    "ShouldComplete 0.0.3063 yêu cầu completable, chưa complete, không rỗng, topWater.Height == Height và mọi nước visible; board có chai dài còn kiểm điều kiện màu/IsLongBottle. Predicate đúng mới đóng nắp và phát callback.",
     "LevelWinOrStuckSystem.FrameUpdate liên tục kiểm IsBoardStopped(); sạch collection thì NextBottleCollection() hoặc WinLevel() nếu là đợt cuối.",
     "HasNoMove() duyệt mọi cặp chai nguồn–đích; không còn nước đi và TrySolveSpecialStuck() thất bại thì StuckLevel(StuckType.NoMove); Daily hết giờ thì StuckLevel(StuckType.TimeIsUp)."
   ],
   "reward_tables": [
     {
       "title": "BẢNG MÃ MÀU NƯỚC (ColorId, 24 giá trị)",
-      "columns": ["Mốc", "Điều kiện", "Phần thưởng"],
+      "columns": [
+        "Mốc",
+        "Điều kiện",
+        "Phần thưởng"
+      ],
       "rows": [
-        ["BLACK", "ColorId = -1", "Ô đen, chỉ dùng trong Level Editor"],
-        ["LBLUE / DBLUE", "ColorId = 0 / 1", "Xanh dương nhạt / đậm"],
-        ["ORANGE", "ColorId = 2", "Cam"],
-        ["LGREEN / DGREEN", "ColorId = 3 / 4", "Xanh lá nhạt / đậm"],
-        ["WHITE", "ColorId = 5", "Trắng"],
-        ["WINE", "ColorId = 6", "Đỏ rượu"],
-        ["BROWN", "ColorId = 7", "Nâu"],
-        ["YELLOW", "ColorId = 8", "Vàng"],
-        ["VIOLET", "ColorId = 9", "Tím"],
-        ["PINK", "ColorId = 10", "Hồng"],
-        ["RED", "ColorId = 11", "Đỏ"],
-        ["NONE", "ColorId = 12", "Chai trống — nhận mọi màu"],
-        ["GRAY", "ColorId = 13", "Xám"],
-        ["RAINBOW1 / RAINBOW2 / RAINBOW3", "ColorId = 14 / 15 / 16", "Ba biến thể cầu vồng"],
-        ["EMERALD", "ColorId = 17", "Ngọc lục bảo"],
-        ["MUSTARD", "ColorId = 18", "Vàng mù tạt"],
-        ["DPINK", "ColorId = 19", "Hồng đậm"],
-        ["MINT", "ColorId = 20", "Bạc hà"],
-        ["LAVENDER", "ColorId = 21", "Oải hương"],
-        ["BEIGE", "ColorId = 22", "Be"]
+        [
+          "BLACK",
+          "ColorId = -1",
+          "Ô đen, chỉ dùng trong Level Editor"
+        ],
+        [
+          "LBLUE / DBLUE",
+          "ColorId = 0 / 1",
+          "Xanh dương nhạt / đậm"
+        ],
+        [
+          "ORANGE",
+          "ColorId = 2",
+          "Cam"
+        ],
+        [
+          "LGREEN / DGREEN",
+          "ColorId = 3 / 4",
+          "Xanh lá nhạt / đậm"
+        ],
+        [
+          "WHITE",
+          "ColorId = 5",
+          "Trắng"
+        ],
+        [
+          "WINE",
+          "ColorId = 6",
+          "Đỏ rượu"
+        ],
+        [
+          "BROWN",
+          "ColorId = 7",
+          "Nâu"
+        ],
+        [
+          "YELLOW",
+          "ColorId = 8",
+          "Vàng"
+        ],
+        [
+          "VIOLET",
+          "ColorId = 9",
+          "Tím"
+        ],
+        [
+          "PINK",
+          "ColorId = 10",
+          "Hồng"
+        ],
+        [
+          "RED",
+          "ColorId = 11",
+          "Đỏ"
+        ],
+        [
+          "NONE",
+          "ColorId = 12",
+          "ColorId cho chai trống trong logic màu; nhận nước còn phụ thuộc capacity, blocker và lock."
+        ],
+        [
+          "GRAY",
+          "ColorId = 13",
+          "Xám"
+        ],
+        [
+          "RAINBOW1 / RAINBOW2 / RAINBOW3",
+          "ColorId = 14 / 15 / 16",
+          "Ba biến thể cầu vồng"
+        ],
+        [
+          "EMERALD",
+          "ColorId = 17",
+          "Ngọc lục bảo"
+        ],
+        [
+          "MUSTARD",
+          "ColorId = 18",
+          "Vàng mù tạt"
+        ],
+        [
+          "DPINK",
+          "ColorId = 19",
+          "Hồng đậm"
+        ],
+        [
+          "MINT",
+          "ColorId = 20",
+          "Bạc hà"
+        ],
+        [
+          "LAVENDER",
+          "ColorId = 21",
+          "Oải hương"
+        ],
+        [
+          "BEIGE",
+          "ColorId = 22",
+          "Be"
+        ]
       ]
     },
     {
       "title": "GÓC NGHIÊNG CHAI THEO LƯỢNG NƯỚC (_rotationsByHeights)",
-      "columns": ["Mốc", "Điều kiện", "Phần thưởng"],
+      "columns": [
+        "Mốc",
+        "Điều kiện",
+        "Phần thưởng"
+      ],
       "rows": [
-        ["Bậc 1", "Chai 4 unit", "35 độ"],
-        ["Bậc 2", "Chai 4 unit", "65 độ"],
-        ["Bậc 3", "Chai 4 unit", "80 độ"],
-        ["Bậc 4", "Chai 4 unit", "85 độ"],
-        ["Bậc 5", "Chai 4 unit", "100 độ"],
-        ["Bậc 6", "Chai 4 unit", "105 độ"],
-        ["Bậc 1", "Chai 2 unit", "45 độ"],
-        ["Bậc 2", "Chai 2 unit", "60 độ"],
-        ["Bậc 3", "Chai 2 unit", "105 độ"]
+        [
+          "Bậc 1",
+          "Chai 4 unit",
+          "35 độ"
+        ],
+        [
+          "Bậc 2",
+          "Chai 4 unit",
+          "65 độ"
+        ],
+        [
+          "Bậc 3",
+          "Chai 4 unit",
+          "80 độ"
+        ],
+        [
+          "Bậc 4",
+          "Chai 4 unit",
+          "85 độ"
+        ],
+        [
+          "Bậc 5",
+          "Chai 4 unit",
+          "100 độ"
+        ],
+        [
+          "Bậc 6",
+          "Chai 4 unit",
+          "105 độ"
+        ],
+        [
+          "Bậc 1",
+          "Chai 2 unit",
+          "45 độ"
+        ],
+        [
+          "Bậc 2",
+          "Chai 2 unit",
+          "60 độ"
+        ],
+        [
+          "Bậc 3",
+          "Chai 2 unit",
+          "105 độ"
+        ]
       ]
     },
     {
       "title": "THỜI LƯỢNG HOẠT ẢNH ĐỔ NƯỚC (BottleAnimationConfigFor4UnitVar0.asset)",
-      "columns": ["Mốc", "Điều kiện", "Phần thưởng"],
+      "columns": [
+        "Mốc",
+        "Điều kiện",
+        "Phần thưởng"
+      ],
       "rows": [
-        ["_riseHeight", "Độ cao nhấc chai khi đổ", "1,85 unit"],
-        ["_riseBottleDuration", "Thời gian nhấc chai", "0,5 giây"],
-        ["_extraRiseBottleDurationByWaterDropHeight", "Cộng thêm theo mỗi bậc rơi", "0,15 giây"],
-        ["_waterLineDuration", "Dòng nước nối hai chai", "0,6 giây"],
-        ["_moveToTargetMinDuration", "Bay tới chai đích", "tối thiểu 0,2 giây"],
-        ["_moveToInitialPositionMinDuration", "Bay về chỗ cũ", "tối thiểu 0,3 giây"],
-        ["_bottleSelectionAnimationDuration", "Nhô chai khi chọn", "0,09 giây"],
-        ["_bottleSelectionAnimationHeight", "Độ cao nhô chai", "1 unit (0,7 cho bàn 3 hàng)"]
+        [
+          "_riseHeight",
+          "Độ cao nhấc chai khi đổ",
+          "1,85 unit"
+        ],
+        [
+          "_riseBottleDuration",
+          "Thời gian nhấc chai",
+          "0,5 giây"
+        ],
+        [
+          "_extraRiseBottleDurationByWaterDropHeight",
+          "Cộng thêm theo mỗi bậc rơi",
+          "0,15 giây"
+        ],
+        [
+          "_waterLineDuration",
+          "Dòng nước nối hai chai",
+          "0,6 giây"
+        ],
+        [
+          "_moveToTargetMinDuration",
+          "Bay tới chai đích",
+          "tối thiểu 0,2 giây"
+        ],
+        [
+          "_moveToInitialPositionMinDuration",
+          "Bay về chỗ cũ",
+          "tối thiểu 0,3 giây"
+        ],
+        [
+          "_bottleSelectionAnimationDuration",
+          "Nhô chai khi chọn",
+          "0,09 giây"
+        ],
+        [
+          "_bottleSelectionAnimationHeight",
+          "Độ cao nhô chai",
+          "1 unit (0,7 cho bàn 3 hàng)"
+        ]
       ]
     },
     {
       "title": "THỨ TỰ LỚP VẼ TRÊN BÀN (SortingService)",
-      "columns": ["Mốc", "Điều kiện", "Phần thưởng"],
+      "columns": [
+        "Mốc",
+        "Điều kiện",
+        "Phần thưởng"
+      ],
       "rows": [
-        ["BottleBackFirstSortOrder", "Mặt sau chai", "1"],
-        ["WaterFirstSortOrder", "Khối nước đầu tiên", "200"],
-        ["BlockerBackSortOrder", "Vật cản sau chai", "500"],
-        ["SelectedBottleTargetSortOrder", "Chai đích khi đang đổ", "1000"],
-        ["BottleSittingSortOrder / BottleAnimatingSortOrder", "Chai đứng yên / đang chạy hoạt ảnh", "1000 / 1000"],
-        ["SelectedBottleOriginSortOrder", "Chai nguồn khi đang đổ", "1500"],
-        ["BottleFrontFirstSortOrder", "Mặt trước chai", "2000"],
-        ["BlockerFrontSortOrder", "Vật cản trước chai", "3000"],
-        ["SnitchSortOrder", "Snitch, lớp trên cùng bàn", "3100"],
-        ["Sorting layer", "Danh sách layer", "Default, BottlesSitting, BottlesAnimating, BottlesClicked, PopUp"]
+        [
+          "BottleBackFirstSortOrder",
+          "Mặt sau chai",
+          "1"
+        ],
+        [
+          "WaterFirstSortOrder",
+          "Khối nước đầu tiên",
+          "200"
+        ],
+        [
+          "BlockerBackSortOrder",
+          "Vật cản sau chai",
+          "500"
+        ],
+        [
+          "SelectedBottleTargetSortOrder",
+          "Chai đích khi đang đổ",
+          "1000"
+        ],
+        [
+          "BottleSittingSortOrder / BottleAnimatingSortOrder",
+          "Chai đứng yên / đang chạy hoạt ảnh",
+          "1000 / 1000"
+        ],
+        [
+          "SelectedBottleOriginSortOrder",
+          "Chai nguồn khi đang đổ",
+          "1500"
+        ],
+        [
+          "BottleFrontFirstSortOrder",
+          "Mặt trước chai",
+          "2000"
+        ],
+        [
+          "BlockerFrontSortOrder",
+          "Vật cản trước chai",
+          "3000"
+        ],
+        [
+          "SnitchSortOrder",
+          "Snitch, lớp trên cùng bàn",
+          "3100"
+        ],
+        [
+          "Sorting layer",
+          "Danh sách layer",
+          "Default, BottlesSitting, BottlesAnimating, BottlesClicked, PopUp"
+        ]
       ]
     },
     {
       "title": "CHIỀU CAO CHAI VÀ BỐ CỤC BÀN",
-      "columns": ["Mốc", "Điều kiện", "Phần thưởng"],
+      "columns": [
+        "Mốc",
+        "Điều kiện",
+        "Phần thưởng"
+      ],
       "rows": [
-        ["DefaultBottleHeight (Regular)", "Level thường", "4 ô"],
-        ["DefaultBottleHeight (Daily)", "Daily Level", "12 ô"],
-        ["DistanceBetweenRowsAsUnit (Regular)", "Khoảng cách hàng chai", "4 unit"],
-        ["DistanceBetweenRowsAsUnit (Daily)", "Khoảng cách hàng chai", "12 unit"],
-        ["ConfigsByBottleHeight", "Danh sách cấu hình hoạt ảnh", "12 mục (một mục null)"],
-        ["Chiều cao có asset cấu hình", "BottleAnimationConfigFor*Unit", "1, 4 (2 biến thể), 5, 8, 10, 11, 12, 15, 16, 18 unit"],
-        ["Cấu hình chai đặc biệt", "Asset riêng", "MagicBottleAnimationConfig, ChargeableBottleAnimationConfig"]
+        [
+          "DefaultBottleHeight (Regular)",
+          "Level thường",
+          "4 ô"
+        ],
+        [
+          "DefaultBottleHeight (Daily)",
+          "Daily Level",
+          "12 ô"
+        ],
+        [
+          "DistanceBetweenRowsAsUnit (Regular)",
+          "Khoảng cách hàng chai",
+          "4 unit"
+        ],
+        [
+          "DistanceBetweenRowsAsUnit (Daily)",
+          "Khoảng cách hàng chai",
+          "12 unit"
+        ],
+        [
+          "ConfigsByBottleHeight",
+          "Danh sách cấu hình hoạt ảnh",
+          "12 mục (một mục null)"
+        ],
+        [
+          "Chiều cao có asset cấu hình",
+          "BottleAnimationConfigFor*Unit",
+          "1, 4 (2 biến thể), 5, 8, 10, 11, 12, 15, 16, 18 unit"
+        ],
+        [
+          "Cấu hình chai đặc biệt",
+          "Asset riêng",
+          "MagicBottleAnimationConfig, ChargeableBottleAnimationConfig"
+        ]
       ]
     }
   ],
   "key_numbers": [
-    {"label": "Chiều cao chai mặc định (level thường)", "value": "4 ô", "source": "BottleCollectionPlacementConfig.DefaultBottleHeight (Regular)"},
-    {"label": "Chiều cao chai Daily", "value": "12 ô", "source": "BottleCollectionPlacementConfig.DefaultBottleHeight (Daily)"},
-    {"label": "Khoảng cách giữa các hàng chai", "value": "4 unit (thường) / 12 unit (Daily)", "source": "BottleCollectionPlacementConfig.DistanceBetweenRowsAsUnit"},
-    {"label": "Số mã màu nước", "value": "24 giá trị (BLACK = -1 … BEIGE = 22)", "source": "ColorId.cs"},
-    {"label": "Số loại item đặt lên bàn", "value": "29 giá trị (None = 0 … ChargeableBottle = 28)", "source": "ItemType.cs"},
-    {"label": "Số chế độ nhận chạm", "value": "4 (None=0, WaterSortSelection=1, BottleSelection=2, ItemSelection=3)", "source": "InputMode.cs"},
-    {"label": "Độ cao nhấc chai khi đổ", "value": "1,85 unit", "source": "BottleAnimationConfig._riseHeight"},
-    {"label": "Thời gian nhấc chai", "value": "0,5 giây", "source": "BottleAnimationConfig._riseBottleDuration"},
-    {"label": "Cộng thêm theo bậc rơi của nước", "value": "0,15 giây", "source": "BottleAnimationConfig._extraRiseBottleDurationByWaterDropHeight"},
-    {"label": "Thời gian dòng nước nối hai chai", "value": "0,6 giây", "source": "BottleAnimationConfig._waterLineDuration"},
-    {"label": "Thời gian bay tới đích / bay về", "value": "tối thiểu 0,2 / 0,3 giây", "source": "BottleAnimationConfig._moveToTargetMinDuration / _moveToInitialPositionMinDuration"},
-    {"label": "Hiệu ứng nhô chai khi chọn", "value": "0,09 giây, cao 1 unit (0,7 cho bàn 3 hàng)", "source": "BottleAnimationConfig._bottleSelectionAnimationDuration / Height"},
-    {"label": "Góc nghiêng chai 4 unit", "value": "35, 65, 80, 85, 100, 105 độ", "source": "BottleAnimationConfig._rotationsByHeights"},
-    {"label": "Góc nghiêng chai 2 unit", "value": "45, 60, 105 độ", "source": "BottleAnimationConfig._rotationsByHeightsFor2UnitBottle"},
-    {"label": "Số cấu hình hoạt ảnh theo chiều cao", "value": "12 mục (một mục null)", "source": "ConfigsByBottleHeight.BottleAnimationConfigs"},
-    {"label": "Chiều cao chai có asset cấu hình", "value": "1, 4, 5, 8, 10, 11, 12, 15, 16, 18 unit", "source": "BottleAnimationConfigFor*Unit.asset"},
-    {"label": "Sort order mặt sau chai", "value": "1", "source": "SortingService.BottleBackFirstSortOrder"},
-    {"label": "Sort order khối nước đầu tiên", "value": "200", "source": "SortingService.WaterFirstSortOrder"},
-    {"label": "Sort order vật cản sau / trước chai", "value": "500 / 3000", "source": "SortingService.BlockerBackSortOrder / BlockerFrontSortOrder"},
-    {"label": "Sort order mặt trước chai", "value": "2000", "source": "SortingService.BottleFrontFirstSortOrder"},
-    {"label": "Sort order chai nguồn / chai đích khi đổ", "value": "1500 / 1000", "source": "SortingService.SelectedBottleOriginSortOrder / SelectedBottleTargetSortOrder"},
-    {"label": "Sort order của Snitch", "value": "3100 (lớp trên cùng bàn)", "source": "SortingService.SnitchSortOrder"},
-    {"label": "Số kiểu preset chai trong Level Editor", "value": "3 (DeterBottle=1, Luck=2, PartialLuck=3)", "source": "BottlePresetType.cs"},
-    {"label": "Số thành phần phụ vẽ kèm item", "value": "5 (None=0, WaterLine=1, Blob=2, FrogPath=3, Shadow=4)", "source": "ItemPartType.cs"},
-    {"label": "Số ColorConfig asset", "value": "18 màu cơ bản, cộng palette VariantA và VariantB", "source": "Assets/MonoBehaviour/*ColorConfig.asset"}
+    {
+      "label": "Chiều cao chai mặc định (level thường)",
+      "value": "4 ô",
+      "source": "BottleCollectionPlacementConfig.DefaultBottleHeight (Regular)"
+    },
+    {
+      "label": "Chiều cao chai Daily",
+      "value": "12 ô",
+      "source": "BottleCollectionPlacementConfig.DefaultBottleHeight (Daily)"
+    },
+    {
+      "label": "Khoảng cách giữa các hàng chai",
+      "value": "4 unit (thường) / 12 unit (Daily)",
+      "source": "BottleCollectionPlacementConfig.DistanceBetweenRowsAsUnit"
+    },
+    {
+      "label": "Số mã màu nước",
+      "value": "24 giá trị (BLACK = -1 … BEIGE = 22)",
+      "source": "ColorId.cs"
+    },
+    {
+      "label": "Số loại item đặt lên bàn",
+      "value": "29 giá trị (None = 0 … ChargeableBottle = 28)",
+      "source": "ItemType.cs"
+    },
+    {
+      "label": "Số chế độ nhận chạm",
+      "value": "4 (None=0, WaterSortSelection=1, BottleSelection=2, ItemSelection=3)",
+      "source": "InputMode.cs"
+    },
+    {
+      "label": "Độ cao nhấc chai khi đổ",
+      "value": "1,85 unit",
+      "source": "BottleAnimationConfig._riseHeight"
+    },
+    {
+      "label": "Thời gian nhấc chai",
+      "value": "0,5 giây",
+      "source": "BottleAnimationConfig._riseBottleDuration"
+    },
+    {
+      "label": "Cộng thêm theo bậc rơi của nước",
+      "value": "0,15 giây",
+      "source": "BottleAnimationConfig._extraRiseBottleDurationByWaterDropHeight"
+    },
+    {
+      "label": "Thời gian dòng nước nối hai chai",
+      "value": "0,6 giây",
+      "source": "BottleAnimationConfig._waterLineDuration"
+    },
+    {
+      "label": "Thời gian bay tới đích / bay về",
+      "value": "tối thiểu 0,2 / 0,3 giây",
+      "source": "BottleAnimationConfig._moveToTargetMinDuration / _moveToInitialPositionMinDuration"
+    },
+    {
+      "label": "Hiệu ứng nhô chai khi chọn",
+      "value": "0,09 giây, cao 1 unit (0,7 cho bàn 3 hàng)",
+      "source": "BottleAnimationConfig._bottleSelectionAnimationDuration / Height"
+    },
+    {
+      "label": "Góc nghiêng chai 4 unit",
+      "value": "35, 65, 80, 85, 100, 105 độ",
+      "source": "BottleAnimationConfig._rotationsByHeights"
+    },
+    {
+      "label": "Góc nghiêng chai 2 unit",
+      "value": "45, 60, 105 độ",
+      "source": "BottleAnimationConfig._rotationsByHeightsFor2UnitBottle"
+    },
+    {
+      "label": "Số cấu hình hoạt ảnh theo chiều cao",
+      "value": "12 mục (một mục null)",
+      "source": "ConfigsByBottleHeight.BottleAnimationConfigs"
+    },
+    {
+      "label": "Chiều cao chai có asset cấu hình",
+      "value": "1, 4, 5, 8, 10, 11, 12, 15, 16, 18 unit",
+      "source": "BottleAnimationConfigFor*Unit.asset"
+    },
+    {
+      "label": "Sort order mặt sau chai",
+      "value": "1",
+      "source": "SortingService.BottleBackFirstSortOrder"
+    },
+    {
+      "label": "Sort order khối nước đầu tiên",
+      "value": "200",
+      "source": "SortingService.WaterFirstSortOrder"
+    },
+    {
+      "label": "Sort order vật cản sau / trước chai",
+      "value": "500 / 3000",
+      "source": "SortingService.BlockerBackSortOrder / BlockerFrontSortOrder"
+    },
+    {
+      "label": "Sort order mặt trước chai",
+      "value": "2000",
+      "source": "SortingService.BottleFrontFirstSortOrder"
+    },
+    {
+      "label": "Sort order chai nguồn / chai đích khi đổ",
+      "value": "1500 / 1000",
+      "source": "SortingService.SelectedBottleOriginSortOrder / SelectedBottleTargetSortOrder"
+    },
+    {
+      "label": "Sort order của Snitch",
+      "value": "3100 (lớp trên cùng bàn)",
+      "source": "SortingService.SnitchSortOrder"
+    },
+    {
+      "label": "Số kiểu preset chai trong Level Editor",
+      "value": "3 (DeterBottle=1, Luck=2, PartialLuck=3)",
+      "source": "BottlePresetType.cs"
+    },
+    {
+      "label": "Số thành phần phụ vẽ kèm item",
+      "value": "5 (None=0, WaterLine=1, Blob=2, FrogPath=3, Shadow=4)",
+      "source": "ItemPartType.cs"
+    },
+    {
+      "label": "Số ColorConfig asset",
+      "value": "18 màu cơ bản, cộng palette VariantA và VariantB",
+      "source": "Assets/MonoBehaviour/*ColorConfig.asset"
+    }
   ],
   "config_highlights": [
-    {"key": "BottleCollectionPlacementConfig.DefaultBottleHeight", "value": "4 (Regular) / 12 (Daily)", "meaning": "Số ô mặc định của một chai"},
-    {"key": "BottleCollectionPlacementConfig.DistanceBetweenRowsAsUnit", "value": "4 (Regular) / 12 (Daily)", "meaning": "Khoảng cách giữa các hàng chai"},
-    {"key": "ConfigsByBottleHeight.BottleAnimationConfigs", "value": "12 mục", "meaning": "Cấu hình hoạt ảnh theo chiều cao và biến thể chai"},
-    {"key": "BottleAnimationConfig._riseHeight / _riseBottleDuration", "value": "1,85 / 0,5 giây", "meaning": "Độ cao và thời gian nhấc chai khi đổ"},
-    {"key": "BottleAnimationConfig._extraRiseBottleDurationByWaterDropHeight", "value": "0,15 giây", "meaning": "Thời gian cộng thêm theo độ cao rơi của nước"},
-    {"key": "BottleAnimationConfig._waterLineDuration", "value": "0,6 giây", "meaning": "Thời gian dòng nước nối hai chai"},
-    {"key": "BottleAnimationConfig._moveToTargetMinDuration / _moveToInitialPositionMinDuration", "value": "0,2 / 0,3 giây", "meaning": "Thời gian tối thiểu bay tới đích và bay về"},
-    {"key": "BottleAnimationConfig._bottleSelectionAnimationDuration / Height", "value": "0,09 giây / 1 unit (0,7 cho bàn 3 hàng)", "meaning": "Hiệu ứng nhô chai khi chọn"},
-    {"key": "BottleAnimationConfig._rotationsByHeights", "value": "35, 65, 80, 85, 100, 105 (độ)", "meaning": "Góc nghiêng chai 4 unit theo lượng nước đổ"},
-    {"key": "BottleAnimationConfig._rotationsByHeightsFor2UnitBottle", "value": "45, 60, 105 (độ)", "meaning": "Góc nghiêng chai 2 unit"},
-    {"key": "ColorId", "value": "BLACK=-1, LBLUE=0, DBLUE=1, ORANGE=2, LGREEN=3, DGREEN=4, WHITE=5, WINE=6, BROWN=7, YELLOW=8, VIOLET=9, PINK=10, RED=11, NONE=12, GRAY=13, RAINBOW1=14, RAINBOW2=15, RAINBOW3=16, EMERALD=17, MUSTARD=18, DPINK=19, MINT=20, LAVENDER=21, BEIGE=22", "meaning": "Mã màu nước, 24 giá trị"},
-    {"key": "ItemType", "value": "None=0, Bottle=1, Water=2, QuestionMark=3, Curtain=4, Clay=5, Plaster=6, Tag=7, Ice=8, Generator=9, Woodbox=10, WoodboxKey=11, Carpet=12, Snitch=13, Toggle=14, Ivy=15, Frog=16, MagicSeal=17, Duck=18, DuckHouse=19, Safe=20, LongBottle=21, Shelf=22, Bag=23, Firework=24, Rainbow=25, Icicle=26, Mosaic=27, ChargeableBottle=28", "meaning": "Danh mục mọi loại item đặt lên bàn"},
-    {"key": "ItemPartType", "value": "None=0, WaterLine=1, Blob=2, FrogPath=3, Shadow=4", "meaning": "Thành phần phụ vẽ kèm item"},
-    {"key": "InputMode", "value": "None=0, WaterSortSelection=1, BottleSelection=2, ItemSelection=3", "meaning": "Chế độ nhận chạm"},
-    {"key": "BottlePresetType", "value": "DeterBottle=1, Luck=2, PartialLuck=3", "meaning": "Kiểu preset chai khi vẽ level trong Level Editor"},
-    {"key": "SortingService sorting layer", "value": "Default, BottlesSitting, BottlesAnimating, BottlesClicked, PopUp", "meaning": "Các lớp vẽ của bàn chơi"},
-    {"key": "SortingService.BottleBackFirstSortOrder / WaterFirstSortOrder", "value": "1 / 200", "meaning": "Sort order mặt sau chai và khối nước đầu"},
-    {"key": "SortingService.BlockerBackSortOrder / BlockerFrontSortOrder", "value": "500 / 3000", "meaning": "Sort order vật cản sau và trước chai"},
-    {"key": "SortingService.BottleFrontFirstSortOrder / SnitchSortOrder", "value": "2000 / 3100", "meaning": "Mặt trước chai và lớp trên cùng bàn"},
-    {"key": "SortingService.SelectedBottleOriginSortOrder / SelectedBottleTargetSortOrder", "value": "1500 / 1000", "meaning": "Sort order chai nguồn và chai đích khi đang đổ"},
-    {"key": "RootLevelConfigModel.ColorVariant", "value": "(server)", "meaning": "Chọn ColorPalette mặc định / VariantA / VariantB"},
-    {"key": "RootLevelConfigModel.IsNewBottleVisualsEnabled / IsNewBottleParticlesEnabled / IsNewBlockerVisualsEnabled", "value": "(server)", "meaning": "Bộ hình ảnh chai, hạt và vật cản mới cho AB test"},
-    {"key": "RootLevelConfigModel.IsBackgroundAndShelvesEnabled / IsSmallBackgroundEnable", "value": "(server)", "meaning": "Bật nền mới và kệ đỡ chai"},
-    {"key": "RootLevelConfigModel.IsRevealBoosterEnabled", "value": "(server)", "meaning": "Bật booster Reveal cho ô dấu hỏi"},
-    {"key": "GameEconomyModel giá thao tác trên bàn", "value": "UndoPrice, ShufflePrice, ExtraBottlePrice, MegaShufflePrice, RevealPrice (server ghi đè)", "meaning": "Giá các thao tác hỗ trợ khi hết booster"},
-    {"key": "GameplayConfigs", "value": "BottleCollectionCameraConfig, BottleCollectionZoomedCameraConfig, FailFlowAnimationTallBottlesConfig, GameUIViewTallBottlesConfig, ConfigsByBottleHeight, LevelEntranceAnimationConfig, InLevelBoosterAnimationConfig, IceConfig, BottleCollectionPlacementConfig", "meaning": "Gói cấu hình gameplay, có bản Regular và bản Daily riêng"},
-    {"key": "Cấu hình hoạt ảnh mặt nước", "value": "WaterViewConfig, WaterRegularRiseConfig, WaterDailyRiseConfig, WaterRegularRotationConfig, WaterParticleConfig, WaterPivotPositionsByBottleHeight, WaterSpriteByBottleHeight, DurationsByHeight", "meaning": "Tham số hoạt ảnh mặt nước theo chiều cao chai"},
-    {"key": "OverlayBlockerModel vs BlockerModel", "value": "phủ toàn chai (Curtain, Woodbox) vs gắn từng ô (Plaster, Clay, MagicSeal, Ice)", "meaning": "Hai lớp vật cản khác nhau về phạm vi ảnh hưởng"},
-    {"key": "GrandRemoteDailyLevelsConfig.PlayOnDurationInSeconds", "value": "(server)", "meaning": "Thời gian cộng thêm khi Play On ở Daily Level"},
-    {"key": "LevelStats chỉ số bàn chơi", "value": "total_move_count, bottles_completed, empty_bottle_count, initial_empty_bottle_count, initial_filled_bottle_count, undo_used, shuffle_used, extrabottle_used, moves2", "meaning": "Thống kê gửi kèm mọi event level_*"}
+    {
+      "key": "BottleCollectionPlacementConfig.DefaultBottleHeight",
+      "value": "4 (Regular) / 12 (Daily)",
+      "meaning": "Số ô mặc định của một chai"
+    },
+    {
+      "key": "BottleCollectionPlacementConfig.DistanceBetweenRowsAsUnit",
+      "value": "4 (Regular) / 12 (Daily)",
+      "meaning": "Khoảng cách giữa các hàng chai"
+    },
+    {
+      "key": "ConfigsByBottleHeight.BottleAnimationConfigs",
+      "value": "12 mục",
+      "meaning": "Cấu hình hoạt ảnh theo chiều cao và biến thể chai"
+    },
+    {
+      "key": "BottleAnimationConfig._riseHeight / _riseBottleDuration",
+      "value": "1,85 / 0,5 giây",
+      "meaning": "Độ cao và thời gian nhấc chai khi đổ"
+    },
+    {
+      "key": "BottleAnimationConfig._extraRiseBottleDurationByWaterDropHeight",
+      "value": "0,15 giây",
+      "meaning": "Thời gian cộng thêm theo độ cao rơi của nước"
+    },
+    {
+      "key": "BottleAnimationConfig._waterLineDuration",
+      "value": "0,6 giây",
+      "meaning": "Thời gian dòng nước nối hai chai"
+    },
+    {
+      "key": "BottleAnimationConfig._moveToTargetMinDuration / _moveToInitialPositionMinDuration",
+      "value": "0,2 / 0,3 giây",
+      "meaning": "Thời gian tối thiểu bay tới đích và bay về"
+    },
+    {
+      "key": "BottleAnimationConfig._bottleSelectionAnimationDuration / Height",
+      "value": "0,09 giây / 1 unit (0,7 cho bàn 3 hàng)",
+      "meaning": "Hiệu ứng nhô chai khi chọn"
+    },
+    {
+      "key": "BottleAnimationConfig._rotationsByHeights",
+      "value": "35, 65, 80, 85, 100, 105 (độ)",
+      "meaning": "Góc nghiêng chai 4 unit theo lượng nước đổ"
+    },
+    {
+      "key": "BottleAnimationConfig._rotationsByHeightsFor2UnitBottle",
+      "value": "45, 60, 105 (độ)",
+      "meaning": "Góc nghiêng chai 2 unit"
+    },
+    {
+      "key": "ColorId",
+      "value": "BLACK=-1, LBLUE=0, DBLUE=1, ORANGE=2, LGREEN=3, DGREEN=4, WHITE=5, WINE=6, BROWN=7, YELLOW=8, VIOLET=9, PINK=10, RED=11, NONE=12, GRAY=13, RAINBOW1=14, RAINBOW2=15, RAINBOW3=16, EMERALD=17, MUSTARD=18, DPINK=19, MINT=20, LAVENDER=21, BEIGE=22",
+      "meaning": "Mã màu nước, 24 giá trị"
+    },
+    {
+      "key": "ItemType",
+      "value": "None=0, Bottle=1, Water=2, QuestionMark=3, Curtain=4, Clay=5, Plaster=6, Tag=7, Ice=8, Generator=9, Woodbox=10, WoodboxKey=11, Carpet=12, Snitch=13, Toggle=14, Ivy=15, Frog=16, MagicSeal=17, Duck=18, DuckHouse=19, Safe=20, LongBottle=21, Shelf=22, Bag=23, Firework=24, Rainbow=25, Icicle=26, Mosaic=27, ChargeableBottle=28",
+      "meaning": "Danh mục mọi loại item đặt lên bàn"
+    },
+    {
+      "key": "ItemPartType",
+      "value": "None=0, WaterLine=1, Blob=2, FrogPath=3, Shadow=4",
+      "meaning": "Thành phần phụ vẽ kèm item"
+    },
+    {
+      "key": "InputMode",
+      "value": "None=0, WaterSortSelection=1, BottleSelection=2, ItemSelection=3",
+      "meaning": "Chế độ nhận chạm"
+    },
+    {
+      "key": "BottlePresetType",
+      "value": "DeterBottle=1, Luck=2, PartialLuck=3",
+      "meaning": "Kiểu preset chai khi vẽ level trong Level Editor"
+    },
+    {
+      "key": "SortingService sorting layer",
+      "value": "Default, BottlesSitting, BottlesAnimating, BottlesClicked, PopUp",
+      "meaning": "Các lớp vẽ của bàn chơi"
+    },
+    {
+      "key": "SortingService.BottleBackFirstSortOrder / WaterFirstSortOrder",
+      "value": "1 / 200",
+      "meaning": "Sort order mặt sau chai và khối nước đầu"
+    },
+    {
+      "key": "SortingService.BlockerBackSortOrder / BlockerFrontSortOrder",
+      "value": "500 / 3000",
+      "meaning": "Sort order vật cản sau và trước chai"
+    },
+    {
+      "key": "SortingService.BottleFrontFirstSortOrder / SnitchSortOrder",
+      "value": "2000 / 3100",
+      "meaning": "Mặt trước chai và lớp trên cùng bàn"
+    },
+    {
+      "key": "SortingService.SelectedBottleOriginSortOrder / SelectedBottleTargetSortOrder",
+      "value": "1500 / 1000",
+      "meaning": "Sort order chai nguồn và chai đích khi đang đổ"
+    },
+    {
+      "key": "RootLevelConfigModel.ColorVariant",
+      "value": "(server)",
+      "meaning": "Chọn ColorPalette mặc định / VariantA / VariantB"
+    },
+    {
+      "key": "RootLevelConfigModel.IsNewBottleVisualsEnabled / IsNewBottleParticlesEnabled / IsNewBlockerVisualsEnabled",
+      "value": "(server)",
+      "meaning": "Cờ chọn visual chai, particle và blocker; chưa có bằng chứng assignment hoặc kết quả A/B."
+    },
+    {
+      "key": "RootLevelConfigModel.IsBackgroundAndShelvesEnabled / IsSmallBackgroundEnable",
+      "value": "(server)",
+      "meaning": "Bật nền mới và kệ đỡ chai"
+    },
+    {
+      "key": "RootLevelConfigModel.IsRevealBoosterEnabled",
+      "value": "(server)",
+      "meaning": "Bật booster Reveal cho ô dấu hỏi"
+    },
+    {
+      "key": "GameEconomyModel giá thao tác trên bàn",
+      "value": "UndoPrice, ShufflePrice, ExtraBottlePrice, MegaShufflePrice, RevealPrice (server ghi đè)",
+      "meaning": "Giá các thao tác hỗ trợ khi hết booster"
+    },
+    {
+      "key": "GameplayConfigs",
+      "value": "BottleCollectionCameraConfig, BottleCollectionZoomedCameraConfig, FailFlowAnimationTallBottlesConfig, GameUIViewTallBottlesConfig, ConfigsByBottleHeight, LevelEntranceAnimationConfig, InLevelBoosterAnimationConfig, IceConfig, BottleCollectionPlacementConfig",
+      "meaning": "Gói cấu hình gameplay, có bản Regular và bản Daily riêng"
+    },
+    {
+      "key": "Cấu hình hoạt ảnh mặt nước",
+      "value": "WaterViewConfig, WaterRegularRiseConfig, WaterDailyRiseConfig, WaterRegularRotationConfig, WaterParticleConfig, WaterPivotPositionsByBottleHeight, WaterSpriteByBottleHeight, DurationsByHeight",
+      "meaning": "Tham số hoạt ảnh mặt nước theo chiều cao chai"
+    },
+    {
+      "key": "OverlayBlockerModel vs BlockerModel",
+      "value": "phủ toàn chai (Curtain, Woodbox) vs gắn từng ô (Plaster, Clay, MagicSeal, Ice)",
+      "meaning": "Hai lớp vật cản khác nhau về phạm vi ảnh hưởng"
+    },
+    {
+      "key": "GrandRemoteDailyLevelsConfig.PlayOnDurationInSeconds",
+      "value": "(server)",
+      "meaning": "Thời gian cộng thêm khi Play On ở Daily Level"
+    },
+    {
+      "key": "LevelStats chỉ số bàn chơi",
+      "value": "total_move_count, bottles_completed, empty_bottle_count, initial_empty_bottle_count, initial_filled_bottle_count, undo_used, shuffle_used, extrabottle_used, moves2",
+      "meaning": "Thống kê gửi kèm mọi event level_*"
+    }
   ],
   "tips": [
     "Cho chai bay sang chai đích thay vì đứng yên biến một thao tác logic khô khan thành chuyển động có trọng lượng.",
     "Bảng góc nghiêng theo lượng nước làm động tác đổ trông đúng vật lý mà không cần mô phỏng thật.",
-    "Luật 'hoàn thành khi màu đó đã hết trên bàn' tránh bắt người chơi đổ nốt những nước đi vô nghĩa.",
+    "Điều kiện full height và visibility giữ ý nghĩa chai hoàn thành. Nhánh long-bottle bổ sung kiểm màu, không phải luật cho phép hoàn thành chai còn thiếu nước.",
     "Chia level thành nhiều đợt chai cho phép làm màn dài mà bàn vẫn gọn trên màn hình điện thoại.",
     "Cho phép nhiều selection chạy song song giữ nhịp tap nhanh, khác hẳn cảm giác chờ từng lượt."
   ],
-  "categories": ["Cơ chế lõi", "Tiến trình"]
+  "categories": [
+    "Cơ chế lõi",
+    "Tiến trình"
+  ]
 }

@@ -14,7 +14,7 @@
     "Modules.Contexts.GamePlay.SuperCharger.Strategies.BestSortTargetFinder",
     "Modules.Contexts.GamePlay.SuperCharger.Strategies.ChargeableBottleSuperChargerStrategy"
   ],
-  "summary": "Super Charger là một trợ thủ dùng trong level: người chơi phải thắng đủ số level ở Home để 'kích hoạt' nó, sau đó trong mỗi ván sẽ có một nút Super Charger nạp dần theo tiến trình chơi (hoặc theo số nước đi, hoặc theo số chai hoàn thành, tuỳ cấu hình). Khi nút đầy, người chơi bấm để dùng một lần 'phép': tuỳ biến thể (SuperChargerType) mà nó sẽ tự sắp xếp lại nhiều chai cùng lúc cho tối ưu (BestSort) hoặc tạo/nạp một chai mini đặc biệt trên bàn (ChargeableBottle). Trạng thái kích hoạt là 'sống đến khi thua': thua một ván là mất Super Charger và phải làm lại tiến độ, nên game có cả popup Are You Sure cảnh báo trước khi bỏ ván. Toàn bộ tính năng do một khoá remote config điều khiển (SuperChargerConfigModel), mặc định client là tắt.",
+  "summary": "Super Charger là một trợ thủ dùng trong level: người chơi phải thắng đủ số level ở Home để 'kích hoạt' nó, sau đó trong mỗi ván sẽ có một nút Super Charger nạp dần theo tiến trình chơi (hoặc theo số nước đi, hoặc theo số chai hoàn thành, tuỳ cấu hình). Khi đủ năng lượng, BestSort chờ người chơi bấm còn ChargeableBottle dùng tự động theo strategy: tuỳ biến thể (SuperChargerType) mà nó sẽ tự sắp xếp lại nhiều chai cùng lúc bằng heuristic trên tập ứng viên giới hạn (BestSort), chưa chứng minh tối ưu toàn puzzle hoặc tạo/nạp một chai mini đặc biệt trên bàn (ChargeableBottle). Trạng thái kích hoạt là 'sống đến khi thua': thua một ván là mất Super Charger và phải làm lại tiến độ, nên game có cả popup Are You Sure cảnh báo trước khi bỏ ván. Toàn bộ tính năng do một khoá remote config điều khiển (SuperChargerConfigModel), mặc định client là tắt.",
   "unlock": "SuperChargerService.IsEligible(): cần SuperChargerConfigModel.IsEnabled = true và tiến độ người chơi ≥ FirstLevelToShow; trong code có bước kẹp: nếu FirstLevelToShow < 5 thì dùng 10 thay thế (chống cấu hình sai). Mặc định client FirstLevelToShow = 5, IsEnabled = false. IsActive() còn đòi tiến độ tích luỹ Progress ≥ TargetLevelProgress.",
   "entry_points": [
     "Icon Super Charger ở Home (SuperChargerService.IsLobbyIconVisible → SuperChargerJoinPopUp, impression source LobbyIcon)",
@@ -1148,5 +1148,374 @@
     "round2_case_ids": [],
     "round2_branch_ucs": [],
     "full_uc_pass": false
+  },
+  "design_spec_20261116": {
+    "source": "editorial/SuperCharger.json",
+    "sha256": "d07a81d5e4d9fef60e37b6963bb4a6c843fbffc387a46bd5f9b56ed0489b6162",
+    "scope": "Designer-facing interpretation; no new runtime verification. Original use_cases and evidence remain unchanged.",
+    "content": {
+      "id": "SuperCharger",
+      "schema_version": 1,
+      "scope": "Diễn giải thiết kế từ GDD, metadata và nguồn đã đối chiếu. Outcome là expected; chỉ câu ghi round2 là actual của fixture 0.0.3129. Mã native 0.0.3063, default APK 0.0.3129 và cache lịch sử có phạm vi riêng. Không có playtest mới trong lượt biên tập.",
+      "design_intent": "Cho người chơi một nhịp chuẩn bị rồi bùng nổ trong bàn, tách điều kiện mở trợ thủ ngoài Home với năng lượng cho từng lần sử dụng. Chiến lược BestSort và chai có charge có cơ chế kích khác nhau, nên không mô tả mọi biến thể như một nút bấm.",
+      "player_loop": "Đủ gate ngoài Home → đạt Progress → vào bàn → nạp theo luật → ready → bấm hoặc tự dùng theo type → lấy goal lần kế → kết quả lượt giữ/reset quyền.",
+      "flow": [
+        {
+          "title": "Kiểm quyền ngoài Home",
+          "actor": "Client",
+          "action": "Đọc IsEnabled, mốc level và Progress mục tiêu.",
+          "rule": "Default Type = 2 (BestSort), IsEnabled = false, FirstLevelToShow = 5, TargetLevelProgress = 0. Code 0.0.3063 nếu FirstLevelToShow < 5 thì dùng 10. Không biến target 0 thành cam kết mọi user bật ngay.",
+          "outcome": "IsEligible và IsActive được tính riêng.",
+          "uc_ids": [
+            "UC-01",
+            "UC-02"
+          ],
+          "source_refs": [
+            "gdd/SuperCharger.json#use_cases/0",
+            "gdd/SuperCharger.json#use_cases/1",
+            "facts/local_code_gap_results_20261115.json#MS-CODE-65",
+            "facts/local_code_gap_results_20261115.json#MS-CODE-66",
+            "facts/core_body_gap_decisions_20261115.json#MS-CORE-BODY-15"
+          ]
+        },
+        {
+          "title": "Giới thiệu và tích tiến độ",
+          "actor": "Người chơi và client",
+          "action": "Xem Join/Info rồi thắng để đạt mục tiêu khi cần.",
+          "rule": "EventShownInLifeTime và Progress có gate; popup reason có Tutorial/Activate/Lose.",
+          "outcome": "Khi đủ mục tiêu, chuẩn bị thông báo kích hoạt trong bàn.",
+          "uc_ids": [
+            "UC-03",
+            "UC-04",
+            "UC-05",
+            "UC-13"
+          ],
+          "source_refs": [
+            "gdd/SuperCharger.json#use_cases/2",
+            "gdd/SuperCharger.json#use_cases/3",
+            "gdd/SuperCharger.json#use_cases/4",
+            "facts/local_code_gap_results_20261115.json#MS-CODE-65",
+            "facts/local_code_gap_results_20261115.json#MS-CODE-66",
+            "facts/core_body_gap_decisions_20261115.json#MS-CORE-BODY-15",
+            "gdd/SuperCharger.json#use_cases/12"
+          ]
+        },
+        {
+          "title": "Khởi tạo năng lượng của lượt",
+          "actor": "Client",
+          "action": "Vào bàn với trợ thủ active.",
+          "rule": "Initialize đặt useCount = 0 và goal theo ChargeMatchCount[0]. ShouldHaveInitialCharge có thể đặt goal = 0, là cờ riêng với trạng thái active.",
+          "outcome": "Có trợ thủ không nhất thiết có một lần dùng đầy sẵn.",
+          "uc_ids": [
+            "UC-06",
+            "UC-09"
+          ],
+          "source_refs": [
+            "gdd/SuperCharger.json#use_cases/5",
+            "gdd/SuperCharger.json#use_cases/8",
+            "facts/local_code_gap_results_20261115.json#MS-CODE-65",
+            "facts/local_code_gap_results_20261115.json#MS-CODE-66",
+            "facts/core_body_gap_decisions_20261115.json#MS-CORE-BODY-15"
+          ]
+        },
+        {
+          "title": "Nạp theo nước đi",
+          "actor": "Người chơi",
+          "action": "Thực hiện các selection phù hợp khi ChargeWithMove bật.",
+          "rule": "CheckMoveIsRepetitive 0.0.3063 đọc state hiện tại của nguồn/đích, không đọc lịch sử qua-lại; một số chuyển dịch dư thừa bị loại.",
+          "outcome": "Không phải mọi tap hoặc mọi nước qua-lại đều cho năng lượng.",
+          "uc_ids": [
+            "UC-07"
+          ],
+          "source_refs": [
+            "gdd/SuperCharger.json#use_cases/6",
+            "facts/local_code_gap_results_20261115.json#MS-CODE-65",
+            "facts/local_code_gap_results_20261115.json#MS-CODE-66",
+            "facts/core_body_gap_decisions_20261115.json#MS-CORE-BODY-15"
+          ]
+        },
+        {
+          "title": "Nạp theo hoàn thành chai",
+          "actor": "Người chơi",
+          "action": "Hoàn tất chai khi ChargeWithMove tắt.",
+          "rule": "CountsTowardCharge ghi màu đã tính để không cộng lại cùng màu trong phạm vi source; goal giảm theo nhánh hợp lệ.",
+          "outcome": "Nút chuyển Ready khi remainingGoal <= 0.",
+          "uc_ids": [
+            "UC-08"
+          ],
+          "source_refs": [
+            "gdd/SuperCharger.json#use_cases/7",
+            "facts/local_code_gap_results_20261115.json#MS-CODE-65",
+            "facts/local_code_gap_results_20261115.json#MS-CODE-66",
+            "facts/core_body_gap_decisions_20261115.json#MS-CORE-BODY-15"
+          ]
+        },
+        {
+          "title": "Dùng BestSort bằng nút",
+          "actor": "Người chơi",
+          "action": "Bấm nút Ready của chiến lược BestSort.",
+          "rule": "TargetFinder chọn ứng viên theo cap và quyền item; Solver có 5 pha. Tên BestSort không chứng minh nghiệm tối ưu toàn cục của puzzle.",
+          "outcome": "Áp solution được strategy tạo và chạy chuỗi hiệu ứng.",
+          "uc_ids": [
+            "UC-10"
+          ],
+          "source_refs": [
+            "gdd/SuperCharger.json#use_cases/9",
+            "facts/local_code_gap_results_20261115.json#MS-CODE-65",
+            "facts/local_code_gap_results_20261115.json#MS-CODE-66",
+            "facts/core_body_gap_decisions_20261115.json#MS-CORE-BODY-15"
+          ]
+        },
+        {
+          "title": "Kiểm bàn sau solution",
+          "actor": "Client",
+          "action": "Sau hiệu ứng, kiểm completed bottle và khả năng kẹt.",
+          "rule": "Có TryRescueFromStuck thêm chai trong nhánh phù hợp và ghi cờ addedBottleForStuck.",
+          "outcome": "Cần phân biệt hiệu ứng chính với chai cứu kẹt; không hứa luôn giải xong.",
+          "uc_ids": [
+            "UC-11"
+          ],
+          "source_refs": [
+            "gdd/SuperCharger.json#use_cases/10",
+            "facts/local_code_gap_results_20261115.json#MS-CODE-65",
+            "facts/local_code_gap_results_20261115.json#MS-CODE-66",
+            "facts/core_body_gap_decisions_20261115.json#MS-CORE-BODY-15"
+          ]
+        },
+        {
+          "title": "Dùng chai có charge tự động",
+          "actor": "Client",
+          "action": "Khi Type = 1 và strategy cho phép, áp ChargeableBottle.",
+          "rule": "ShouldUseAutomatically trả true ở nhánh này; không yêu cầu mọi type phải đợi người chơi bấm cùng một nút.",
+          "outcome": "Chai mini được tạo/nạp theo lifecycle của strategy.",
+          "uc_ids": [
+            "UC-12"
+          ],
+          "source_refs": [
+            "gdd/SuperCharger.json#use_cases/11",
+            "facts/local_code_gap_results_20261115.json#MS-CODE-65",
+            "facts/local_code_gap_results_20261115.json#MS-CODE-66",
+            "facts/core_body_gap_decisions_20261115.json#MS-CORE-BODY-15"
+          ]
+        },
+        {
+          "title": "Nạp cho lần sử dụng sau",
+          "actor": "Client và người chơi",
+          "action": "Tiếp tục bàn sau lần dùng trước.",
+          "rule": "IncreaseSuperChargerUseCount tăng index và kẹp vào phần tử cuối ChargeMatchCount; không cộng dồn toàn bộ list.",
+          "outcome": "Goal mới đúng lần dùng; hết list thì lặp giá trị cuối.",
+          "uc_ids": [
+            "UC-07",
+            "UC-08"
+          ],
+          "source_refs": [
+            "gdd/SuperCharger.json#use_cases/6",
+            "gdd/SuperCharger.json#use_cases/7",
+            "facts/local_code_gap_results_20261115.json#MS-CODE-65"
+          ]
+        },
+        {
+          "title": "Kết lượt, cảnh báo và bù lỗi",
+          "actor": "Người chơi và client",
+          "action": "Hủy hoặc xác nhận thoát; khi thua, theo reset và lưu model.",
+          "rule": "Quyền Home, charge trong lượt và gói Compensation là các trạng thái riêng; có API bù không chứng minh người chơi được bù tự động mọi lỗi. Khi thắng có CompleteSuperChargerTargetProgress theo caller; đây khác bước nạp cho lần dùng trong bàn.",
+          "outcome": "Không giữ sai một charge hoặc grant bù chỉ vì đóng popup.",
+          "uc_ids": [
+            "UC-14",
+            "UC-15",
+            "UC-16",
+            "UC-18",
+            "UC-19"
+          ],
+          "source_refs": [
+            "gdd/SuperCharger.json#use_cases/13",
+            "gdd/SuperCharger.json#use_cases/14",
+            "gdd/SuperCharger.json#use_cases/17",
+            "gdd/SuperCharger.json#use_cases/18",
+            "facts/local_code_gap_results_20261115.json#MS-CODE-65",
+            "facts/local_code_gap_results_20261115.json#MS-CODE-66",
+            "facts/core_body_gap_decisions_20261115.json#MS-CORE-BODY-15",
+            "gdd/SuperCharger.json#use_cases/15"
+          ]
+        }
+      ],
+      "rules": [
+        {
+          "title": "Hai thước tiến độ",
+          "text": "Progress ở Home mở quyền; remainingGoal và useCount trong bàn đo năng lượng. Không thể dùng cùng một con số để giải thích cả hai.",
+          "source_refs": [
+            "gdd/SuperCharger.json#flow",
+            "gdd/SuperCharger.json#configs",
+            "facts/local_code_gap_results_20261115.json#MS-CODE-65",
+            "facts/local_code_gap_results_20261115.json#MS-CODE-66",
+            "facts/core_body_gap_decisions_20261115.json#MS-CORE-BODY-15"
+          ]
+        },
+        {
+          "title": "List goal không phải tổng cần tích",
+          "text": "ChargeMatchCount[0] dùng cho lần đầu; index lần dùng tăng và clamp. Default [1] không chứng minh chỉ dùng một lần toàn level.",
+          "source_refs": [
+            "gdd/SuperCharger.json#flow",
+            "gdd/SuperCharger.json#configs",
+            "facts/local_code_gap_results_20261115.json#MS-CODE-65",
+            "facts/local_code_gap_results_20261115.json#MS-CODE-66",
+            "facts/core_body_gap_decisions_20261115.json#MS-CORE-BODY-15"
+          ]
+        },
+        {
+          "title": "Repetitive không có nghĩa đọc history",
+          "text": "Predicate lịch sử loại nguồn một màu sang chai trống trong một số gate, nguồn height = 1 trừ blocker 9 hoặc đích thiếu capacity. Không phải lọc Undo hay phát hiện lặp N nước.",
+          "source_refs": [
+            "gdd/SuperCharger.json#flow",
+            "gdd/SuperCharger.json#configs",
+            "facts/local_code_gap_results_20261115.json#MS-CODE-65",
+            "facts/local_code_gap_results_20261115.json#MS-CODE-66",
+            "facts/core_body_gap_decisions_20261115.json#MS-CORE-BODY-15"
+          ]
+        },
+        {
+          "title": "Heuristic có phần biết và chưa biết",
+          "text": "RandomReverse kiểm số màu > 1 và Random.Range(0,2) == 0 trước reverse trong source 0.0.3063. Đây là 1/2 ở nhánh đủ gate, không phải xác suất mọi solution bị đảo.",
+          "source_refs": [
+            "gdd/SuperCharger.json#flow",
+            "gdd/SuperCharger.json#configs",
+            "facts/local_code_gap_results_20261115.json#MS-CODE-65",
+            "facts/local_code_gap_results_20261115.json#MS-CODE-66",
+            "facts/core_body_gap_decisions_20261115.json#MS-CORE-BODY-15"
+          ]
+        },
+        {
+          "title": "Cap có ngữ cảnh",
+          "text": "BestSortMaxEffectedBottleCap 4 và bảng theo candidatecount là default source; chưa bảo đảm mọi lần dùng tác động đúng 4 chai hoặc không có override.",
+          "source_refs": [
+            "gdd/SuperCharger.json#flow",
+            "gdd/SuperCharger.json#configs",
+            "facts/local_code_gap_results_20261115.json#MS-CODE-65",
+            "facts/local_code_gap_results_20261115.json#MS-CODE-66",
+            "facts/core_body_gap_decisions_20261115.json#MS-CORE-BODY-15"
+          ]
+        }
+      ],
+      "decisions": [
+        {
+          "question": "Vì sao tách active và initial charge?",
+          "answer": "Một điều kiện quyết định có trợ thủ, điều kiện kia quyết định có thể dùng ngay khi vào bàn. Trộn chúng khiến người chơi hiểu sai khi nút chưa đầy.",
+          "basis": "Eligibility, Initialize và TryApplyInitialCharge.",
+          "source_refs": [
+            "gdd/SuperCharger.json#flow",
+            "gdd/SuperCharger.json#configs",
+            "facts/local_code_gap_results_20261115.json#MS-CODE-65",
+            "facts/local_code_gap_results_20261115.json#MS-CODE-66",
+            "facts/core_body_gap_decisions_20261115.json#MS-CORE-BODY-15"
+          ]
+        },
+        {
+          "question": "Có thể gọi BestSort là nút thắng ngay không?",
+          "answer": "Không. Nó áp heuristic lên tập ứng viên có giới hạn rồi còn kiểm stuck; tên strategy không chứng minh luôn tìm lời giải toàn bàn.",
+          "basis": "BestSortSolver/TargetFinder và rescue branch.",
+          "source_refs": [
+            "gdd/SuperCharger.json#flow",
+            "gdd/SuperCharger.json#configs",
+            "facts/local_code_gap_results_20261115.json#MS-CODE-65",
+            "facts/local_code_gap_results_20261115.json#MS-CODE-66",
+            "facts/core_body_gap_decisions_20261115.json#MS-CORE-BODY-15"
+          ]
+        },
+        {
+          "question": "Goal tăng bằng cách nào?",
+          "answer": "Theo danh sách goal của từng lần dùng, kẹp vào phần tử cuối; không phải công thức cộng tất cả giá trị trước đó.",
+          "basis": "MS-CODE-65, code 0.0.3063.",
+          "source_refs": [
+            "gdd/SuperCharger.json#flow",
+            "gdd/SuperCharger.json#configs",
+            "facts/local_code_gap_results_20261115.json#MS-CODE-65",
+            "facts/local_code_gap_results_20261115.json#MS-CODE-66",
+            "facts/core_body_gap_decisions_20261115.json#MS-CORE-BODY-15"
+          ]
+        }
+      ],
+      "segments_ab": {
+        "summary": "Các trục có selector rõ; không suy allocation hoặc uplift từ config.",
+        "axes": [
+          {
+            "axis": "Type và cách nạp",
+            "selection": "Type = 1/2, ChargeWithMove, InitialCharge và ChargeMatchCount chọn strategy/goal.",
+            "effect": "Đổi manual/automatic và nhịp dùng phép.",
+            "evidence_limit": "Default 0.0.3129 có nguồn file, nhưng các bằng chứng method ghi 0.0.3063 giữ phạm vi đó; chưa có runtime trợ thủ 0.0.3129.",
+            "source_refs": [
+              "gdd/SuperCharger.json#flow",
+              "gdd/SuperCharger.json#configs",
+              "gdd/SuperCharger.json#segment_ab_review_20261115"
+            ]
+          },
+          {
+            "axis": "Eligibility và cap",
+            "selection": "Enable, FirstLevel, Progress và bảng cap theo ứng viên.",
+            "effect": "Đổi quyền vào và tập chai bị tác động.",
+            "evidence_limit": "Không có comparative assignment hoặc outcome để gọi tác động A/B.",
+            "source_refs": [
+              "gdd/SuperCharger.json#flow",
+              "gdd/SuperCharger.json#configs",
+              "gdd/SuperCharger.json#segment_ab_review_20261115"
+            ]
+          }
+        ],
+        "unknowns": [
+          "Chưa có runtime active của trợ thủ trên fixture 352 hoặc assignment production để đóng các nhánh này."
+        ]
+      },
+      "recovery": [
+        {
+          "condition": "Dùng xong vẫn kẹt",
+          "expected": "Theo TryRescueFromStuck và kiểm lại; không coi việc gọi helper là một runtime recovery đã pass.",
+          "verified_scope": "Theo code/dossier có build; chưa chạy recovery trợ thủ trên thiết bị trong lượt này.",
+          "uc_ids": [
+            "UC-11"
+          ]
+        },
+        {
+          "condition": "Config hết list goal hoặc thiếu ứng viên",
+          "expected": "Dùng clamp ở list hợp lệ; dữ liệu rỗng/strategy không tạo được vẫn cần xử lý đúng gate, không tự lấy goal = 0 đểgrant.",
+          "verified_scope": "Theo code/dossier có build; chưa chạy recovery trợ thủ trên thiết bị trong lượt này.",
+          "uc_ids": [
+            "UC-01",
+            "UC-07",
+            "UC-08",
+            "UC-10"
+          ]
+        },
+        {
+          "condition": "Thua hoặc đổi eligibility khi mở app",
+          "expected": "Đọc reset của service và model; không dùng cold restart Home 353 để chứng minh charge trợ thủpersist.",
+          "verified_scope": "Theo code/dossier có build; chưa chạy recovery trợ thủ trên thiết bị trong lượt này.",
+          "uc_ids": [
+            "UC-15",
+            "UC-17",
+            "UC-18"
+          ]
+        }
+      ],
+      "takeaways": [
+        {
+          "text": "Một điều kiện quyết định có trợ thủ, điều kiện kia quyết định có thể dùng ngay khi vào bàn. Trộn chúng khiến người chơi hiểu sai khi nút chưa đầy.",
+          "basis": "Eligibility, Initialize và TryApplyInitialCharge."
+        },
+        {
+          "text": "Không. Nó áp heuristic lên tập ứng viên có giới hạn rồi còn kiểm stuck; tên strategy không chứng minh luôn tìm lời giải toàn bàn.",
+          "basis": "BestSortSolver/TargetFinder và rescue branch."
+        },
+        {
+          "text": "Theo danh sách goal của từng lần dùng, kẹp vào phần tử cuối; không phải công thức cộng tất cả giá trị trước đó.",
+          "basis": "MS-CODE-65, code 0.0.3063."
+        }
+      ],
+      "reviewed_source_paths": [
+        "gdd/SuperCharger.json",
+        "site_meta/SuperCharger.json",
+        "facts/local_code_gap_results_20261115.json",
+        "facts/core_body_gap_decisions_20261115.json",
+        "facts/review_20261116/public_current_config_3129/defaults/SuperChargerConfigModel.json"
+      ]
+    }
   }
 }

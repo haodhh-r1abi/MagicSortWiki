@@ -10614,5 +10614,363 @@
     "round2_case_ids": [],
     "round2_branch_ucs": [],
     "full_uc_pass": false
+  },
+  "design_spec_20261116": {
+    "source": "editorial/LevelGeneration.json",
+    "sha256": "708e46da637146a4b1bf4dafa8924098a85dc1e43de69fa03410193dc754456e",
+    "scope": "Designer-facing interpretation; no new runtime verification. Original use_cases and evidence remain unchanged.",
+    "content": {
+      "id": "LevelGeneration",
+      "schema_version": 1,
+      "scope": "Diễn giải thiết kế từ GDD, metadata và nguồn đã đối chiếu. Outcome là expected; chỉ câu ghi round2 là actual của fixture 0.0.3129. Mã native 0.0.3063, default APK 0.0.3129 và cache lịch sử có phạm vi riêng. Không có playtest mới trong lượt biên tập.",
+      "design_intent": "Phân phối board dựng sẵn theo một mapping có thể thay đổi, dùng retry và trạng thái trợ thủ để chọn biến thể mà vẫn tải trước nội dung. Designer cần thấy bảng nguồn và phép chọn, không gọi kho seed là một bộ level runtime đã xác minh.",
+      "player_loop": "Chọn mapping có nguồn → tìm entry → chọn seed theo tutorial/retry/Snitch → load board → chơi → ghi attempt/kết quả → tiếp tục regular hoặc loop phù hợp.",
+      "flow": [
+        {
+          "title": "Chọn bộ cấu hình có nguồn",
+          "actor": "Client",
+          "action": "Khởi tạo resolver và nhận cấu hình hoặc dùng nguồn dự phòng.",
+          "rule": "Firebase/default và Grand regular/daily là các đường nguồn khác nhau. Tên ConfigName hoặc cache tồn tại chưa chứng minh backend vừa chọn bộ đó cho user.",
+          "outcome": "Có một bộ mapping hợp lệ với provenance trước khi tìm seed.",
+          "uc_ids": [
+            "UC-13",
+            "UC-18"
+          ],
+          "source_refs": [
+            "gdd/LevelGeneration.json#use_cases/12",
+            "gdd/LevelGeneration.json#use_cases/17"
+          ]
+        },
+        {
+          "title": "Tìm entry của level",
+          "actor": "Client",
+          "action": "Dùng level number hiện tại để lấy LevelConfigModel.",
+          "rule": "Nguồn default 0.0.3063 có 219 regular + 80 loop; packaged default 0.0.3129 đã đọc cũng có count 219/80. Cache thiết bị đọc 15/11 có 999/500 và giống byte cache tháng 9–10. Không dùng boundary 219 của default cho cache 999.",
+          "outcome": "Chọn đúng regular hoặc loop theo bảng đã được chọn, không theo một hằng toàn cục tưởng tượng.",
+          "uc_ids": [
+            "UC-01"
+          ],
+          "source_refs": [
+            "gdd/LevelGeneration.json#use_cases/0"
+          ]
+        },
+        {
+          "title": "Ưu tiên đường tutorial khi phù hợp",
+          "actor": "Client",
+          "action": "Lấy mapping của các level đầu được gắn tutorial.",
+          "rule": "Trong default đã kiểm, level 1–4 có isTutorial; số seed của các entry đầu khác nhau.",
+          "outcome": "Không giả định mọi level có 5 seed hoặc mọi lần tutorial dùng cùng cách retry.",
+          "uc_ids": [
+            "UC-10"
+          ],
+          "source_refs": [
+            "gdd/LevelGeneration.json#use_cases/9"
+          ]
+        },
+        {
+          "title": "Chọn seed theo retry",
+          "actor": "Client",
+          "action": "Tính retry hiệu dụng trước khi chọn tập seed.",
+          "rule": "Pseudo-C 0.0.3063 dùng max(retryCount−snitchRetryCount,0). Nếu có dlbSeeds và retry đủ dlbCap thì dùng tập DLB với index retry − cap; nhánh khác dùng seeds.",
+          "outcome": "Seed selection giữ được sự khác biệt giữa retry thường và retry có Snitch.",
+          "uc_ids": [
+            "UC-02",
+            "UC-17"
+          ],
+          "source_refs": [
+            "gdd/LevelGeneration.json#use_cases/1",
+            "gdd/LevelGeneration.json#use_cases/16"
+          ]
+        },
+        {
+          "title": "Xét seed dành riêng Snitch",
+          "actor": "Client",
+          "action": "Khi Snitch đang active và slSeed không rỗng, theo đường seed riêng.",
+          "rule": "SlSeed có ưu tiên trong helper nguồn 0.0.3063; không suy mọi seed chứa Snitch từ tên file hoặc chỉ từ config bật.",
+          "outcome": "Model bàn được chọn theo nhánh tương ứng trước khi load.",
+          "uc_ids": [
+            "UC-11"
+          ],
+          "source_refs": [
+            "gdd/LevelGeneration.json#use_cases/10"
+          ]
+        },
+        {
+          "title": "Vượt tập seed tuần tự",
+          "actor": "Client",
+          "action": "Khi retry vượt danh sách, chọn trong tập dự phòng.",
+          "rule": "Source sao chép tập, loại lastSelectedSeed; nếu tập rỗng dùng lại tập gốc, rồi Random.Range(0,100)%Count. Cách modulo không phải bằng chứng phân phối đều cho mọi Count.",
+          "outcome": "Có đường chọn lại mà không hứa không bao giờ lặp seed.",
+          "uc_ids": [
+            "UC-02"
+          ],
+          "source_refs": [
+            "gdd/LevelGeneration.json#use_cases/1"
+          ]
+        },
+        {
+          "title": "Nạp board theo seed ID",
+          "actor": "Client",
+          "action": "Tìm file đã lưu rồi fallback Resources khi phù hợp.",
+          "rule": "Tên seed nối mapping với JSON bàn; cấu trúc Board/Cells/Item phải đọc theo converter, không dùng difficulty trong filename làm toàn bộ độ khó gameplay.",
+          "outcome": "Trả LevelModel của đúng ID đã chọn hoặc xử lý thiếu file.",
+          "uc_ids": [
+            "UC-03",
+            "UC-08"
+          ],
+          "source_refs": [
+            "gdd/LevelGeneration.json#use_cases/2",
+            "gdd/LevelGeneration.json#use_cases/7"
+          ]
+        },
+        {
+          "title": "Tải trước nội dung sắp tới",
+          "actor": "Client",
+          "action": "Gom seed các level phía trước thành batch.",
+          "rule": "Body lịch sử hỗ trợ batch tới 120 level mỗi lần; danh sách seed có thể lớn hơn số level vì nhiều variant.",
+          "outcome": "Giảm phụ thuộc tải đúng lúc bấm Play, nhưng chưa bảo đảm mọi asset đã có khi offline.",
+          "uc_ids": [
+            "UC-04"
+          ],
+          "source_refs": [
+            "gdd/LevelGeneration.json#use_cases/3"
+          ]
+        },
+        {
+          "title": "Giãn nhịp khi tải lỗi",
+          "actor": "Client",
+          "action": "Thất bại tải batch thì chờ trước lần thử sau.",
+          "rule": "Cooldown source tăng tới 200 giây. Đây là đường tải seed, không lấy trần này cho HTTP policy toàn game.",
+          "outcome": "Không spam tải hoặc tự tạo seed khác để che lỗi.",
+          "uc_ids": [
+            "UC-05"
+          ],
+          "source_refs": [
+            "gdd/LevelGeneration.json#use_cases/4"
+          ]
+        },
+        {
+          "title": "Áp độ khó và phần quà",
+          "actor": "Client và người chơi",
+          "action": "Đọc loại Regular/Hard/SuperHard và quà vạc của entry.",
+          "rule": "Cờ isHard/isSuperHard và cauldronReward thuộc config; tên file difficulty là quy ước catalog. Coin/reward còn cần đọc GameEconomy và thời điểm grant.",
+          "outcome": "UI độ khó và reward nhất quán với entry, không suy seed khó hơn chỉ từ số trong tên.",
+          "uc_ids": [
+            "UC-06",
+            "UC-07"
+          ],
+          "source_refs": [
+            "gdd/LevelGeneration.json#use_cases/5",
+            "gdd/LevelGeneration.json#use_cases/6"
+          ]
+        },
+        {
+          "title": "Chọn bàn Daily theo ngày",
+          "actor": "Client và người chơi",
+          "action": "Mở Daily rồi chọn ngày hợp lệ để vào chế độ riêng.",
+          "rule": "Daily có config tutorial/currentMonth/previousMonth, timer và PlayOnDuration riêng. File default không tự là lịch production tháng 11 đang được chọn.",
+          "outcome": "Không dùng mapping regular hoặc retry boundary của regular để áp cho mọi Daily.",
+          "uc_ids": [
+            "UC-12"
+          ],
+          "source_refs": [
+            "gdd/LevelGeneration.json#use_cases/11"
+          ]
+        },
+        {
+          "title": "Tách công cụ nội bộ khỏi đường người chơi",
+          "actor": "Designer",
+          "action": "Tra debugger, SolveLevel và LevelEditor khi nghiên cứu board.",
+          "rule": "Endpoint giải hoặc editor code tồn tại không chứng minh người chơi dùng được; lượt này không chạy Editor hoặc solver backend.",
+          "outcome": "Giữ tool capability riêng với hành vi runtime và coverage playtest.",
+          "uc_ids": [
+            "UC-14",
+            "UC-15",
+            "UC-16"
+          ],
+          "source_refs": [
+            "gdd/LevelGeneration.json#use_cases/13",
+            "gdd/LevelGeneration.json#use_cases/14",
+            "gdd/LevelGeneration.json#use_cases/15"
+          ]
+        }
+      ],
+      "rules": [
+        {
+          "title": "Board, catalog entry và mapping là ba số khác nhau",
+          "text": "Nguồn 0.0.3063 có 3.956 board JSON; catalog 3.956 entry gồm một entry rỗng, tương ứng 3.955 seed thật; zurna.json nằm ngoài catalog. Không lấy số dòng catalog làm số level đã chơi.",
+          "source_refs": [
+            "gdd/LevelGeneration.json#summary",
+            "gdd/LevelGeneration.json#flow",
+            "analysis/24-levels-core-data-20261115.md",
+            "facts/review_20261116_round2/core352_moves_observations.json",
+            "facts/editorial_20261116/core_captions_review.json"
+          ]
+        },
+        {
+          "title": "Cache đọc lại vẫn là lịch sử",
+          "text": "999 regular/500 loop và 350 board thiết bị đọc 15/11 là dữ liệu có nguồn; byte cache khớp tháng 9–10 không biến thành response production mới.",
+          "source_refs": [
+            "gdd/LevelGeneration.json#summary",
+            "gdd/LevelGeneration.json#flow",
+            "analysis/24-levels-core-data-20261115.md",
+            "facts/review_20261116_round2/core352_moves_observations.json",
+            "facts/editorial_20261116/core_captions_review.json"
+          ]
+        },
+        {
+          "title": "DLB là selector, chưa chứng minh dễ hơn",
+          "text": "Cache có 7 regular entry DLB × 3 seed, loop không có DLB; default 0.0.3063 có 8 entry. Tên DLB và ý định đổi seed sau retry chưa đủ chứng minh solvability hoặc tăng tỉ lệ thắng.",
+          "source_refs": [
+            "gdd/LevelGeneration.json#summary",
+            "gdd/LevelGeneration.json#flow",
+            "analysis/24-levels-core-data-20261115.md",
+            "facts/review_20261116_round2/core352_moves_observations.json",
+            "facts/editorial_20261116/core_captions_review.json"
+          ]
+        },
+        {
+          "title": "Coverage runtime không xác lập seed identity",
+          "text": "Round 2 hoàn thành level 352 về 353 nhưng chưa có liên kết file nguồn/seed ID đã xác lập cho board đó; không tự gán seed chỉ vì board nhìn giống.",
+          "source_refs": [
+            "gdd/LevelGeneration.json#summary",
+            "gdd/LevelGeneration.json#flow",
+            "analysis/24-levels-core-data-20261115.md",
+            "facts/review_20261116_round2/core352_moves_observations.json",
+            "facts/editorial_20261116/core_captions_review.json"
+          ]
+        },
+        {
+          "title": "Typed data cần giữ cả rỗng và variant",
+          "text": "Full JSON, schema, board ZIP và seed references cần giữ nguyên; bảng phân trang phục vụ đọc, không cắt export xuống preview đầu.",
+          "source_refs": [
+            "gdd/LevelGeneration.json#summary",
+            "gdd/LevelGeneration.json#flow",
+            "analysis/24-levels-core-data-20261115.md",
+            "facts/review_20261116_round2/core352_moves_observations.json",
+            "facts/editorial_20261116/core_captions_review.json"
+          ]
+        }
+      ],
+      "decisions": [
+        {
+          "question": "Vì sao resolver đứng trước luật regular/loop?",
+          "answer": "Boundary và nội dung loop phụ thuộc bộ mapping đang dùng. Áp 219/220 của default lên cache 999 sẽ chọn sai entry.",
+          "basis": "Hai bộ count có provenance khác nhau.",
+          "source_refs": [
+            "gdd/LevelGeneration.json#flow",
+            "analysis/24-levels-core-data-20261115.md",
+            "facts/review_20261116_round2/core352_moves_observations.json",
+            "facts/editorial_20261116/core_captions_review.json"
+          ]
+        },
+        {
+          "question": "Có thể gọi chọn lại seed là bảo đảm không lặp không?",
+          "answer": "Không. Nhánh loại seed cũ có fallback dùng lại tập nếu rỗng, và modulo chọn index không chứng minh mọi xác suất bằng nhau.",
+          "basis": "GetSeedIdFromConfig pseudo-C 0.0.3063.",
+          "source_refs": [
+            "gdd/LevelGeneration.json#flow",
+            "analysis/24-levels-core-data-20261115.md",
+            "facts/review_20261116_round2/core352_moves_observations.json",
+            "facts/editorial_20261116/core_captions_review.json"
+          ]
+        },
+        {
+          "question": "Có thể tính độ phủ playtest bằng số board đã export không?",
+          "answer": "Không. Export chứng minh dữ liệu có thể truy xuất; runtime cần case, seed identity và thao tác riêng.",
+          "basis": "Catalog/data coverage khác observed UC branch.",
+          "source_refs": [
+            "gdd/LevelGeneration.json#flow",
+            "analysis/24-levels-core-data-20261115.md",
+            "facts/review_20261116_round2/core352_moves_observations.json",
+            "facts/editorial_20261116/core_captions_review.json"
+          ]
+        }
+      ],
+      "segments_ab": {
+        "summary": "Mapping, DLB và SlSeed là các trục chọn nội dung có consumer; chưa có phân bổ A/B hoặc hiệu quả nhân quả được xác minh.",
+        "axes": [
+          {
+            "axis": "Bộ cấu hình regular/daily",
+            "selection": "Resolver, ConfigName, cache, fallback và version chọn nguồn.",
+            "effect": "Đổi danh sách entry, seed và giới hạn regular/loop.",
+            "evidence_limit": "Không chứng minh mọi tài khoản dùng cùng bảng hoặc một nhóm user đã được assign mới.",
+            "source_refs": [
+              "gdd/LevelGeneration.json#use_cases/17",
+              "gdd/LevelGeneration.json#continuation_review_20261116"
+            ]
+          },
+          {
+            "axis": "Retry và trạng thái Snitch",
+            "selection": "Retry hiệu dụng, dlbCap/dlbSeeds và SlSeed quyết định nhánh seed.",
+            "effect": "Đổi board của cùng số level.",
+            "evidence_limit": "Luật helper đã đọc ở 0.0.3063; boundary và seed đã chọn runtime 0.0.3129 còn cần trace, không có uplift.",
+            "source_refs": [
+              "gdd/LevelGeneration.json#use_cases/1",
+              "gdd/LevelGeneration.json#use_cases/10"
+            ]
+          }
+        ],
+        "unknowns": [
+          "Chưa có actual file nguồn identity của board 352 trong case round 2.",
+          "Chưa có comparative cohort hoặc đủ boundary tests cho mọi nhánh DLB/loop/retry."
+        ]
+      },
+      "recovery": [
+        {
+          "condition": "Không lấy được config mới",
+          "expected": "Theo resolver dùng cache/default hợp lệ và ghi nguồn; không gọi fallback là remote mới.",
+          "verified_scope": "Source/doc có nguồn; không gửi request mới.",
+          "uc_ids": [
+            "UC-13"
+          ]
+        },
+        {
+          "condition": "Thiếu board hoặc batch tải lỗi",
+          "expected": "Theo persistent/resources/cooldown; không tự thay seed mà mất provenance.",
+          "verified_scope": "Source lịch sử có nhánh; không test mọi missing-file boundary.",
+          "uc_ids": [
+            "UC-03",
+            "UC-05"
+          ]
+        },
+        {
+          "condition": "Retry vượt danh sách hoặc seed trước là lựa chọn duy nhất",
+          "expected": "Theo nhánh fallback có thể dùng lại tập gốc; không hứa chống lặp tuyệt đối.",
+          "verified_scope": "Pseudo-C 0.0.3063, chưa chạy đầy đủ trên 0.0.3129.",
+          "uc_ids": [
+            "UC-02",
+            "UC-17"
+          ]
+        }
+      ],
+      "takeaways": [
+        {
+          "text": "Boundary và nội dung loop phụ thuộc bộ mapping đang dùng. Áp 219/220 của default lên cache 999 sẽ chọn sai entry.",
+          "basis": "Hai bộ count có provenance khác nhau."
+        },
+        {
+          "text": "Không. Nhánh loại seed cũ có fallback dùng lại tập nếu rỗng, và modulo chọn index không chứng minh mọi xác suất bằng nhau.",
+          "basis": "GetSeedIdFromConfig pseudo-C 0.0.3063."
+        },
+        {
+          "text": "Không. Export chứng minh dữ liệu có thể truy xuất; runtime cần case, seed identity và thao tác riêng.",
+          "basis": "Catalog/data coverage khác observed UC branch."
+        }
+      ],
+      "reviewed_source_paths": [
+        "gdd/LevelGeneration.json",
+        "site_meta/LevelGeneration.json",
+        "analysis/24-levels-core-data-20261115.md",
+        "facts/review_20261116_round2/core352_moves_observations.json",
+        "facts/editorial_20261116/core_captions_review.json",
+        "facts/review_20261116/public_current_config_3129/defaults/BEDailyLevelConfig.json",
+        "facts/review_20261116/public_current_config_3129/defaults/BELevelConfig.json",
+        "facts/review_20261116/public_current_config_3129/defaults/BlockerIntroConfigModel.json",
+        "facts/review_20261116/public_current_config_3129/defaults/GrandRemoteDailyLevelsConfig.json",
+        "facts/review_20261116/public_current_config_3129/defaults/LevelsConfigv2.json",
+        "facts/review_20261116/public_current_config_3129/defaults/LoopLevelsConfig.json"
+      ]
+    }
   }
 }

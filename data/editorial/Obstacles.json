@@ -1,0 +1,408 @@
+{
+  "id": "Obstacles",
+  "schema_version": 1,
+  "scope": "Diễn giải thiết kế từ GDD, metadata và nguồn đã đối chiếu. Outcome là expected; chỉ câu ghi round2 là actual của fixture 0.0.3129. Mã native 0.0.3063, default APK 0.0.3129 và cache lịch sử có phạm vi riêng. Không có playtest mới trong lượt biên tập.",
+  "design_intent": "Tạo những câu hỏi chiến thuật khác nhau bằng thông tin bị che, quyền chọn bị khóa, mục tiêu theo màu và nguồn nước phát sinh. Danh mục item không chỉ gồm blocker: kệ, trợ thủ và nước đặc biệt phải được phân biệt để designer không đặt sai số loại thử thách.",
+  "player_loop": "Đọc dấu hiệu vật cản → xác định sự kiện mở → chọn chuỗi nước phù hợp → quan sát thay đổi trạng thái → khai thác không gian/thông tin mới → kiểm lại mục tiêu bàn.",
+  "flow": [
+    {
+      "title": "Giới thiệu đúng loại mới",
+      "actor": "Người chơi và client",
+      "action": "Đọc intro khi bàn có blocker chưa được giới thiệu.",
+      "rule": "BlockerIntro và cờ đã xem điều tiết popup; default Curtain/Clay/Plaster 20/60/110 không bao quát mọi loại.",
+      "outcome": "Người chơi biết điều kiện xử lý loại mới trước khi tự suy từ hình.",
+      "uc_ids": [
+        "UC-25"
+      ],
+      "source_refs": [
+        "gdd/Obstacles.json#use_cases/24",
+        "facts/core_body_gap_decisions_20261115.json#MS-CORE-BODY-11",
+        "facts/core_body_gap_decisions_20261115.json#MS-CORE-BODY-04",
+        "facts/review_cases_20261116_round2.json"
+      ]
+    },
+    {
+      "title": "Mở thông tin bị giấu",
+      "actor": "Người chơi",
+      "action": "Lấy nước phía trên Question Mark.",
+      "rule": "Ô ẩn giữ màu trong model nhưng che ở UI; reveal không đồng nghĩa đã hoàn thành chai.",
+      "outcome": "Màu lộ ra để lập lại kế hoạch.",
+      "uc_ids": [
+        "UC-01"
+      ],
+      "source_refs": [
+        "gdd/Obstacles.json#use_cases/0",
+        "facts/core_body_gap_decisions_20261115.json#MS-CORE-BODY-11",
+        "facts/core_body_gap_decisions_20261115.json#MS-CORE-BODY-04",
+        "facts/review_cases_20261116_round2.json"
+      ]
+    },
+    {
+      "title": "Phân biệt mở nhờ chai nào",
+      "actor": "Người chơi",
+      "action": "Hoàn thành mục tiêu của Curtain, Clay hoặc Plaster.",
+      "rule": "Curtain gắn mục tiêu màu; Clay và Plaster không được gộp: Plaster đọc chai hàng xóm hoàn thành.",
+      "outcome": "Chai hoặc ô được giải phóng theo callback đúng loại.",
+      "uc_ids": [
+        "UC-02",
+        "UC-03",
+        "UC-04"
+      ],
+      "source_refs": [
+        "gdd/Obstacles.json#use_cases/1",
+        "gdd/Obstacles.json#use_cases/2",
+        "gdd/Obstacles.json#use_cases/3",
+        "facts/core_body_gap_decisions_20261115.json#MS-CORE-BODY-11",
+        "facts/core_body_gap_decisions_20261115.json#MS-CORE-BODY-04",
+        "facts/review_cases_20261116_round2.json"
+      ]
+    },
+    {
+      "title": "Tôn trọng màu và dải niêm phong",
+      "actor": "Người chơi",
+      "action": "Chọn nước đổ qua chai Tag hoặc Magic Seal.",
+      "rule": "Tag định hướng màu mục tiêu; seal chặn dải ô và có luật chọn riêng. Hình cùng màu không bỏ qua gate blocker.",
+      "outcome": "Chỉ phần nước đang được phép mới tham gia selection.",
+      "uc_ids": [
+        "UC-05",
+        "UC-08"
+      ],
+      "source_refs": [
+        "gdd/Obstacles.json#use_cases/4",
+        "gdd/Obstacles.json#use_cases/7",
+        "facts/core_body_gap_decisions_20261115.json#MS-CORE-BODY-11",
+        "facts/core_body_gap_decisions_20261115.json#MS-CORE-BODY-04",
+        "facts/review_cases_20261116_round2.json"
+      ]
+    },
+    {
+      "title": "Mở nhóm chai bị phủ",
+      "actor": "Người chơi",
+      "action": "Thực hiện mục tiêu Ice/Carpet, tìm khóa Woodbox hoặc ghép KeyLock.",
+      "rule": "WoodboxKeyType và KeyLockType là hai bộ định danh khác nhau; không dùng ColorId hay số enum thay nhau.",
+      "outcome": "Lớp phủ gỡ đúng nhóm chai và kiểu khóa.",
+      "uc_ids": [
+        "UC-06",
+        "UC-09",
+        "UC-10",
+        "UC-11"
+      ],
+      "source_refs": [
+        "gdd/Obstacles.json#use_cases/5",
+        "gdd/Obstacles.json#use_cases/8",
+        "gdd/Obstacles.json#use_cases/9",
+        "gdd/Obstacles.json#use_cases/10",
+        "facts/core_body_gap_decisions_20261115.json#MS-CORE-BODY-11",
+        "facts/core_body_gap_decisions_20261115.json#MS-CORE-BODY-04",
+        "facts/review_cases_20261116_round2.json"
+      ]
+    },
+    {
+      "title": "Đổ từ máy sinh nước",
+      "actor": "Người chơi",
+      "action": "Sử dụng chai có Generator và theo dõi màu kế tiếp.",
+      "rule": "ColorIds là danh sách sinh; round 2 pink/counter 2 → blue/counter 1 → grey/mất nhãn → chai mini trống. Đây là một layout quan sát, không phải mọi generator có ba lượt.",
+      "outcome": "Người chơi đưa phần nước mới vào bài toán sau mỗi lần phát.",
+      "uc_ids": [
+        "UC-12"
+      ],
+      "source_refs": [
+        "gdd/Obstacles.json#use_cases/11",
+        "facts/core_body_gap_decisions_20261115.json#MS-CORE-BODY-11",
+        "facts/core_body_gap_decisions_20261115.json#MS-CORE-BODY-04",
+        "facts/review_cases_20261116_round2.json"
+      ]
+    },
+    {
+      "title": "Đọc luật thay đổi theo nước",
+      "actor": "Người chơi",
+      "action": "Lập thứ tự với Icicle, Ivy và Frog.",
+      "rule": "Mã 0.0.3063: Icicle đặt pending khi đổ đúng màu vào chai chủ rồi xử lý lúc move finished. Ivy giảm state khi màu nước khớp _colorId và chính chai chủ _belongingBottle không có overlay; IsSelectableAsOrigin/Target của Ivy chỉ so _state < lượng nước trong chai chủ, không kiểm màu. Frog di chuyển đầu mỗi move và đảo hướng ở hai đầu, không kiểm màu nước.",
+      "outcome": "Không dùng một thanh máu hoặc điều kiện đúng màu chung cho cả ba.",
+      "uc_ids": [
+        "UC-07",
+        "UC-14",
+        "UC-15"
+      ],
+      "source_refs": [
+        "gdd/Obstacles.json#use_cases/6",
+        "gdd/Obstacles.json#use_cases/13",
+        "gdd/Obstacles.json#use_cases/14",
+        "facts/core_body_gap_decisions_20261115.json#MS-CORE-BODY-11",
+        "facts/core_body_gap_decisions_20261115.json#MS-CORE-BODY-04",
+        "facts/review_cases_20261116_round2.json",
+        "facts/editorial_20261116/core_source_errata.json#MS-CORE-ERRATA-IVY-01"
+      ]
+    },
+    {
+      "title": "Chơi theo nhịp công tắc",
+      "actor": "Người chơi và client",
+      "action": "Theo dõi chai mở/đóng khi thực hiện nước đi.",
+      "rule": "Toggle có gate Shuffle/Reveal và có thể implement special stuck resolver. Resolver chỉ gọi khi predicate chung cho phép, không tự bảo đảm mọi board được cứu.",
+      "outcome": "Người chơi tính thứ tự và client kiểm trạng thái sau move.",
+      "uc_ids": [
+        "UC-13"
+      ],
+      "source_refs": [
+        "gdd/Obstacles.json#use_cases/12",
+        "facts/core_body_gap_decisions_20261115.json#MS-CORE-BODY-11",
+        "facts/core_body_gap_decisions_20261115.json#MS-CORE-BODY-04",
+        "facts/review_cases_20261116_round2.json"
+      ]
+    },
+    {
+      "title": "Hoàn thành mục tiêu nhiều bước",
+      "actor": "Người chơi",
+      "action": "Giải cứu Duck, mở Safe/Bag hoặc phá Mosaic.",
+      "rule": "Duck/house cần loại phù hợp; Bag/Safe có số lượng theo model; Mosaic có màu và vị trí mục tiêu. Không chuyển mọi giá trị RequiredAmount thành một số cố định toàn game.",
+      "outcome": "Mục tiêu giảm theo sự kiện hợp lệ cho tới gỡ lớp phủ.",
+      "uc_ids": [
+        "UC-16",
+        "UC-17",
+        "UC-18",
+        "UC-19"
+      ],
+      "source_refs": [
+        "gdd/Obstacles.json#use_cases/15",
+        "gdd/Obstacles.json#use_cases/16",
+        "gdd/Obstacles.json#use_cases/17",
+        "gdd/Obstacles.json#use_cases/18",
+        "facts/core_body_gap_decisions_20261115.json#MS-CORE-BODY-11",
+        "facts/core_body_gap_decisions_20261115.json#MS-CORE-BODY-04",
+        "facts/review_cases_20261116_round2.json"
+      ]
+    },
+    {
+      "title": "Dùng vật đặc biệt thay đổi bàn",
+      "actor": "Người chơi",
+      "action": "Kích hoạt hoặc dùng Firework/Rainbow theo trạng thái model.",
+      "rule": "Pháo có FireworkCount; Rainbow có cơ chế màu đặc biệt. Không coi đây chỉ là blocker khóa input hoặc cùng luật với nước thường.",
+      "outcome": "Hiệu ứng đổi thông tin/màu của các ô theo implementation.",
+      "uc_ids": [
+        "UC-20",
+        "UC-21"
+      ],
+      "source_refs": [
+        "gdd/Obstacles.json#use_cases/19",
+        "gdd/Obstacles.json#use_cases/20",
+        "facts/core_body_gap_decisions_20261115.json#MS-CORE-BODY-11",
+        "facts/core_body_gap_decisions_20261115.json#MS-CORE-BODY-04",
+        "facts/review_cases_20261116_round2.json"
+      ]
+    },
+    {
+      "title": "Phân biệt trợ thủ và bố cục",
+      "actor": "Designer và người chơi",
+      "action": "Đọc ChargeableBottle, Snitch và Shelf trong cùng catalog.",
+      "rule": "Shelf là kệ bố cục, không chặn; Snitch và ChargeableBottle là tương tác trợ thủ có lifecycle riêng. ItemType chứa cả các loại này nên đếm tới enum 28 không phải 25+ blocker chức năng.",
+      "outcome": "Không tăng số vật cản bằng cách đếm mọi enum item.",
+      "uc_ids": [
+        "UC-22",
+        "UC-23",
+        "UC-24"
+      ],
+      "source_refs": [
+        "gdd/Obstacles.json#use_cases/21",
+        "gdd/Obstacles.json#use_cases/22",
+        "gdd/Obstacles.json#use_cases/23",
+        "facts/core_body_gap_decisions_20261115.json#MS-CORE-BODY-11",
+        "facts/core_body_gap_decisions_20261115.json#MS-CORE-BODY-04",
+        "facts/review_cases_20261116_round2.json"
+      ]
+    },
+    {
+      "title": "Dùng booster hoặc Undo quanh vật cản",
+      "actor": "Người chơi",
+      "action": "Chọn công cụ và xem điều gì được giữ sau hiệu ứng.",
+      "rule": "IsAllowShuffle/IsRevealable/IsSelectableAsSnitchTarget là quyền riêng. Round 2 Undo trả nước nhưng không tái che sáu cloth đã tháo.",
+      "outcome": "Đọc lại trạng thái blocker thực, không hứa Undo nhất quán theo nghĩa khôi phục mọi loại.",
+      "uc_ids": [
+        "UC-26"
+      ],
+      "source_refs": [
+        "gdd/Obstacles.json#use_cases/25",
+        "facts/core_body_gap_decisions_20261115.json#MS-CORE-BODY-11",
+        "facts/core_body_gap_decisions_20261115.json#MS-CORE-BODY-04",
+        "facts/review_cases_20261116_round2.json"
+      ]
+    }
+  ],
+  "rules": [
+    {
+      "title": "Discriminator JSON khác enum runtime",
+      "text": "ItemModelConverter 0.0.3063 có serialized Id 18 → Generator model → ItemType 9; serialized 32 → Duck → ItemType = 18. Số trong JSON không được gắn trực tiếp vào tên enum item.",
+      "source_refs": [
+        "gdd/Obstacles.json#flow",
+        "gdd/Obstacles.json#configs",
+        "facts/core_body_gap_decisions_20261115.json#MS-CORE-BODY-11",
+        "facts/core_body_gap_decisions_20261115.json#MS-CORE-BODY-04",
+        "facts/review_cases_20261116_round2.json"
+      ]
+    },
+    {
+      "title": "Field theo loại model",
+      "text": "Mã converter 0.0.3063 cùng field metadata cho thấy nhãn ngắn phụ thuộc allocated type: IO là Toggle.IsOn; NC theo Generator/Mosaic.ColorIds; CAI là Carpet.Id; MCI là Ice.Id kiểu int. Không lấy tên biến decompiler làm schema.",
+      "source_refs": [
+        "gdd/Obstacles.json#flow",
+        "gdd/Obstacles.json#configs",
+        "facts/core_body_gap_decisions_20261115.json#MS-CORE-BODY-11",
+        "facts/core_body_gap_decisions_20261115.json#MS-CORE-BODY-04",
+        "facts/review_cases_20261116_round2.json"
+      ]
+    },
+    {
+      "title": "Visibility và selectability khác nhau",
+      "text": "Một item có thể che màu nhưng vẫn cho đổ, hoặc hiện rõ mà khóa nguồn/đích. Cần ghi từng hook thay vì chỉ một thuộc tính blocked.",
+      "source_refs": [
+        "gdd/Obstacles.json#flow",
+        "gdd/Obstacles.json#configs",
+        "facts/core_body_gap_decisions_20261115.json#MS-CORE-BODY-11",
+        "facts/core_body_gap_decisions_20261115.json#MS-CORE-BODY-04",
+        "facts/review_cases_20261116_round2.json"
+      ]
+    },
+    {
+      "title": "State là luật riêng",
+      "text": "Ivy Prepare đặt state = 4 trong body 0.0.3063. Màu nước và overlay trên chai chủ chi phối giảm state; hai predicate chọn nguồn/đích dùng state so với fill amount, không dùng màu. Không áp luật này thành sức bền chung của Frog/Icicle.",
+      "source_refs": [
+        "gdd/Obstacles.json#flow",
+        "gdd/Obstacles.json#configs",
+        "facts/core_body_gap_decisions_20261115.json#MS-CORE-BODY-11",
+        "facts/core_body_gap_decisions_20261115.json#MS-CORE-BODY-04",
+        "facts/review_cases_20261116_round2.json",
+        "facts/editorial_20261116/core_source_errata.json#MS-CORE-ERRATA-IVY-01"
+      ]
+    },
+    {
+      "title": "Coverage 352 có ranh giới",
+      "text": "Round 2 phủ cloth, hidden, generator và Undo/Extra tương tác; những loại còn lại có nguồn code/asset/UC, không được nâng thành đã playtest.",
+      "source_refs": [
+        "gdd/Obstacles.json#flow",
+        "gdd/Obstacles.json#configs",
+        "facts/core_body_gap_decisions_20261115.json#MS-CORE-BODY-11",
+        "facts/core_body_gap_decisions_20261115.json#MS-CORE-BODY-04",
+        "facts/review_cases_20261116_round2.json"
+      ]
+    }
+  ],
+  "decisions": [
+    {
+      "question": "Vì sao cần nhóm theo tác động thay vì chỉ tên vật?",
+      "answer": "Designer cần biết vật cản làm thiếu thông tin, thiếu quyền chọn, thiếu không gian hay thêm nước; các nhóm này quyết định cách kết hợp trong level.",
+      "basis": "Hook selection/visibility và callback item trong hồ sơ.",
+      "source_refs": [
+        "gdd/Obstacles.json#flow",
+        "gdd/Obstacles.json#configs",
+        "facts/core_body_gap_decisions_20261115.json#MS-CORE-BODY-11",
+        "facts/core_body_gap_decisions_20261115.json#MS-CORE-BODY-04",
+        "facts/review_cases_20261116_round2.json"
+      ]
+    },
+    {
+      "question": "Có thể cho mọi vật cản cùng luật hoàn thành N chai không?",
+      "answer": "Không. Icicle, Ivy và Frog có các trigger khác nhau; gộp thành health chung sẽ thay đổi puzzle.",
+      "basis": "MS-CORE-BODY-11.",
+      "source_refs": [
+        "gdd/Obstacles.json#flow",
+        "gdd/Obstacles.json#configs",
+        "facts/core_body_gap_decisions_20261115.json#MS-CORE-BODY-11",
+        "facts/core_body_gap_decisions_20261115.json#MS-CORE-BODY-04",
+        "facts/review_cases_20261116_round2.json"
+      ]
+    },
+    {
+      "question": "Vì sao schema phải tách Id JSON với ItemType?",
+      "answer": "Converter chọn model trước khi gán runtime type; nhầm hai số làm sai bảng level và cơ chế ngay cả khi JSON parse thành công.",
+      "basis": "ItemModelConverter source 0.0.3063 và đối soát typed board.",
+      "source_refs": [
+        "gdd/Obstacles.json#flow",
+        "gdd/Obstacles.json#configs",
+        "facts/core_body_gap_decisions_20261115.json#MS-CORE-BODY-11",
+        "facts/core_body_gap_decisions_20261115.json#MS-CORE-BODY-04",
+        "facts/review_cases_20261116_round2.json"
+      ]
+    }
+  ],
+  "segments_ab": {
+    "summary": "Phân biệt selector, trạng thái và A/B; chưa có allocation/outcome được xác minh.",
+    "axes": [
+      {
+        "axis": "Model và cách serialize",
+        "selection": "Allocated model cùng ItemModelConverter chọn ý nghĩa field.",
+        "effect": "Đổi cách đọc mục tiêu, màu, count và ID nhóm.",
+        "evidence_limit": "Đây là schema dữ liệu, không phải segment người chơi.",
+        "source_refs": [
+          "gdd/Obstacles.json#flow",
+          "gdd/Obstacles.json#configs",
+          "gdd/Obstacles.json#segment_ab_review_20261115"
+        ]
+      },
+      {
+        "axis": "Hình thức và quyền trợ thủ",
+        "selection": "IsNewBlockerVisualsEnabled, Snitch/SuperCharger flags và hook mỗi item.",
+        "effect": "Đổi visual hoặc cách công cụ tác động lên vật cản.",
+        "evidence_limit": "Cờ default chưa chứng minh effective assignment hay tỷ lệ xuất hiện production.",
+        "source_refs": [
+          "gdd/Obstacles.json#flow",
+          "gdd/Obstacles.json#configs",
+          "gdd/Obstacles.json#segment_ab_review_20261115"
+        ]
+      }
+    ],
+    "unknowns": [
+      "Effective config, runtime các nhánh chưa chạy và phân bổ A/B cần bằng chứng riêng."
+    ]
+  },
+  "recovery": [
+    {
+      "condition": "Bàn hết nước đi vì trạng thái blocker",
+      "expected": "TrySolveSpecialStuck chỉ dispatch resolver trong các gate; cần fixture của từng resolver để khẳng định đã cứu được.",
+      "verified_scope": "Source-scoped; quan sát round 2 có phạm vi đúng case, không full UC pass.",
+      "uc_ids": [
+        "UC-13",
+        "UC-26"
+      ]
+    },
+    {
+      "condition": "Không có target hợp lệ cho trợ thủ",
+      "expected": "Theo fallback của Snitch hoặc chiến lược tương ứng, không phá một item bất kỳ để đủ animation.",
+      "verified_scope": "Source-scoped; quan sát round 2 có phạm vi đúng case, không full UC pass.",
+      "uc_ids": [
+        "UC-23"
+      ]
+    },
+    {
+      "condition": "Undo sau mở lớp phủ",
+      "expected": "Giữ phân biệt giữa lịch sử nước và tiến độ item; cloth ở 352 không hồi khi Undo, không suy mọi lớp phủ đều giống vậy.",
+      "verified_scope": "Source-scoped; quan sát round 2 có phạm vi đúng case, không full UC pass.",
+      "uc_ids": [
+        "UC-02",
+        "UC-26"
+      ]
+    }
+  ],
+  "takeaways": [
+    {
+      "text": "Designer cần biết vật cản làm thiếu thông tin, thiếu quyền chọn, thiếu không gian hay thêm nước; các nhóm này quyết định cách kết hợp trong level.",
+      "basis": "Hook selection/visibility và callback item trong hồ sơ."
+    },
+    {
+      "text": "Không. Icicle, Ivy và Frog có các trigger khác nhau; gộp thành health chung sẽ thay đổi puzzle.",
+      "basis": "MS-CORE-BODY-11."
+    },
+    {
+      "text": "Converter chọn model trước khi gán runtime type; nhầm hai số làm sai bảng level và cơ chế ngay cả khi JSON parse thành công.",
+      "basis": "ItemModelConverter source 0.0.3063 và đối soát typed board."
+    }
+  ],
+  "reviewed_source_paths": [
+    "gdd/Obstacles.json",
+    "site_meta/Obstacles.json",
+    "facts/core_body_gap_decisions_20261115.json",
+    "facts/review_cases_20261116_round2.json",
+    "facts/review_20261116/public_current_config_3129/defaults/BlockerIntroConfigModel.json",
+    "facts/review_20261116/public_current_config_3129/defaults/SnitchConfigModel.json",
+    "facts/review_20261116/public_current_config_3129/defaults/SuperChargerConfigModel.json",
+    "facts/editorial_20261116/core_source_errata.json"
+  ]
+}

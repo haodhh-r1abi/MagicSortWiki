@@ -1,7 +1,7 @@
 {
   "id": "Obstacles",
   "title": "Vật cản & cơ chế đặc biệt (Obstacles)",
-  "tagline": "Hơn 25 loại vật cản gắn lên chai hoặc phủ nhóm chai, mở rộng luật water-sort cơ bản của Magic Sort.",
+  "tagline": "Các luật ô ẩn, blocker, lớp phủ và vật đặc biệt mở rộng bài toán đổ màu; catalog ItemType còn chứa nước, chai, trợ thủ và kệ.",
   "infobox": [
     [
       "Loại",
@@ -33,7 +33,7 @@
     ]
   ],
   "description": [
-    "Magic Sort mở rộng luật water-sort bằng hơn 25 loại vật cản; mọi vật cản kế thừa ABlockerItem (kế thừa AItem).",
+    "Catalog ItemType chứa blocker, lớp phủ và cả item chức năng/bố cục. Không dùng số enum đến 28 hoặc số UC để kết luận có hơn 25 blocker đều kế thừa ABlockerItem.",
     "Vật cản chia hai nhóm: BlockerModel gắn vào một ô hoặc một chai, và OverlayBlockerModel phủ lên nhiều chai (Carpet, Woodbox, Duck House, Safe, Mosaic).",
     "Các hook chung quyết định hành vi: IsSelectableAsOrigin / IsSelectableAsTarget chặn thao tác, HidesWaterColors che màu nước.",
     "Điều kiện phá phổ biến nhất là hoàn thành một chai đúng màu: OnBottleCompleted, OnAnyBottleCompleted, OnNeighbourBottleCompleted.",
@@ -61,7 +61,7 @@
     "Trong khi chơi, BottleItem.AddBlocker gắn item vào chai; IsSelectableAsOrigin/AsTarget duyệt danh sách _blockers và trả false nếu bị chặn.",
     "CacheBlockedIndexes tính _firstUnblockedCellIndex để biết ô nào còn dùng được trong chai.",
     "Vật cản che màu (Question Mark, Curtain, Clay, Magic Seal) dùng HidesWaterColors; khi lớp nước phía trên bị lấy đi, BottleItem.RevealBottleCells() gọi Complete() để lộ màu thật.",
-    "Vật cản theo mục tiêu màu (Curtain, Tag, Ivy, Mosaic) so ColorId của chai vừa hoàn thành với ColorId khai báo trong model (Curtain dùng ObjectiveModel, JSON key \"CI\").",
+    "Mỗi vật có trigger riêng. Ivy 0.0.3063 giảm state theo màu của move khi chai chủ không overlay, không phải chờ một chai vừa hoàn thành. Curtain và các mục tiêu hoàn thành khác phải đọc callback của từng loại.",
     "Vật cản theo số lần (Bag RequiredAmount, Safe RequiredAmount) đếm số chai hoàn thành cho tới khi đủ ngưỡng của level.",
     "Generator bơm nước theo mảng GeneratorItemModel.ColorIds đúng thứ tự; Firework kích hoạt bắn FireworkCount quả pháo mở nhiều ô cùng lúc.",
     "Toggle đổi trạng thái theo mỗi nước đi qua OnAnyMoveStarted / OnAnyMoveFinished; IsAllowShuffle và IsRevealable chặn booster tương ứng.",
@@ -323,9 +323,9 @@
   ],
   "key_numbers": [
     {
-      "label": "Số loại vật cản mô tả",
-      "value": "25+ loại (ItemType đến 28)",
-      "source": "Obstacles.summary / ItemType.cs"
+      "label": "Phạm vi catalog item",
+      "value": "ItemType khai báo đến 28, gồm cả chai, nước, Shelf và trợ thủ; không đồng nghĩa 25+blocker chức năng",
+      "source": "ItemType và các UC riêng từng item"
     },
     {
       "label": "Level giới thiệu Curtain",
@@ -452,7 +452,7 @@
     {
       "key": "SuperChargerConfigModel",
       "value": "IsEnabled=false, Type=2, FirstLevelToShow=5, TargetLevelProgress=0, ChargeWithMove=false, CanIncreaseHealth=false, ShouldHaveInitialCharge=false, ChargeMatchCount=[1]",
-      "meaning": "Cấu hình chai tích năng lượng (ChargeableBottle)"
+      "meaning": "Cấu hình Super Charger; Type = 2 là BestSort, Type = 1 mới là ChargeableBottle."
     },
     {
       "key": "IceConfig.IceBreakAnimationStartTime / EndTime",
@@ -512,7 +512,7 @@
     {
       "key": "TagItemModel.ColorId / IvyItemModel.ColorId",
       "value": "theo level",
-      "meaning": "Màu bắt buộc của thẻ và dây leo"
+      "meaning": "Tag có gate màu riêng. Ivy dùng ColorId cho trigger giảm state; selection nguồn/đích của Ivy so state với lượng nước chai chủ, không kiểm màu."
     },
     {
       "key": "IceItemModel.Id / CarpetItemModel.Id",
@@ -569,7 +569,7 @@
     "Ba vật cản cơ bản (Curtain 20, Clay 60, Plaster 110) tạo đường cong độ khó dạng bậc thang, mỗi lần thêm một luật mới.",
     "Nhóm Overlay (Carpet, Woodbox, Duck House, Safe, Mosaic) khoá nhiều chai cùng lúc nên tăng độ khó mạnh hơn blocker đơn lẻ.",
     "Cặp màu phải khớp (Woodbox–Key, Duck–DuckHouse, Lock–Key) buộc người chơi lập kế hoạch theo thứ tự, không chỉ theo màu nước.",
-    "Snitch và Super Charger mặc định tắt, cho phép bật dần theo A/B test qua remote config."
+    "Snitch và Super Charger có cờ enable/strategy trong config; khả năng bật từng nhánh không chứng minh experiment đã được phân bổ hoặc chạy so sánh."
   ],
   "categories": [
     "Cơ chế lõi",

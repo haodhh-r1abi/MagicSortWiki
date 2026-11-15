@@ -1,7 +1,7 @@
 {
   "id": "MagicBottle",
   "title": "Magic Bottle (Chai phép)",
-  "tagline": "Thắng đủ số level để kích hoạt, mỗi ván sau được tặng thêm một chai trống cho tới khi thua.",
+  "tagline": "Thắng tích tiến độ để mở trợ thủ chai phụ theo config; caller 0.0.3063 thêm chai height 1, trạng thái nước effective trên 0.0.3129 chưa được quan sát.",
   "infobox": [
     [
       "Loại",
@@ -25,7 +25,7 @@
     ],
     [
       "Thưởng chính",
-      "1 chai trống thêm trên bàn ở mỗi level"
+      "Chai phụ: caller 0.0.3063 truyền height 1; chưa xác nhận empty/full effective trên 0.0.3129."
     ],
     [
       "Điều kiện / phụ thuộc",
@@ -37,19 +37,19 @@
     ]
   ],
   "description": [
-    "Magic Bottle là trợ thủ 'một chai thêm': thắng đủ số level ở Home để kích hoạt, sau đó mỗi ván được tặng thêm một chai trống trên bàn.",
+    "Magic Bottle cho quyền thêm chai khi đủ tiến độ và gate. Source 0.0.3063 gọi AddBottle(x,0,1); chưa đủ bằng chứng nói mọi ván 0.0.3129 nhận chai thường cao 4 hoặc khẳng định trạng thái trống effective.",
     "Chai trống là thứ quý nhất trong game sắp xếp nước vì mở ra rất nhiều nước đi mới.",
-    "Trạng thái đi qua ba mức: chưa đủ level → đủ level nhưng chưa xem giới thiệu → đang tích tiến độ → đã có Magic Bottle.",
+    "Các trạng thái được phân biệt: chưa đủ level → đủ level nhưng chưa xem giới thiệu → đang tích tiến độ → đã có Magic Bottle.",
     "Tiến độ chỉ tăng khi đã xem popup giới thiệu (EventShownInLifeTime = true), mỗi lần thắng level cộng 1.",
     "Trạng thái kích hoạt sống đến khi người chơi thua một ván; thua thì Progress về 0 và phải làm lại từ đầu.",
     "Có popup Are You Sure cảnh báo 'You will lose your Magic Bottle!' trước khi bỏ ván.",
     "Khi vừa chạm mốc, popup Congrats chạy hoạt ảnh hai phần: chai phóng to bay theo đường Bezier ra giữa màn hình, rồi bay về nút Play.",
     "Trong level, chai thêm bay vào bằng hoạt ảnh riêng: một cái gối (PillowView) hạ xuống rồi chai đáp lên đúng vị trí theo bố cục bàn.",
-    "Tính năng do khoá remote config MagicBottleConfigModel điều khiển và không có file mặc định trong build, nên hoàn toàn phụ thuộc server.",
+    "Không tìm thấy file default MagicBottle trong tập nguồn đã kiểm; cache lịch sử có isEnable=false, firstLevelToShow 11, neededProgress 10. Không suy mọi build hoặc mọi quyền runtime hoàn toàn phụ thuộc response mới.",
     "Trên bàn còn có biến thể họ hàng ChargeableBottle — chai mini nạp lại được, thực chất là hiện thân của biến thể Super Charger ChargeableBottle."
   ],
   "notes": [
-    "Lưu ý: không có Resources/defaultconfigs/MagicBottleConfigModel.json nên IsEnable, FirstLevelToShow, NeededProgress đều là (server).",
+    "Nguồn default MagicBottle chưa tìm thấy trong tập đã kiểm. Cache tháng 9–10 có giá trị cụ thể false/11/10; thiếu default không có nghĩa các giá trị lịch sử đều chưa biết.",
     "Lưu ý: TryIncreaseProgress chỉ chạy khi IsEligible và EventShownInLifeTime = true — popup giới thiệu là điều kiện tiên quyết để bắt đầu tích tiến độ.",
     "Lưu ý: mở app cũng gọi TryResetProgress() — nếu server đã tắt tính năng hoặc người chơi tụt điều kiện thì tiến độ bị xoá.",
     "Lưu ý: khi mất Magic Bottle, cả Progress lẫn LastSeenLobbyButtonProgress đều đặt về 0.",
@@ -87,7 +87,7 @@
         [
           "Kích hoạt Magic Bottle",
           "Progress đạt MagicBottleConfigModel.NeededProgress (server)",
-          "1 chai trống thêm trên bàn ở mỗi level, cho tới khi thua"
+          "Quyền thêm chai phụ; caller 0.0.3063 height 1, chưa xác nhận trạng thái nước effective trên 0.0.3129."
         ],
         [
           "Dùng ChargeableBottle",
@@ -97,7 +97,7 @@
       ]
     },
     {
-      "title": "CẤU HÌNH ĐIỀU KHIỂN (MagicBottleConfigModel — server)",
+      "title": "CẤU HÌNH MAGIC BOTTLE — CACHE LỊCH SỬ THÁNG 9–10, KHÔNG PHẢI EFFECTIVE CONFIG",
       "columns": [
         "Khoá",
         "Giá trị",
@@ -106,17 +106,17 @@
       "rows": [
         [
           "IsEnable",
-          "(server)",
+          "false (cache lịch sử)",
           "Bật/tắt Magic Bottle"
         ],
         [
           "FirstLevelToShow",
-          "(server)",
+          "11 (cache lịch sử)",
           "Level tối thiểu để thấy tính năng"
         ],
         [
           "NeededProgress",
-          "(server)",
+          "10 (cache lịch sử)",
           "Số level phải thắng để nhận chai thêm"
         ]
       ]
@@ -215,17 +215,17 @@
   "key_numbers": [
     {
       "label": "Bật/tắt tính năng",
-      "value": "(server) — không có file mặc định trong build",
+      "value": "Cache lịch sử tháng 9–10: false; chưa xác nhận effective config hiện tại",
       "source": "MagicBottleConfigModel.IsEnable"
     },
     {
       "label": "Level mở khoá",
-      "value": "(server)",
+      "value": "Cache lịch sử tháng 9–10: 11",
       "source": "MagicBottleConfigModel.FirstLevelToShow"
     },
     {
       "label": "Số level phải thắng để kích hoạt",
-      "value": "(server)",
+      "value": "Cache lịch sử tháng 9–10: 10",
       "source": "MagicBottleConfigModel.NeededProgress"
     },
     {
@@ -235,7 +235,7 @@
     },
     {
       "label": "Chai thêm nhận được",
-      "value": "1 chai trống mỗi level",
+      "value": "Caller 0.0.3063 thêm một chai height 1; empty/full effective còn cần pool/reset/runtime",
       "source": "MagicBottleInGameManager.AddMagicBottleAndHide"
     },
     {
@@ -317,17 +317,17 @@
   "config_highlights": [
     {
       "key": "MagicBottleConfigModel.IsEnable",
-      "value": "(server)",
-      "meaning": "Bật/tắt Magic Bottle; không có file mặc định trong build"
+      "value": "Cache lịch sử: false; không có default được tìm thấy trong tập nguồn đã kiểm",
+      "meaning": "Cờ bật/tắt MagicBottle. Chưa tìm thấy file default trong tập nguồn đã kiểm; giá trị cache lịch sử không xác lập effective config của build hoặc tài khoản hiện tại."
     },
     {
       "key": "MagicBottleConfigModel.FirstLevelToShow",
-      "value": "(server)",
+      "value": "Cache tháng 9–10: 11",
       "meaning": "Level tối thiểu để thấy tính năng"
     },
     {
       "key": "MagicBottleConfigModel.NeededProgress",
-      "value": "(server)",
+      "value": "Cache tháng 9–10: 10",
       "meaning": "Số level phải thắng để nhận chai thêm"
     },
     {
@@ -429,7 +429,7 @@
   "tips": [
     "Vòng lặp thiết kế rất chặt: phần thưởng chỉ tồn tại khi còn thắng, nên người chơi có động lực dùng booster để không thua.",
     "Popup Are You Sure dùng chung khung với Snitch và Super Charger, tăng sức nặng tâm lý khi cả ba cùng hiện.",
-    "Không có giá trị mặc định trong build nghĩa là vận hành có thể mở tính năng cho từng nhóm người chơi một cách rất linh hoạt.",
+    "Không tìm thấy default chỉ là giới hạn nguồn; các cache đã có giá trị, còn chọn nhóm user ở backend và allocation A/B vẫn chưa biết.",
     "Hoạt ảnh kết thúc bằng chai bay vào nút Play để nối liền cảm giác 'đã có thêm chai cho ván sau'.",
     "ChargeableBottle chia sẻ hiện vật trên bàn với Magic Bottle nhưng thuộc hệ Super Charger, cần tách bạch khi phân tích số liệu."
   ],

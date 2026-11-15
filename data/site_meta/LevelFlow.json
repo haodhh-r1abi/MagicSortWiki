@@ -1,578 +1,578 @@
 {
- "id": "LevelFlow",
- "title": "Vòng đời màn chơi (Level Flow)",
- "tagline": "Khung điều khiển một lượt chơi: từ nút Play tới các nhánh thắng, thua, kẹt, thoát và chuỗi popup trở về Home.",
- "infobox": [
-  [
-   "Loại",
-   "Cơ chế lõi"
+  "id": "LevelFlow",
+  "title": "Vòng đời màn chơi (Level Flow)",
+  "tagline": "Khung điều khiển một lượt chơi: từ nút Play tới các nhánh thắng, thua, kẹt, thoát và chuỗi popup trở về Home.",
+  "infobox": [
+    [
+      "Loại",
+      "Cơ chế lõi"
+    ],
+    [
+      "Mở khóa",
+      "Có từ level 1, không có điều kiện"
+    ],
+    [
+      "Tham gia",
+      "Cá nhân"
+    ],
+    [
+      "Tiền tệ",
+      "Coin cho Play On, refill mạng và booster"
+    ],
+    [
+      "Thưởng chính",
+      "20 coin level thường, 60 coin level khó, 100 coin level siêu khó, cộng phần thưởng vạc nếu có"
+    ],
+    [
+      "Điều kiện / phụ thuộc",
+      "Rewarded Play On cần enable, level threshold và các gate placement; mốc 100 là giá trị cấu hình được nêu, không chứng minh mọi tài khoản đều có nút từ level đó."
+    ],
+    [
+      "Manager",
+      "RegularLevelManager"
+    ]
   ],
-  [
-   "Mở khóa",
-   "Có từ level 1, không có điều kiện"
+  "description": [
+    "Level Flow là khung điều khiển toàn bộ một lượt chơi, từ lúc bấm Play ở Home tới lúc trở về Home.",
+    "Hai lớp chạy song song: một lớp giữ trạng thái dữ liệu của level và một lớp là máy trạng thái luồng giao diện.",
+    "Điểm đặc trưng của thể loại bottle sort là không có khái niệm hết lượt: người chơi chỉ thua khi hết giờ hoặc khi bàn cờ kẹt.",
+    "Vì vậy nhánh kẹt mới là nhánh kiếm tiền chính, nơi game mời mua Play On bằng coin hoặc xem quảng cáo thưởng.",
+    "Giá Play On tăng dần theo số lần dùng trong cùng một level, theo bảng bậc trong cấu hình kinh tế.",
+    "Enum có 10 variant gameplay (0..9) cùng Disabled=99. Mapping behavior đã đọc từ ELF 0.0.3063; enum/variant không chứng minh đây là 11 experiment A/B đã chạy.",
+    "Một bộ đếm chỉ số đầy đủ chạy suốt level, ghi lại số nước đi, số chai hoàn thành, booster đã dùng và vật cản đã mở.",
+    "Khi level kế tiếp có vật cản mới, game chèn popup giới thiệu vật cản đó trước.",
+    "Sau lượt, chọn một trong bốn queue regular/daily × win/lose; mỗi command có gate và skip/terminate riêng. Giới hạn popup có selector cấu hình, chưa có bằng chứng allocation A/B."
   ],
-  [
-   "Tham gia",
-   "Cá nhân"
+  "notes": [
+    "Số liệu trong hồ sơ gồm default, mã native lịch sử, cache và case runtime; phải đọc provenance từng giá trị, không gộp mọi số thành default đóng gói.",
+    "Lưu ý: GamePlayStateType không có giá trị 8, và PlayOnBehaviourType không có giá trị 2.",
+    "Lưu ý: chỉ số bảng giá Play On là số lần đã dùng trong level, bị kẹp trong khoảng từ 0 tới số bậc trừ 1.",
+    "Có kiểm giới hạn rewarded Play On theo thời gian trong source; chưa có thử nghiệm chỉnh giờ hoặc mọi đường sync để khẳng định chống thao túng đồng hồ.",
+    "Mapping PlayOn variant 0..9 và nhánh watchedCount của variant 3 đã giải ở mã/ELF 0.0.3063; eligibility và hiệu lực trên runtime 0.0.3129 cần kiểm riêng.",
+    "Source 0.0.3063 đã có thứ tự 4 queue: 9 regularLose, 57 regularWin, 2 dailyLose, 6 dailyWin command. Gate làm số popup thực khác số command.",
+    "BELevelConfig default khai báo ConfigName 04-02-25-default-w-dlb và ConfigType = 0; chưa đủ bằng chứng bộ này đang được backend chọn cho mọi tài khoản.",
+    "Lưu ý: thưởng coin thắng level được đọc qua AdConfigModel nhưng giá trị mặc định nằm trong GameEconomyModel.json."
   ],
-  [
-   "Tiền tệ",
-   "Coin cho Play On, refill mạng và booster"
+  "how_it_works": [
+    "Bấm Play ở Home đổi ngữ cảnh sang GamePlay (2) và dựng toàn bộ service của gameplay; analytics ghi play_button_clicked hoặc play_button_click_failed.",
+    "Máy trạng thái nạp mọi state rồi chạy FromHomeToGamePlayState (1) để chuyển cảnh.",
+    "Level được nạp theo seed: model level, danh sách chai và cấu hình level, kèm các cờ như đang là tutorial, có Magic Bottle hay có Snitch.",
+    "Trạng thái dữ liệu chuyển Playing (1), tín hiệu bắt đầu level được bắn và hệ thống quảng cáo được cập nhật.",
+    "Trong lúc chơi, bộ đếm chỉ số ghi total_move_count, bottles_completed, empty_bottle_count, undo_used, shuffle_used, extrabottle_used và thống kê vật cản.",
+    "Lần chạm chai đầu tiên và nước đi đầu tiên đều có analytics riêng để đo độ khó khởi động của level.",
+    "Khi bàn hết nước đi hoặc hết giờ, trạng thái chuyển Stuck (4) với lý do NoMove (1) hoặc TimeIsUp (2), và popup kẹt mở ra.",
+    "Popup Stuck có các view A/B/C trong source; nút coin và rewarded còn phụ thuộc config, eligibility và availability. Không mặc định mọi popup đều đồng thời có cả hai.",
+    "Mua bằng coin trừ theo bảng bậc 900, 1900 rồi 2300 coin; lượt đầu miễn phí nếu cờ IsFirstPlayOnFree bật (mặc định false).",
+    "Play On thành công đưa trạng thái về Playing và áp dụng hiệu ứng: chai phụ (0), chai nhỏ (1), Undo (3) hoặc Mega Shuffle (4).",
+    "Từ chối Play On mở popup xác nhận rồi vào LoseState (5), bắn analytics energy_depleted và trừ một mạng.",
+    "Bấm thoát trong cài đặt mở popup xác nhận; đồng ý thì vào QuitState (12), hủy thì quay lại chơi tiếp.",
+    "Khi chai cuối hoàn thành, trạng thái chuyển Win (3), popup chúc mừng mở, tiến độ Journey cập nhật và analytics level_win bắn.",
+    "Màn thắng trao 20 coin cho level thường, 60 coin cho level khó và 100 coin cho level siêu khó, kèm phần thưởng vạc nếu level có.",
+    "Nút nhân đôi coin bằng quảng cáo dùng bộ số riêng theo độ khó với lý do nhận thưởng Rewarded2XCoin (8).",
+    "Cuối cùng, chuỗi lệnh trở về Home chạy theo bốn cấu hình thường và daily nhân với thắng và thua, rồi level được giải phóng."
   ],
-  [
-   "Thưởng chính",
-   "20 coin level thường, 60 coin level khó, 100 coin level siêu khó, cộng phần thưởng vạc nếu có"
+  "reward_tables": [
+    {
+      "title": "THƯỞNG COIN KHI THẮNG LEVEL",
+      "columns": [
+        "Loại level",
+        "Điều kiện",
+        "Phần thưởng"
+      ],
+      "rows": [
+        [
+          "Level thường",
+          "Thắng một level thường",
+          "20 coin"
+        ],
+        [
+          "Level khó",
+          "Thắng một level Hard",
+          "60 coin"
+        ],
+        [
+          "Level siêu khó",
+          "Thắng một level Super Hard",
+          "100 coin"
+        ],
+        [
+          "Nhân đôi bằng quảng cáo",
+          "Xem rewarded ở LevelWinPopUp",
+          "CoinAmountNew2xRewardedForRegular / ForHard / ForSuperHard (server), lý do Rewarded2XCoin = 8"
+        ],
+        [
+          "Phần thưởng vạc",
+          "Level có LevelConfigModel.HasCauldronReward",
+          "LevelConfigModel.CauldronReward (server), lý do EarnReason.LevelWinCauldron = 1"
+        ]
+      ]
+    },
+    {
+      "title": "BẢNG GIÁ PLAY ON (GameEconomyModel.json: PlayOnConfigModels)",
+      "columns": [
+        "Bậc",
+        "Điều kiện",
+        "Giá"
+      ],
+      "rows": [
+        [
+          "Bậc 1",
+          "Lần Play On đầu trong level (PlayOnType 0 = ExtraBottle)",
+          "900 coin; miễn phí nếu IsFirstPlayOnFree bật (mặc định false)"
+        ],
+        [
+          "Bậc 2",
+          "Lần Play On thứ hai trong level",
+          "1900 coin"
+        ],
+        [
+          "Bậc 3",
+          "Lần Play On thứ ba trở đi trong level",
+          "2300 coin"
+        ]
+      ]
+    },
+    {
+      "title": "PLAY ON BẰNG QUẢNG CÁO (AdConfigModel / PlayOnRewardedConfigModel)",
+      "columns": [
+        "Tham số",
+        "Giá trị mặc định",
+        "Ý nghĩa"
+      ],
+      "rows": [
+        [
+          "PlayOnWithRewardedEnabled",
+          "false",
+          "Bật Play On bằng quảng cáo thưởng"
+        ],
+        [
+          "FirstLevelToShowPlayOnWithRewarded",
+          "100",
+          "Level tối thiểu để thấy nút xem quảng cáo"
+        ],
+        [
+          "PlayOnWithRewardedDailyLimit",
+          "20",
+          "Số lượt Play On bằng quảng cáo mỗi ngày"
+        ],
+        [
+          "PlayOnWithRewardedVariantType",
+          "0 = AddExtraBottle",
+          "Biến thể phần thưởng mặc định"
+        ],
+        [
+          "StagedPlayOnLimit",
+          "5",
+          "Ngưỡng chuyển từ 1 sang 2 quảng cáo cho biến thể WithLimit"
+        ]
+      ]
+    },
+    {
+      "title": "BIẾN THỂ PLAY ON BẰNG QUẢNG CÁO (PlayOnWithRewardedVariantType)",
+      "columns": [
+        "Mã",
+        "Biến thể",
+        "Ghi chú"
+      ],
+      "rows": [
+        [
+          "0",
+          "AddExtraBottle",
+          "Mặc định trong client"
+        ],
+        [
+          "1",
+          "AddTinyBottle",
+          ""
+        ],
+        [
+          "2",
+          "AddExtraBottleWithDoubleRewarded",
+          "Yêu cầu xem hai quảng cáo"
+        ],
+        [
+          "3",
+          "AddUndoAndExtraBottle",
+          "Nhánh duy nhất đọc được đầy đủ trong pseudo-C"
+        ],
+        [
+          "4",
+          "AddTinyBottleWithDoubleRewarded",
+          ""
+        ],
+        [
+          "5",
+          "AddTinyBottlesWithInterAndRewarded",
+          "Kết hợp interstitial và rewarded"
+        ],
+        [
+          "6",
+          "AddTinyBottlesWithLimit",
+          "Dùng ngưỡng StagedPlayOnLimit = 5"
+        ],
+        [
+          "7",
+          "AddTinyBottlesWithLimitInterAndRewarded",
+          ""
+        ],
+        [
+          "8",
+          "DoSingleUndo",
+          ""
+        ],
+        [
+          "9",
+          "DoMegaShuffle",
+          ""
+        ],
+        [
+          "99",
+          "Disabled",
+          "Tắt hẳn nhánh quảng cáo"
+        ]
+      ]
+    },
+    {
+      "title": "MÁY TRẠNG THÁI CỦA MỘT LƯỢT CHƠI",
+      "columns": [
+        "Nhóm",
+        "Giá trị",
+        "Ghi chú"
+      ],
+      "rows": [
+        [
+          "LevelState",
+          "None=0, Playing=1, Lose=2, Win=3, Stuck=4, PlayOn=5, Quit=6, Pause=7, PlayOnWithRewarded=8",
+          "Trạng thái dữ liệu của level"
+        ],
+        [
+          "GamePlayStateType",
+          "None=0, FromHomeToGamePlayState=1, PlayingState=2, StuckState=3, PlayOnState=4, LoseState=5, WaitingForStartAfterLoseState=6, WinState=7, GamePlaySceneToHomeSceneState=9, QuitPressedState=10, ResumePlayingAfterQuit=11, QuitState=12, WaitingForStartAfterQuitState=13",
+          "Không có giá trị 8"
+        ],
+        [
+          "StuckType",
+          "None=0, NoMove=1, TimeIsUp=2",
+          "Lý do bàn cờ kẹt"
+        ],
+        [
+          "GameStateType",
+          "Application=0, Home=1, GamePlay=2, Daily=3",
+          "Ngữ cảnh scene hiện tại"
+        ],
+        [
+          "LevelEndType",
+          "None=0, Win=1, Lose=2, Quit=3",
+          "Kiểu kết thúc gửi lên analytics"
+        ],
+        [
+          "PlayOnBehaviourType",
+          "ExtraBottle=0, ExtraTinyBottle=1, Undo=3, MegaShuffle=4",
+          "Không có giá trị 2"
+        ],
+        [
+          "PlayOnType",
+          "ExtraBottle=0, Undo=1",
+          "Loại Play On khai báo trong config"
+        ],
+        [
+          "TryAgainPopupOpenPlace",
+          "Quit=0, Stuck=1",
+          "Ngữ cảnh mở popup thử lại"
+        ],
+        [
+          "StorePopUpSource",
+          "None=0, Booster=1, Navigation=2, PlayOn=3, Refill=4, Teams=5",
+          "Nguồn mở cửa hàng khi thiếu coin"
+        ]
+      ]
+    }
   ],
-  [
-   "Điều kiện / phụ thuộc",
-   "Play On bằng quảng cáo cần AdConfigModel.PlayOnWithRewardedEnabled và level đạt 100"
+  "key_numbers": [
+    {
+      "label": "Giá Play On lần 1 / 2 / 3",
+      "value": "900 / 1900 / 2300 coin",
+      "source": "GameEconomyModel.json: PlayOnConfigModels"
+    },
+    {
+      "label": "Play On đầu tiên miễn phí",
+      "value": "false",
+      "source": "GameEconomyModel.json: IsFirstPlayOnFree"
+    },
+    {
+      "label": "Thưởng coin thắng level thường / khó / siêu khó",
+      "value": "20 / 60 / 100 coin",
+      "source": "GameEconomyModel.json: RegularLevelWinCoinReward, HardLevelWinCoinReward, SuperHardLevelWinCoinReward"
+    },
+    {
+      "label": "Giá đổ đầy mạng",
+      "value": "900 coin",
+      "source": "GameEconomyModel.json: refillPrice"
+    },
+    {
+      "label": "Thời gian hồi một mạng",
+      "value": "30 phút",
+      "source": "GameEconomyModel.json: refillDurationAsMinutes"
+    },
+    {
+      "label": "Số mạng tối đa",
+      "value": "5",
+      "source": "GameEconomyModel.json: maxLifeAmount"
+    },
+    {
+      "label": "Giá Mega Shuffle",
+      "value": "900 coin",
+      "source": "GameEconomyModel.json: MegaShufflePrice"
+    },
+    {
+      "label": "Bật Play On bằng quảng cáo",
+      "value": "false (mặc định)",
+      "source": "AdConfigModel.PlayOnWithRewardedEnabled"
+    },
+    {
+      "label": "Level tối thiểu để thấy Play On bằng quảng cáo",
+      "value": "100",
+      "source": "AdConfigModel.FirstLevelToShowPlayOnWithRewarded"
+    },
+    {
+      "label": "Giới hạn quảng cáo Play On mỗi ngày",
+      "value": "20 lượt",
+      "source": "AdConfigModel.PlayOnWithRewardedDailyLimit"
+    },
+    {
+      "label": "Biến thể Play On quảng cáo mặc định",
+      "value": "0 = AddExtraBottle",
+      "source": "AdConfigModel.PlayOnWithRewardedVariantType"
+    },
+    {
+      "label": "Ngưỡng chuyển sang hai quảng cáo",
+      "value": "5",
+      "source": "PlayOnRewardedConfigModel.StagedPlayOnLimit"
+    },
+    {
+      "label": "Số biến thể Play On bằng quảng cáo",
+      "value": "11 (0–9 và 99)",
+      "source": "PlayOnWithRewardedVariantType"
+    },
+    {
+      "label": "Bật quảng cáo interstitial",
+      "value": "true",
+      "source": "AdConfigModel.IsInterEnabled"
+    },
+    {
+      "label": "Level tối thiểu để thấy interstitial",
+      "value": "61",
+      "source": "AdConfigModel.FirstLevelToShowInter"
+    },
+    {
+      "label": "Tần suất interstitial",
+      "value": "240 giây",
+      "source": "AdConfigModel.InterShowFrequencyInSeconds"
+    },
+    {
+      "label": "Số trạng thái dữ liệu level",
+      "value": "9 (None=0 … PlayOnWithRewarded=8)",
+      "source": "LevelState"
+    },
+    {
+      "label": "Số state trong máy trạng thái luồng",
+      "value": "13 giá trị, thiếu số 8",
+      "source": "GamePlayStateType"
+    },
+    {
+      "label": "Thuật toán Mega Shuffle",
+      "value": "_megaShuffleUseNewAlgorithm = True, _megaShuffleEmptyOneBottle = True",
+      "source": "MegaShuffleManager"
+    },
+    {
+      "label": "Thứ tự ưu tiên offer màn thua",
+      "value": "SpecialOffer=0, TreasureDrill=1, MagicPass=2, PawTouch=3",
+      "source": "EgoOfferConfigModel.OfferPriorities"
+    },
+    {
+      "label": "Cấu hình level backend đang dùng",
+      "value": "\"04-02-25-default-w-dlb\", ConfigType 0",
+      "source": "BELevelConfig.json"
+    },
+    {
+      "label": "Khóa đồng bộ của quảng cáo Play On",
+      "value": "PlayOnWithRewardedDataModel {Count, LastWatchTime}",
+      "source": "PlayOnWithRewardedDataService.GetSyncName"
+    },
+    {
+      "label": "Số mốc tiến trình sau lần mở app đầu tiên",
+      "value": "3 (level_reach_45_24h, level_reach_45_72h, level_reach_100_72h)",
+      "source": "LevelFlow analytics"
+    }
   ],
-  [
-   "Manager",
-   "RegularLevelManager"
+  "config_highlights": [
+    {
+      "key": "GameEconomyModel.json: PlayOnConfigModels",
+      "value": "3 bậc PlayOnType 0: 900 / 1900 / 2300 coin",
+      "meaning": "Bảng bậc giá Play On, chỉ số là số lần đã dùng trong level"
+    },
+    {
+      "key": "GameEconomyModel.json: IsFirstPlayOnFree",
+      "value": "false",
+      "meaning": "Cho phép lượt Play On đầu tiên miễn phí"
+    },
+    {
+      "key": "GameEconomyModel.json: RegularLevelWinCoinReward",
+      "value": "20",
+      "meaning": "Coin thưởng thắng level thường"
+    },
+    {
+      "key": "GameEconomyModel.json: HardLevelWinCoinReward",
+      "value": "60",
+      "meaning": "Coin thưởng thắng level khó"
+    },
+    {
+      "key": "GameEconomyModel.json: SuperHardLevelWinCoinReward",
+      "value": "100",
+      "meaning": "Coin thưởng thắng level siêu khó"
+    },
+    {
+      "key": "GameEconomyModel.json: refillPrice",
+      "value": "900",
+      "meaning": "Giá đổ đầy mạng"
+    },
+    {
+      "key": "GameEconomyModel.json: MegaShufflePrice",
+      "value": "900",
+      "meaning": "Giá booster Mega Shuffle"
+    },
+    {
+      "key": "AdConfigModel.PlayOnWithRewardedEnabled",
+      "value": "false",
+      "meaning": "Bật Play On bằng quảng cáo thưởng"
+    },
+    {
+      "key": "AdConfigModel.FirstLevelToShowPlayOnWithRewarded",
+      "value": "100",
+      "meaning": "Level tối thiểu để thấy nút quảng cáo Play On"
+    },
+    {
+      "key": "AdConfigModel.PlayOnWithRewardedDailyLimit",
+      "value": "20",
+      "meaning": "Số lượt Play On bằng quảng cáo mỗi ngày"
+    },
+    {
+      "key": "AdConfigModel.PlayOnWithRewardedVariantType",
+      "value": "0 (AddExtraBottle)",
+      "meaning": "Chọn biến thể phần thưởng Play On"
+    },
+    {
+      "key": "PlayOnRewardedConfigModel.StagedPlayOnLimit",
+      "value": "5",
+      "meaning": "Ngưỡng chuyển từ 1 sang 2 quảng cáo cho biến thể WithLimit"
+    },
+    {
+      "key": "AdConfigModel.CoinAmountNew2xRewardedForRegular / ForHard / ForSuperHard",
+      "value": "server",
+      "meaning": "Coin khi nhân đôi bằng quảng cáo ở màn thắng"
+    },
+    {
+      "key": "AdConfigModel.IsInterEnabled / FirstLevelToShowInter / InterShowFrequencyInSeconds",
+      "value": "true / 61 / 240",
+      "meaning": "Điều kiện chèn quảng cáo interstitial giữa các level"
+    },
+    {
+      "key": "RootLevelConfigModel.IsNewTryAgainFlowEnabled",
+      "value": "server",
+      "meaning": "Bật luồng Try Again mới"
+    },
+    {
+      "key": "RootLevelConfigModel.LevelEndPopupsAbGroup",
+      "value": "server",
+      "meaning": "Nhóm A/B quyết định giới hạn popup cuối level"
+    },
+    {
+      "key": "RootLevelConfigModel.HomeReturnPopupShowLimit",
+      "value": "server",
+      "meaning": "Số popup tối đa khi về Home"
+    },
+    {
+      "key": "RootLevelConfigModel.MegaShuffleRetryCount",
+      "value": "server",
+      "meaning": "Số lần thử lại thuật toán Mega Shuffle"
+    },
+    {
+      "key": "RootLevelConfigModel.MegaShuffleEmptyBottleProbability",
+      "value": "server",
+      "meaning": "Xác suất tạo chai trống sau Mega Shuffle"
+    },
+    {
+      "key": "RootLevelConfigModel.IsOgPlayStyle / IsVibrationOn / IsMusicEnabled",
+      "value": "server",
+      "meaning": "Kiểu chơi và mặc định âm thanh, rung trong level"
+    },
+    {
+      "key": "RootLevelConfigModel.InGameBoosterVariant / ColorVariant",
+      "value": "server",
+      "meaning": "Biến thể A/B bố cục booster trong level và bảng màu"
+    },
+    {
+      "key": "BlockerIntroConfigModel",
+      "value": "Curtain, Plaster, Clay, LockAndKey (server)",
+      "meaning": "Level bắt đầu giới thiệu từng loại vật cản"
+    },
+    {
+      "key": "EgoOfferConfigModel.OfferPriorities",
+      "value": "SpecialOffer=0, TreasureDrill=1, MagicPass=2, PawTouch=3",
+      "meaning": "Thứ tự ưu tiên offer hiện ở màn thua"
+    },
+    {
+      "key": "MegaShuffleManager._megaShuffleUseNewAlgorithm",
+      "value": "True",
+      "meaning": "Dùng thuật toán trộn mới"
+    },
+    {
+      "key": "MegaShuffleManager._megaShuffleEmptyOneBottle",
+      "value": "True",
+      "meaning": "Cố gắng để trống hẳn một chai sau khi trộn"
+    },
+    {
+      "key": "LevelState",
+      "value": "None=0, Playing=1, Lose=2, Win=3, Stuck=4, PlayOn=5, Quit=6, Pause=7, PlayOnWithRewarded=8",
+      "meaning": "Trạng thái dữ liệu của level"
+    },
+    {
+      "key": "GamePlayStateType",
+      "value": "13 giá trị từ None=0 tới WaitingForStartAfterQuitState=13, thiếu 8",
+      "meaning": "Máy trạng thái luồng gameplay"
+    },
+    {
+      "key": "StuckType",
+      "value": "None=0, NoMove=1, TimeIsUp=2",
+      "meaning": "Lý do bàn cờ kẹt"
+    },
+    {
+      "key": "PlayOnBehaviourType",
+      "value": "ExtraBottle=0, ExtraTinyBottle=1, Undo=3, MegaShuffle=4",
+      "meaning": "Hiệu ứng được cấp khi Play On, không có giá trị 2"
+    },
+    {
+      "key": "BELevelConfig.json",
+      "value": "ConfigName \"04-02-25-default-w-dlb\", ConfigType 0",
+      "meaning": "Bộ cấu hình level backend đang dùng"
+    },
+    {
+      "key": "PlayOnWithRewardedDataModel",
+      "value": "{Count, LastWatchTime}",
+      "meaning": "Số lượt quảng cáo Play On đã xem trong ngày, đồng bộ server"
+    }
+  ],
+  "tips": [
+    "Không có cơ chế hết lượt khiến toàn bộ áp lực kiếm tiền dồn vào khoảnh khắc bàn cờ kẹt, nơi người chơi đã đầu tư nhiều công sức.",
+    "Giá Play On leo từ 900 lên 2300 coin trong cùng một level buộc người chơi cân nhắc dừng hay tiếp.",
+    "10 variant gameplay và Disabled là các nhánh có nguồn, cho thấy nhiều lựa chọn thiết kế tiếp tục. Chưa có bằng chứng đây là điểm đã A/B test nhiều nhất hoặc có uplift.",
+    "Popup giới thiệu vật cản mới đặt ngay trước level chứa vật cản đó, giảm cảm giác bị đánh úp.",
+    "Giới hạn popup là một công cụ điều tiết nhịp về Home; muốn gọi theo nhóm A/B cần thêm bằng chứng assignment và so sánh kết quả."
+  ],
+  "categories": [
+    "Cơ chế lõi",
+    "Kinh tế",
+    "Tiến trình",
+    "Meta"
   ]
- ],
- "description": [
-  "Level Flow là khung điều khiển toàn bộ một lượt chơi, từ lúc bấm Play ở Home tới lúc trở về Home.",
-  "Hai lớp chạy song song: một lớp giữ trạng thái dữ liệu của level và một lớp là máy trạng thái luồng giao diện.",
-  "Điểm đặc trưng của thể loại bottle sort là không có khái niệm hết lượt: người chơi chỉ thua khi hết giờ hoặc khi bàn cờ kẹt.",
-  "Vì vậy nhánh kẹt mới là nhánh kiếm tiền chính, nơi game mời mua Play On bằng coin hoặc xem quảng cáo thưởng.",
-  "Giá Play On tăng dần theo số lần dùng trong cùng một level, theo bảng bậc trong cấu hình kinh tế.",
-  "Play On bằng quảng cáo có tới 11 biến thể A/B, cấp chai phụ, chai nhỏ, Undo hoặc Mega Shuffle.",
-  "Một bộ đếm chỉ số đầy đủ chạy suốt level, ghi lại số nước đi, số chai hoàn thành, booster đã dùng và vật cản đã mở.",
-  "Khi level kế tiếp có vật cản mới, game chèn popup giới thiệu vật cản đó trước.",
-  "Sau khi rời level, một hàng lệnh chạy tuần tự để trao thưởng và mở popup, có giới hạn số popup theo nhóm A/B."
- ],
- "notes": [
-  "Lưu ý: mọi số trong tài liệu này là bản mặc định đóng gói trong Resources/defaultconfigs; Firebase Remote Config có thể ghi đè (gaps).",
-  "Lưu ý: GamePlayStateType không có giá trị 8, và PlayOnBehaviourType không có giá trị 2.",
-  "Lưu ý: chỉ số bảng giá Play On là số lần đã dùng trong level, bị kẹp trong khoảng từ 0 tới số bậc trừ 1.",
-  "Lưu ý: giới hạn quảng cáo Play On mỗi ngày được kiểm tra theo giờ server để chống chỉnh giờ máy.",
-  "Lưu ý: ánh xạ chi tiết giữa biến thể Play On quảng cáo và hiệu ứng được cấp mới đọc được nhánh AddUndoAndExtraBottle (3) (gaps).",
-  "Lưu ý: thứ tự chính xác các lệnh trở về Home trong từng cấu hình chưa đọc được từ pseudo-C (gaps).",
-  "Lưu ý: cấu hình level backend đang dùng có tên '04-02-25-default-w-dlb' với ConfigType 0.",
-  "Lưu ý: thưởng coin thắng level được đọc qua AdConfigModel nhưng giá trị mặc định nằm trong GameEconomyModel.json."
- ],
- "how_it_works": [
-  "Bấm Play ở Home đổi ngữ cảnh sang GamePlay (2) và dựng toàn bộ service của gameplay; analytics ghi play_button_clicked hoặc play_button_click_failed.",
-  "Máy trạng thái nạp mọi state rồi chạy FromHomeToGamePlayState (1) để chuyển cảnh.",
-  "Level được nạp theo seed: model level, danh sách chai và cấu hình level, kèm các cờ như đang là tutorial, có Magic Bottle hay có Snitch.",
-  "Trạng thái dữ liệu chuyển Playing (1), tín hiệu bắt đầu level được bắn và hệ thống quảng cáo được cập nhật.",
-  "Trong lúc chơi, bộ đếm chỉ số ghi total_move_count, bottles_completed, empty_bottle_count, undo_used, shuffle_used, extrabottle_used và thống kê vật cản.",
-  "Lần chạm chai đầu tiên và nước đi đầu tiên đều có analytics riêng để đo độ khó khởi động của level.",
-  "Khi bàn hết nước đi hoặc hết giờ, trạng thái chuyển Stuck (4) với lý do NoMove (1) hoặc TimeIsUp (2), và popup kẹt mở ra.",
-  "Popup kẹt có ba biến thể A/B/C, hiển thị đồng thời nút mua Play On bằng coin và nút xem quảng cáo.",
-  "Mua bằng coin trừ theo bảng bậc 900, 1900 rồi 2300 coin; lượt đầu miễn phí nếu cờ IsFirstPlayOnFree bật (mặc định false).",
-  "Play On thành công đưa trạng thái về Playing và áp dụng hiệu ứng: chai phụ (0), chai nhỏ (1), Undo (3) hoặc Mega Shuffle (4).",
-  "Từ chối Play On mở popup xác nhận rồi vào LoseState (5), bắn analytics energy_depleted và trừ một mạng.",
-  "Bấm thoát trong cài đặt mở popup xác nhận; đồng ý thì vào QuitState (12), hủy thì quay lại chơi tiếp.",
-  "Khi chai cuối hoàn thành, trạng thái chuyển Win (3), popup chúc mừng mở, tiến độ Journey cập nhật và analytics level_win bắn.",
-  "Màn thắng trao 20 coin cho level thường, 60 coin cho level khó và 100 coin cho level siêu khó, kèm phần thưởng vạc nếu level có.",
-  "Nút nhân đôi coin bằng quảng cáo dùng bộ số riêng theo độ khó với lý do nhận thưởng Rewarded2XCoin (8).",
-  "Cuối cùng, chuỗi lệnh trở về Home chạy theo bốn cấu hình thường và daily nhân với thắng và thua, rồi level được giải phóng."
- ],
- "reward_tables": [
-  {
-   "title": "THƯỞNG COIN KHI THẮNG LEVEL",
-   "columns": [
-    "Loại level",
-    "Điều kiện",
-    "Phần thưởng"
-   ],
-   "rows": [
-    [
-     "Level thường",
-     "Thắng một level thường",
-     "20 coin"
-    ],
-    [
-     "Level khó",
-     "Thắng một level Hard",
-     "60 coin"
-    ],
-    [
-     "Level siêu khó",
-     "Thắng một level Super Hard",
-     "100 coin"
-    ],
-    [
-     "Nhân đôi bằng quảng cáo",
-     "Xem rewarded ở LevelWinPopUp",
-     "CoinAmountNew2xRewardedForRegular / ForHard / ForSuperHard (server), lý do Rewarded2XCoin = 8"
-    ],
-    [
-     "Phần thưởng vạc",
-     "Level có LevelConfigModel.HasCauldronReward",
-     "LevelConfigModel.CauldronReward (server), lý do EarnReason.LevelWinCauldron = 1"
-    ]
-   ]
-  },
-  {
-   "title": "BẢNG GIÁ PLAY ON (GameEconomyModel.json: PlayOnConfigModels)",
-   "columns": [
-    "Bậc",
-    "Điều kiện",
-    "Giá"
-   ],
-   "rows": [
-    [
-     "Bậc 1",
-     "Lần Play On đầu trong level (PlayOnType 0 = ExtraBottle)",
-     "900 coin; miễn phí nếu IsFirstPlayOnFree bật (mặc định false)"
-    ],
-    [
-     "Bậc 2",
-     "Lần Play On thứ hai trong level",
-     "1900 coin"
-    ],
-    [
-     "Bậc 3",
-     "Lần Play On thứ ba trở đi trong level",
-     "2300 coin"
-    ]
-   ]
-  },
-  {
-   "title": "PLAY ON BẰNG QUẢNG CÁO (AdConfigModel / PlayOnRewardedConfigModel)",
-   "columns": [
-    "Tham số",
-    "Giá trị mặc định",
-    "Ý nghĩa"
-   ],
-   "rows": [
-    [
-     "PlayOnWithRewardedEnabled",
-     "false",
-     "Bật Play On bằng quảng cáo thưởng"
-    ],
-    [
-     "FirstLevelToShowPlayOnWithRewarded",
-     "100",
-     "Level tối thiểu để thấy nút xem quảng cáo"
-    ],
-    [
-     "PlayOnWithRewardedDailyLimit",
-     "20",
-     "Số lượt Play On bằng quảng cáo mỗi ngày"
-    ],
-    [
-     "PlayOnWithRewardedVariantType",
-     "0 = AddExtraBottle",
-     "Biến thể phần thưởng mặc định"
-    ],
-    [
-     "StagedPlayOnLimit",
-     "5",
-     "Ngưỡng chuyển từ 1 sang 2 quảng cáo cho biến thể WithLimit"
-    ]
-   ]
-  },
-  {
-   "title": "BIẾN THỂ PLAY ON BẰNG QUẢNG CÁO (PlayOnWithRewardedVariantType)",
-   "columns": [
-    "Mã",
-    "Biến thể",
-    "Ghi chú"
-   ],
-   "rows": [
-    [
-     "0",
-     "AddExtraBottle",
-     "Mặc định trong client"
-    ],
-    [
-     "1",
-     "AddTinyBottle",
-     ""
-    ],
-    [
-     "2",
-     "AddExtraBottleWithDoubleRewarded",
-     "Yêu cầu xem hai quảng cáo"
-    ],
-    [
-     "3",
-     "AddUndoAndExtraBottle",
-     "Nhánh duy nhất đọc được đầy đủ trong pseudo-C"
-    ],
-    [
-     "4",
-     "AddTinyBottleWithDoubleRewarded",
-     ""
-    ],
-    [
-     "5",
-     "AddTinyBottlesWithInterAndRewarded",
-     "Kết hợp interstitial và rewarded"
-    ],
-    [
-     "6",
-     "AddTinyBottlesWithLimit",
-     "Dùng ngưỡng StagedPlayOnLimit = 5"
-    ],
-    [
-     "7",
-     "AddTinyBottlesWithLimitInterAndRewarded",
-     ""
-    ],
-    [
-     "8",
-     "DoSingleUndo",
-     ""
-    ],
-    [
-     "9",
-     "DoMegaShuffle",
-     ""
-    ],
-    [
-     "99",
-     "Disabled",
-     "Tắt hẳn nhánh quảng cáo"
-    ]
-   ]
-  },
-  {
-   "title": "MÁY TRẠNG THÁI CỦA MỘT LƯỢT CHƠI",
-   "columns": [
-    "Nhóm",
-    "Giá trị",
-    "Ghi chú"
-   ],
-   "rows": [
-    [
-     "LevelState",
-     "None=0, Playing=1, Lose=2, Win=3, Stuck=4, PlayOn=5, Quit=6, Pause=7, PlayOnWithRewarded=8",
-     "Trạng thái dữ liệu của level"
-    ],
-    [
-     "GamePlayStateType",
-     "None=0, FromHomeToGamePlayState=1, PlayingState=2, StuckState=3, PlayOnState=4, LoseState=5, WaitingForStartAfterLoseState=6, WinState=7, GamePlaySceneToHomeSceneState=9, QuitPressedState=10, ResumePlayingAfterQuit=11, QuitState=12, WaitingForStartAfterQuitState=13",
-     "Không có giá trị 8"
-    ],
-    [
-     "StuckType",
-     "None=0, NoMove=1, TimeIsUp=2",
-     "Lý do bàn cờ kẹt"
-    ],
-    [
-     "GameStateType",
-     "Application=0, Home=1, GamePlay=2, Daily=3",
-     "Ngữ cảnh scene hiện tại"
-    ],
-    [
-     "LevelEndType",
-     "None=0, Win=1, Lose=2, Quit=3",
-     "Kiểu kết thúc gửi lên analytics"
-    ],
-    [
-     "PlayOnBehaviourType",
-     "ExtraBottle=0, ExtraTinyBottle=1, Undo=3, MegaShuffle=4",
-     "Không có giá trị 2"
-    ],
-    [
-     "PlayOnType",
-     "ExtraBottle=0, Undo=1",
-     "Loại Play On khai báo trong config"
-    ],
-    [
-     "TryAgainPopupOpenPlace",
-     "Quit=0, Stuck=1",
-     "Ngữ cảnh mở popup thử lại"
-    ],
-    [
-     "StorePopUpSource",
-     "None=0, Booster=1, Navigation=2, PlayOn=3, Refill=4, Teams=5",
-     "Nguồn mở cửa hàng khi thiếu coin"
-    ]
-   ]
-  }
- ],
- "key_numbers": [
-  {
-   "label": "Giá Play On lần 1 / 2 / 3",
-   "value": "900 / 1900 / 2300 coin",
-   "source": "GameEconomyModel.json: PlayOnConfigModels"
-  },
-  {
-   "label": "Play On đầu tiên miễn phí",
-   "value": "false",
-   "source": "GameEconomyModel.json: IsFirstPlayOnFree"
-  },
-  {
-   "label": "Thưởng coin thắng level thường / khó / siêu khó",
-   "value": "20 / 60 / 100 coin",
-   "source": "GameEconomyModel.json: RegularLevelWinCoinReward, HardLevelWinCoinReward, SuperHardLevelWinCoinReward"
-  },
-  {
-   "label": "Giá đổ đầy mạng",
-   "value": "900 coin",
-   "source": "GameEconomyModel.json: refillPrice"
-  },
-  {
-   "label": "Thời gian hồi một mạng",
-   "value": "30 phút",
-   "source": "GameEconomyModel.json: refillDurationAsMinutes"
-  },
-  {
-   "label": "Số mạng tối đa",
-   "value": "5",
-   "source": "GameEconomyModel.json: maxLifeAmount"
-  },
-  {
-   "label": "Giá Mega Shuffle",
-   "value": "900 coin",
-   "source": "GameEconomyModel.json: MegaShufflePrice"
-  },
-  {
-   "label": "Bật Play On bằng quảng cáo",
-   "value": "false (mặc định)",
-   "source": "AdConfigModel.PlayOnWithRewardedEnabled"
-  },
-  {
-   "label": "Level tối thiểu để thấy Play On bằng quảng cáo",
-   "value": "100",
-   "source": "AdConfigModel.FirstLevelToShowPlayOnWithRewarded"
-  },
-  {
-   "label": "Giới hạn quảng cáo Play On mỗi ngày",
-   "value": "20 lượt",
-   "source": "AdConfigModel.PlayOnWithRewardedDailyLimit"
-  },
-  {
-   "label": "Biến thể Play On quảng cáo mặc định",
-   "value": "0 = AddExtraBottle",
-   "source": "AdConfigModel.PlayOnWithRewardedVariantType"
-  },
-  {
-   "label": "Ngưỡng chuyển sang hai quảng cáo",
-   "value": "5",
-   "source": "PlayOnRewardedConfigModel.StagedPlayOnLimit"
-  },
-  {
-   "label": "Số biến thể Play On bằng quảng cáo",
-   "value": "11 (0–9 và 99)",
-   "source": "PlayOnWithRewardedVariantType"
-  },
-  {
-   "label": "Bật quảng cáo interstitial",
-   "value": "true",
-   "source": "AdConfigModel.IsInterEnabled"
-  },
-  {
-   "label": "Level tối thiểu để thấy interstitial",
-   "value": "61",
-   "source": "AdConfigModel.FirstLevelToShowInter"
-  },
-  {
-   "label": "Tần suất interstitial",
-   "value": "240 giây",
-   "source": "AdConfigModel.InterShowFrequencyInSeconds"
-  },
-  {
-   "label": "Số trạng thái dữ liệu level",
-   "value": "9 (None=0 … PlayOnWithRewarded=8)",
-   "source": "LevelState"
-  },
-  {
-   "label": "Số state trong máy trạng thái luồng",
-   "value": "13 giá trị, thiếu số 8",
-   "source": "GamePlayStateType"
-  },
-  {
-   "label": "Thuật toán Mega Shuffle",
-   "value": "_megaShuffleUseNewAlgorithm = True, _megaShuffleEmptyOneBottle = True",
-   "source": "MegaShuffleManager"
-  },
-  {
-   "label": "Thứ tự ưu tiên offer màn thua",
-   "value": "SpecialOffer=0, TreasureDrill=1, MagicPass=2, PawTouch=3",
-   "source": "EgoOfferConfigModel.OfferPriorities"
-  },
-  {
-   "label": "Cấu hình level backend đang dùng",
-   "value": "\"04-02-25-default-w-dlb\", ConfigType 0",
-   "source": "BELevelConfig.json"
-  },
-  {
-   "label": "Khóa đồng bộ của quảng cáo Play On",
-   "value": "PlayOnWithRewardedDataModel {Count, LastWatchTime}",
-   "source": "PlayOnWithRewardedDataService.GetSyncName"
-  },
-  {
-   "label": "Số mốc tiến trình sau lần mở app đầu tiên",
-   "value": "3 (level_reach_45_24h, level_reach_45_72h, level_reach_100_72h)",
-   "source": "LevelFlow analytics"
-  }
- ],
- "config_highlights": [
-  {
-   "key": "GameEconomyModel.json: PlayOnConfigModels",
-   "value": "3 bậc PlayOnType 0: 900 / 1900 / 2300 coin",
-   "meaning": "Bảng bậc giá Play On, chỉ số là số lần đã dùng trong level"
-  },
-  {
-   "key": "GameEconomyModel.json: IsFirstPlayOnFree",
-   "value": "false",
-   "meaning": "Cho phép lượt Play On đầu tiên miễn phí"
-  },
-  {
-   "key": "GameEconomyModel.json: RegularLevelWinCoinReward",
-   "value": "20",
-   "meaning": "Coin thưởng thắng level thường"
-  },
-  {
-   "key": "GameEconomyModel.json: HardLevelWinCoinReward",
-   "value": "60",
-   "meaning": "Coin thưởng thắng level khó"
-  },
-  {
-   "key": "GameEconomyModel.json: SuperHardLevelWinCoinReward",
-   "value": "100",
-   "meaning": "Coin thưởng thắng level siêu khó"
-  },
-  {
-   "key": "GameEconomyModel.json: refillPrice",
-   "value": "900",
-   "meaning": "Giá đổ đầy mạng"
-  },
-  {
-   "key": "GameEconomyModel.json: MegaShufflePrice",
-   "value": "900",
-   "meaning": "Giá booster Mega Shuffle"
-  },
-  {
-   "key": "AdConfigModel.PlayOnWithRewardedEnabled",
-   "value": "false",
-   "meaning": "Bật Play On bằng quảng cáo thưởng"
-  },
-  {
-   "key": "AdConfigModel.FirstLevelToShowPlayOnWithRewarded",
-   "value": "100",
-   "meaning": "Level tối thiểu để thấy nút quảng cáo Play On"
-  },
-  {
-   "key": "AdConfigModel.PlayOnWithRewardedDailyLimit",
-   "value": "20",
-   "meaning": "Số lượt Play On bằng quảng cáo mỗi ngày"
-  },
-  {
-   "key": "AdConfigModel.PlayOnWithRewardedVariantType",
-   "value": "0 (AddExtraBottle)",
-   "meaning": "Chọn biến thể phần thưởng Play On"
-  },
-  {
-   "key": "PlayOnRewardedConfigModel.StagedPlayOnLimit",
-   "value": "5",
-   "meaning": "Ngưỡng chuyển từ 1 sang 2 quảng cáo cho biến thể WithLimit"
-  },
-  {
-   "key": "AdConfigModel.CoinAmountNew2xRewardedForRegular / ForHard / ForSuperHard",
-   "value": "server",
-   "meaning": "Coin khi nhân đôi bằng quảng cáo ở màn thắng"
-  },
-  {
-   "key": "AdConfigModel.IsInterEnabled / FirstLevelToShowInter / InterShowFrequencyInSeconds",
-   "value": "true / 61 / 240",
-   "meaning": "Điều kiện chèn quảng cáo interstitial giữa các level"
-  },
-  {
-   "key": "RootLevelConfigModel.IsNewTryAgainFlowEnabled",
-   "value": "server",
-   "meaning": "Bật luồng Try Again mới"
-  },
-  {
-   "key": "RootLevelConfigModel.LevelEndPopupsAbGroup",
-   "value": "server",
-   "meaning": "Nhóm A/B quyết định giới hạn popup cuối level"
-  },
-  {
-   "key": "RootLevelConfigModel.HomeReturnPopupShowLimit",
-   "value": "server",
-   "meaning": "Số popup tối đa khi về Home"
-  },
-  {
-   "key": "RootLevelConfigModel.MegaShuffleRetryCount",
-   "value": "server",
-   "meaning": "Số lần thử lại thuật toán Mega Shuffle"
-  },
-  {
-   "key": "RootLevelConfigModel.MegaShuffleEmptyBottleProbability",
-   "value": "server",
-   "meaning": "Xác suất tạo chai trống sau Mega Shuffle"
-  },
-  {
-   "key": "RootLevelConfigModel.IsOgPlayStyle / IsVibrationOn / IsMusicEnabled",
-   "value": "server",
-   "meaning": "Kiểu chơi và mặc định âm thanh, rung trong level"
-  },
-  {
-   "key": "RootLevelConfigModel.InGameBoosterVariant / ColorVariant",
-   "value": "server",
-   "meaning": "Biến thể A/B bố cục booster trong level và bảng màu"
-  },
-  {
-   "key": "BlockerIntroConfigModel",
-   "value": "Curtain, Plaster, Clay, LockAndKey (server)",
-   "meaning": "Level bắt đầu giới thiệu từng loại vật cản"
-  },
-  {
-   "key": "EgoOfferConfigModel.OfferPriorities",
-   "value": "SpecialOffer=0, TreasureDrill=1, MagicPass=2, PawTouch=3",
-   "meaning": "Thứ tự ưu tiên offer hiện ở màn thua"
-  },
-  {
-   "key": "MegaShuffleManager._megaShuffleUseNewAlgorithm",
-   "value": "True",
-   "meaning": "Dùng thuật toán trộn mới"
-  },
-  {
-   "key": "MegaShuffleManager._megaShuffleEmptyOneBottle",
-   "value": "True",
-   "meaning": "Cố gắng để trống hẳn một chai sau khi trộn"
-  },
-  {
-   "key": "LevelState",
-   "value": "None=0, Playing=1, Lose=2, Win=3, Stuck=4, PlayOn=5, Quit=6, Pause=7, PlayOnWithRewarded=8",
-   "meaning": "Trạng thái dữ liệu của level"
-  },
-  {
-   "key": "GamePlayStateType",
-   "value": "13 giá trị từ None=0 tới WaitingForStartAfterQuitState=13, thiếu 8",
-   "meaning": "Máy trạng thái luồng gameplay"
-  },
-  {
-   "key": "StuckType",
-   "value": "None=0, NoMove=1, TimeIsUp=2",
-   "meaning": "Lý do bàn cờ kẹt"
-  },
-  {
-   "key": "PlayOnBehaviourType",
-   "value": "ExtraBottle=0, ExtraTinyBottle=1, Undo=3, MegaShuffle=4",
-   "meaning": "Hiệu ứng được cấp khi Play On, không có giá trị 2"
-  },
-  {
-   "key": "BELevelConfig.json",
-   "value": "ConfigName \"04-02-25-default-w-dlb\", ConfigType 0",
-   "meaning": "Bộ cấu hình level backend đang dùng"
-  },
-  {
-   "key": "PlayOnWithRewardedDataModel",
-   "value": "{Count, LastWatchTime}",
-   "meaning": "Số lượt quảng cáo Play On đã xem trong ngày, đồng bộ server"
-  }
- ],
- "tips": [
-  "Không có cơ chế hết lượt khiến toàn bộ áp lực kiếm tiền dồn vào khoảnh khắc bàn cờ kẹt, nơi người chơi đã đầu tư nhiều công sức.",
-  "Giá Play On leo từ 900 lên 2300 coin trong cùng một level buộc người chơi cân nhắc dừng hay tiếp.",
-  "Mười một biến thể Play On bằng quảng cáo cho thấy đây là điểm được A/B test kỹ nhất của luồng chơi.",
-  "Popup giới thiệu vật cản mới đặt ngay trước level chứa vật cản đó, giảm cảm giác bị đánh úp.",
-  "Giới hạn số popup sau level theo nhóm A/B là công cụ cân bằng giữa doanh thu và trải nghiệm."
- ],
- "categories": [
-  "Cơ chế lõi",
-  "Kinh tế",
-  "Tiến trình",
-  "Meta"
- ]
 }

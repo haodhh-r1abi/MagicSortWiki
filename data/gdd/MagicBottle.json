@@ -10,7 +10,7 @@
     "Modules.Contexts.GamePlay.MagicBottle.Scripts.MagicBottleInGameManager",
     "Modules.Contexts.GamePlay.Board.Items.Scripts.ChargeableBottle.ChargeableBottleItem"
   ],
-  "summary": "Magic Bottle là trợ thủ 'một chai thêm': người chơi thắng đủ số level ở Home để kích hoạt, sau đó mỗi ván sẽ được tặng thêm một chai trống trên bàn — thứ quý nhất trong game sắp xếp nước, vì một chai trống mở ra rất nhiều nước đi. Chai này bay vào bàn bằng một hoạt ảnh riêng (một cái gối/pillow hạ xuống rồi chai đáp lên). Trạng thái kích hoạt sống đến khi người chơi thua một ván, có popup Are You Sure cảnh báo trước khi bỏ ván, và một popup Congrats hoành tráng khi vừa kích hoạt xong. Tính năng do khoá remote config MagicBottleConfigModel điều khiển và không có file mặc định trong build, nghĩa là hoàn toàn phụ thuộc server. Trên bàn cờ còn có một biến thể họ hàng là ChargeableBottle — chai mini nạp lại được, dùng chung với biến thể ChargeableBottle của Super Charger. [Phạm vi bằng chứng15/11: AddBottleAsMagicBottle truyền bottleHeight=1 trong native0.0.3063. Pool/reset/water-state effective và build0.0.3129 chưa xác nhận; mô tả chai trống là thiết kế cần kiểm runtime, không phải kết quả đã pass.]",
+  "summary": "Magic Bottle là trợ thủ thêm sức chứa khi đủ tiến độ và gate cấu hình. Ở Home, người chơi thắng tích Progress sau khi đủ eligibility và đã xem event; đạt NeededProgress thì có quyền thêm chai theo luồng của tính năng. Caller native 0.0.3063 AddBottleAsMagicBottle truyền height = 1, không có bước thêm nước ở AddMagicBottleAndHide; trạng thái nước effective còn cần trace pool/reset hoặc runtime, nên chưa gọi chắc đây là chai trống cao 4 trên app 0.0.3129. Reset khi thua hoặc mất điều kiện có caller riêng; cảnh báo Are You Sure giúp người chơi cân nhắc trước khi rời lượt. Tập nguồn đã kiểm chưa có file default MagicBottle, nhưng cache tháng 9–10 có isEnable=false, firstLevelToShow=11, neededProgress=10; không coi các giá trị đó là production hiện tại. ChargeableBottle là strategy SuperCharger Type 1 có charge riêng, không gộp với quyền MagicBottle.",
   "unlock": "MagicBottleService.IsEligible(): MagicBottleConfigModel.IsEnable = true và tiến độ người chơi ≥ FirstLevelToShow. MagicBottleService.HasMagicBottle(): thêm điều kiện Progress ≥ NeededProgress. IsActive() = IsEligible() && EventShownInLifeTime (đã xem popup giới thiệu).",
   "entry_points": [
     "MagicBottleLobbyButton ở Home (vòng tròn tiến độ, bấm mở MagicBottlePopUp — impression source LobbyIcon)",
@@ -34,7 +34,7 @@
         "MagicBottleService.get_ConfigModel() trả model"
       ],
       "result": "Tính năng bật cho nhóm người chơi phù hợp",
-      "rules": "Không có file MagicBottleConfigModel.json trong Resources/defaultconfigs (khoá vẫn nằm trong danh sách AddRootLevelConfigService) — toàn bộ giá trị IsEnable / FirstLevelToShow / NeededProgress do server cấp",
+      "rules": "Tập nguồn đã kiểm không có file MagicBottleConfigModel.json trong Resources/defaultconfigs; khoá vẫn nằm trong AddRootLevelConfigService. IsEnable / FirstLevelToShow / NeededProgress có giá trị trong cache lịch sử; cần xác minh nguồn effective và override trên session cụ thể, không suy toàn bộ giá trị hiện hành từ sự vắng mặt file default.",
       "evidence": "MagicBottleService.get_ConfigModel; MagicBottleConfigModel.IsValid; FirebaseRemoteConfigResolver.AddRootLevelConfigService"
     },
     {
@@ -48,7 +48,7 @@
         "IsActive(): IsEligible && EventShownInLifeTime",
         "HasMagicBottle(): IsEligible && Progress ≥ GetNeededProgress()"
       ],
-      "result": "Ba mức trạng thái: chưa đủ level → đủ level nhưng chưa xem giới thiệu → đang tích tiến độ → đã có Magic Bottle",
+      "result": "Các trạng thái: chưa đủ level → đủ level nhưng chưa xem giới thiệu → đang tích tiến độ → đã có Magic Bottle",
       "rules": "GetFirstLevelToShow / GetNeededProgress đọc thẳng từ config, có nhánh phòng khi config null",
       "evidence": "MagicBottleService.IsEligible; MagicBottleService.IsActive; MagicBottleService.HasMagicBottle; MagicBottleService.GetFirstLevelToShow"
     },
@@ -97,7 +97,7 @@
         "Hàm trả bool báo có vừa chạm mốc hay không"
       ],
       "result": "Vòng tiến độ trên MagicBottleLobbyButton nhích lên",
-      "rules": "Số mốc là MagicBottleConfigModel.NeededProgress (do server cấp)",
+      "rules": "Số mốc đọc từ MagicBottleConfigModel.NeededProgress; giá trị effective và nguồn override cần đối chiếu theo session.",
       "evidence": "MagicBottleService.TryIncreaseProgress; MagicBottleDataService.IncreaseProgress; MagicBottleService.GetNeededProgress"
     },
     {
@@ -932,5 +932,345 @@
     "round2_case_ids": [],
     "round2_branch_ucs": [],
     "full_uc_pass": false
+  },
+  "design_spec_20261116": {
+    "source": "editorial/MagicBottle.json",
+    "sha256": "d001041383e9e0fb7aeeea023757e9b0795b6d3093ccbe9b2f759950c0923e95",
+    "scope": "Designer-facing interpretation; no new runtime verification. Original use_cases and evidence remain unchanged.",
+    "content": {
+      "id": "MagicBottle",
+      "schema_version": 1,
+      "scope": "Diễn giải thiết kế từ GDD, metadata và nguồn đã đối chiếu. Outcome là expected; chỉ câu ghi round2 là actual của fixture 0.0.3129. Mã native 0.0.3063, default APK 0.0.3129 và cache lịch sử có phạm vi riêng. Không có playtest mới trong lượt biên tập.",
+      "design_intent": "Biến chuỗi tiến bộ ngoài bàn thành một lợi thế sức chứa trong bàn, để người chơi có thứ muốn giữ khi quyết định tiếp tục hoặc bỏ lượt. Lợi thế phải mô tả theo kích thước chai thực của nguồn, không lấy hình chai trên popup thay dung tích.",
+      "player_loop": "Đủ gate → xem giới thiệu → thắng tích tiến độ → đạt mốc → vào bàn có trợ thủ → giữ qua thắng hoặc mất khi nhánh reset hợp lệ chạy.",
+      "flow": [
+        {
+          "title": "Đủ điều kiện hiển thị",
+          "actor": "Client",
+          "action": "Kiểm config và level trước khi hiện lời mời.",
+          "rule": "IsEnable và FirstLevelToShow là gate; cache tháng 9–10 ghi level 11 và NeededProgress = 10. Không thấy file default MagicBottle trong tập nguồn đã kiểm, không suy mọi build đều thiếu.",
+          "outcome": "Tính năng có thể được mở theo nguồn được chọn; một cache không xác nhận production hiện tại.",
+          "uc_ids": [
+            "UC-01",
+            "UC-02",
+            "UC-17"
+          ],
+          "source_refs": [
+            "gdd/MagicBottle.json#use_cases/0",
+            "gdd/MagicBottle.json#use_cases/1",
+            "facts/local_code_gap_results_20261115.json#MS-CODE-43",
+            "facts/core_body_gap_decisions_20261115.json#MS-CORE-BODY-09",
+            "gdd/MagicBottle.json#use_cases/16"
+          ]
+        },
+        {
+          "title": "Xem giới thiệu lần đầu",
+          "actor": "Người chơi",
+          "action": "Mở popup giới thiệu từ điểm vào hợp lệ.",
+          "rule": "EventShownInLifeTime tham gia gate tích tiến độ; cờ IsIntroduced phục vụ info-seen riêng.",
+          "outcome": "Đánh dấu đúng loại đã xem thay vì gộp hai cờ.",
+          "uc_ids": [
+            "UC-03"
+          ],
+          "source_refs": [
+            "gdd/MagicBottle.json#use_cases/2",
+            "facts/local_code_gap_results_20261115.json#MS-CODE-43",
+            "facts/core_body_gap_decisions_20261115.json#MS-CORE-BODY-09"
+          ]
+        },
+        {
+          "title": "Tra lại hướng dẫn",
+          "actor": "Người chơi",
+          "action": "Mở Info để xem mục tiêu và cảnh báo mất trợ thủ.",
+          "rule": "Xem info không đồng nghĩa vừa kích hoạt hoặc tự cộng Progress.",
+          "outcome": "Có thể hiểu luật mà không nhận thêm sức chứa ngay.",
+          "uc_ids": [
+            "UC-04"
+          ],
+          "source_refs": [
+            "gdd/MagicBottle.json#use_cases/3",
+            "facts/local_code_gap_results_20261115.json#MS-CODE-43",
+            "facts/core_body_gap_decisions_20261115.json#MS-CORE-BODY-09"
+          ]
+        },
+        {
+          "title": "Tích chiến thắng",
+          "actor": "Người chơi",
+          "action": "Thắng level sau khi đủ điều kiện và đã xem giới thiệu.",
+          "rule": "TryIncreaseProgress tăng 1 theo body đã mô tả; NeededProgress là mục tiêu cấu hình, không chốt 10 cho mọi user.",
+          "outcome": "Thanh tiến độ tiến tới mốc kích hoạt.",
+          "uc_ids": [
+            "UC-05"
+          ],
+          "source_refs": [
+            "gdd/MagicBottle.json#use_cases/4",
+            "facts/local_code_gap_results_20261115.json#MS-CODE-43",
+            "facts/core_body_gap_decisions_20261115.json#MS-CORE-BODY-09"
+          ]
+        },
+        {
+          "title": "Vừa đạt mốc ở Home",
+          "actor": "Người chơi và client",
+          "action": "Xem phần thu thập tiến độ và popup Congrats.",
+          "rule": "HasGainedMagicBottle so trạng thái trước/sau; LastSeenLobbyButtonProgress chỉ phục vụ phần tiến độ đã trình diễn.",
+          "outcome": "Không phát lại Congrats chỉ vì mở lại info.",
+          "uc_ids": [
+            "UC-06",
+            "UC-07"
+          ],
+          "source_refs": [
+            "gdd/MagicBottle.json#use_cases/5",
+            "gdd/MagicBottle.json#use_cases/6",
+            "facts/local_code_gap_results_20261115.json#MS-CODE-43",
+            "facts/core_body_gap_decisions_20261115.json#MS-CORE-BODY-09"
+          ]
+        },
+        {
+          "title": "Đưa chai phụ vào bàn",
+          "actor": "Client",
+          "action": "Thêm chai rồi chạy hoạt ảnh xuất hiện.",
+          "rule": "Code 0.0.3063 AddBottleAsMagicBottle gọi AddBottle(x,0,1), tham số height = 1. Caller không thêm nước; empty/full effective còn cần pool/reset trace và runtime.",
+          "outcome": "Thêm đúng loại chai của nguồn; không hứa một chai thường cao 4 hoặc đã chứng minh trống trên 3129.",
+          "uc_ids": [
+            "UC-08"
+          ],
+          "source_refs": [
+            "gdd/MagicBottle.json#use_cases/7",
+            "facts/local_code_gap_results_20261115.json#MS-CODE-43",
+            "facts/core_body_gap_decisions_20261115.json#MS-CORE-BODY-09"
+          ]
+        },
+        {
+          "title": "Cân nhắc trước khi bỏ lượt",
+          "actor": "Người chơi",
+          "action": "Đọc cảnh báo mất Magic Bottle khi xác nhận rời ván.",
+          "rule": "Cảnh báo thuộc luồng AreYouSure; việc hủy phải khác xác nhận Quit.",
+          "outcome": "Người chơi có quyết định giữ lợi thế bằng cách trở lại bàn.",
+          "uc_ids": [
+            "UC-10"
+          ],
+          "source_refs": [
+            "gdd/MagicBottle.json#use_cases/9",
+            "facts/local_code_gap_results_20261115.json#MS-CODE-43",
+            "facts/core_body_gap_decisions_20261115.json#MS-CORE-BODY-09"
+          ]
+        },
+        {
+          "title": "Kết thúc theo nhánh mất trợ thủ",
+          "actor": "Client",
+          "action": "Khi caller thua/thoát hợp lệ chạy reset, cập nhật model.",
+          "rule": "Theo hồ sơ, reset đặt Progress và LastSeenLobbyButtonProgress về 0; không xóa cờ info/lifetime một cách tùy tiện.",
+          "outcome": "Lần sau phải tích lại theo gate hiện hành.",
+          "uc_ids": [
+            "UC-09"
+          ],
+          "source_refs": [
+            "gdd/MagicBottle.json#use_cases/8",
+            "facts/local_code_gap_results_20261115.json#MS-CODE-43",
+            "facts/core_body_gap_decisions_20261115.json#MS-CORE-BODY-09"
+          ]
+        },
+        {
+          "title": "Khởi động lại và đồng bộ",
+          "actor": "Client",
+          "action": "Đọc model khi mở app hoặc tải dữ liệu tài khoản.",
+          "rule": "TryResetProgress được gọi khi mở app; việc mất eligibility có thể xóa tiến độ, không có nghĩa mọi restart đều reset.",
+          "outcome": "Không bảo đảm cross-device persistence chỉ vì model có serialize/sync.",
+          "uc_ids": [
+            "UC-11",
+            "UC-15"
+          ],
+          "source_refs": [
+            "gdd/MagicBottle.json#use_cases/10",
+            "gdd/MagicBottle.json#use_cases/14",
+            "facts/local_code_gap_results_20261115.json#MS-CODE-43",
+            "facts/core_body_gap_decisions_20261115.json#MS-CORE-BODY-09"
+          ]
+        },
+        {
+          "title": "Phân biệt chai nạp lại",
+          "actor": "Designer và người chơi",
+          "action": "Tra ChargeableBottle khi gặp chai mini có năng lượng.",
+          "rule": "ChargeableBottle là chiến lược SuperCharger Type = 1, không phải cùng quyền MagicBottle. HasInitialCharge và charge state là dữ liệu riêng.",
+          "outcome": "Không nhập tiến độ MagicBottle với năng lượng của mini bottle.",
+          "uc_ids": [
+            "UC-12",
+            "UC-13",
+            "UC-14"
+          ],
+          "source_refs": [
+            "gdd/MagicBottle.json#use_cases/11",
+            "gdd/MagicBottle.json#use_cases/12",
+            "gdd/MagicBottle.json#use_cases/13",
+            "facts/local_code_gap_results_20261115.json#MS-CODE-43",
+            "facts/core_body_gap_decisions_20261115.json#MS-CORE-BODY-09"
+          ]
+        }
+      ],
+      "rules": [
+        {
+          "title": "Ba điều kiện khác nhau",
+          "text": "IsEligible kiểm enable/level; IsActive còn dựa cờ event đã xem theo nguồn; HasMagicBottle kiểm đủ NeededProgress. Tên Active không tự có nghĩa đã nhận chai.",
+          "source_refs": [
+            "gdd/MagicBottle.json#flow",
+            "gdd/MagicBottle.json#configs",
+            "facts/local_code_gap_results_20261115.json#MS-CODE-43",
+            "facts/core_body_gap_decisions_20261115.json#MS-CORE-BODY-09"
+          ]
+        },
+        {
+          "title": "Thông tin cache có giá trị cụ thể",
+          "text": "FirstLevelToShow = 11 và NeededProgress = 10 đã có trong các cache tháng 9–10; không ghi placeholder server nếu đang mô tả đúng những snapshot này.",
+          "source_refs": [
+            "gdd/MagicBottle.json#flow",
+            "gdd/MagicBottle.json#configs",
+            "facts/local_code_gap_results_20261115.json#MS-CODE-43",
+            "facts/core_body_gap_decisions_20261115.json#MS-CORE-BODY-09",
+            "facts/runtime/server_configs/MagicBottleConfigModel.json"
+          ]
+        },
+        {
+          "title": "Chai thêm cần giới hạn dung tích",
+          "text": "Caller lịch sử cho height = 1, còn trạng thái nước phụ thuộc Prepare/pool. Chưa có case runtime MagicBottle của 0.0.3129 để đóng phần này.",
+          "source_refs": [
+            "gdd/MagicBottle.json#flow",
+            "gdd/MagicBottle.json#configs",
+            "facts/local_code_gap_results_20261115.json#MS-CODE-43",
+            "facts/core_body_gap_decisions_20261115.json#MS-CORE-BODY-09"
+          ]
+        },
+        {
+          "title": "Biểu tượng không phải entitlement",
+          "text": "Nút Home còn phụ thuộc slot và cờ trạng thái. Vắng icon không đủ kết luận progress bị xóa hoặc server tắt feature.",
+          "source_refs": [
+            "gdd/MagicBottle.json#flow",
+            "gdd/MagicBottle.json#configs",
+            "facts/local_code_gap_results_20261115.json#MS-CODE-43",
+            "facts/core_body_gap_decisions_20261115.json#MS-CORE-BODY-09"
+          ]
+        },
+        {
+          "title": "Tool nội bộ không phải quyền người chơi",
+          "text": "Đường cheat/QA tặng Magic Bottle được giữ trong UC catalog để nghiên cứu; không gọi nó là nguồn nhận hoặc fallback tự động của tài khoản thường.",
+          "source_refs": [
+            "gdd/MagicBottle.json#use_cases/15"
+          ]
+        }
+      ],
+      "decisions": [
+        {
+          "question": "Vì sao cần tách hai cờ giới thiệu?",
+          "answer": "Mở lại info là hành vi tra cứu; xem event lần đầu là gate tiến độ. Hoán đổi hai cờ có thể khiến người chơi không tích hoặc bị mở popup lại.",
+          "basis": "MS-CODE-43, code 0.0.3063.",
+          "source_refs": [
+            "gdd/MagicBottle.json#flow",
+            "gdd/MagicBottle.json#configs",
+            "facts/local_code_gap_results_20261115.json#MS-CODE-43",
+            "facts/core_body_gap_decisions_20261115.json#MS-CORE-BODY-09"
+          ]
+        },
+        {
+          "question": "Có thể gọi reward là một chai trống cao 4 không?",
+          "answer": "Không. Caller nguồn truyền height = 1 và chưa đủ trace empty-state effective. Mô tả chắc chắn một chai thường sẽ làm sai lợi thế gameplay.",
+          "basis": "MS-CORE-BODY-09.",
+          "source_refs": [
+            "gdd/MagicBottle.json#flow",
+            "gdd/MagicBottle.json#configs",
+            "facts/local_code_gap_results_20261115.json#MS-CODE-43",
+            "facts/core_body_gap_decisions_20261115.json#MS-CORE-BODY-09"
+          ]
+        },
+        {
+          "question": "Khởi động lại có xóa mọi tiến độ không?",
+          "answer": "Không nên mô tả như vậy: reset có kiểm điều kiện và caller. Cần đối chiếu config có còn đủ điều kiện trước khi giải thích mất trạng thái.",
+          "basis": "TryResetProgress/onAppLaunch trong hồ sơ.",
+          "source_refs": [
+            "gdd/MagicBottle.json#flow",
+            "gdd/MagicBottle.json#configs",
+            "facts/local_code_gap_results_20261115.json#MS-CODE-43",
+            "facts/core_body_gap_decisions_20261115.json#MS-CORE-BODY-09"
+          ]
+        }
+      ],
+      "segments_ab": {
+        "summary": "Các trục có selector rõ; không suy allocation hoặc uplift từ config.",
+        "axes": [
+          {
+            "axis": "Enable, level và mục tiêu",
+            "selection": "MagicBottleConfigModel cùng EventShownInLifeTime chọn quyền tích/nhận.",
+            "effect": "Đổi lúc xuất hiện và số chiến thắng cần thiết.",
+            "evidence_limit": "Cache có 11/10 không phải bằng chứng assignment hoặc effective config hiện tại.",
+            "source_refs": [
+              "gdd/MagicBottle.json#flow",
+              "gdd/MagicBottle.json#configs",
+              "gdd/MagicBottle.json#segment_ab_review_20261115"
+            ]
+          },
+          {
+            "axis": "MagicBottle và ChargeableBottle",
+            "selection": "Quyền MagicBottle khác SuperCharger Type = 1.",
+            "effect": "Chọn cơ chế chai phụ và chai có charge khác nhau.",
+            "evidence_limit": "Không có runtime 0.0.3129 cho cả hai nhánh này trong lượt core 352.",
+            "source_refs": [
+              "gdd/MagicBottle.json#flow",
+              "gdd/MagicBottle.json#configs",
+              "gdd/MagicBottle.json#segment_ab_review_20261115"
+            ]
+          }
+        ],
+        "unknowns": [
+          "Chưa có runtime active của trợ thủ trên fixture 352 hoặc assignment production để đóng các nhánh này."
+        ]
+      },
+      "recovery": [
+        {
+          "condition": "Hủy cảnh báo rời ván",
+          "expected": "Trở lại bàn theo luồng Quit cancel; không reset như đã xác nhận thua chỉ vì popup mở.",
+          "verified_scope": "Theo code/dossier có build; chưa chạy recovery trợ thủ trên thiết bị trong lượt này.",
+          "uc_ids": [
+            "UC-10"
+          ]
+        },
+        {
+          "condition": "Mở app khi config đã đổi",
+          "expected": "Đọc eligibility và model trước khi giữ/reset; chưa có thử nghiệm flag đổi live.",
+          "verified_scope": "Theo code/dossier có build; chưa chạy recovery trợ thủ trên thiết bị trong lượt này.",
+          "uc_ids": [
+            "UC-11",
+            "UC-15"
+          ]
+        },
+        {
+          "condition": "Chai mini không còn charge",
+          "expected": "Theo lifecycle ChargeableBottle riêng; không tự trừ hoặc cấp lại Progress của MagicBottle.",
+          "verified_scope": "Theo code/dossier có build; chưa chạy recovery trợ thủ trên thiết bị trong lượt này.",
+          "uc_ids": [
+            "UC-12",
+            "UC-13"
+          ]
+        }
+      ],
+      "takeaways": [
+        {
+          "text": "Mở lại info là hành vi tra cứu; xem event lần đầu là gate tiến độ. Hoán đổi hai cờ có thể khiến người chơi không tích hoặc bị mở popup lại.",
+          "basis": "MS-CODE-43, code 0.0.3063."
+        },
+        {
+          "text": "Không. Caller nguồn truyền height = 1 và chưa đủ trace empty-state effective. Mô tả chắc chắn một chai thường sẽ làm sai lợi thế gameplay.",
+          "basis": "MS-CORE-BODY-09."
+        },
+        {
+          "text": "Không nên mô tả như vậy: reset có kiểm điều kiện và caller. Cần đối chiếu config có còn đủ điều kiện trước khi giải thích mất trạng thái.",
+          "basis": "TryResetProgress/onAppLaunch trong hồ sơ."
+        }
+      ],
+      "reviewed_source_paths": [
+        "gdd/MagicBottle.json",
+        "site_meta/MagicBottle.json",
+        "facts/local_code_gap_results_20261115.json",
+        "facts/core_body_gap_decisions_20261115.json",
+        "facts/runtime/server_configs/MagicBottleConfigModel.json"
+      ]
+    }
   }
 }

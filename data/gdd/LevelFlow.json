@@ -13,7 +13,7 @@
     "Modules.Contexts.GamePlay.UI.TryAgainPopUpNs.Scripts.TryAgainFlowService",
     "Modules.Infrastructure.Common.Scripts.CommandNS.CommandHistoryManager"
   ],
-  "summary": "LevelFlow là khung điều khiển toàn bộ một lượt chơi Magic Sort: từ lúc bấm Play ở Home, nạp model level theo seed, chơi, tới các nhánh kết thúc (thắng / thua / kẹt / thoát) và chuỗi lệnh đưa người chơi trở lại Home. Hai lớp song song cùng chạy: RegularLevelManager giữ trạng thái dữ liệu của level (enum LevelState) còn RegularGamePlayStateManager là máy trạng thái UI/luồng (enum GamePlayStateType) với các state Enter/Exit riêng biệt. Điểm thiết kế đặc trưng của thể loại bottle-sort là không có 'hết lượt': người chơi chỉ thua khi hết giờ (daily) hoặc khi bàn cờ bị kẹt (StuckType.NoMove) — nên nhánh Stuck mới là nhánh kiếm tiền chính, nơi game mời mua Play On bằng coin (giá tăng dần theo số lần dùng trong cùng level) hoặc xem quảng cáo thưởng (PlayOnWithRewarded) để nhận thêm chai/undo/mega shuffle. Sau khi rời level, ReturnToHomeSequenceService chạy một hàng lệnh (trao thưởng coin, tiến trình Journey, popup Daily/RateUs/MagicLab/BroomStreak/Tournament...) có giới hạn số popup theo AB test trước khi trả người chơi về Home.",
+  "summary": "LevelFlow là khung điều khiển toàn bộ một lượt chơi Magic Sort: từ lúc bấm Play ở Home, nạp model level theo seed, chơi, tới các nhánh kết thúc (thắng / thua / kẹt / thoát) và chuỗi lệnh đưa người chơi trở lại Home. Hai lớp song song cùng chạy: RegularLevelManager giữ trạng thái dữ liệu của level (enum LevelState) còn RegularGamePlayStateManager là máy trạng thái UI/luồng (enum GamePlayStateType) với các state Enter/Exit riêng biệt. Điểm thiết kế đặc trưng của thể loại bottle-sort là không có 'hết lượt': người chơi chỉ thua khi hết giờ (daily) hoặc khi bàn cờ bị kẹt (StuckType.NoMove) — nên nhánh Stuck mới là nhánh kiếm tiền chính, nơi game mời mua Play On bằng coin (giá tăng dần theo số lần dùng trong cùng level) hoặc xem quảng cáo thưởng (PlayOnWithRewarded) để nhận thêm chai/undo/mega shuffle. Sau khi rời level, ReturnToHomeSequenceService chạy một hàng lệnh (trao thưởng coin, tiến trình Journey, popup Daily/RateUs/MagicLab/BroomStreak/Tournament...) có selector và giới hạn popup theo cấu hình; chưa có bằng chứng assignment A/B trước khi trả người chơi về Home.",
   "unlock": "Có từ level 1, không có điều kiện mở khoá. Các nhánh phụ mới bật dần: quảng cáo Play On chỉ bật khi AdConfigModel.PlayOnWithRewardedEnabled = true và người chơi đã qua AdConfigModel.FirstLevelToShowPlayOnWithRewarded (AdService.GetPlayOnWithRewardedFirstLevelToShow, kiểm trong PlayOnWithRewardedService.CanUsePlayOnWithRewarded); luồng TryAgain mới bật bằng cờ RootLevelConfigModel.IsNewTryAgainFlowEnabled; giới hạn popup sau level theo RootLevelConfigModel.LevelEndPopupsAbGroup / HomeReturnPopupShowLimit (ReturnToHomeSequenceService.get_IsPopupLimitAbEnabled).",
   "entry_points": [
     "Nút Play ở Home (PreLevelPopUp → analytics play_button_clicked / play_button_click_failed)",
@@ -3605,5 +3605,416 @@
       "UC-14"
     ],
     "full_uc_pass": false
+  },
+  "design_spec_20261116": {
+    "source": "editorial/LevelFlow.json",
+    "sha256": "69b4ec8498cbf04cd90a8912ed880fa7acebd74983347c1bd14e3aad90f13240",
+    "scope": "Designer-facing interpretation; no new runtime verification. Original use_cases and evidence remain unchanged.",
+    "content": {
+      "id": "LevelFlow",
+      "schema_version": 1,
+      "scope": "Diễn giải thiết kế từ GDD, metadata và nguồn đã đối chiếu. Outcome là expected; chỉ câu ghi round2 là actual của fixture 0.0.3129. Mã native 0.0.3063, default APK 0.0.3129 và cache lịch sử có phạm vi riêng. Không có playtest mới trong lượt biên tập.",
+      "design_intent": "Điều phối một lượt chơi từ Home tới kết quả mà vẫn giữ quyền chọn tiếp tục, thử lại hoặc rời bàn rõ ràng. Kẹt là một trạng thái có thể được cứu; thua là quyết định kết thúc sau các nhánh tiếp tục chứ không phải mọi tap bị từ chối.",
+      "player_loop": "Play → nạp bàn → chơi → thắng hoặc kẹt → chọn tiếp tục/thua/thoát → xử lý thưởng và event → trở lại Home hoặc thử lại.",
+      "flow": [
+        {
+          "title": "Bắt đầu lượt từ Home",
+          "actor": "Người chơi và client",
+          "action": "Bấm Play khi đủ điều kiện để vào lượt.",
+          "rule": "LevelManager giữ seed, attempt, tutorial và quyền trợ thủ; state dữ liệu và state giao diện là hai lớp.",
+          "outcome": "Bàn và UI vào Playing với danh tính lượt rõ ràng.",
+          "uc_ids": [
+            "UC-01"
+          ],
+          "source_refs": [
+            "gdd/LevelFlow.json#use_cases/0",
+            "facts/core_body_gap_decisions_20261115.json#MS-CORE-BODY-07",
+            "facts/core_body_gap_decisions_20261115.json#MS-CORE-BODY-08",
+            "facts/core_body_gap_decisions_20261115.json#MS-CORE-BODY-05",
+            "facts/review_cases_20261116_round2.json",
+            "facts/runtime/review_20261116_round2/session_end.json"
+          ]
+        },
+        {
+          "title": "Chơi và ghi thống kê",
+          "actor": "Người chơi",
+          "action": "Đổ màu, dùng booster hoặc trợ thủ khi hợp lệ.",
+          "rule": "LevelStats theo dõi nước đi và hiệu ứng; việc gọi analytics chưa chứng minh backend nhận.",
+          "outcome": "Các hành động thay đổi bàn và số liệu lượt tương ứng.",
+          "uc_ids": [
+            "UC-02"
+          ],
+          "source_refs": [
+            "gdd/LevelFlow.json#use_cases/1",
+            "facts/core_body_gap_decisions_20261115.json#MS-CORE-BODY-07",
+            "facts/core_body_gap_decisions_20261115.json#MS-CORE-BODY-08",
+            "facts/core_body_gap_decisions_20261115.json#MS-CORE-BODY-05",
+            "facts/review_cases_20261116_round2.json",
+            "facts/runtime/review_20261116_round2/session_end.json"
+          ]
+        },
+        {
+          "title": "Đi tới popup kẹt",
+          "actor": "Client",
+          "action": "Khi không còn nước đi sau kiểm, mở Stuck.",
+          "rule": "NoMove khác TimeIsUp của Daily; các popup A/B/C không tự chứng minh giá khác nhau.",
+          "outcome": "Người chơi thấy lựa chọn Play On hoặc kết thúc.",
+          "uc_ids": [
+            "UC-03"
+          ],
+          "source_refs": [
+            "gdd/LevelFlow.json#use_cases/2",
+            "facts/core_body_gap_decisions_20261115.json#MS-CORE-BODY-07",
+            "facts/core_body_gap_decisions_20261115.json#MS-CORE-BODY-08",
+            "facts/core_body_gap_decisions_20261115.json#MS-CORE-BODY-05",
+            "facts/review_cases_20261116_round2.json",
+            "facts/runtime/review_20261116_round2/session_end.json"
+          ]
+        },
+        {
+          "title": "Tiếp tục bằng coin",
+          "actor": "Người chơi",
+          "action": "Đọc giá hiện tại rồi chọn Play On.",
+          "rule": "Giá phụ thuộc cấu hình và số lần dùng; IsFirstPlayOnFree chỉ có tác dụng khi nhánh được bật.",
+          "outcome": "Chỉ khi dùng thành công mới áp behavior và quay lại Playing.",
+          "uc_ids": [
+            "UC-04"
+          ],
+          "source_refs": [
+            "gdd/LevelFlow.json#use_cases/3",
+            "facts/core_body_gap_decisions_20261115.json#MS-CORE-BODY-07",
+            "facts/core_body_gap_decisions_20261115.json#MS-CORE-BODY-08",
+            "facts/core_body_gap_decisions_20261115.json#MS-CORE-BODY-05",
+            "facts/review_cases_20261116_round2.json",
+            "facts/runtime/review_20261116_round2/session_end.json"
+          ]
+        },
+        {
+          "title": "Không đủ coin để tiếp tục",
+          "actor": "Người chơi và client",
+          "action": "Chọn Play On khi coin không đủ.",
+          "rule": "Có nhánh mở Store theo source; mở Shop không phải purchase hay grant.",
+          "outcome": "Người chơi có thể quay lại mà không tự được cộng coin hoặc reset kẹt.",
+          "uc_ids": [
+            "UC-05"
+          ],
+          "source_refs": [
+            "gdd/LevelFlow.json#use_cases/4",
+            "facts/core_body_gap_decisions_20261115.json#MS-CORE-BODY-07",
+            "facts/core_body_gap_decisions_20261115.json#MS-CORE-BODY-08",
+            "facts/core_body_gap_decisions_20261115.json#MS-CORE-BODY-05",
+            "facts/review_cases_20261116_round2.json",
+            "facts/runtime/review_20261116_round2/session_end.json"
+          ]
+        },
+        {
+          "title": "Tiếp tục bằng rewarded",
+          "actor": "Người chơi",
+          "action": "Chọn xem ad nếu placement sẵn sàng và đủ gate.",
+          "rule": "10 variant gameplay 0..9 cùng Disabled=99 được khai báo. Mapping behavior đã giải ở 0.0.3063; mỗi variant còn điều kiện số lần xem, limit và caller.",
+          "outcome": "Completed ad mới đi theo nhánh tiếp tục phù hợp; không suy Disabled helper fallback thành offer đang bật.",
+          "uc_ids": [
+            "UC-06"
+          ],
+          "source_refs": [
+            "gdd/LevelFlow.json#use_cases/5",
+            "facts/core_body_gap_decisions_20261115.json#MS-CORE-BODY-07",
+            "facts/core_body_gap_decisions_20261115.json#MS-CORE-BODY-08",
+            "facts/core_body_gap_decisions_20261115.json#MS-CORE-BODY-05",
+            "facts/review_cases_20261116_round2.json",
+            "facts/runtime/review_20261116_round2/session_end.json"
+          ]
+        },
+        {
+          "title": "Áp hành vi cứu bàn rồi kiểm lại",
+          "actor": "Client và người chơi",
+          "action": "Sau Play On hợp lệ, áp Extra Bottle, chai nhỏ, Undo hoặc Mega Shuffle theo behavior đã chọn.",
+          "rule": "Mega Shuffle và Undo có đường thi hành riêng; xáo bàn có thể vẫn kẹt và Undo chỉ đảo phần lịch sử được hỗ trợ. Không mặc định một behavior luôn tạo lời giải.",
+          "outcome": "Trở lại Playing nếu đường tiếp tục hoàn tất; yêu cầu kiểm lại win/stuck sau thay đổi.",
+          "uc_ids": [
+            "UC-08",
+            "UC-09"
+          ],
+          "source_refs": [
+            "gdd/LevelFlow.json#use_cases/7",
+            "gdd/LevelFlow.json#use_cases/8",
+            "facts/core_body_gap_decisions_20261115.json#MS-CORE-BODY-08"
+          ]
+        },
+        {
+          "title": "Từ chối tiếp tục",
+          "actor": "Người chơi",
+          "action": "Đóng hoặc từ chối Play On rồi xác nhận kết thúc khi được hỏi.",
+          "rule": "Có lớp Are You Sure và offer theo điều kiện; mỗi popup xuất hiện còn tùy command gate.",
+          "outcome": "Lượt đi tới Lose và nhánh thử lại; debit mạng cần đọc đúng chế độ và fixture.",
+          "uc_ids": [
+            "UC-10"
+          ],
+          "source_refs": [
+            "gdd/LevelFlow.json#use_cases/9",
+            "facts/core_body_gap_decisions_20261115.json#MS-CORE-BODY-07",
+            "facts/core_body_gap_decisions_20261115.json#MS-CORE-BODY-08",
+            "facts/core_body_gap_decisions_20261115.json#MS-CORE-BODY-05",
+            "facts/review_cases_20261116_round2.json",
+            "facts/runtime/review_20261116_round2/session_end.json"
+          ]
+        },
+        {
+          "title": "Thoát chủ động và hủy xác nhận",
+          "actor": "Người chơi",
+          "action": "Mở Settings trong level rồi chọn thoát; có thể hủy xác nhận để chơi tiếp.",
+          "rule": "Quit và Lose là hai end type khác nhau, dù có thể dùng chung queue hậu lượt.",
+          "outcome": "Hủy quay về Playing; xác nhận đi tới Quit và dọn lượt.",
+          "uc_ids": [
+            "UC-12"
+          ],
+          "source_refs": [
+            "gdd/LevelFlow.json#use_cases/11",
+            "facts/core_body_gap_decisions_20261115.json#MS-CORE-BODY-07",
+            "facts/core_body_gap_decisions_20261115.json#MS-CORE-BODY-08",
+            "facts/core_body_gap_decisions_20261115.json#MS-CORE-BODY-05",
+            "facts/review_cases_20261116_round2.json",
+            "facts/runtime/review_20261116_round2/session_end.json"
+          ]
+        },
+        {
+          "title": "Thắng và đọc quà",
+          "actor": "Người chơi và client",
+          "action": "Hoàn tất bàn rồi xem popup chiến thắng.",
+          "rule": "Round 2 094 hiện Perfect 20 coin nhưng số dư còn cũ; sau Continue tới 095 ledger đã cộng 20. Không đồng nhất text popup với thời điểm grant.",
+          "outcome": "Level tăng 352→353 và quà được đối soát theo ledger, không theo filename screenshot.",
+          "uc_ids": [
+            "UC-11"
+          ],
+          "source_refs": [
+            "gdd/LevelFlow.json#use_cases/10",
+            "facts/core_body_gap_decisions_20261115.json#MS-CORE-BODY-07",
+            "facts/core_body_gap_decisions_20261115.json#MS-CORE-BODY-08",
+            "facts/core_body_gap_decisions_20261115.json#MS-CORE-BODY-05",
+            "facts/review_cases_20261116_round2.json",
+            "facts/runtime/review_20261116_round2/session_end.json"
+          ]
+        },
+        {
+          "title": "Xử lý queue rồi về Home",
+          "actor": "Client và người chơi",
+          "action": "Đọc hoặc đóng các popup hậu lượt theo thứ tự đủ điều kiện.",
+          "rule": "Source 0.0.3063 có 4 queue: thua thường 9, thắng thường 57, thua Daily 2, thắng Daily 6 command; command count không phải số popup sẽ thấy.",
+          "outcome": "Round 2 thấy Boat result rồi Duck result trước Home 353; không xác nhận toàn bộ 57 command đã hiển thị.",
+          "uc_ids": [
+            "UC-14"
+          ],
+          "source_refs": [
+            "gdd/LevelFlow.json#use_cases/13",
+            "facts/core_body_gap_decisions_20261115.json#MS-CORE-BODY-07",
+            "facts/core_body_gap_decisions_20261115.json#MS-CORE-BODY-08",
+            "facts/core_body_gap_decisions_20261115.json#MS-CORE-BODY-05",
+            "facts/review_cases_20261116_round2.json",
+            "facts/runtime/review_20261116_round2/session_end.json"
+          ]
+        },
+        {
+          "title": "Rời focus rồi trở lại",
+          "actor": "Người chơi và client",
+          "action": "Tạm rời app rồi quay lại.",
+          "rule": "Pause/resume và lưu lượt có caller riêng; cold restart sau thắng không chứng minh resume bàn đang chơi.",
+          "outcome": "Không gộp mất focus với một lần Lose hoặc một session mới nếu chưa đủ predicate.",
+          "uc_ids": [
+            "UC-15"
+          ],
+          "source_refs": [
+            "gdd/LevelFlow.json#use_cases/14",
+            "facts/core_body_gap_decisions_20261115.json#MS-CORE-BODY-07",
+            "facts/core_body_gap_decisions_20261115.json#MS-CORE-BODY-08",
+            "facts/core_body_gap_decisions_20261115.json#MS-CORE-BODY-05",
+            "facts/review_cases_20261116_round2.json",
+            "facts/runtime/review_20261116_round2/session_end.json"
+          ]
+        }
+      ],
+      "rules": [
+        {
+          "title": "State dữ liệu khác state giao diện",
+          "text": "Playing/Stuck/Win/Quit trong LevelState không phải danh sách màn hình. Một trạng thái có thể trải qua animation, popup và queue trước khi đổi scene.",
+          "source_refs": [
+            "gdd/LevelFlow.json#flow",
+            "gdd/LevelFlow.json#configs",
+            "facts/core_body_gap_decisions_20261115.json#MS-CORE-BODY-07",
+            "facts/core_body_gap_decisions_20261115.json#MS-CORE-BODY-08",
+            "facts/core_body_gap_decisions_20261115.json#MS-CORE-BODY-05",
+            "facts/review_cases_20261116_round2.json",
+            "facts/runtime/review_20261116_round2/session_end.json"
+          ]
+        },
+        {
+          "title": "Behavior Play On không phải tên quảng cáo",
+          "text": "Trong mã 0.0.3063, variant 3 có watchedCount 1 → Undo, dưới 2 ở nhánh khác → rỗng, từ 2 → Undo + ExtraBottle; các variant khác dùng table. Eligibility nằm caller, không lấy helper làm cam kết ad luôn có.",
+          "source_refs": [
+            "gdd/LevelFlow.json#flow",
+            "gdd/LevelFlow.json#configs",
+            "facts/core_body_gap_decisions_20261115.json#MS-CORE-BODY-07",
+            "facts/core_body_gap_decisions_20261115.json#MS-CORE-BODY-08",
+            "facts/core_body_gap_decisions_20261115.json#MS-CORE-BODY-05",
+            "facts/review_cases_20261116_round2.json",
+            "facts/runtime/review_20261116_round2/session_end.json"
+          ]
+        },
+        {
+          "title": "Return Home không bảo đảm mọi grant backend",
+          "text": "Quà local, tiến độ Journey và popup event có thời điểm riêng. Cần đối soát số dư, pending reward và trạng thái server thay vì coi về Home là mọi backend claim thành công.",
+          "source_refs": [
+            "gdd/LevelFlow.json#flow",
+            "gdd/LevelFlow.json#configs",
+            "facts/core_body_gap_decisions_20261115.json#MS-CORE-BODY-07",
+            "facts/core_body_gap_decisions_20261115.json#MS-CORE-BODY-08",
+            "facts/core_body_gap_decisions_20261115.json#MS-CORE-BODY-05",
+            "facts/review_cases_20261116_round2.json",
+            "facts/runtime/review_20261116_round2/session_end.json"
+          ]
+        },
+        {
+          "title": "Giới hạn chế độ Daily",
+          "text": "Các body Daily đã đọc chưa thấy debit mạng trong manager; chưa trace mọi listener nên không được kết luận Daily chơi miễn phí vô hạn.",
+          "source_refs": [
+            "gdd/LevelFlow.json#flow",
+            "gdd/LevelFlow.json#configs",
+            "facts/core_body_gap_decisions_20261115.json#MS-CORE-BODY-07",
+            "facts/core_body_gap_decisions_20261115.json#MS-CORE-BODY-08",
+            "facts/core_body_gap_decisions_20261115.json#MS-CORE-BODY-05",
+            "facts/review_cases_20261116_round2.json",
+            "facts/runtime/review_20261116_round2/session_end.json"
+          ]
+        }
+      ],
+      "decisions": [
+        {
+          "question": "Vì sao có nhánh hủy trước Quit?",
+          "answer": "Người chơi cần thấy hậu quả mất chuỗi hoặc trợ thủ trước khi commit end type. Cancel phải trả đúng bàn đang chơi.",
+          "basis": "Luồng QuitPressed/ResumePlayingAfterQuit trong hồ sơ.",
+          "source_refs": [
+            "gdd/LevelFlow.json#flow",
+            "gdd/LevelFlow.json#configs",
+            "facts/core_body_gap_decisions_20261115.json#MS-CORE-BODY-07",
+            "facts/core_body_gap_decisions_20261115.json#MS-CORE-BODY-08",
+            "facts/core_body_gap_decisions_20261115.json#MS-CORE-BODY-05",
+            "facts/review_cases_20261116_round2.json",
+            "facts/runtime/review_20261116_round2/session_end.json"
+          ]
+        },
+        {
+          "question": "Có nên gọi Stuck là thất bại cuối cùng?",
+          "answer": "Không. Play On có thể đưa bàn trở lại Playing; nhánh Lose chỉ chốt khi các điều kiện kết thúc đã chạy.",
+          "basis": "State Stuck/PlayOn/Lose riêng.",
+          "source_refs": [
+            "gdd/LevelFlow.json#flow",
+            "gdd/LevelFlow.json#configs",
+            "facts/core_body_gap_decisions_20261115.json#MS-CORE-BODY-07",
+            "facts/core_body_gap_decisions_20261115.json#MS-CORE-BODY-08",
+            "facts/core_body_gap_decisions_20261115.json#MS-CORE-BODY-05",
+            "facts/review_cases_20261116_round2.json",
+            "facts/runtime/review_20261116_round2/session_end.json"
+          ]
+        },
+        {
+          "question": "Khi nào ghi nhận thưởng thắng?",
+          "answer": "Dùng cửa sổ ledger quan sát được; round 2 094→095 là mốc coin đổi, còn 099/100 xác minh số dư sau Home và cold restart.",
+          "basis": "MS-R 16 B-LEVELFLOW 01 và session_end.",
+          "source_refs": [
+            "gdd/LevelFlow.json#flow",
+            "gdd/LevelFlow.json#configs",
+            "facts/core_body_gap_decisions_20261115.json#MS-CORE-BODY-07",
+            "facts/core_body_gap_decisions_20261115.json#MS-CORE-BODY-08",
+            "facts/core_body_gap_decisions_20261115.json#MS-CORE-BODY-05",
+            "facts/review_cases_20261116_round2.json",
+            "facts/runtime/review_20261116_round2/session_end.json"
+          ]
+        }
+      ],
+      "segments_ab": {
+        "summary": "Các trục dưới tách selector nội dung, trạng thái và experiment; chưa có assignment hoặc uplift mới.",
+        "axes": [
+          {
+            "axis": "Play On và popup",
+            "selection": "AdConfig, PlayOnRewardedConfig và các cờ cuối level chọn gate/behavior/limit.",
+            "effect": "Đổi lựa chọn tiếp tục và tần suất popup.",
+            "evidence_limit": "Config/enum không đủ chứng minh allocation A/B hoặc ad completed.",
+            "source_refs": [
+              "gdd/LevelFlow.json#segment_ab_review_20261115",
+              "gdd/LevelFlow.json#flow",
+              "gdd/LevelFlow.json#configs"
+            ]
+          },
+          {
+            "axis": "Regular/Daily và end type",
+            "selection": "Loại lượt cùng Win/Lose/Quit chọn queue hậu lượt.",
+            "effect": "Đổi command, timer và nhánh kết thúc.",
+            "evidence_limit": "Không lấy một win Regular để phủ Lose hoặc Daily.",
+            "source_refs": [
+              "gdd/LevelFlow.json#segment_ab_review_20261115",
+              "gdd/LevelFlow.json#flow",
+              "gdd/LevelFlow.json#configs"
+            ]
+          }
+        ],
+        "unknowns": [
+          "Cần bằng chứng selector effective, cohort và outcome trước khi kết luận A/B; source tồn tại hoặc một fixture không đủ."
+        ]
+      },
+      "recovery": [
+        {
+          "condition": "Purchase hoặc ad không hoàn tất",
+          "expected": "Giữ trạng thái chưa tiếp tục nếu chưa có kết quả hợp lệ; không tự thêm behavior chỉ từ bấm nút.",
+          "verified_scope": "Theo nguồn/UC đã chỉ rõ; câu round 2 có phạm vi case, không full UC pass.",
+          "uc_ids": [
+            "UC-04",
+            "UC-05",
+            "UC-06"
+          ]
+        },
+        {
+          "condition": "Hủy thoát",
+          "expected": "Trả quyền chơi theo nhánh ResumePlayingAfterQuit, không áp hậu quả Quit như đã xác nhận.",
+          "verified_scope": "Theo nguồn/UC đã chỉ rõ; câu round 2 có phạm vi case, không full UC pass.",
+          "uc_ids": [
+            "UC-12"
+          ]
+        },
+        {
+          "condition": "Restart sau chiến thắng",
+          "expected": "Round 2 giữ Home 353 và số dư sau cold restart; phạm vi này không gồm crash giữa grant hoặc resume bàn chưa xong.",
+          "verified_scope": "Theo nguồn/UC đã chỉ rõ; câu round 2 có phạm vi case, không full UC pass.",
+          "uc_ids": [
+            "UC-11",
+            "UC-18"
+          ]
+        }
+      ],
+      "takeaways": [
+        {
+          "text": "Người chơi cần thấy hậu quả mất chuỗi hoặc trợ thủ trước khi commit end type. Cancel phải trả đúng bàn đang chơi.",
+          "basis": "Luồng QuitPressed/ResumePlayingAfterQuit trong hồ sơ."
+        },
+        {
+          "text": "Không. Play On có thể đưa bàn trở lại Playing; nhánh Lose chỉ chốt khi các điều kiện kết thúc đã chạy.",
+          "basis": "State Stuck/PlayOn/Lose riêng."
+        },
+        {
+          "text": "Dùng cửa sổ ledger quan sát được; round 2 094→095 là mốc coin đổi, còn 099/100 xác minh số dư sau Home và cold restart.",
+          "basis": "MS-R 16 B-LEVELFLOW 01 và session_end."
+        }
+      ],
+      "reviewed_source_paths": [
+        "gdd/LevelFlow.json",
+        "site_meta/LevelFlow.json",
+        "facts/core_body_gap_decisions_20261115.json",
+        "facts/review_cases_20261116_round2.json",
+        "facts/runtime/review_20261116_round2/session_end.json",
+        "facts/review_20261116/public_current_config_3129/defaults/AdConfigModel.json",
+        "facts/review_20261116/public_current_config_3129/defaults/BELevelConfig.json",
+        "facts/review_20261116/public_current_config_3129/defaults/BlockerIntroConfigModel.json",
+        "facts/review_20261116/public_current_config_3129/defaults/GameEconomyModel.json",
+        "facts/review_20261116/public_current_config_3129/defaults/PlayOnRewardedConfigModel.json"
+      ]
+    }
   }
 }

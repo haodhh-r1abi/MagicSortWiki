@@ -23,10 +23,7 @@
   document.querySelectorAll(".toggle-all").forEach(a=>a.addEventListener("click", e=>{ e.preventDefault(); const ds = document.querySelectorAll("details.uc"); const open = [...ds].some(d=>!d.open); ds.forEach(d=>d.open=open); }));
   // open use case from hash
   if(location.hash){ const el = document.getElementById(decodeURIComponent(location.hash.slice(1))); if(el && el.tagName==="DETAILS") el.open = true; }
-  // levels table
-  if(window.LOAD_LEVELS){ const box = document.getElementById("levels"), f = document.getElementById("lvfilter"); fetch(root+"data/levels.tsv").then(r=>r.text()).then(t=>{ const lines = t.split("\n").filter(Boolean); const h = lines[0].split("\t"); const rows = lines.slice(1).map(l=>l.split("\t"));
-      let cur = rows; const draw = ()=>{ const lim = cur.slice(0,600); box.innerHTML = `<p class="muted">${cur.length} level (hiển thị tối đa 600)</p><table class="wt"><thead><tr>${h.map(x=>`<th>${x}</th>`).join("")}</tr></thead><tbody>${lim.map(r=>`<tr>${r.map(c=>`<td>${c}</td>`).join("")}</tr>`).join("")}</tbody></table>`; };
-      draw(); f.addEventListener("input", ()=>{ const v = f.value.trim().toLowerCase(); cur = !v ? rows : rows.filter(r=> r[1]===v || r.join("\t").toLowerCase().includes(v)); draw(); }); }).catch(()=>{ box.innerHTML = '<p class="muted">Không tải được levels.tsv (mở qua http:// hoặc GitHub Pages).</p>'; }); }
+  // Full catalog is rendered at build time; reader.js paginates without file:// fetches.
 })();
 
 document.addEventListener('click',function(e){var a=e.target.closest('a.shot');if(!a)return;e.preventDefault();

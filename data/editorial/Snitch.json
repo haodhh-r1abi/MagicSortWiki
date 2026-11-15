@@ -1,0 +1,348 @@
+{
+  "id": "Snitch",
+  "schema_version": 1,
+  "scope": "Diễn giải thiết kế từ GDD, metadata và nguồn đã đối chiếu. Outcome là expected; chỉ câu ghi round2 là actual của fixture 0.0.3129. Mã native 0.0.3063, default APK 0.0.3129 và cache lịch sử có phạm vi riêng. Không có playtest mới trong lượt biên tập.",
+  "design_intent": "Tạo trợ thủ giải quyết thông tin bị giấu hoặc vật cản theo mục tiêu có kiểm soát. Người chơi cần phân biệt lợi thế đã kích hoạt ngoài Home với Snitch cụ thể được đặt trong model bàn và chuỗi hành động của nó.",
+  "player_loop": "Đủ gate → xem giới thiệu → thắng tích tiến độ → vào bàn → chờ Snitch chọn và tác động mục tiêu → tiếp tục đổ → giữ hoặc mất quyền theo kết quả lượt.",
+  "flow": [
+    {
+      "title": "Kiểm nguồn bật và mốc",
+      "actor": "Client",
+      "action": "Tra config trước khi mở Snitch.",
+      "rule": "Default nguồn có IsEnabled = false, FirstLevelToShow = 290, TargetLevelProgress = 10. Đây là giá trị đóng gói, không phải feature đang bật hay tài khoản đã có trợ thủ. Icon còn phụ thuộc quyền slot lobby, nên đủ level chưa bảo đảm có nút hiện.",
+      "outcome": "Mở đúng khả năng tiếp cận khi config effective cho phép.",
+      "uc_ids": [
+        "UC-01",
+        "UC-18"
+      ],
+      "source_refs": [
+        "gdd/Snitch.json#use_cases/0",
+        "facts/core_body_gap_decisions_20261115.json#MS-CORE-BODY-13",
+        "facts/core_body_gap_decisions_20261115.json#MS-CORE-BODY-14",
+        "facts/local_code_gap_results_20261115.json#MS-CODE-50",
+        "gdd/Snitch.json#use_cases/17"
+      ]
+    },
+    {
+      "title": "Xem lời mời và luật hai loại",
+      "actor": "Người chơi",
+      "action": "Mở Join hoặc Info để đọc Normal/Red.",
+      "rule": "Cờ EventShownInLifeTime, info và level tutorial có mục đích riêng.",
+      "outcome": "Không cộng tiến độ chỉ vì popup hiện.",
+      "uc_ids": [
+        "UC-04",
+        "UC-05"
+      ],
+      "source_refs": [
+        "gdd/Snitch.json#use_cases/3",
+        "gdd/Snitch.json#use_cases/4",
+        "facts/core_body_gap_decisions_20261115.json#MS-CORE-BODY-13",
+        "facts/core_body_gap_decisions_20261115.json#MS-CORE-BODY-14",
+        "facts/local_code_gap_results_20261115.json#MS-CODE-50"
+      ]
+    },
+    {
+      "title": "Thắng để kích hoạt",
+      "actor": "Người chơi",
+      "action": "Thắng level và đọc vòng tiến độ ở Home.",
+      "rule": "Progress tăng theo gate tới TargetLevelProgress; LastSeenLobbyButtonProgress tách mốc đã trình diễn.",
+      "outcome": "Đạt mục tiêu mới đi tới trạng thái trợ thủ active.",
+      "uc_ids": [
+        "UC-02",
+        "UC-06",
+        "UC-07"
+      ],
+      "source_refs": [
+        "gdd/Snitch.json#use_cases/1",
+        "gdd/Snitch.json#use_cases/5",
+        "gdd/Snitch.json#use_cases/6",
+        "facts/core_body_gap_decisions_20261115.json#MS-CORE-BODY-13",
+        "facts/core_body_gap_decisions_20261115.json#MS-CORE-BODY-14",
+        "facts/local_code_gap_results_20261115.json#MS-CODE-50"
+      ]
+    },
+    {
+      "title": "Đưa hộp vào theo trình tự",
+      "actor": "Client",
+      "action": "Vào level và chờ hộp Snitch xuất hiện.",
+      "rule": "OnLevelStart nhận externalSnitches và levelSnitchInfo; state machine còn chờ blocker intro và tutorial trước các bước bay.",
+      "outcome": "Không tranh quyền điều khiển với intro đang chạy.",
+      "uc_ids": [
+        "UC-08",
+        "UC-14"
+      ],
+      "source_refs": [
+        "gdd/Snitch.json#use_cases/7",
+        "gdd/Snitch.json#use_cases/13",
+        "facts/core_body_gap_decisions_20261115.json#MS-CORE-BODY-13",
+        "facts/core_body_gap_decisions_20261115.json#MS-CORE-BODY-14",
+        "facts/local_code_gap_results_20261115.json#MS-CODE-50"
+      ]
+    },
+    {
+      "title": "Hoàn tất hướng dẫn trong bàn",
+      "actor": "Người chơi",
+      "action": "Theo popup tutorial khi predicate cho phép.",
+      "rule": "Tutorial tạm dừng/tiếp tục chuỗi Snitch; không coi mở tutorial là đã tác động vào blocker.",
+      "outcome": "Chuỗi tiếp tục sau hướng dẫn đúng lúc.",
+      "uc_ids": [
+        "UC-13"
+      ],
+      "source_refs": [
+        "gdd/Snitch.json#use_cases/12",
+        "facts/core_body_gap_decisions_20261115.json#MS-CORE-BODY-13",
+        "facts/core_body_gap_decisions_20261115.json#MS-CORE-BODY-14",
+        "facts/local_code_gap_results_20261115.json#MS-CODE-50"
+      ]
+    },
+    {
+      "title": "Dùng Snitch thường để lộ thông tin",
+      "actor": "Client",
+      "action": "Chọn mục tiêu Normal theo dữ liệu và target finder.",
+      "rule": "Ưu tiên target chỉ định rồi các nhánh lựa chọn/fallback. Với item gắn ô, OnBottleWatersUpdated chỉ kích khi water của ô chủ lên đỉnh theo body 0.0.3063.",
+      "outcome": "Lộ ô hoặc chai theo effect; không phải mỗi move bất kỳ đều kích Snitch.",
+      "uc_ids": [
+        "UC-09"
+      ],
+      "source_refs": [
+        "gdd/Snitch.json#use_cases/8",
+        "facts/core_body_gap_decisions_20261115.json#MS-CORE-BODY-13",
+        "facts/core_body_gap_decisions_20261115.json#MS-CORE-BODY-14",
+        "facts/local_code_gap_results_20261115.json#MS-CODE-50"
+      ]
+    },
+    {
+      "title": "Dùng Snitch Đỏ lên blocker",
+      "actor": "Client",
+      "action": "Tìm blocker được phép và bay tới.",
+      "rule": "IsSelectableAsSnitchTarget cùng priority và lock điều tiết mục tiêu; full heuristic tên blocker chưa được giải hoàn toàn.",
+      "outcome": "Tác động đúng item và callback thay vì phá một vật bất kỳ.",
+      "uc_ids": [
+        "UC-10"
+      ],
+      "source_refs": [
+        "gdd/Snitch.json#use_cases/9",
+        "facts/core_body_gap_decisions_20261115.json#MS-CORE-BODY-13",
+        "facts/core_body_gap_decisions_20261115.json#MS-CORE-BODY-14",
+        "facts/local_code_gap_results_20261115.json#MS-CODE-50"
+      ]
+    },
+    {
+      "title": "Fallback và tránh tranh đích",
+      "actor": "Client",
+      "action": "Xử lý khi mục tiêu chính không còn hoặc đã bị Snitch khác giữ.",
+      "rule": "Có LockTarget/LockItem và fallbackPremium khi bật; số lượng lấy từ list/model, không suy cap 3 Normal/2 Red từ số delay animation.",
+      "outcome": "Không coi hai animation cùng bay là có quyền tác động cùng item.",
+      "uc_ids": [
+        "UC-11",
+        "UC-12"
+      ],
+      "source_refs": [
+        "gdd/Snitch.json#use_cases/10",
+        "gdd/Snitch.json#use_cases/11",
+        "facts/core_body_gap_decisions_20261115.json#MS-CORE-BODY-13",
+        "facts/core_body_gap_decisions_20261115.json#MS-CORE-BODY-14",
+        "facts/local_code_gap_results_20261115.json#MS-CODE-50"
+      ]
+    },
+    {
+      "title": "Kết thúc tác động rồi tiếp tục bàn",
+      "actor": "Người chơi và client",
+      "action": "Chờ effect hoặc Snitch đậu/đặt lại trước khi đổ tiếp.",
+      "rule": "Lock/unlock và callback complete bảo vệ trạng thái mục tiêu.",
+      "outcome": "Bàn nhận thao tác tiếp theo theo gate thực.",
+      "uc_ids": [
+        "UC-15"
+      ],
+      "source_refs": [
+        "gdd/Snitch.json#use_cases/14",
+        "facts/core_body_gap_decisions_20261115.json#MS-CORE-BODY-13",
+        "facts/core_body_gap_decisions_20261115.json#MS-CORE-BODY-14",
+        "facts/local_code_gap_results_20261115.json#MS-CODE-50"
+      ]
+    },
+    {
+      "title": "Rời ván và khôi phục model",
+      "actor": "Người chơi và client",
+      "action": "Đọc cảnh báo mất Snitch, hủy hoặc xác nhận kết thúc.",
+      "rule": "Caller Lose/Quit có reset; các cờ giới thiệu khác Progress. Sync model có nguồn nhưng chưa kiểm nhiều thiết bị.",
+      "outcome": "Không reset chỉ vì xem Info; không hứa restart hoặc sync luôn bảo toàn mọi trường.",
+      "uc_ids": [
+        "UC-16",
+        "UC-03",
+        "UC-17"
+      ],
+      "source_refs": [
+        "gdd/Snitch.json#use_cases/15",
+        "gdd/Snitch.json#use_cases/2",
+        "gdd/Snitch.json#use_cases/16",
+        "facts/core_body_gap_decisions_20261115.json#MS-CORE-BODY-13",
+        "facts/core_body_gap_decisions_20261115.json#MS-CORE-BODY-14",
+        "facts/local_code_gap_results_20261115.json#MS-CODE-50"
+      ]
+    }
+  ],
+  "rules": [
+    {
+      "title": "Số tham số animation không phải cap",
+      "text": "Có delay cho một số vị trí Snitch không chứng minh số tối đa. GetRed/NormalMoveTarget duyệt list đầu vào với filtering và mục tiêu hợp lệ.",
+      "source_refs": [
+        "gdd/Snitch.json#flow",
+        "gdd/Snitch.json#configs",
+        "facts/core_body_gap_decisions_20261115.json#MS-CORE-BODY-13",
+        "facts/core_body_gap_decisions_20261115.json#MS-CORE-BODY-14",
+        "facts/local_code_gap_results_20261115.json#MS-CODE-50"
+      ]
+    },
+    {
+      "title": "Priority chỉ được giải từng phần",
+      "text": "Body lịch sử có int.MinValue cho ứng viên sai, một số điểm 2/1/15/4 và trừ 1000 theo số lần chọn type. Chưa đủ map mọi nhánh vtable ra một bảng ưu tiên blocker hoàn chỉnh.",
+      "source_refs": [
+        "gdd/Snitch.json#flow",
+        "gdd/Snitch.json#configs",
+        "facts/core_body_gap_decisions_20261115.json#MS-CORE-BODY-13",
+        "facts/core_body_gap_decisions_20261115.json#MS-CORE-BODY-14",
+        "facts/local_code_gap_results_20261115.json#MS-CODE-50"
+      ]
+    },
+    {
+      "title": "Kích hoạt phụ thuộc vị trí ô",
+      "text": "Callback item gắn nước kiểm nước ô chủ có phải topWater. Không viết mọi lần đổ đều tự giải phóng một Snitch.",
+      "source_refs": [
+        "gdd/Snitch.json#flow",
+        "gdd/Snitch.json#configs",
+        "facts/core_body_gap_decisions_20261115.json#MS-CORE-BODY-13",
+        "facts/core_body_gap_decisions_20261115.json#MS-CORE-BODY-14",
+        "facts/local_code_gap_results_20261115.json#MS-CODE-50"
+      ]
+    },
+    {
+      "title": "Target dữ liệu khác target hiệu lực",
+      "text": "Fixed indices trong model vẫn đi qua validity/lock và nhánh fallback; danh sách target không phải bảo đảm mọi con đều có effect thành công.",
+      "source_refs": [
+        "gdd/Snitch.json#flow",
+        "gdd/Snitch.json#configs",
+        "facts/core_body_gap_decisions_20261115.json#MS-CORE-BODY-13",
+        "facts/core_body_gap_decisions_20261115.json#MS-CORE-BODY-14",
+        "facts/local_code_gap_results_20261115.json#MS-CODE-50"
+      ]
+    }
+  ],
+  "decisions": [
+    {
+      "question": "Vì sao Normal và Red cần giải thích riêng?",
+      "answer": "Một loại chủ yếu mở thông tin, loại kia tác động blocker; nhập chung làm sai kỳ vọng và cách bố trí mục tiêu trong level.",
+      "basis": "Hai strategy target và effect của source.",
+      "source_refs": [
+        "gdd/Snitch.json#flow",
+        "gdd/Snitch.json#configs",
+        "facts/core_body_gap_decisions_20261115.json#MS-CORE-BODY-13",
+        "facts/core_body_gap_decisions_20261115.json#MS-CORE-BODY-14",
+        "facts/local_code_gap_results_20261115.json#MS-CODE-50"
+      ]
+    },
+    {
+      "question": "Có thể công bố cap Snitch từ animation config không?",
+      "answer": "Không. Cần consumer cấp list và fixture stress; delay thứ ba không phải hằng giới hạn gameplay.",
+      "basis": "MS-CORE-BODY-13.",
+      "source_refs": [
+        "gdd/Snitch.json#flow",
+        "gdd/Snitch.json#configs",
+        "facts/core_body_gap_decisions_20261115.json#MS-CORE-BODY-13",
+        "facts/core_body_gap_decisions_20261115.json#MS-CORE-BODY-14",
+        "facts/local_code_gap_results_20261115.json#MS-CODE-50"
+      ]
+    },
+    {
+      "question": "Vì sao cần khóa mục tiêu trước khi bay?",
+      "answer": "Effect đến sau một đoạn animation; mục tiêu có thể bị tác động đồng thời. Lock giúp giữ quyền cho nhánh đã chọn nhưng chưa phải chứng minh mọi race đã test.",
+      "basis": "Target locking trong hồ sơ.",
+      "source_refs": [
+        "gdd/Snitch.json#flow",
+        "gdd/Snitch.json#configs",
+        "facts/core_body_gap_decisions_20261115.json#MS-CORE-BODY-13",
+        "facts/core_body_gap_decisions_20261115.json#MS-CORE-BODY-14",
+        "facts/local_code_gap_results_20261115.json#MS-CODE-50"
+      ]
+    }
+  ],
+  "segments_ab": {
+    "summary": "Các trục có selector rõ; không suy allocation hoặc uplift từ config.",
+    "axes": [
+      {
+        "axis": "Enable và tiến độ",
+        "selection": "Cấu hình mặc định level 290, mục tiêu 10 cùng Progress và cờ đã xem chọn eligibility/active.",
+        "effect": "Đổi khả năng trợ thủ vào bàn.",
+        "evidence_limit": "Chưa có runtime build 0.0.3129 có Snitch active trong case 352.",
+        "source_refs": [
+          "gdd/Snitch.json#flow",
+          "gdd/Snitch.json#configs",
+          "gdd/Snitch.json#segment_ab_review_20261115"
+        ]
+      },
+      {
+        "axis": "Loại, target và fallback",
+        "selection": "Normal/Red, fixed indices, weighted/priority và IsFallbackPremiumHitActive chọn đích.",
+        "effect": "Đổi thông tin được lộ hoặc blocker bị tác động.",
+        "evidence_limit": "Nhánh chọn mục tiêu không phải phân khúc thương mại hay assignment A/B.",
+        "source_refs": [
+          "gdd/Snitch.json#flow",
+          "gdd/Snitch.json#configs",
+          "gdd/Snitch.json#segment_ab_review_20261115"
+        ]
+      }
+    ],
+    "unknowns": [
+      "Chưa có runtime active của trợ thủ trên fixture 352 hoặc assignment production để đóng các nhánh này."
+    ]
+  },
+  "recovery": [
+    {
+      "condition": "Không có target chính",
+      "expected": "Theo fallback và validity hiện có; không suy luôn có một vật cản để phá.",
+      "verified_scope": "Theo code/dossier có build; chưa chạy recovery trợ thủ trên thiết bị trong lượt này.",
+      "uc_ids": [
+        "UC-11"
+      ]
+    },
+    {
+      "condition": "Intro blocker và tutorial cùng chờ",
+      "expected": "Giữ thứ tự state machine, hoãn Snitch đúng gate.",
+      "verified_scope": "Theo code/dossier có build; chưa chạy recovery trợ thủ trên thiết bị trong lượt này.",
+      "uc_ids": [
+        "UC-13",
+        "UC-14"
+      ]
+    },
+    {
+      "condition": "Mục tiêu bị giữ hoặc đã đổi",
+      "expected": "Recheck/lock theo implementation; cần fixture nhiều Snitch để xác minh hết nhánh cạnh tranh.",
+      "verified_scope": "Theo code/dossier có build; chưa chạy recovery trợ thủ trên thiết bị trong lượt này.",
+      "uc_ids": [
+        "UC-12",
+        "UC-17"
+      ]
+    }
+  ],
+  "takeaways": [
+    {
+      "text": "Một loại chủ yếu mở thông tin, loại kia tác động blocker; nhập chung làm sai kỳ vọng và cách bố trí mục tiêu trong level.",
+      "basis": "Hai strategy target và effect của source."
+    },
+    {
+      "text": "Không. Cần consumer cấp list và fixture stress; delay thứ ba không phải hằng giới hạn gameplay.",
+      "basis": "MS-CORE-BODY-13."
+    },
+    {
+      "text": "Effect đến sau một đoạn animation; mục tiêu có thể bị tác động đồng thời. Lock giúp giữ quyền cho nhánh đã chọn nhưng chưa phải chứng minh mọi race đã test.",
+      "basis": "Target locking trong hồ sơ."
+    }
+  ],
+  "reviewed_source_paths": [
+    "gdd/Snitch.json",
+    "site_meta/Snitch.json",
+    "facts/core_body_gap_decisions_20261115.json",
+    "facts/local_code_gap_results_20261115.json",
+    "facts/review_20261116/public_current_config_3129/defaults/SnitchConfigModel.json"
+  ]
+}

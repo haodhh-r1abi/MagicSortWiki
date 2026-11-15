@@ -8,18 +8,21 @@
     const input = document.createElement('input'); input.type='search'; input.placeholder='Lọc toàn bộ bảng…'; input.setAttribute('aria-label','Lọc tất cả dòng trong bảng');
     const prev = document.createElement('button'); prev.textContent='Trước'; prev.type='button';
     const next = document.createElement('button'); next.textContent='Tiếp'; next.type='button';
+    const first = document.createElement('button'); first.textContent='Đầu'; first.type='button';first.setAttribute('aria-label','Trang đầu');
+    const last = document.createElement('button'); last.textContent='Cuối'; last.type='button';last.setAttribute('aria-label','Trang cuối');
     const count = document.createElement('span'); count.className='table-count'; count.setAttribute('aria-live','polite');
-    tools.append(input,prev,next,count); table.parentElement.before(tools);
+    tools.append(input,first,prev,next,last,count); table.parentElement.before(tools);
     const haystack=rows.map(r=>normalize(r.textContent)); let page=0, selected=rows;
     const draw=()=>{
       const max=Math.max(0,Math.ceil(selected.length/size)-1); page=Math.min(page,max);
       rows.forEach(r=>r.hidden=true); selected.slice(page*size,(page+1)*size).forEach(r=>r.hidden=false);
-      prev.disabled=page===0; next.disabled=page>=max;
+      first.disabled=prev.disabled=page===0; last.disabled=next.disabled=page>=max;
       count.textContent=selected.length?`${page*size+1}–${Math.min((page+1)*size,selected.length)} / ${selected.length} dòng · tổng ${rows.length}`:`0 kết quả · tổng ${rows.length} dòng`;
       table.dataset.totalRows=rows.length; table.dataset.filteredRows=selected.length;
     };
     input.addEventListener('input',()=>{const q=normalize(input.value);selected=rows.filter((r,i)=>haystack[i].includes(q));page=0;draw()});
     prev.addEventListener('click',()=>{page--;draw()});next.addEventListener('click',()=>{page++;draw()});draw();
+    first.addEventListener('click',()=>{page=0;draw()});last.addEventListener('click',()=>{page=Math.max(0,Math.ceil(selected.length/size)-1);draw()});
   });
   const ucSection=document.getElementById('use-case');
   if(ucSection){

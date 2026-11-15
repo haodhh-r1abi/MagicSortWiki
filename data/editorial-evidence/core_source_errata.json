@@ -1,0 +1,38 @@
+{
+  "schema_version": 1,
+  "date": "2026-11-16",
+  "id": "MS-CORE-ERRATA-IVY-01",
+  "status": "raw_body_corrected_interpretation",
+  "build": "0.0.3063 ARMv7",
+  "source": {
+    "path": "../com.grandgames.magicsort_Unity_20260909_112501/RecoveredNative/PseudoC/Assembly-CSharp/Modules/Contexts/GamePlay/Board/Items/Scripts/Ivy/IvyItem.c",
+    "sha256": "140991d0ff1edf28cc9e0b819f3a3d3953b5c53922ae8a29d4f6c3426fe40a72"
+  },
+  "supersedes_interpretation_only": [
+    "facts/core_body_gap_decisions_20261115.json#MS-CORE-BODY-11 conclusion fragment target không overlay",
+    "gdd/Obstacles.json UC-14 selection rule only matching color"
+  ],
+  "corrections": [
+    {
+      "topic": "Which bottle overlay is tested",
+      "lines": [
+        191,
+        201
+      ],
+      "excerpt": "191:   iVar2 = (__this->fields)._colorId;\n192:   if (iVar2 == waterColorId) {\n193:     pMVar4 = (__this->fields)._belongingBottle;\n194:     if (pMVar4 == (Modules_Contexts_GamePlay_BoardItems_Scripts_Bottle_BottleItem_o *)0x0) {\n195:       FUN_00983f20(iVar2,originBottle);\n196:     }\n197:     bVar1 = Modules_Contexts_GamePlay_BoardItems_Scripts_Bottle_BottleItem__HasOverlayBlocker\n198:                       (pMVar4,(MethodInfo *)0x0);\n199:     if (!bVar1) {\n200:       pMVar4 = (__this->fields)._belongingBottle;\n201:       (__this->fields)._state = (__this->fields)._state + -1;",
+      "interpretation": "OnAnyMoveStarted compares waterColorId with _colorId. It loads __this._belongingBottle and calls HasOverlayBlocker on that HOST bottle. Only when the HOST has no overlay does state decrement. It does not test targetBottle overlay in this branch."
+    },
+    {
+      "topic": "Origin/target selection is fill-state based",
+      "lines": [
+        316,
+        357
+      ],
+      "excerpt": "328:   __this_00 = (__this->fields)._belongingBottle;\n329:   if (__this_00 == (Modules_Contexts_GamePlay_BoardItems_Scripts_Bottle_BottleItem_o *)0x0) {\n330:     FUN_00983f20();\n331:   }\n332:   iVar1 = Modules_Contexts_GamePlay_BoardItems_Scripts_Bottle_BottleItem__GetFillAmount\n333:                     (__this_00,(MethodInfo *)0x0);\n334:   return (__this->fields)._state < iVar1;\n335: }\n351:   __this_00 = (__this->fields)._belongingBottle;\n352:   if (__this_00 == (Modules_Contexts_GamePlay_BoardItems_Scripts_Bottle_BottleItem_o *)0x0) {\n353:     FUN_00983f20();\n354:   }\n355:   iVar1 = Modules_Contexts_GamePlay_BoardItems_Scripts_Bottle_BottleItem__GetFillAmount\n356:                     (__this_00,(MethodInfo *)0x0);\n357:   return (__this->fields)._state < iVar1;\n358: }",
+      "interpretation": "Both IsSelectableAsOrigin and IsSelectableAsTarget return _state < _belongingBottle.GetFillAmount(). The target method receives waterColorId but does not use it. Color gates state decrease in OnAnyMoveStarted, not these selection predicates."
+    }
+  ],
+  "historical_records_preserved": true,
+  "runtime_verified": false,
+  "limits": "Corrects source reading for specified historical body only; no runtime0.0.3129 behavior or complete game-level solvability claim."
+}

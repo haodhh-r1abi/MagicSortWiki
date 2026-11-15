@@ -1,0 +1,375 @@
+{
+  "id": "Boosters",
+  "schema_version": 1,
+  "scope": "Diễn giải thiết kế từ GDD, metadata và nguồn đã đối chiếu. Outcome là expected; chỉ câu ghi round2 là actual của fixture 0.0.3129. Mã native 0.0.3063, default APK 0.0.3129 và cache lịch sử có phạm vi riêng. Không có playtest mới trong lượt biên tập.",
+  "design_intent": "Cho người chơi một công cụ cụ thể để đổi thế bàn bằng tài nguyên hữu hạn. Mỗi loại tác động vào một tầng khác nhau: lịch sử nước đổ, thứ tự trong chai, không gian trống, bố cục toàn bàn hoặc thông tin/vật cản.",
+  "player_loop": "Đọc nút và lượng còn → chờ bàn sẵn sàng → chọn booster → chọn đích nếu cần → xác nhận bằng thao tác hợp lệ → tiêu nguồn chi trả → xem kết quả và kiểm lại bàn.",
+  "flow": [
+    {
+      "title": "Đọc nút trước khi dùng",
+      "actor": "Người chơi",
+      "action": "Nhìn số item hoặc giá coin trên nút.",
+      "rule": "InventoryView và PurchaseView phản ánh hai nguồn chi trả; default là Undo/Shuffle 300 coin, Extra/Mega/Reveal 900 coin. Giá hiệu lực vẫn phụ thuộc config đang chọn.",
+      "outcome": "Người chơi biết dùng item hay chuyển sang mua nhanh.",
+      "uc_ids": [
+        "UC-01"
+      ],
+      "source_refs": [
+        "gdd/Boosters.json#use_cases/0",
+        "facts/core_body_gap_decisions_20261115.json#MS-CORE-BODY-01",
+        "facts/core_body_gap_decisions_20261115.json#MS-CORE-BODY-02",
+        "facts/core_body_gap_decisions_20261115.json#MS-CORE-BODY-16",
+        "facts/review_cases_20261116_round2.json"
+      ]
+    },
+    {
+      "title": "Chờ điều kiện bàn",
+      "actor": "Người chơi và client",
+      "action": "Bấm booster khi bàn không còn thao tác đang xử lý.",
+      "rule": "IsBoardStopped và điều kiện từng booster kiểm trước hiệu ứng; nút hiện không đồng nghĩa luôn dùng được.",
+      "outcome": "Từ chối khi chưa hợp lệ thay vì trừ trước rồi để hiệu ứng lỗi.",
+      "uc_ids": [
+        "UC-09"
+      ],
+      "source_refs": [
+        "gdd/Boosters.json#use_cases/8",
+        "facts/core_body_gap_decisions_20261115.json#MS-CORE-BODY-01",
+        "facts/core_body_gap_decisions_20261115.json#MS-CORE-BODY-02",
+        "facts/core_body_gap_decisions_20261115.json#MS-CORE-BODY-16",
+        "facts/review_cases_20261116_round2.json"
+      ]
+    },
+    {
+      "title": "Hoàn tác nước đổ",
+      "actor": "Người chơi",
+      "action": "Dùng Undo khi có lịch sử có thể đảo.",
+      "rule": "Source Undo gọi ReverseLastSelection; round 2 dùng 1 item trả nước cyan/cap nhưng cloth không quay lại.",
+      "outcome": "Hoàn tác phần nước đi được hỗ trợ, không hứa rollback mọi obstacle.",
+      "uc_ids": [
+        "UC-02"
+      ],
+      "source_refs": [
+        "gdd/Boosters.json#use_cases/1",
+        "facts/core_body_gap_decisions_20261115.json#MS-CORE-BODY-01",
+        "facts/core_body_gap_decisions_20261115.json#MS-CORE-BODY-02",
+        "facts/core_body_gap_decisions_20261115.json#MS-CORE-BODY-16",
+        "facts/review_cases_20261116_round2.json"
+      ]
+    },
+    {
+      "title": "Xáo một chai",
+      "actor": "Người chơi",
+      "action": "Chọn Shuffle rồi chọn chai được phép.",
+      "rule": "State machine 0.0.3063 chỉ Spend sau khi có selectedBottle hợp lệ; không dùng quy tắc này để suy đường Mega Shuffle.",
+      "outcome": "Một chai được xáo và nguồn chi trả bị trừ đúng lúc hợp lệ.",
+      "uc_ids": [
+        "UC-03"
+      ],
+      "source_refs": [
+        "gdd/Boosters.json#use_cases/2",
+        "facts/core_body_gap_decisions_20261115.json#MS-CORE-BODY-01",
+        "facts/core_body_gap_decisions_20261115.json#MS-CORE-BODY-02",
+        "facts/core_body_gap_decisions_20261115.json#MS-CORE-BODY-16",
+        "facts/review_cases_20261116_round2.json"
+      ]
+    },
+    {
+      "title": "Lộ hoặc gỡ trên một chai",
+      "actor": "Người chơi",
+      "action": "Chọn Reveal rồi chọn chai đủ điều kiện.",
+      "rule": "Reveal có state machine chọn riêng và gate IsRevealable của item; không phải mọi blocker đều bị gỡ.",
+      "outcome": "Hiệu ứng đúng loại được áp, không mặc định dọn sạch mọi vật trên chai.",
+      "uc_ids": [
+        "UC-04"
+      ],
+      "source_refs": [
+        "gdd/Boosters.json#use_cases/3",
+        "facts/core_body_gap_decisions_20261115.json#MS-CORE-BODY-01",
+        "facts/core_body_gap_decisions_20261115.json#MS-CORE-BODY-02",
+        "facts/core_body_gap_decisions_20261115.json#MS-CORE-BODY-16",
+        "facts/review_cases_20261116_round2.json"
+      ]
+    },
+    {
+      "title": "Hủy chế độ chọn",
+      "actor": "Người chơi",
+      "action": "Bấm hủy hoặc đi tới nhánh selectedBottle = null.",
+      "rule": "Trong Shuffle/Reveal 0.0.3063, nhánh hủy thoát trước Spend và phát signal cancel.",
+      "outcome": "Không tiêu item/coin chỉ vì đã mở lớp chọn.",
+      "uc_ids": [
+        "UC-10"
+      ],
+      "source_refs": [
+        "gdd/Boosters.json#use_cases/9",
+        "facts/core_body_gap_decisions_20261115.json#MS-CORE-BODY-01",
+        "facts/core_body_gap_decisions_20261115.json#MS-CORE-BODY-02",
+        "facts/core_body_gap_decisions_20261115.json#MS-CORE-BODY-16",
+        "facts/review_cases_20261116_round2.json"
+      ]
+    },
+    {
+      "title": "Thêm không gian bằng chai",
+      "actor": "Người chơi",
+      "action": "Dùng Extra Bottle khi bàn cho phép thêm.",
+      "rule": "Kiểm max bottle/layout trước khi dùng; round 2 tăng 12→13 chai và giảm Extra 9988→9987.",
+      "outcome": "Bàn có thêm chai; chưa chứng minh không có giới hạn toàn cục.",
+      "uc_ids": [
+        "UC-05"
+      ],
+      "source_refs": [
+        "gdd/Boosters.json#use_cases/4",
+        "facts/core_body_gap_decisions_20261115.json#MS-CORE-BODY-01",
+        "facts/core_body_gap_decisions_20261115.json#MS-CORE-BODY-02",
+        "facts/core_body_gap_decisions_20261115.json#MS-CORE-BODY-16",
+        "facts/review_cases_20261116_round2.json"
+      ]
+    },
+    {
+      "title": "Trộn toàn bàn",
+      "actor": "Người chơi hoặc hệ thống",
+      "action": "Dùng Mega Shuffle hoặc được luồng hệ thống cấp hiệu ứng tương tự.",
+      "rule": "Thuật toán có chai/ màu bị loại và số lần thử cấu hình; ForceMegaShuffle là đường riêng. Không bảo đảm mọi lần trộn tạo bàn có lời giải.",
+      "outcome": "Áp bố cục được chấp nhận rồi kiểm lại stuck.",
+      "uc_ids": [
+        "UC-06",
+        "UC-07"
+      ],
+      "source_refs": [
+        "gdd/Boosters.json#use_cases/5",
+        "gdd/Boosters.json#use_cases/6",
+        "facts/core_body_gap_decisions_20261115.json#MS-CORE-BODY-01",
+        "facts/core_body_gap_decisions_20261115.json#MS-CORE-BODY-02",
+        "facts/core_body_gap_decisions_20261115.json#MS-CORE-BODY-16",
+        "facts/review_cases_20261116_round2.json"
+      ]
+    },
+    {
+      "title": "Hết item và thiếu coin",
+      "actor": "Người chơi và client",
+      "action": "Thử dùng khi số lượng bằng 0.",
+      "rule": "Có item thì Spend item; hết item có thể Spend coin theo đường hỗ trợ; thiếu coin có nhánh mở Store. Bấm nút không phải mọi trường hợp đều trừ ngay.",
+      "outcome": "Không trao booster miễn phí chỉ vì Store đã mở.",
+      "uc_ids": [
+        "UC-08"
+      ],
+      "source_refs": [
+        "gdd/Boosters.json#use_cases/7",
+        "facts/core_body_gap_decisions_20261115.json#MS-CORE-BODY-01",
+        "facts/core_body_gap_decisions_20261115.json#MS-CORE-BODY-02",
+        "facts/core_body_gap_decisions_20261115.json#MS-CORE-BODY-16",
+        "facts/review_cases_20261116_round2.json"
+      ]
+    },
+    {
+      "title": "Mở khóa và bổ sung kho",
+      "actor": "Người chơi và client",
+      "action": "Nhận giới thiệu, quà khởi điểm hoặc reward về sau.",
+      "rule": "Default mở ba booster ở level 15 và cho 3 mỗi loại cơ bản; booster thứ tư còn phụ thuộc variant/enable. Quà sự kiện khác purchase tại nút.",
+      "outcome": "Đường earn và spend có nguồn riêng để đối soát.",
+      "uc_ids": [
+        "UC-11",
+        "UC-12",
+        "UC-13",
+        "UC-14"
+      ],
+      "source_refs": [
+        "gdd/Boosters.json#use_cases/10",
+        "gdd/Boosters.json#use_cases/11",
+        "gdd/Boosters.json#use_cases/12",
+        "gdd/Boosters.json#use_cases/13",
+        "facts/core_body_gap_decisions_20261115.json#MS-CORE-BODY-01",
+        "facts/core_body_gap_decisions_20261115.json#MS-CORE-BODY-02",
+        "facts/core_body_gap_decisions_20261115.json#MS-CORE-BODY-16",
+        "facts/review_cases_20261116_round2.json"
+      ]
+    },
+    {
+      "title": "Kiểm phạm vi pre-booster",
+      "actor": "Designer",
+      "action": "Tra cứu trước khi mô tả picker hoặc chuỗi pre-level.",
+      "rule": "PreBoosterWinStreakService 0.0.3063 chỉ thấy constructor; popup PreLevel đã đọc chỉ có Show lifecycle.",
+      "outcome": "Giữ phần luật streak/picker chưa biết, không tự mô tả một màn chọn booster đang chạy.",
+      "uc_ids": [
+        "UC-16"
+      ],
+      "source_refs": [
+        "gdd/Boosters.json#use_cases/15",
+        "facts/core_body_gap_decisions_20261115.json#MS-CORE-BODY-01",
+        "facts/core_body_gap_decisions_20261115.json#MS-CORE-BODY-02",
+        "facts/core_body_gap_decisions_20261115.json#MS-CORE-BODY-16",
+        "facts/review_cases_20261116_round2.json"
+      ]
+    }
+  ],
+  "rules": [
+    {
+      "title": "Không gộp thời điểm Spend",
+      "text": "Undo/Extra xử lý trong TryUseBooster; Shuffle/Reveal chờ target; Mega dùng đường riêng. Cần đọc đúng caller trước khi mô tả hủy hoặc lỗi.",
+      "source_refs": [
+        "gdd/Boosters.json#flow",
+        "gdd/Boosters.json#configs",
+        "facts/core_body_gap_decisions_20261115.json#MS-CORE-BODY-01",
+        "facts/core_body_gap_decisions_20261115.json#MS-CORE-BODY-02",
+        "facts/core_body_gap_decisions_20261115.json#MS-CORE-BODY-16",
+        "facts/review_cases_20261116_round2.json"
+      ]
+    },
+    {
+      "title": "Lịch sử không phải ảnh chụp bàn",
+      "text": "Shuffle có reset selection history theo body. Undo qua BottleCollection và sau Mega chưa đủ chứng cứ, không dùng tên CommandHistory để hứa khả năng đảo mọi hiệu ứng.",
+      "source_refs": [
+        "gdd/Boosters.json#flow",
+        "gdd/Boosters.json#configs",
+        "facts/core_body_gap_decisions_20261115.json#MS-CORE-BODY-01",
+        "facts/core_body_gap_decisions_20261115.json#MS-CORE-BODY-02",
+        "facts/core_body_gap_decisions_20261115.json#MS-CORE-BODY-16",
+        "facts/review_cases_20261116_round2.json"
+      ]
+    },
+    {
+      "title": "Ô thứ tư là selector, chưa phải thí nghiệm đã đo",
+      "text": "InGameBoosterVariant 1/2 có consumer tutorial Mega/Reveal ở 0.0.3063; vị trí và feature gate cần đối chiếu constructor/caller. Không có assignment hoặc uplift.",
+      "source_refs": [
+        "gdd/Boosters.json#flow",
+        "gdd/Boosters.json#configs",
+        "facts/core_body_gap_decisions_20261115.json#MS-CORE-BODY-01",
+        "facts/core_body_gap_decisions_20261115.json#MS-CORE-BODY-02",
+        "facts/core_body_gap_decisions_20261115.json#MS-CORE-BODY-16",
+        "facts/review_cases_20261116_round2.json"
+      ]
+    },
+    {
+      "title": "Nhận và tiêu là hai sổ",
+      "text": "CurrencyType 4/5/6/18/19 là các item riêng; inventory fixture cao không đại diện lượng khởi điểm hay cân bằng production.",
+      "source_refs": [
+        "gdd/Boosters.json#flow",
+        "gdd/Boosters.json#configs",
+        "facts/core_body_gap_decisions_20261115.json#MS-CORE-BODY-01",
+        "facts/core_body_gap_decisions_20261115.json#MS-CORE-BODY-02",
+        "facts/core_body_gap_decisions_20261115.json#MS-CORE-BODY-16",
+        "facts/review_cases_20261116_round2.json"
+      ]
+    }
+  ],
+  "decisions": [
+    {
+      "question": "Vì sao target phải được chọn trước khi tiêu Shuffle/Reveal?",
+      "answer": "Người chơi còn có thể hủy hoặc không có đích hợp lệ; tiêu tại bước chọn thành công giữ chi phí gắn một tác động thực.",
+      "basis": "State machines 0.0.3063 và lịch sử Shuffle được ghi trong GDD.",
+      "source_refs": [
+        "gdd/Boosters.json#flow",
+        "gdd/Boosters.json#configs",
+        "facts/core_body_gap_decisions_20261115.json#MS-CORE-BODY-01",
+        "facts/core_body_gap_decisions_20261115.json#MS-CORE-BODY-02",
+        "facts/core_body_gap_decisions_20261115.json#MS-CORE-BODY-16",
+        "facts/review_cases_20261116_round2.json"
+      ]
+    },
+    {
+      "question": "Có nên giới thiệu Extra Bottle như chắc chắn cứu mọi bàn?",
+      "answer": "Không. Nó thêm sức chứa nhưng còn giới hạn layout và blocker; sau hiệu ứng vẫn cần xét bàn.",
+      "basis": "Điều kiện AddExtraBottle và kiểm stuck.",
+      "source_refs": [
+        "gdd/Boosters.json#flow",
+        "gdd/Boosters.json#configs",
+        "facts/core_body_gap_decisions_20261115.json#MS-CORE-BODY-01",
+        "facts/core_body_gap_decisions_20261115.json#MS-CORE-BODY-02",
+        "facts/core_body_gap_decisions_20261115.json#MS-CORE-BODY-16",
+        "facts/review_cases_20261116_round2.json"
+      ]
+    },
+    {
+      "question": "Pre-booster có phải đã được dựng đầy đủ?",
+      "answer": "Không. Những class/lifecycle hiện có chưa cung cấp rule streak, picker và grant; phải giữ dependency này.",
+      "basis": "MS-CORE-BODY-01/02.",
+      "source_refs": [
+        "gdd/Boosters.json#flow",
+        "gdd/Boosters.json#configs",
+        "facts/core_body_gap_decisions_20261115.json#MS-CORE-BODY-01",
+        "facts/core_body_gap_decisions_20261115.json#MS-CORE-BODY-02",
+        "facts/core_body_gap_decisions_20261115.json#MS-CORE-BODY-16",
+        "facts/review_cases_20261116_round2.json"
+      ]
+    }
+  ],
+  "segments_ab": {
+    "summary": "Phân biệt selector, trạng thái và A/B; chưa có allocation/outcome được xác minh.",
+    "axes": [
+      {
+        "axis": "Variant ô thứ tư",
+        "selection": "InGameBoosterVariant và IsRevealBoosterEnabled chọn nhánh.",
+        "effect": "Đổi công cụ hoặc hướng dẫn có thể hiện.",
+        "evidence_limit": "Consumer lịch sử không xác lập config effective hoặc cohort.",
+        "source_refs": [
+          "gdd/Boosters.json#flow",
+          "gdd/Boosters.json#configs",
+          "gdd/Boosters.json#segment_ab_review_20261115"
+        ]
+      },
+      {
+        "axis": "Nguồn chi trả",
+        "selection": "Item còn/không còn, coin đủ/thiếu và nguồn hiệu ứng hệ thống.",
+        "effect": "Chọn Spend item, Spend coin, mở Store hoặc hiệu ứng được cấp.",
+        "evidence_limit": "Đây là trạng thái kinh tế, không tự là A/B.",
+        "source_refs": [
+          "gdd/Boosters.json#flow",
+          "gdd/Boosters.json#configs",
+          "gdd/Boosters.json#segment_ab_review_20261115"
+        ]
+      }
+    ],
+    "unknowns": [
+      "Effective config, runtime các nhánh chưa chạy và phân bổ A/B cần bằng chứng riêng."
+    ]
+  },
+  "recovery": [
+    {
+      "condition": "Hủy chọn chai",
+      "expected": "Thoát chế độ chọn mà không Spend theo hai body Shuffle/Reveal đã đọc.",
+      "verified_scope": "Source-scoped; quan sát round 2 có phạm vi đúng case, không full UC pass.",
+      "uc_ids": [
+        "UC-03",
+        "UC-04",
+        "UC-10"
+      ]
+    },
+    {
+      "condition": "Mega vẫn kẹt hoặc không có ứng viên",
+      "expected": "Kiểm nhánh retry/failure và báo đúng kết quả; không lặp grant hoặc hứa bàn đã giải.",
+      "verified_scope": "Source-scoped; quan sát round 2 có phạm vi đúng case, không full UC pass.",
+      "uc_ids": [
+        "UC-06",
+        "UC-07"
+      ]
+    },
+    {
+      "condition": "Reload hoặc sync kho",
+      "expected": "Đọc item riêng và ledger; dữ liệu local lưu được chưa chứng minh sync nhiều thiết bị.",
+      "verified_scope": "Source-scoped; quan sát round 2 có phạm vi đúng case, không full UC pass.",
+      "uc_ids": [
+        "UC-15"
+      ]
+    }
+  ],
+  "takeaways": [
+    {
+      "text": "Người chơi còn có thể hủy hoặc không có đích hợp lệ; tiêu tại bước chọn thành công giữ chi phí gắn một tác động thực.",
+      "basis": "State machines 0.0.3063 và lịch sử Shuffle được ghi trong GDD."
+    },
+    {
+      "text": "Không. Nó thêm sức chứa nhưng còn giới hạn layout và blocker; sau hiệu ứng vẫn cần xét bàn.",
+      "basis": "Điều kiện AddExtraBottle và kiểm stuck."
+    },
+    {
+      "text": "Không. Những class/lifecycle hiện có chưa cung cấp rule streak, picker và grant; phải giữ dependency này.",
+      "basis": "MS-CORE-BODY-01/02."
+    }
+  ],
+  "reviewed_source_paths": [
+    "gdd/Boosters.json",
+    "site_meta/Boosters.json",
+    "facts/core_body_gap_decisions_20261115.json",
+    "facts/review_cases_20261116_round2.json",
+    "facts/review_20261116/public_current_config_3129/defaults/GameEconomyModel.json"
+  ]
+}

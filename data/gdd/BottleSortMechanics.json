@@ -13,14 +13,14 @@
     "Modules.Contexts.GamePlay.BoardItems.Scripts.Common.ColorNS.ColorService",
     "Modules.Infrastructure.UI.Common.Scripts.SortingService"
   ],
-  "summary": "Đây là lõi gameplay của Magic Sort: bàn chơi gồm nhiều chai xếp thành hàng, mỗi chai có số ô (Height) chứa các khối nước màu. Người chơi tap chai nguồn rồi tap chai đích; nước màu trên cùng của chai nguồn sẽ chảy sang nếu chai đích trống hoặc có cùng màu ở trên cùng và còn chỗ. Chai đầy toàn một màu sẽ được 'hoàn thành' (đóng nắp và biến mất khỏi bàn). Thắng khi mọi chai đều hoàn thành/trống; thua chỉ khi bàn hết nước đi hợp lệ (Stuck) hoặc hết giờ ở chế độ Daily. Điểm khác biệt của Magic Sort so với water-sort truyền thống: chai không đứng yên — chai nguồn bay sang cạnh chai đích, nghiêng theo góc phụ thuộc lượng nước và chiều cao chai (rotationsByHeights), nhiều khối nước cùng màu liền nhau được gộp (TryMergeColors) và đổ trong một lần; bàn có thể chia thành nhiều 'BottleCollection' (nhiều đợt) trong cùng một level; và có ô Question Mark che giấu màu cho tới khi lộ ra.",
+  "summary": "Đây là lõi gameplay của Magic Sort: bàn chơi gồm nhiều chai xếp thành hàng, mỗi chai có số ô (Height) chứa các khối nước màu. Người chơi tap chai nguồn rồi tap chai đích; nước màu trên cùng của chai nguồn sẽ chảy sang nếu chai đích trống hoặc có cùng màu ở trên cùng và còn chỗ. Chai đủ điều kiện đồng màu, full height và visible được hoàn thành, đóng nắp và khóa chọn; không khẳng định mọi chai đều biến mất khỏi bàn. Thắng khi mọi chai đều hoàn thành/trống; thua chỉ khi bàn hết nước đi hợp lệ (Stuck) hoặc hết giờ ở chế độ Daily. Điểm khác biệt của Magic Sort so với water-sort truyền thống: chai không đứng yên — chai nguồn bay sang cạnh chai đích, nghiêng theo góc phụ thuộc lượng nước và chiều cao chai (rotationsByHeights), nhiều khối nước cùng màu liền nhau được gộp (TryMergeColors) và đổ trong một lần; bàn có thể chia thành nhiều 'BottleCollection' (nhiều đợt) trong cùng một level; và có ô Question Mark che giấu màu cho tới khi lộ ra.",
   "unlock": "Có từ level 1. Bảng màu và số chai thay đổi theo cấu hình level; các biến thể hình ảnh bật/tắt bằng RootLevelConfigModel (IsNewBottleVisualsEnabled, IsNewBottleParticlesEnabled, IsBackgroundAndShelvesEnabled, ColorVariant chọn ColorPalette A/B).",
   "entry_points": [
     "Bàn chơi trong scene GamePlay (BottleCollection.GenerateBottles)",
     "Daily Level dùng cùng cơ chế với chai cao 12 ô",
     "Level Editor (Modules.LevelEditor.WaterSort) dựng bàn từ preset"
   ],
-  "flow": "BottleCollections.GenerateBottleCollections(levelAndLevelConfigModel, isDaily) đọc danh sách BottleItemModel và tạo một hoặc nhiều BottleCollection. Mỗi BottleCollection.SortBottleModels xếp model thành các hàng theo toạ độ Y, FindMaxBottleHeight tìm chiều cao lớn nhất để chọn cấu hình camera/animation, rồi GenerateBottles dựng từng BottleItem: AddBottle(x, y, bottleHeight) → Prepare(...) và AddWaterItem/InsertWaterItem cho từng khối nước với ColorId, sau đó gắn các blocker (Curtain, Plaster, Clay, Tag, Ice, Generator, Woodbox, Carpet, Toggle, Ivy, Frog, MagicSeal, Duck, Safe, Mosaic, Bag, Firework, Rainbow, Icicle, ChargeableBottle, Snitch) và kệ (AddShelvesIfNeeded). GameplayInputSystem.OnTouchDown lấy toạ độ thế giới → BottleCollection.GetIntersectedBottle(worldPosition, InputMode, out bottle). Lần tap đầu: Selection.CanSelectAsOrigin(bottle) → SelectAsOrigin, chai nhô lên (PlayBottleSelectedAnimation). Lần tap thứ hai: Selection.CanSelectAsTarget(target, origin) kiểm tra BottleItem.IsSelectableAsTarget(originBottle, waterColorId); nếu hợp lệ → SelectAsTarget, SelectionResult.GetSelectionResult tính WaterHeightToMove và chiều cao nước trước/sau của cả hai chai, chai nguồn bay sang, nghiêng theo RotationSteps (GetRotationStepsToDropTheWater) và WaterLine nối hai miệng chai để đổ; ApplySelection cập nhật dữ liệu (RemoveWater/AddWater), CompleteSelection kết thúc và chai nguồn quay về chỗ cũ (OnOriginBottleReturnToInitialPosition). Nếu tap lại chính chai đó hoặc chai không hợp lệ thì Deselect / TryCancel / ReverseSelection. Sau mỗi lượt, BottleItem.TryComplete kiểm tra ShouldComplete: chai đầy đủ một màu (chiều cao nước trên cùng == Height) — hoặc khi lượng màu đó còn lại trên bàn vừa khít — thì Complete() và bắn OnBottleCompleted cho BottleCollection và các chai bên cạnh (mở khoá blocker phụ thuộc). LevelWinOrStuckSystem.FrameUpdate liên tục gọi CheckAndApplyLevelWinOrHasNoMove: khi IsBoardStopped() (không còn animation) mà BottleCollections.IsCollectionCleared() thì thắng (hoặc NextBottleCollection nếu chưa phải collection cuối); nếu HasNoMove() thì TrySolveSpecialStuck() thử gỡ (ví dụ Generator còn sinh nước), thất bại thì báo StuckType.NoMove. CheckAndApplyTimeIsUp() xử lý hết giờ ở Daily (StuckType.TimeIsUp).",
+  "flow": "BottleCollections.GenerateBottleCollections(levelAndLevelConfigModel, isDaily) đọc danh sách BottleItemModel và tạo một hoặc nhiều BottleCollection. Mỗi BottleCollection.SortBottleModels xếp model thành các hàng theo toạ độ Y, FindMaxBottleHeight tìm chiều cao lớn nhất để chọn cấu hình camera/animation, rồi GenerateBottles dựng từng BottleItem: AddBottle(x, y, bottleHeight) → Prepare(...) và AddWaterItem/InsertWaterItem cho từng khối nước với ColorId, sau đó gắn các blocker (Curtain, Plaster, Clay, Tag, Ice, Generator, Woodbox, Carpet, Toggle, Ivy, Frog, MagicSeal, Duck, Safe, Mosaic, Bag, Firework, Rainbow, Icicle, ChargeableBottle, Snitch) và kệ (AddShelvesIfNeeded). GameplayInputSystem.OnTouchDown lấy toạ độ thế giới → BottleCollection.GetIntersectedBottle(worldPosition, InputMode, out bottle). Lần tap đầu: Selection.CanSelectAsOrigin(bottle) → SelectAsOrigin, chai nhô lên (PlayBottleSelectedAnimation). Lần tap thứ hai: Selection.CanSelectAsTarget(target, origin) kiểm tra BottleItem.IsSelectableAsTarget(originBottle, waterColorId); nếu hợp lệ → SelectAsTarget, SelectionResult.GetSelectionResult tính WaterHeightToMove và chiều cao nước trước/sau của cả hai chai, chai nguồn bay sang, nghiêng theo RotationSteps (GetRotationStepsToDropTheWater) và WaterLine nối hai miệng chai để đổ; ApplySelection cập nhật dữ liệu (RemoveWater/AddWater), CompleteSelection kết thúc và chai nguồn quay về chỗ cũ (OnOriginBottleReturnToInitialPosition). Nếu tap lại chính chai đó hoặc chai không hợp lệ thì Deselect / TryCancel / ReverseSelection. Sau mỗi lượt, BottleItem.TryComplete kiểm tra ShouldComplete 0.0.3063: base = isCompletable && !IsCompleted && !IsEmpty && topWater.Height == Height && IsAllWatersVisible. Không có chai dài trên board thì dùng base; có chai dài thì thêm (GetColorCount(topColor) == Height || IsLongBottle). Không có nhánh hoàn thành chai chưa đầy. Khi predicate đúng thì Complete() và bắn OnBottleCompleted cho BottleCollection và các chai bên cạnh (mở khoá blocker phụ thuộc). LevelWinOrStuckSystem.FrameUpdate liên tục gọi CheckAndApplyLevelWinOrHasNoMove: khi IsBoardStopped() (không còn animation) mà BottleCollections.IsCollectionCleared() thì thắng (hoặc NextBottleCollection nếu chưa phải collection cuối); nếu HasNoMove() thì TrySolveSpecialStuck() thử gỡ (ví dụ Generator còn sinh nước), thất bại thì báo StuckType.NoMove. CheckAndApplyTimeIsUp() xử lý hết giờ ở Daily (StuckType.TimeIsUp).",
   "use_cases": [
     {
       "id": "UC-01",
@@ -348,7 +348,7 @@
         "SelectionSystem.IsSelectionRunning() / GetRunningSelections() cho hệ thống khác biết bàn đang bận",
         "GameplayInputSystem.OnTouchCancel(position) xử lý huỷ chạm"
       ],
-      "result": "Không xảy ra thao tác chồng chéo làm hỏng trạng thái bàn",
+      "result": "Các lock và input gates được thiết kế để ngăn chọn chồng cùng chai; chưa có bằng chứng bao quát mọi race hoặc tổ hợp animation.",
       "rules": "Magic Sort cho phép nhiều selection chạy song song (danh sách _selectionsRunning) nên khoá theo từng chai chứ không khoá toàn bàn",
       "evidence": "GameplayInputSystem.Activate; GameplayInputSystem.Deactivate; SelectionSystem.TryCancelAllSelections; SelectionSystem.IsSelectionRunning; BottleItem.IsBottleSelectionRunning"
     },
@@ -1485,5 +1485,332 @@
       "UC-11"
     ],
     "full_uc_pass": false
+  },
+  "design_spec_20261116": {
+    "source": "editorial/BottleSortMechanics.json",
+    "sha256": "4243a05698e0a92a6da2a1b86e56cf7cf8b7eb68e026c83099fcb1a17a4cebc6",
+    "scope": "Designer-facing interpretation; no new runtime verification. Original use_cases and evidence remain unchanged.",
+    "content": {
+      "id": "BottleSortMechanics",
+      "schema_version": 1,
+      "scope": "Diễn giải thiết kế từ GDD, metadata và nguồn đã đối chiếu. Outcome là expected; chỉ câu ghi round2 là actual của fixture 0.0.3129. Mã native 0.0.3063, default APK 0.0.3129 và cache lịch sử có phạm vi riêng. Không có playtest mới trong lượt biên tập.",
+      "design_intent": "Cho người chơi suy luận bằng màu trên mặt chai và sức chứa, đồng thời làm mỗi nước đổ có phản hồi vật lý rõ. Những lớp ẩn, blocker và chai đặc biệt mở rộng luật, nên thành công phải dựa dữ liệu bàn chứ không chỉ nhìn animation.",
+      "player_loop": "Đọc mặt nước → chọn nguồn → chọn đích → đổ lượng hợp lệ → xem ô hoặc blocker mới lộ → sắp xếp tiếp → hoàn tất đợt và level.",
+      "flow": [
+        {
+          "title": "Đọc bàn và sức chứa",
+          "actor": "Người chơi và client",
+          "action": "Vào level và quan sát các chai, ô ẩn, vật cản cùng số đợt nếu có.",
+          "rule": "Model dựng chai theo Height và vị trí; một level có thể gồm nhiều BottleCollection. Chai thường/Daily thường có cấu hình cao 4/12, còn chai đặc biệt có height riêng.",
+          "outcome": "Bàn phản ánh đúng model trước khi nhận thao tác.",
+          "uc_ids": [
+            "UC-01"
+          ],
+          "source_refs": [
+            "gdd/BottleSortMechanics.json#use_cases/0",
+            "facts/core_body_gap_decisions_20261115.json#MS-CORE-BODY-03",
+            "facts/core_body_gap_decisions_20261115.json#MS-CORE-BODY-04",
+            "facts/review_cases_20261116_round2.json",
+            "facts/review_20261116_round2/core352_moves_observations.json"
+          ]
+        },
+        {
+          "title": "Nhấc chai nguồn",
+          "actor": "Người chơi",
+          "action": "Chạm chai có phần nước có thể lấy.",
+          "rule": "Selection và blocker kiểm quyền chọn nguồn; chai hoàn thành, bị khóa hoặc đang thuộc selection khác có gate riêng.",
+          "outcome": "Nguồn được nhấc lên hoặc thao tác bị từ chối mà không đổi nước.",
+          "uc_ids": [
+            "UC-02"
+          ],
+          "source_refs": [
+            "gdd/BottleSortMechanics.json#use_cases/1",
+            "facts/core_body_gap_decisions_20261115.json#MS-CORE-BODY-03",
+            "facts/core_body_gap_decisions_20261115.json#MS-CORE-BODY-04",
+            "facts/review_cases_20261116_round2.json",
+            "facts/review_20261116_round2/core352_moves_observations.json"
+          ]
+        },
+        {
+          "title": "Chọn đích hoặc hủy lựa chọn",
+          "actor": "Người chơi",
+          "action": "Chạm chai trống hoặc có mặt nước cùng màu; chạm lại/đổi lựa chọn để hủy theo nhánh input.",
+          "rule": "Đích phải còn chỗ và không bị blocker chặn. Cùng màu nhưng đầy vẫn không hợp lệ.",
+          "outcome": "Selection hợp lệ mới đi tới đổ; tap sai không được xem là một nước thành công.",
+          "uc_ids": [
+            "UC-03"
+          ],
+          "source_refs": [
+            "gdd/BottleSortMechanics.json#use_cases/2",
+            "facts/core_body_gap_decisions_20261115.json#MS-CORE-BODY-03",
+            "facts/core_body_gap_decisions_20261115.json#MS-CORE-BODY-04",
+            "facts/review_cases_20261116_round2.json",
+            "facts/review_20261116_round2/core352_moves_observations.json"
+          ]
+        },
+        {
+          "title": "Chuyển đủ lượng có thể đổ",
+          "actor": "Client",
+          "action": "Tính lượng màu liền nhau ở đỉnh nguồn và phần trống của đích.",
+          "rule": "Lượng chuyển bị giới hạn bởi top-water liền màu và sức chứa hợp lệ; không mặc định luôn lấy đúng một ô hoặc toàn chai.",
+          "outcome": "Dữ liệu và đường nước phản ánh cùng lượng chuyển.",
+          "uc_ids": [
+            "UC-04"
+          ],
+          "source_refs": [
+            "gdd/BottleSortMechanics.json#use_cases/3",
+            "facts/core_body_gap_decisions_20261115.json#MS-CORE-BODY-03",
+            "facts/core_body_gap_decisions_20261115.json#MS-CORE-BODY-04",
+            "facts/review_cases_20261116_round2.json",
+            "facts/review_20261116_round2/core352_moves_observations.json"
+          ]
+        },
+        {
+          "title": "Hoàn tất animation và cập nhật bàn",
+          "actor": "Người chơi và client",
+          "action": "Theo dõi chai nguồn bay, nghiêng rồi trở về.",
+          "rule": "Có nhiều selection cùng tồn tại nhưng khóa theo chai; xét input khi animation đang chạy phải theo gate, không suy cả bàn luôn bị khóa.",
+          "outcome": "Sau callback, dữ liệu nguồn/đích và trạng thái chọn nhất quán.",
+          "uc_ids": [
+            "UC-05"
+          ],
+          "source_refs": [
+            "gdd/BottleSortMechanics.json#use_cases/4",
+            "facts/core_body_gap_decisions_20261115.json#MS-CORE-BODY-03",
+            "facts/core_body_gap_decisions_20261115.json#MS-CORE-BODY-04",
+            "facts/review_cases_20261116_round2.json",
+            "facts/review_20261116_round2/core352_moves_observations.json"
+          ]
+        },
+        {
+          "title": "Hoàn thành chai đúng điều kiện",
+          "actor": "Client",
+          "action": "Đánh giá chai sau khi nước ổn định.",
+          "rule": "Code 0.0.3063 yêu cầu isCompletable, chưa hoàn thành, không rỗng, nước đỉnh cao bằng Height và mọi nước visible. Khi board có chai dài còn có điều kiện tổng lượng màu hoặc bản thân là chai dài.",
+          "outcome": "Không hoàn thành chai chưa đầy chỉ vì màu đó còn ít; cap và callback chỉ chạy khi predicate đúng.",
+          "uc_ids": [
+            "UC-06"
+          ],
+          "source_refs": [
+            "gdd/BottleSortMechanics.json#use_cases/5",
+            "facts/core_body_gap_decisions_20261115.json#MS-CORE-BODY-03",
+            "facts/core_body_gap_decisions_20261115.json#MS-CORE-BODY-04",
+            "facts/review_cases_20261116_round2.json",
+            "facts/review_20261116_round2/core352_moves_observations.json"
+          ]
+        },
+        {
+          "title": "Đọc màu vừa lộ",
+          "actor": "Người chơi",
+          "action": "Đổ phần nước phía trên ô dấu hỏi rồi lập lại kế hoạch.",
+          "rule": "Question Mark che thông tin; việc lộ màu có thể thay đổi quyết định tiếp theo. Round 2 level 352 ghi lộ dần ở ba chai, không xác lập mọi mẫu hidden.",
+          "outcome": "Thông tin mới trở thành dữ liệu để chọn nước đi tiếp.",
+          "uc_ids": [
+            "UC-11"
+          ],
+          "source_refs": [
+            "gdd/BottleSortMechanics.json#use_cases/10",
+            "facts/core_body_gap_decisions_20261115.json#MS-CORE-BODY-03",
+            "facts/core_body_gap_decisions_20261115.json#MS-CORE-BODY-04",
+            "facts/review_cases_20261116_round2.json",
+            "facts/review_20261116_round2/core352_moves_observations.json"
+          ]
+        },
+        {
+          "title": "Xét kẹt sau khi bàn dừng",
+          "actor": "Client",
+          "action": "Chờ bàn ổn định rồi kiểm nước đi và lối giải đặc biệt.",
+          "rule": "HasNoMove 0.0.3063 không chỉ kiểm có cặp chai cùng màu; nó tính capacity, loại một số chuyển dịch dư thừa và có nhánh special resolver.",
+          "outcome": "Chỉ mở Stuck sau quy trình kiểm; thấy một đường đổ hình học không đủ kết luận chắc chắn chưa kẹt.",
+          "uc_ids": [
+            "UC-08"
+          ],
+          "source_refs": [
+            "gdd/BottleSortMechanics.json#use_cases/7",
+            "facts/core_body_gap_decisions_20261115.json#MS-CORE-BODY-03",
+            "facts/core_body_gap_decisions_20261115.json#MS-CORE-BODY-04",
+            "facts/review_cases_20261116_round2.json",
+            "facts/review_20261116_round2/core352_moves_observations.json"
+          ]
+        },
+        {
+          "title": "Chuyển đợt hoặc thắng",
+          "actor": "Client",
+          "action": "Khi collection hiện tại được dọn, chuyển đợt kế nếu còn.",
+          "rule": "Collection cleared và level win là hai mốc khác nhau; Undo qua ranh giới đợt chưa được xác minh.",
+          "outcome": "Đợt cuối hoàn tất mới chuyển tới thắng level.",
+          "uc_ids": [
+            "UC-07"
+          ],
+          "source_refs": [
+            "gdd/BottleSortMechanics.json#use_cases/6",
+            "facts/core_body_gap_decisions_20261115.json#MS-CORE-BODY-03",
+            "facts/core_body_gap_decisions_20261115.json#MS-CORE-BODY-04",
+            "facts/review_cases_20261116_round2.json",
+            "facts/review_20261116_round2/core352_moves_observations.json"
+          ]
+        },
+        {
+          "title": "Hoàn tác trong phạm vi hỗ trợ",
+          "actor": "Người chơi",
+          "action": "Dùng Undo sau một nước đổ hợp lệ.",
+          "rule": "Round 2 phục hồi nước và cap cyan nhưng không phục hồi sáu cloth đã tháo; Undo không phải snapshot rollback mọi hệ.",
+          "outcome": "Đọc lại cả nước lẫn blocker sau Undo, không hứa khôi phục toàn bộ trạng thái.",
+          "uc_ids": [
+            "UC-10"
+          ],
+          "source_refs": [
+            "gdd/BottleSortMechanics.json#use_cases/9",
+            "facts/core_body_gap_decisions_20261115.json#MS-CORE-BODY-03",
+            "facts/core_body_gap_decisions_20261115.json#MS-CORE-BODY-04",
+            "facts/review_cases_20261116_round2.json",
+            "facts/review_20261116_round2/core352_moves_observations.json"
+          ]
+        }
+      ],
+      "rules": [
+        {
+          "title": "Đồng màu chưa đủ để hoàn thành",
+          "text": "Phải thỏa completable, full height và visibility; nhánh long-bottle là điều kiện bổ sung chứ không phải quyền cap chai còn thiếu nước.",
+          "source_refs": [
+            "gdd/BottleSortMechanics.json#flow",
+            "gdd/BottleSortMechanics.json#configs",
+            "facts/core_body_gap_decisions_20261115.json#MS-CORE-BODY-03",
+            "facts/core_body_gap_decisions_20261115.json#MS-CORE-BODY-04",
+            "facts/review_cases_20261116_round2.json",
+            "facts/review_20261116_round2/core352_moves_observations.json"
+          ]
+        },
+        {
+          "title": "Kiểm thắng, kiểm kẹt và timer khác nhau",
+          "text": "Chế độ thường kiểm collection và nước đi; Daily có đường TimeIsUp riêng. Không dùng kết luận về finite-life Daily khi mới đọc manager không thấy debit.",
+          "source_refs": [
+            "gdd/BottleSortMechanics.json#flow",
+            "gdd/BottleSortMechanics.json#configs",
+            "facts/core_body_gap_decisions_20261115.json#MS-CORE-BODY-03",
+            "facts/core_body_gap_decisions_20261115.json#MS-CORE-BODY-04",
+            "facts/review_cases_20261116_round2.json",
+            "facts/review_20261116_round2/core352_moves_observations.json"
+          ]
+        },
+        {
+          "title": "Quan sát 352 có giới hạn",
+          "text": "Round 2 xác minh từ chối đổ vào chai đầy, gộp cyan, tháo cloth, hidden reveal và một Undo. Không suy seed identity hay mọi animation/selection race từ chuỗi này.",
+          "source_refs": [
+            "gdd/BottleSortMechanics.json#flow",
+            "gdd/BottleSortMechanics.json#configs",
+            "facts/core_body_gap_decisions_20261115.json#MS-CORE-BODY-03",
+            "facts/core_body_gap_decisions_20261115.json#MS-CORE-BODY-04",
+            "facts/review_cases_20261116_round2.json",
+            "facts/review_20261116_round2/core352_moves_observations.json"
+          ]
+        }
+      ],
+      "decisions": [
+        {
+          "question": "Tại sao phải cho thấy sức chứa rõ như màu?",
+          "answer": "Đúng màu nhưng đầy vẫn bị chặn; người chơi cần đọc cả hai để hiểu tap sai và không đổ lỗi cho input.",
+          "basis": "Runtime 077 giữ nguyên bàn khi đích đầy.",
+          "source_refs": [
+            "gdd/BottleSortMechanics.json#flow",
+            "gdd/BottleSortMechanics.json#configs",
+            "facts/core_body_gap_decisions_20261115.json#MS-CORE-BODY-03",
+            "facts/core_body_gap_decisions_20261115.json#MS-CORE-BODY-04",
+            "facts/review_cases_20261116_round2.json",
+            "facts/review_20261116_round2/core352_moves_observations.json"
+          ]
+        },
+        {
+          "question": "Undo nên được mô tả là gì?",
+          "answer": "Hoàn tác nước đi được hỗ trợ; các thay đổi phụ thuộc blocker có thể không hồi nguyên. Hướng dẫn cần tránh lời hứa quay lại toàn bộ snapshot.",
+          "basis": "Round 2 080→081 và hồ sơ booster.",
+          "source_refs": [
+            "gdd/BottleSortMechanics.json#flow",
+            "gdd/BottleSortMechanics.json#configs",
+            "facts/core_body_gap_decisions_20261115.json#MS-CORE-BODY-03",
+            "facts/core_body_gap_decisions_20261115.json#MS-CORE-BODY-04",
+            "facts/review_cases_20261116_round2.json",
+            "facts/review_20261116_round2/core352_moves_observations.json"
+          ]
+        }
+      ],
+      "segments_ab": {
+        "summary": "Các trục dưới tách selector nội dung, trạng thái và experiment; chưa có assignment hoặc uplift mới.",
+        "axes": [
+          {
+            "axis": "Màu và hình thức chai",
+            "selection": "ColorVariant, palette và các cờ visuals chọn cách biểu diễn.",
+            "effect": "Đổi độ phân biệt màu, silhouette hoặc hiệu ứng, không tự đổi model seed.",
+            "evidence_limit": "Có cờ variant nhưng chưa có allocation/outcome A/B.",
+            "source_refs": [
+              "gdd/BottleSortMechanics.json#segment_ab_review_20261115",
+              "gdd/BottleSortMechanics.json#flow",
+              "gdd/BottleSortMechanics.json#configs"
+            ]
+          },
+          {
+            "axis": "Loại bàn và chai đặc biệt",
+            "selection": "Regular/Daily, nhiều collection, long bottle và blocker quyết định gate.",
+            "effect": "Đổi sức chứa và phép kiểm hoàn thành/nước đi.",
+            "evidence_limit": "Các nhánh code 0.0.3063 chưa đồng nghĩa đã kiểm runtime 0.0.3129.",
+            "source_refs": [
+              "gdd/BottleSortMechanics.json#segment_ab_review_20261115",
+              "gdd/BottleSortMechanics.json#flow",
+              "gdd/BottleSortMechanics.json#configs"
+            ]
+          }
+        ],
+        "unknowns": [
+          "Cần bằng chứng selector effective, cohort và outcome trước khi kết luận A/B; source tồn tại hoặc một fixture không đủ."
+        ]
+      },
+      "recovery": [
+        {
+          "condition": "Chọn đích đầy, sai màu hoặc bị chặn",
+          "expected": "Từ chối selection không hợp lệ; cho người chơi chọn lại hoặc hủy theo input.",
+          "verified_scope": "Theo nguồn/UC đã chỉ rõ; câu round 2 có phạm vi case, không full UC pass.",
+          "uc_ids": [
+            "UC-03",
+            "UC-18"
+          ]
+        },
+        {
+          "condition": "Bàn tưởng không còn đường",
+          "expected": "Kiểm special resolver và gate board stopped trước Stuck; chưa hứa mọi layout sẽ được tự cứu.",
+          "verified_scope": "Theo nguồn/UC đã chỉ rõ; câu round 2 có phạm vi case, không full UC pass.",
+          "uc_ids": [
+            "UC-08",
+            "UC-19"
+          ]
+        },
+        {
+          "condition": "Undo sau khi mở vật cản",
+          "expected": "Phân biệt hoàn tác nước với phục hồi blocker; dùng quan sát cụ thể, không suy mọi loại đều giống cloth.",
+          "verified_scope": "Theo nguồn/UC đã chỉ rõ; câu round 2 có phạm vi case, không full UC pass.",
+          "uc_ids": [
+            "UC-10",
+            "UC-15"
+          ]
+        }
+      ],
+      "takeaways": [
+        {
+          "text": "Đúng màu nhưng đầy vẫn bị chặn; người chơi cần đọc cả hai để hiểu tap sai và không đổ lỗi cho input.",
+          "basis": "Runtime 077 giữ nguyên bàn khi đích đầy."
+        },
+        {
+          "text": "Hoàn tác nước đi được hỗ trợ; các thay đổi phụ thuộc blocker có thể không hồi nguyên. Hướng dẫn cần tránh lời hứa quay lại toàn bộ snapshot.",
+          "basis": "Round 2 080→081 và hồ sơ booster."
+        }
+      ],
+      "reviewed_source_paths": [
+        "gdd/BottleSortMechanics.json",
+        "site_meta/BottleSortMechanics.json",
+        "facts/core_body_gap_decisions_20261115.json",
+        "facts/review_cases_20261116_round2.json",
+        "facts/review_20261116_round2/core352_moves_observations.json",
+        "facts/review_20261116/public_current_config_3129/defaults/GameEconomyModel.json"
+      ]
+    }
   }
 }

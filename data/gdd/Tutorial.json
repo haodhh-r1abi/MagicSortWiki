@@ -239,9 +239,9 @@
         "PlayerService.SetIsBlockerIntroduced(blockerId) và IsBlockerIntroduced(blockerId) cho vật cản (định dạng mới, theo id)",
         "PlayerService.IsBlockerIntroducedOld(ItemType) đọc khoá cũ dạng '{0}Introduced' để tương thích ngược",
         "DailyDataService.SetDailyIntroduced() / IsDailyIntroduced() và SetTutorialLevelPlayed() / DidTutorialLevelPlay() cho Daily",
-        "Các cờ này đi qua ISyncable nên chuyển máy không bị lặp lại tutorial"
+        "Các cờ được lưu theo PlayerPrefs/model và một số đi qua sync; chưa kiểm chuyển máy hoặc mọi luồng restore để bảo đảm không lặp tutorial."
       ],
-      "result": "Mỗi hướng dẫn chỉ hiện đúng một lần trên mọi thiết bị",
+      "result": "Các lớp tutorial có trạng thái đã giới thiệu để điều tiết replay; chưa xác minh hành vi trên mọi thiết bị.",
       "rules": "Có hai định dạng cờ vật cản song song (cũ theo tên ItemType, mới theo blockerId) — bằng chứng của một lần migrate dữ liệu",
       "evidence": "PlayerService.SetIsBlockerIntroduced; PlayerService.IsBlockerIntroduced; PlayerService.IsBlockerIntroducedOld; DailyDataService.SetDailyIntroduced; DailyDataService.DidTutorialLevelPlay"
     }
@@ -5015,5 +5015,289 @@
     "round2_case_ids": [],
     "round2_branch_ucs": [],
     "full_uc_pass": false
+  },
+  "design_spec_20261116": {
+    "source": "editorial/Tutorial.json",
+    "sha256": "e6c31eecbfc908e2719e43c7bcabfa38c74e07bacdb666f62fde34e7024efa7b",
+    "scope": "Designer-facing interpretation; no new runtime verification. Original use_cases and evidence remain unchanged.",
+    "content": {
+      "id": "Tutorial",
+      "schema_version": 1,
+      "scope": "Diễn giải thiết kế từ GDD, metadata và nguồn đã đối chiếu. Outcome là expected; chỉ câu ghi round2 là actual của fixture 0.0.3129. Mã native 0.0.3063, default APK 0.0.3129 và cache lịch sử có phạm vi riêng. Không có playtest mới trong lượt biên tập.",
+      "design_intent": "Dạy thao tác và luật đúng lúc người chơi cần dùng, thay vì dồn mọi hướng dẫn vào một màn đầu game. Mỗi lớp phải nói rõ nó khóa thao tác gì, kết thúc khi nào và bằng chứng nào cho phép coi người chơi đã được giới thiệu.",
+      "player_loop": "Vào nội dung mới → thấy chỉ dẫn theo ngữ cảnh → thực hiện đúng thao tác → được trả quyền điều khiển → tiếp tục chơi; lớp hướng dẫn khác chỉ xuất hiện khi đủ gate riêng.",
+      "flow": [
+        {
+          "title": "Bắt đầu bàn có cờ hướng dẫn",
+          "actor": "Người chơi và client",
+          "action": "Vào level được đánh dấu tutorial, chờ bàn và hoạt ảnh vào màn hoàn tất.",
+          "rule": "Default/cache có bốn level đầu mang isTutorial. Cờ này khác cờ đã xem popup của booster hoặc vật cản.",
+          "outcome": "TutorialSystem bắt đầu đúng thời điểm bàn sẵn sàng, chưa yêu cầu người chơi hiểu các cơ chế về sau.",
+          "uc_ids": [
+            "UC-04"
+          ],
+          "source_refs": [
+            "gdd/Tutorial.json#use_cases/3",
+            "facts/core_body_gap_decisions_20261115.json#MS-CORE-BODY-16",
+            "facts/core_body_gap_decisions_20261115.json#MS-CORE-BODY-17"
+          ]
+        },
+        {
+          "title": "Chọn chai nguồn theo chỉ dẫn",
+          "actor": "Người chơi",
+          "action": "Chạm chai được ngón tay chỉ để nhấc lên.",
+          "rule": "Trong chặng dẫn tay, vùng chọn hợp lệ được giới hạn; text nguồn 0.0.3063 có câu Tap the left bottle to pick up.",
+          "outcome": "Chai nguồn được chọn và chỉ dẫn chuyển sang bước chọn đích.",
+          "uc_ids": [
+            "UC-01"
+          ],
+          "source_refs": [
+            "gdd/Tutorial.json#use_cases/0",
+            "facts/core_body_gap_decisions_20261115.json#MS-CORE-BODY-16",
+            "facts/core_body_gap_decisions_20261115.json#MS-CORE-BODY-17"
+          ]
+        },
+        {
+          "title": "Chọn đích của nước đi đầu",
+          "actor": "Người chơi",
+          "action": "Chạm chai đích hợp lệ sau khi chọn nguồn.",
+          "rule": "Dấu xanh/đỏ và text theo hướng trái/phải được tính lại từ chai nguồn; không chỉ phát một animation tay cố định.",
+          "outcome": "Hoàn tất chặng thao tác khi selection đúng được nhận.",
+          "uc_ids": [
+            "UC-02"
+          ],
+          "source_refs": [
+            "gdd/Tutorial.json#use_cases/1",
+            "facts/core_body_gap_decisions_20261115.json#MS-CORE-BODY-16",
+            "facts/core_body_gap_decisions_20261115.json#MS-CORE-BODY-17"
+          ]
+        },
+        {
+          "title": "Học luật cùng màu",
+          "actor": "Người chơi",
+          "action": "Thực hiện nước đổ đúng màu ở chặng tiếp theo.",
+          "rule": "Text Only pour water into the same color được truyền thẳng tới text setter trong code 0.0.3063.",
+          "outcome": "Kết thúc chặng luật rồi tiếp tục phần luyện tập của level.",
+          "uc_ids": [
+            "UC-03"
+          ],
+          "source_refs": [
+            "gdd/Tutorial.json#use_cases/2",
+            "facts/core_body_gap_decisions_20261115.json#MS-CORE-BODY-16",
+            "facts/core_body_gap_decisions_20261115.json#MS-CORE-BODY-17"
+          ]
+        },
+        {
+          "title": "Gặp vật cản mới",
+          "actor": "Người chơi và client",
+          "action": "Đọc popup giới thiệu trước khi chơi nội dung mới.",
+          "rule": "Các mốc Curtain/Clay/Plaster 20/60/110 là giá trị nguồn config, có thể bị resolver thay; ItemType None bỏ qua.",
+          "outcome": "Chỉ loại vật cản liên quan được giải thích; không suy rằng mọi blocker đều có popup ở các mốc này.",
+          "uc_ids": [
+            "UC-06"
+          ],
+          "source_refs": [
+            "gdd/Tutorial.json#use_cases/5",
+            "facts/core_body_gap_decisions_20261115.json#MS-CORE-BODY-16",
+            "facts/core_body_gap_decisions_20261115.json#MS-CORE-BODY-17"
+          ]
+        },
+        {
+          "title": "Nhận giới thiệu booster cơ bản",
+          "actor": "Người chơi",
+          "action": "Xem giới thiệu khi booster đủ điều kiện mở.",
+          "rule": "Default kinh tế đặt ba booster cơ bản ở level 15; phần quà và quyền dùng là dữ liệu riêng với trạng thái đã giới thiệu.",
+          "outcome": "Người chơi biết thao tác trước khi tự tiêu item hoặc coin.",
+          "uc_ids": [
+            "UC-07"
+          ],
+          "source_refs": [
+            "gdd/Tutorial.json#use_cases/6",
+            "facts/core_body_gap_decisions_20261115.json#MS-CORE-BODY-16",
+            "facts/core_body_gap_decisions_20261115.json#MS-CORE-BODY-17"
+          ]
+        },
+        {
+          "title": "Dẫn tay booster nâng cao",
+          "actor": "Người chơi và client",
+          "action": "Theo chỉ dẫn Reveal hoặc Mega Shuffle khi predicate cho phép.",
+          "rule": "Code 0.0.3063 kiểm variant 2/1, chưa giới thiệu, không vướng tutorial Snitch, không có blocker mới, level > 9. Predicate đã đọc không kiểm số item.",
+          "outcome": "Chỉ một hướng dẫn hợp lệ chiếm thao tác; không suy từ inventory cao rằng tutorial chắc chắn bật.",
+          "uc_ids": [
+            "UC-08"
+          ],
+          "source_refs": [
+            "gdd/Tutorial.json#use_cases/7",
+            "facts/core_body_gap_decisions_20261115.json#MS-CORE-BODY-16",
+            "facts/core_body_gap_decisions_20261115.json#MS-CORE-BODY-17"
+          ]
+        },
+        {
+          "title": "Học luật riêng của từng tính năng phụ",
+          "actor": "Người chơi",
+          "action": "Theo tutorial của Merge hoặc nội dung vừa mở.",
+          "rule": "Tutorial Snitch, Super Charger, MiniGame và Daily có controller/cờ riêng; không dùng cờ hoàn thành tutorial bàn thường thay chúng.",
+          "outcome": "Kết thúc từng lớp theo điều kiện của tính năng tương ứng.",
+          "uc_ids": [
+            "UC-09",
+            "UC-10",
+            "UC-11",
+            "UC-12",
+            "UC-13"
+          ],
+          "source_refs": [
+            "gdd/Tutorial.json#use_cases/10",
+            "facts/core_body_gap_decisions_20261115.json#MS-CORE-BODY-16",
+            "facts/core_body_gap_decisions_20261115.json#MS-CORE-BODY-17",
+            "gdd/Tutorial.json#use_cases/8",
+            "gdd/Tutorial.json#use_cases/9",
+            "gdd/Tutorial.json#use_cases/11",
+            "gdd/Tutorial.json#use_cases/12"
+          ]
+        },
+        {
+          "title": "Rời hoặc quay lại sau hướng dẫn",
+          "actor": "Client",
+          "action": "Dọn finger/selection view khi rời level và đọc cờ đã lưu khi quay lại.",
+          "rule": "Cờ PlayerPrefs, model và dữ liệu sync không có cùng phạm vi; việc có ISyncable chưa chứng minh mọi thiết bị không bao giờ lặp.",
+          "outcome": "Không để ngón tay hay khóa input treo; trạng thái đã hướng dẫn phải được khôi phục theo đúng nguồn.",
+          "uc_ids": [
+            "UC-14"
+          ],
+          "source_refs": [
+            "gdd/Tutorial.json#use_cases/13",
+            "facts/core_body_gap_decisions_20261115.json#MS-CORE-BODY-16",
+            "facts/core_body_gap_decisions_20261115.json#MS-CORE-BODY-17"
+          ]
+        }
+      ],
+      "rules": [
+        {
+          "title": "Một màn có nhiều lớp",
+          "text": "Tutorial bàn, intro blocker, intro booster và tutorial event là những vòng đời riêng. Viết completion flag của từng lớp thay vì một cờ chung tutorial done.",
+          "source_refs": [
+            "gdd/Tutorial.json#flow",
+            "gdd/Tutorial.json#configs",
+            "facts/core_body_gap_decisions_20261115.json#MS-CORE-BODY-16",
+            "facts/core_body_gap_decisions_20261115.json#MS-CORE-BODY-17"
+          ]
+        },
+        {
+          "title": "Chuỗi tiếng Anh có phạm vi build",
+          "text": "Hai đường StartFirstTutorial/StartSecondTutorial 0.0.3063 đã kiểm không lookup localization; điều này không chứng minh mọi text tutorial hoặc mọi locale của 0.0.3129 đều tiếng Anh.",
+          "source_refs": [
+            "gdd/Tutorial.json#flow",
+            "gdd/Tutorial.json#configs",
+            "facts/core_body_gap_decisions_20261115.json#MS-CORE-BODY-16",
+            "facts/core_body_gap_decisions_20261115.json#MS-CORE-BODY-17"
+          ]
+        },
+        {
+          "title": "Đo phễu khác hoàn tất trải nghiệm",
+          "text": "tutorial_split_start và tutorial_split_N là điểm phát tín hiệu theo chặng. Có method gọi event không đủ chứng minh delivery, tỷ lệ rơi hoặc hiệu quả dạy học.",
+          "source_refs": [
+            "gdd/Tutorial.json#flow",
+            "gdd/Tutorial.json#configs",
+            "facts/core_body_gap_decisions_20261115.json#MS-CORE-BODY-16",
+            "facts/core_body_gap_decisions_20261115.json#MS-CORE-BODY-17"
+          ]
+        }
+      ],
+      "decisions": [
+        {
+          "question": "Tại sao trì hoãn tutorial nâng cao khi có intro khác?",
+          "answer": "Hai luồng cùng khóa hoặc hướng chú ý vào bàn có thể cạnh tranh. Predicate source tránh chạy Reveal/Mega cùng Snitch hoặc blocker mới.",
+          "basis": "MS-CORE-BODY-16, code 0.0.3063.",
+          "source_refs": [
+            "gdd/Tutorial.json#flow",
+            "gdd/Tutorial.json#configs",
+            "facts/core_body_gap_decisions_20261115.json#MS-CORE-BODY-16",
+            "facts/core_body_gap_decisions_20261115.json#MS-CORE-BODY-17"
+          ]
+        },
+        {
+          "question": "Có thể dùng cờ đã xem để kết luận người chơi đã hiểu không?",
+          "answer": "Cờ chỉ ghi một mốc trong flow; đánh giá hiểu luật cần hành vi sau khi trả quyền điều khiển và dữ liệu phễu có delivery.",
+          "basis": "Phân biệt trạng thái lưu và kết quả học.",
+          "source_refs": [
+            "gdd/Tutorial.json#flow",
+            "gdd/Tutorial.json#configs",
+            "facts/core_body_gap_decisions_20261115.json#MS-CORE-BODY-16",
+            "facts/core_body_gap_decisions_20261115.json#MS-CORE-BODY-17"
+          ]
+        }
+      ],
+      "segments_ab": {
+        "summary": "Các trục dưới tách selector nội dung, trạng thái và experiment; chưa có assignment hoặc uplift mới.",
+        "axes": [
+          {
+            "axis": "Nội dung và variant booster",
+            "selection": "isTutorial của level và InGameBoosterVariant chọn lớp hướng dẫn.",
+            "effect": "Đổi thao tác được dẫn tay và điều kiện xuất hiện.",
+            "evidence_limit": "Selector code/default không xác lập assignment A/B.",
+            "source_refs": [
+              "gdd/Tutorial.json#segment_ab_review_20261115",
+              "gdd/Tutorial.json#flow",
+              "gdd/Tutorial.json#configs"
+            ]
+          },
+          {
+            "axis": "Cờ đã giới thiệu và xung đột luồng",
+            "selection": "Cờ từng tính năng cùng trạng thái Snitch/blocker intro điều tiết quyền mở.",
+            "effect": "Hoãn hoặc bỏ lớp đã xem.",
+            "evidence_limit": "Chưa kiểm một fixture tài khoản mới trên nhiều thiết bị.",
+            "source_refs": [
+              "gdd/Tutorial.json#segment_ab_review_20261115",
+              "gdd/Tutorial.json#flow",
+              "gdd/Tutorial.json#configs"
+            ]
+          }
+        ],
+        "unknowns": [
+          "Cần bằng chứng selector effective, cohort và outcome trước khi kết luận A/B; source tồn tại hoặc một fixture không đủ."
+        ]
+      },
+      "recovery": [
+        {
+          "condition": "Rời level giữa khi finger đang hiện",
+          "expected": "Dọn view và đăng ký input của tutorial; khi vào lại đọc trạng thái phù hợp, không mặc định mọi chặng phải replay hoặc bị bỏ.",
+          "verified_scope": "Theo nguồn/UC đã chỉ rõ; câu round 2 có phạm vi case, không full UC pass.",
+          "uc_ids": [
+            "UC-14"
+          ]
+        },
+        {
+          "condition": "Hai intro cùng đủ điều kiện",
+          "expected": "Ưu tiên theo gate của caller; không chạy chồng hai tutorial giữ input.",
+          "verified_scope": "Theo nguồn/UC đã chỉ rõ; câu round 2 có phạm vi case, không full UC pass.",
+          "uc_ids": [
+            "UC-06",
+            "UC-08",
+            "UC-10"
+          ]
+        }
+      ],
+      "takeaways": [
+        {
+          "text": "Hai luồng cùng khóa hoặc hướng chú ý vào bàn có thể cạnh tranh. Predicate source tránh chạy Reveal/Mega cùng Snitch hoặc blocker mới.",
+          "basis": "MS-CORE-BODY-16, code 0.0.3063."
+        },
+        {
+          "text": "Cờ chỉ ghi một mốc trong flow; đánh giá hiểu luật cần hành vi sau khi trả quyền điều khiển và dữ liệu phễu có delivery.",
+          "basis": "Phân biệt trạng thái lưu và kết quả học."
+        }
+      ],
+      "reviewed_source_paths": [
+        "gdd/Tutorial.json",
+        "site_meta/Tutorial.json",
+        "facts/core_body_gap_decisions_20261115.json",
+        "facts/review_20261116/public_current_config_3129/defaults/BlockerIntroConfigModel.json",
+        "facts/review_20261116/public_current_config_3129/defaults/GameEconomyModel.json",
+        "facts/review_20261116/public_current_config_3129/defaults/GrandRemoteDailyLevelsConfig.json",
+        "facts/review_20261116/public_current_config_3129/defaults/LevelsConfigv2.json",
+        "facts/review_20261116/public_current_config_3129/defaults/SnitchConfigModel.json",
+        "facts/review_20261116/public_current_config_3129/defaults/SuperChargerConfigModel.json"
+      ]
+    }
   }
 }

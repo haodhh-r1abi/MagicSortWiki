@@ -3,20 +3,44 @@
   "title": "Booster trong màn chơi (Boosters)",
   "tagline": "Năm booster gỡ thế bí: Undo, Shuffle, Extra Bottle, Mega Shuffle và Reveal.",
   "infobox": [
-    ["Loại", "Cơ chế lõi"],
-    ["Mở khóa", "Level 15 cho Undo, Shuffle và Extra Bottle"],
-    ["Tham gia", "Cá nhân, dùng ngay trong bàn chơi"],
-    ["Vật phẩm thu thập", "Undo, Shuffle, Extra Bottle, Mega Shuffle, Reveal"],
-    ["Tiền tệ", "Coin (mua nhanh khi hết booster)"],
-    ["Thưởng chính", "Người chơi mới nhận 1000 coin, 3 Undo, 3 Shuffle, 3 Extra Bottle"],
-    ["Điều kiện / phụ thuộc", "Bàn phải dừng (IsBoardStopped); booster thứ tư theo RootLevelConfigModel.InGameBoosterVariant"],
-    ["Manager", "BoosterManager, MegaShuffleManager, BoosterStats, InventoryService"]
+    [
+      "Loại",
+      "Cơ chế lõi"
+    ],
+    [
+      "Mở khóa",
+      "Level 15 cho Undo, Shuffle và Extra Bottle"
+    ],
+    [
+      "Tham gia",
+      "Cá nhân, dùng ngay trong bàn chơi"
+    ],
+    [
+      "Vật phẩm thu thập",
+      "Undo, Shuffle, Extra Bottle, Mega Shuffle, Reveal"
+    ],
+    [
+      "Tiền tệ",
+      "Coin (mua nhanh khi hết booster)"
+    ],
+    [
+      "Thưởng chính",
+      "Người chơi mới nhận 1000 coin, 3 Undo, 3 Shuffle, 3 Extra Bottle"
+    ],
+    [
+      "Điều kiện / phụ thuộc",
+      "Bàn phải dừng (IsBoardStopped); booster thứ tư theo RootLevelConfigModel.InGameBoosterVariant"
+    ],
+    [
+      "Manager",
+      "BoosterManager, MegaShuffleManager, BoosterStats, InventoryService"
+    ]
   ],
   "description": [
     "Magic Sort có 5 booster: Undo hoàn tác nước đi, Shuffle xáo lại một chai được chọn, Extra Bottle thêm một chai rỗng, Mega Shuffle trộn toàn bộ bàn và Reveal gỡ vật cản trên một chai.",
     "Ba booster cơ bản (Undo, Shuffle, Extra Bottle) mở khóa cùng lúc ở level 15.",
-    "Ô booster thứ tư trong thanh dưới màn hình là chỗ AB test: hiện Reveal, hiện Mega Shuffle, hoặc không hiện gì.",
-    "Mọi booster đều theo mô hình 'có hàng thì dùng, hết hàng thì mua ngay bằng coin' — bấm là trừ coin luôn, không mở cửa hàng trung gian.",
+    "Ô booster thứ tư do InGameBoosterVariant và cờ tính năng chọn; consumer tutorial 0.0.3063 có variant 1 cho Mega Shuffle, variant 2 cho Reveal. Không suy đã có allocation A/B.",
+    "Có item thì dùng nguồn item, hết item có thể mua nhanh bằng coin theo đường tương ứng. Shuffle/Reveal chỉ Spend sau target hợp lệ; hủy không tiêu. Thiếu coin có nhánh mở Store.",
     "Nút booster hiển thị số lượng còn (BoosterInventoryView) hoặc giá (BoosterPurchaseView) tùy kho đồ.",
     "Shuffle và Reveal cần chọn chai: màn hình làm mờ nền, hiện hướng dẫn và hai nút hủy.",
     "Mega Shuffle dùng thuật toán dựng bàn ảo, đảo khối màu và cố ép trống hẳn một chai.",
@@ -26,7 +50,7 @@
   ],
   "notes": [
     "Lưu ý: mọi booster đều yêu cầu bàn phải dừng — không còn animation chạy và không có selection đang xử lý.",
-    "Lưu ý: Undo không xuyên qua ranh giới BottleCollection và lịch sử bị xóa sạch sau Mega Shuffle.",
+    "Phạm vi Undo qua BottleCollection hoặc sau Mega Shuffle chưa được xác minh đầy đủ. Shuffle có reset selection history theo body; không dùng điều đó để kết luận mọi loại trộn đều cùng luật.",
     "Lưu ý: chai gắn Tag, Generator, Toggle hoặc ChargeableBottle trả IsAllowShuffle() = false nên không chọn được cho Shuffle.",
     "Lưu ý: vật cản có IsRevealable() = true gồm Curtain, Clay, Plaster, Tag, Ice, Carpet, Toggle, Woodbox.",
     "Lưu ý: Extra Bottle bị chặn khi hàng đã đầy chai (IsBottlesCountReachedMax).",
@@ -34,14 +58,14 @@
     "Lưu ý: thiếu coin khi mua nhanh thì mở cửa hàng với StorePopUpSource.Booster (= 1).",
     "Lưu ý: UseForceMegaShuffle(delay) chạy bất kể kho đồ và không trừ tiền, dùng cho Play On trao Mega Shuffle.",
     "Lưu ý: nếu trộn xong bàn vẫn kẹt thì bắn analytics 'playon_withrewarded_mega_shuffle_stucked'.",
-    "Lưu ý: ánh xạ giá trị InGameBoosterVariant sang từng bố cục chưa đọc được từ pseudo-C (gap)."
+    "Consumer tutorial đã chứng minh InGameBoosterVariant 1/2 tương ứng Mega/Reveal ở 0.0.3063; toàn bộ layout và config effective vẫn cần caller/runtime đúng build."
   ],
   "how_it_works": [
     "GamePlayContextInstaller dựng BoosterManager với SelectionSystem, BottleCollections, GameplayInputSystem và LevelWinOrStuckSystem.",
     "Mỗi BoosterButton gắn một CurrencyType; OnEnable đăng ký sự kiện đổi kho đồ, UpdateView chọn hiện số lượng (amount > 0) hay giá (amount = 0).",
     "FourthInGameBoosterView.OnEnable bật _revealParent hoặc _megaShuffleParent và chọn bố cục 3 hay 4 nút theo RootLevelConfigModel.InGameBoosterVariant.",
     "Bấm nút: TryUseBooster(currencyType) kiểm CanUseBooster — bàn phải dừng cộng điều kiện riêng của từng booster.",
-    "UseBooster trừ vật phẩm trong kho, hoặc nếu hết thì kiểm DoesEnoughVisibleCurrency(Coin, price) rồi Spend(CurrencySpendReason.Boosters = 1, Coin, price).",
+    "TryUseBooster xử lý nguồn item/coin cho các nhánh tương ứng; UseBooster thi hành hiệu ứng. Shuffle/Reveal có state machine riêng, chỉ Spend sau khi có target hợp lệ; hủy thoát trước Spend.",
     "Undo (300 coin): SelectionSystem.ReverseLastSelection() trả nước đi cuối; BoosterStats.IncreaseUndoUsage(), LevelStats ghi undo_used.",
     "Shuffle (300 coin): phát tín hiệu hiện BottleSelectionBackground với chữ 'SELECT BOTTLE TO SHUFFLE', GameplayInputSystem.WaitForSelection(InputMode.BottleSelection = 2) chờ chọn chai.",
     "Chọn xong: CanUseShuffleBooster(bottleItem) kiểm hợp lệ rồi BottleItem.Shuffle(colorOrders) đảo thứ tự màu trong chai.",
@@ -56,123 +80,479 @@
   "reward_tables": [
     {
       "title": "GIÁ MUA NHANH BOOSTER (GameEconomyModel.json)",
-      "columns": ["Mốc", "Điều kiện", "Phần thưởng"],
+      "columns": [
+        "Mốc",
+        "Điều kiện",
+        "Phần thưởng"
+      ],
       "rows": [
-        ["Undo (CurrencyType 4)", "Hết Undo trong kho, bấm nút", "300 coin đổi 1 Undo"],
-        ["Shuffle (CurrencyType 5)", "Hết Shuffle trong kho", "300 coin đổi 1 Shuffle"],
-        ["Extra Bottle (CurrencyType 6)", "Hết Extra Bottle trong kho", "900 coin đổi 1 Extra Bottle"],
-        ["Mega Shuffle (CurrencyType 18)", "Hết Mega Shuffle trong kho", "900 coin đổi 1 Mega Shuffle"],
-        ["Reveal (CurrencyType 19)", "Hết Reveal trong kho", "900 coin đổi 1 Reveal"]
+        [
+          "Undo (CurrencyType 4)",
+          "Hết Undo trong kho, bấm nút",
+          "300 coin đổi 1 Undo"
+        ],
+        [
+          "Shuffle (CurrencyType 5)",
+          "Hết Shuffle trong kho",
+          "300 coin đổi 1 Shuffle"
+        ],
+        [
+          "Extra Bottle (CurrencyType 6)",
+          "Hết Extra Bottle trong kho",
+          "900 coin đổi 1 Extra Bottle"
+        ],
+        [
+          "Mega Shuffle (CurrencyType 18)",
+          "Hết Mega Shuffle trong kho",
+          "900 coin đổi 1 Mega Shuffle"
+        ],
+        [
+          "Reveal (CurrencyType 19)",
+          "Hết Reveal trong kho",
+          "900 coin đổi 1 Reveal"
+        ]
       ]
     },
     {
       "title": "KHO KHỞI ĐIỂM VÀ MỐC MỞ KHÓA (GameEconomyModel.json)",
-      "columns": ["Mốc", "Điều kiện", "Phần thưởng"],
+      "columns": [
+        "Mốc",
+        "Điều kiện",
+        "Phần thưởng"
+      ],
       "rows": [
-        ["initialCoin", "Cài game lần đầu", "1000 coin"],
-        ["initialUndoAmount", "Cài game lần đầu", "3 Undo"],
-        ["initialShuffleAmount", "Cài game lần đầu", "3 Shuffle"],
-        ["initialExtraBottleAmount", "Cài game lần đầu", "3 Extra Bottle"],
-        ["initialFourthBoosterAmount", "Cài game lần đầu, biến thể booster thứ tư đang bật", "3 booster thứ tư (Reveal hoặc Mega Shuffle)"],
-        ["undoUnlockAtLevel", "Mở khóa hiển thị Undo", "Level 15"],
-        ["shuffleUnlockAtLevel", "Mở khóa hiển thị Shuffle", "Level 15"],
-        ["extraBottleUnlockAtLevel", "Mở khóa hiển thị Extra Bottle", "Level 15"],
-        ["maxLifeAmount", "Trần số mạng", "5 Life"],
-        ["refillPrice", "Nạp đầy mạng", "900 coin"],
-        ["refillDurationAsMinutes", "Thời lượng nạp", "30 phút"]
+        [
+          "initialCoin",
+          "Cài game lần đầu",
+          "1000 coin"
+        ],
+        [
+          "initialUndoAmount",
+          "Cài game lần đầu",
+          "3 Undo"
+        ],
+        [
+          "initialShuffleAmount",
+          "Cài game lần đầu",
+          "3 Shuffle"
+        ],
+        [
+          "initialExtraBottleAmount",
+          "Cài game lần đầu",
+          "3 Extra Bottle"
+        ],
+        [
+          "initialFourthBoosterAmount",
+          "Cài game lần đầu, biến thể booster thứ tư đang bật",
+          "3 booster thứ tư (Reveal hoặc Mega Shuffle)"
+        ],
+        [
+          "undoUnlockAtLevel",
+          "Mở khóa hiển thị Undo",
+          "Level 15"
+        ],
+        [
+          "shuffleUnlockAtLevel",
+          "Mở khóa hiển thị Shuffle",
+          "Level 15"
+        ],
+        [
+          "extraBottleUnlockAtLevel",
+          "Mở khóa hiển thị Extra Bottle",
+          "Level 15"
+        ],
+        [
+          "maxLifeAmount",
+          "Trần số mạng",
+          "5 Life"
+        ],
+        [
+          "refillPrice",
+          "Nạp đầy mạng",
+          "900 coin"
+        ],
+        [
+          "refillDurationAsMinutes",
+          "Thời lượng nạp",
+          "30 phút"
+        ]
       ]
     },
     {
       "title": "GIÁ PLAY ON THEO LẦN (GameEconomyModel.PlayOnConfigModels)",
-      "columns": ["Mốc", "Điều kiện", "Phần thưởng"],
+      "columns": [
+        "Mốc",
+        "Điều kiện",
+        "Phần thưởng"
+      ],
       "rows": [
-        ["Play On lần 1", "PlayOnConfigModels[0], PlayOnType = 0", "900 coin"],
-        ["Play On lần 2", "PlayOnConfigModels[1], PlayOnType = 0", "1900 coin"],
-        ["Play On lần 3", "PlayOnConfigModels[2], PlayOnType = 0", "2300 coin"],
-        ["IsFirstPlayOnFree", "Cờ Play On đầu miễn phí", "false (mặc định client)"]
+        [
+          "Play On lần 1",
+          "PlayOnConfigModels[0], PlayOnType = 0",
+          "900 coin"
+        ],
+        [
+          "Play On lần 2",
+          "PlayOnConfigModels[1], PlayOnType = 0",
+          "1900 coin"
+        ],
+        [
+          "Play On lần 3",
+          "PlayOnConfigModels[2], PlayOnType = 0",
+          "2300 coin"
+        ],
+        [
+          "IsFirstPlayOnFree",
+          "Cờ Play On đầu miễn phí",
+          "false (mặc định client)"
+        ]
       ]
     },
     {
       "title": "BOOSTER TỪ PHẦN THƯỞNG VẠC (CauldronReward, bản đóng gói)",
-      "columns": ["Mốc", "Điều kiện", "Phần thưởng"],
+      "columns": [
+        "Mốc",
+        "Điều kiện",
+        "Phần thưởng"
+      ],
       "rows": [
-        ["Vạc Super Hard – nhóm Shuffle", "9 level Super Hard", "1 Shuffle mỗi level"],
-        ["Vạc Super Hard – nhóm Undo", "8 level Super Hard", "1 Undo mỗi level"],
-        ["Vạc Super Hard – nhóm Extra Bottle", "7 level Super Hard", "1 Extra Bottle mỗi level"],
-        ["Vạc Super Hard – nhóm Limitless Life", "5 level Super Hard", "30 phút Limitless Life mỗi level"],
-        ["Vạc Hard – Limitless Life", "1 level Hard", "30 phút Limitless Life"],
-        ["Coin thắng level thường", "RegularLevelWinCoinReward", "20 coin"],
-        ["Coin thắng level khó", "HardLevelWinCoinReward", "60 coin"],
-        ["Coin thắng level siêu khó", "SuperHardLevelWinCoinReward", "100 coin"],
-        ["Play On bằng quảng cáo", "Xem rewarded khi bàn kẹt", "Extra Bottle, Tiny Bottle, Undo hoặc Mega Shuffle miễn phí"]
+        [
+          "Vạc Super Hard – nhóm Shuffle",
+          "9 level Super Hard",
+          "1 Shuffle mỗi level"
+        ],
+        [
+          "Vạc Super Hard – nhóm Undo",
+          "8 level Super Hard",
+          "1 Undo mỗi level"
+        ],
+        [
+          "Vạc Super Hard – nhóm Extra Bottle",
+          "7 level Super Hard",
+          "1 Extra Bottle mỗi level"
+        ],
+        [
+          "Vạc Super Hard – nhóm Limitless Life",
+          "5 level Super Hard",
+          "30 phút Limitless Life mỗi level"
+        ],
+        [
+          "Vạc Hard – Limitless Life",
+          "1 level Hard",
+          "30 phút Limitless Life"
+        ],
+        [
+          "Coin thắng level thường",
+          "RegularLevelWinCoinReward",
+          "20 coin"
+        ],
+        [
+          "Coin thắng level khó",
+          "HardLevelWinCoinReward",
+          "60 coin"
+        ],
+        [
+          "Coin thắng level siêu khó",
+          "SuperHardLevelWinCoinReward",
+          "100 coin"
+        ],
+        [
+          "Play On bằng quảng cáo",
+          "Xem rewarded khi bàn kẹt",
+          "Extra Bottle, Tiny Bottle, Undo hoặc Mega Shuffle miễn phí"
+        ]
       ]
     }
   ],
   "key_numbers": [
-    {"label": "Giá mua nhanh Undo", "value": "300 coin", "source": "GameEconomyModel.json UndoPrice"},
-    {"label": "Giá mua nhanh Shuffle", "value": "300 coin", "source": "GameEconomyModel.json ShufflePrice"},
-    {"label": "Giá mua nhanh Extra Bottle", "value": "900 coin", "source": "GameEconomyModel.json ExtraBottlePrice"},
-    {"label": "Giá mua nhanh Mega Shuffle", "value": "900 coin", "source": "GameEconomyModel.json MegaShufflePrice"},
-    {"label": "Giá mua nhanh Reveal", "value": "900 coin", "source": "GameEconomyModel.json RevealPrice"},
-    {"label": "Level mở khóa ba booster cơ bản", "value": "15", "source": "GameEconomyModel.json undoUnlockAtLevel / shuffleUnlockAtLevel / extraBottleUnlockAtLevel"},
-    {"label": "Coin khởi điểm", "value": "1000", "source": "GameEconomyModel.json initialCoin"},
-    {"label": "Booster khởi điểm mỗi loại", "value": "3", "source": "GameEconomyModel.json initialUndoAmount / initialShuffleAmount / initialExtraBottleAmount / initialFourthBoosterAmount"},
-    {"label": "Giá Play On lần 1", "value": "900 coin", "source": "GameEconomyModel.json PlayOnPrice"},
-    {"label": "Giá Play On lần 2", "value": "1900 coin", "source": "GameEconomyModel.json SecondPlayOnPrice"},
-    {"label": "Giá Play On lần 3", "value": "2300 coin", "source": "GameEconomyModel.json ThirdSecondPlayOnPrice"},
-    {"label": "Giá nạp đầy mạng", "value": "900 coin", "source": "GameEconomyModel.json refillPrice"},
-    {"label": "Thời lượng nạp mạng", "value": "30 phút", "source": "GameEconomyModel.json refillDurationAsMinutes"},
-    {"label": "Trần số mạng", "value": "5", "source": "GameEconomyModel.json maxLifeAmount"},
-    {"label": "Mã vật phẩm Undo", "value": "CurrencyType 4", "source": "CurrencyType.cs"},
-    {"label": "Mã vật phẩm Shuffle", "value": "CurrencyType 5", "source": "CurrencyType.cs"},
-    {"label": "Mã vật phẩm Extra Bottle", "value": "CurrencyType 6", "source": "CurrencyType.cs"},
-    {"label": "Mã vật phẩm Mega Shuffle", "value": "CurrencyType 18", "source": "CurrencyType.cs"},
-    {"label": "Mã vật phẩm Reveal", "value": "CurrencyType 19", "source": "CurrencyType.cs"},
-    {"label": "Lý do trừ tiền khi mua booster", "value": "CurrencySpendReason.Boosters = 1", "source": "CurrencySpendReason.cs"},
-    {"label": "Nguồn mở cửa hàng khi thiếu coin", "value": "StorePopUpSource.Booster = 1", "source": "StorePopUpSource.cs"},
-    {"label": "Chế độ input khi chọn chai", "value": "InputMode.BottleSelection = 2", "source": "InputMode.cs"},
-    {"label": "Số vật cản có thể Reveal", "value": "8 (Curtain, Clay, Plaster, Tag, Ice, Carpet, Toggle, Woodbox)", "source": "ABlockerItem.IsRevealable"},
-    {"label": "Dùng thuật toán Mega Shuffle mới", "value": "true", "source": "MegaShuffleManager._megaShuffleUseNewAlgorithm"},
-    {"label": "Ép trống một chai sau Mega Shuffle", "value": "true", "source": "MegaShuffleManager._megaShuffleEmptyOneBottle"}
+    {
+      "label": "Giá mua nhanh Undo",
+      "value": "300 coin",
+      "source": "GameEconomyModel.json UndoPrice"
+    },
+    {
+      "label": "Giá mua nhanh Shuffle",
+      "value": "300 coin",
+      "source": "GameEconomyModel.json ShufflePrice"
+    },
+    {
+      "label": "Giá mua nhanh Extra Bottle",
+      "value": "900 coin",
+      "source": "GameEconomyModel.json ExtraBottlePrice"
+    },
+    {
+      "label": "Giá mua nhanh Mega Shuffle",
+      "value": "900 coin",
+      "source": "GameEconomyModel.json MegaShufflePrice"
+    },
+    {
+      "label": "Giá mua nhanh Reveal",
+      "value": "900 coin",
+      "source": "GameEconomyModel.json RevealPrice"
+    },
+    {
+      "label": "Level mở khóa ba booster cơ bản",
+      "value": "15",
+      "source": "GameEconomyModel.json undoUnlockAtLevel / shuffleUnlockAtLevel / extraBottleUnlockAtLevel"
+    },
+    {
+      "label": "Coin khởi điểm",
+      "value": "1000",
+      "source": "GameEconomyModel.json initialCoin"
+    },
+    {
+      "label": "Booster khởi điểm mỗi loại",
+      "value": "3",
+      "source": "GameEconomyModel.json initialUndoAmount / initialShuffleAmount / initialExtraBottleAmount / initialFourthBoosterAmount"
+    },
+    {
+      "label": "Giá Play On lần 1",
+      "value": "900 coin",
+      "source": "GameEconomyModel.json PlayOnPrice"
+    },
+    {
+      "label": "Giá Play On lần 2",
+      "value": "1900 coin",
+      "source": "GameEconomyModel.json SecondPlayOnPrice"
+    },
+    {
+      "label": "Giá Play On lần 3",
+      "value": "2300 coin",
+      "source": "GameEconomyModel.json ThirdSecondPlayOnPrice"
+    },
+    {
+      "label": "Giá nạp đầy mạng",
+      "value": "900 coin",
+      "source": "GameEconomyModel.json refillPrice"
+    },
+    {
+      "label": "Thời lượng nạp mạng",
+      "value": "30 phút",
+      "source": "GameEconomyModel.json refillDurationAsMinutes"
+    },
+    {
+      "label": "Trần số mạng",
+      "value": "5",
+      "source": "GameEconomyModel.json maxLifeAmount"
+    },
+    {
+      "label": "Mã vật phẩm Undo",
+      "value": "CurrencyType 4",
+      "source": "CurrencyType.cs"
+    },
+    {
+      "label": "Mã vật phẩm Shuffle",
+      "value": "CurrencyType 5",
+      "source": "CurrencyType.cs"
+    },
+    {
+      "label": "Mã vật phẩm Extra Bottle",
+      "value": "CurrencyType 6",
+      "source": "CurrencyType.cs"
+    },
+    {
+      "label": "Mã vật phẩm Mega Shuffle",
+      "value": "CurrencyType 18",
+      "source": "CurrencyType.cs"
+    },
+    {
+      "label": "Mã vật phẩm Reveal",
+      "value": "CurrencyType 19",
+      "source": "CurrencyType.cs"
+    },
+    {
+      "label": "Lý do trừ tiền khi mua booster",
+      "value": "CurrencySpendReason.Boosters = 1",
+      "source": "CurrencySpendReason.cs"
+    },
+    {
+      "label": "Nguồn mở cửa hàng khi thiếu coin",
+      "value": "StorePopUpSource.Booster = 1",
+      "source": "StorePopUpSource.cs"
+    },
+    {
+      "label": "Chế độ input khi chọn chai",
+      "value": "InputMode.BottleSelection = 2",
+      "source": "InputMode.cs"
+    },
+    {
+      "label": "Số vật cản có thể Reveal",
+      "value": "8 (Curtain, Clay, Plaster, Tag, Ice, Carpet, Toggle, Woodbox)",
+      "source": "ABlockerItem.IsRevealable"
+    },
+    {
+      "label": "Dùng thuật toán Mega Shuffle mới",
+      "value": "true",
+      "source": "MegaShuffleManager._megaShuffleUseNewAlgorithm"
+    },
+    {
+      "label": "Ép trống một chai sau Mega Shuffle",
+      "value": "true",
+      "source": "MegaShuffleManager._megaShuffleEmptyOneBottle"
+    }
   ],
   "config_highlights": [
-    {"key": "GameEconomyModel.UndoPrice", "value": "300 coin", "meaning": "Giá mua nhanh Undo trong bàn"},
-    {"key": "GameEconomyModel.ShufflePrice", "value": "300 coin", "meaning": "Giá mua nhanh Shuffle"},
-    {"key": "GameEconomyModel.ExtraBottlePrice", "value": "900 coin", "meaning": "Giá mua nhanh Extra Bottle"},
-    {"key": "GameEconomyModel.MegaShufflePrice", "value": "900 coin", "meaning": "Giá mua nhanh Mega Shuffle"},
-    {"key": "GameEconomyModel.RevealPrice", "value": "900 coin", "meaning": "Giá mua nhanh Reveal"},
-    {"key": "GameEconomyModel.undoUnlockAtLevel / shuffleUnlockAtLevel / extraBottleUnlockAtLevel", "value": "15 / 15 / 15", "meaning": "Level mở khóa ba booster cơ bản"},
-    {"key": "GameEconomyModel.initialCoin", "value": "1000", "meaning": "Coin khởi điểm của người chơi mới"},
-    {"key": "GameEconomyModel.initialUndoAmount / initialShuffleAmount / initialExtraBottleAmount / initialFourthBoosterAmount", "value": "3 / 3 / 3 / 3", "meaning": "Số booster tặng người chơi mới"},
-    {"key": "GameEconomyModel.PlayOnPrice / SecondPlayOnPrice / ThirdSecondPlayOnPrice", "value": "900 / 1900 / 2300 coin", "meaning": "Giá Play On tăng dần theo lần trong cùng level"},
-    {"key": "GameEconomyModel.IsFirstPlayOnFree", "value": "false", "meaning": "Play On đầu tiên có miễn phí không"},
-    {"key": "GameEconomyModel.refillPrice / refillDurationAsMinutes / maxLifeAmount", "value": "900 coin / 30 phút / 5", "meaning": "Kinh tế mạng liên quan tới booster"},
-    {"key": "GameEconomyModel.RegularLevelWinCoinReward / HardLevelWinCoinReward / SuperHardLevelWinCoinReward", "value": "20 / 60 / 100 coin", "meaning": "Coin thưởng thắng level theo độ khó"},
-    {"key": "CurrencyType booster", "value": "Undo=4, Shuffle=5, ExtraBottle=6, MegaShuffle=18, Reveal=19", "meaning": "Mã vật phẩm booster trong kho đồ"},
-    {"key": "CurrencySpendReason.Boosters", "value": "1", "meaning": "Lý do trừ tiền khi mua booster"},
-    {"key": "StorePopUpSource.Booster", "value": "1", "meaning": "Nguồn mở cửa hàng khi thiếu coin"},
-    {"key": "InputMode.BottleSelection", "value": "2", "meaning": "Chế độ nhận chạm khi chọn chai cho Shuffle/Reveal"},
-    {"key": "MegaShuffleManager._megaShuffleUseNewAlgorithm", "value": "true", "meaning": "Dùng thuật toán trộn mới"},
-    {"key": "MegaShuffleManager._megaShuffleEmptyOneBottle", "value": "true", "meaning": "Ưu tiên tạo một chai trống sau khi trộn"},
-    {"key": "MegaShuffleManager._shuffleRetryCount", "value": "RootLevelConfigModel.MegaShuffleRetryCount (server)", "meaning": "Số lần thử lại khi kết quả trộn không hợp lệ"},
-    {"key": "RootLevelConfigModel.MegaShuffleEmptyBottleProbability", "value": "(server)", "meaning": "Xác suất tạo chai trống trong thuật toán trộn"},
-    {"key": "RootLevelConfigModel.InGameBoosterVariant", "value": "(server)", "meaning": "Chọn bố cục 3 hay 4 booster và booster thứ tư là Reveal hay Mega Shuffle"},
-    {"key": "RootLevelConfigModel.IsRevealBoosterEnabled", "value": "(server)", "meaning": "Bật booster Reveal"},
-    {"key": "BottleSelectionBackground.ShuffleTextKey", "value": "GameBoosterShuffleInfo = \"SELECT BOTTLE TO SHUFFLE\"", "meaning": "Hướng dẫn khi chọn chai cho Shuffle"},
-    {"key": "BottleSelectionBackground.RevealTextKey", "value": "GameBoosterRevealInfo = \"SELECT TO REMOVE OBSTACLE\"", "meaning": "Hướng dẫn khi chọn chai cho Reveal"},
-    {"key": "Localization Mega Shuffle", "value": "MegaShuffleTitle = \"Mega Shuffle!\", MegaShuffleDescription = \"Shuffles the entire board!\"", "meaning": "Văn bản popup giới thiệu Mega Shuffle"},
-    {"key": "Localization Reveal", "value": "RevealTitle = \"Reveal!\", RevealDescription = \"Reveal removes obstacles!\"", "meaning": "Văn bản popup giới thiệu Reveal"},
-    {"key": "Localization Stuck popup", "value": "StuckPopupUndo = \"Undo Move\", StuckPopupMegaShuffle = \"Shuffle All\", RevealAll = \"Reveal All\"", "meaning": "Nhãn nút booster ở popup kẹt bàn"},
-    {"key": "BoosterStats", "value": "UndoUsage, ShuffleUsage, ExtraBottleUsage", "meaning": "Đếm số lần dùng booster trong một level"},
-    {"key": "InventoryService._hasSingleUseFreePlayOn", "value": "bool (client)", "meaning": "Cờ một lượt Play On miễn phí"},
-    {"key": "InventoryModel / PreBoosterWinStreakModel", "value": "sync model", "meaning": "Kho coin, booster và chuỗi thắng dùng cho gợi ý booster trước level"}
+    {
+      "key": "GameEconomyModel.UndoPrice",
+      "value": "300 coin",
+      "meaning": "Giá mua nhanh Undo trong bàn"
+    },
+    {
+      "key": "GameEconomyModel.ShufflePrice",
+      "value": "300 coin",
+      "meaning": "Giá mua nhanh Shuffle"
+    },
+    {
+      "key": "GameEconomyModel.ExtraBottlePrice",
+      "value": "900 coin",
+      "meaning": "Giá mua nhanh Extra Bottle"
+    },
+    {
+      "key": "GameEconomyModel.MegaShufflePrice",
+      "value": "900 coin",
+      "meaning": "Giá mua nhanh Mega Shuffle"
+    },
+    {
+      "key": "GameEconomyModel.RevealPrice",
+      "value": "900 coin",
+      "meaning": "Giá mua nhanh Reveal"
+    },
+    {
+      "key": "GameEconomyModel.undoUnlockAtLevel / shuffleUnlockAtLevel / extraBottleUnlockAtLevel",
+      "value": "15 / 15 / 15",
+      "meaning": "Level mở khóa ba booster cơ bản"
+    },
+    {
+      "key": "GameEconomyModel.initialCoin",
+      "value": "1000",
+      "meaning": "Coin khởi điểm của người chơi mới"
+    },
+    {
+      "key": "GameEconomyModel.initialUndoAmount / initialShuffleAmount / initialExtraBottleAmount / initialFourthBoosterAmount",
+      "value": "3 / 3 / 3 / 3",
+      "meaning": "Số booster tặng người chơi mới"
+    },
+    {
+      "key": "GameEconomyModel.PlayOnPrice / SecondPlayOnPrice / ThirdSecondPlayOnPrice",
+      "value": "900 / 1900 / 2300 coin",
+      "meaning": "Giá Play On tăng dần theo lần trong cùng level"
+    },
+    {
+      "key": "GameEconomyModel.IsFirstPlayOnFree",
+      "value": "false",
+      "meaning": "Play On đầu tiên có miễn phí không"
+    },
+    {
+      "key": "GameEconomyModel.refillPrice / refillDurationAsMinutes / maxLifeAmount",
+      "value": "900 coin / 30 phút / 5",
+      "meaning": "Kinh tế mạng liên quan tới booster"
+    },
+    {
+      "key": "GameEconomyModel.RegularLevelWinCoinReward / HardLevelWinCoinReward / SuperHardLevelWinCoinReward",
+      "value": "20 / 60 / 100 coin",
+      "meaning": "Coin thưởng thắng level theo độ khó"
+    },
+    {
+      "key": "CurrencyType booster",
+      "value": "Undo=4, Shuffle=5, ExtraBottle=6, MegaShuffle=18, Reveal=19",
+      "meaning": "Mã vật phẩm booster trong kho đồ"
+    },
+    {
+      "key": "CurrencySpendReason.Boosters",
+      "value": "1",
+      "meaning": "Lý do trừ tiền khi mua booster"
+    },
+    {
+      "key": "StorePopUpSource.Booster",
+      "value": "1",
+      "meaning": "Nguồn mở cửa hàng khi thiếu coin"
+    },
+    {
+      "key": "InputMode.BottleSelection",
+      "value": "2",
+      "meaning": "Chế độ nhận chạm khi chọn chai cho Shuffle/Reveal"
+    },
+    {
+      "key": "MegaShuffleManager._megaShuffleUseNewAlgorithm",
+      "value": "true",
+      "meaning": "Dùng thuật toán trộn mới"
+    },
+    {
+      "key": "MegaShuffleManager._megaShuffleEmptyOneBottle",
+      "value": "true",
+      "meaning": "Ưu tiên tạo một chai trống sau khi trộn"
+    },
+    {
+      "key": "MegaShuffleManager._shuffleRetryCount",
+      "value": "RootLevelConfigModel.MegaShuffleRetryCount (server)",
+      "meaning": "Số lần thử lại khi kết quả trộn không hợp lệ"
+    },
+    {
+      "key": "RootLevelConfigModel.MegaShuffleEmptyBottleProbability",
+      "value": "(server)",
+      "meaning": "Xác suất tạo chai trống trong thuật toán trộn"
+    },
+    {
+      "key": "RootLevelConfigModel.InGameBoosterVariant",
+      "value": "(server)",
+      "meaning": "Chọn bố cục 3 hay 4 booster và booster thứ tư là Reveal hay Mega Shuffle"
+    },
+    {
+      "key": "RootLevelConfigModel.IsRevealBoosterEnabled",
+      "value": "(server)",
+      "meaning": "Bật booster Reveal"
+    },
+    {
+      "key": "BottleSelectionBackground.ShuffleTextKey",
+      "value": "GameBoosterShuffleInfo = \"SELECT BOTTLE TO SHUFFLE\"",
+      "meaning": "Hướng dẫn khi chọn chai cho Shuffle"
+    },
+    {
+      "key": "BottleSelectionBackground.RevealTextKey",
+      "value": "GameBoosterRevealInfo = \"SELECT TO REMOVE OBSTACLE\"",
+      "meaning": "Hướng dẫn khi chọn chai cho Reveal"
+    },
+    {
+      "key": "Localization Mega Shuffle",
+      "value": "MegaShuffleTitle = \"Mega Shuffle!\", MegaShuffleDescription = \"Shuffles the entire board!\"",
+      "meaning": "Văn bản popup giới thiệu Mega Shuffle"
+    },
+    {
+      "key": "Localization Reveal",
+      "value": "RevealTitle = \"Reveal!\", RevealDescription = \"Reveal removes obstacles!\"",
+      "meaning": "Văn bản popup giới thiệu Reveal"
+    },
+    {
+      "key": "Localization Stuck popup",
+      "value": "StuckPopupUndo = \"Undo Move\", StuckPopupMegaShuffle = \"Shuffle All\", RevealAll = \"Reveal All\"",
+      "meaning": "Nhãn nút booster ở popup kẹt bàn"
+    },
+    {
+      "key": "BoosterStats",
+      "value": "UndoUsage, ShuffleUsage, ExtraBottleUsage",
+      "meaning": "Đếm số lần dùng booster trong một level"
+    },
+    {
+      "key": "InventoryService._hasSingleUseFreePlayOn",
+      "value": "bool (client)",
+      "meaning": "Cờ một lượt Play On miễn phí"
+    },
+    {
+      "key": "InventoryModel / PreBoosterWinStreakModel",
+      "value": "sync model",
+      "meaning": "Kho coin, booster và chuỗi thắng dùng cho gợi ý booster trước level"
+    }
   ],
   "tips": [
-    "Mua ngay trên nút booster (không mở cửa hàng trung gian) giảm ma sát tối đa đúng lúc người chơi đang bí.",
+    "Mua nhanh trên nút giảm một bước khi coin đủ, nhưng vẫn có gate, chọn target hoặc Store khi thiếu coin; không phải mọi bấm nút đều tiêu ngay.",
     "Cho Undo và Shuffle giá 300 coin, còn Extra Bottle / Mega Shuffle / Reveal giá 900 coin phân tầng rõ mức 'cứu nguy nặng'.",
     "Hủy chọn chai không tiêu hao booster giữ niềm tin của người chơi vào hệ thống.",
-    "Mega Shuffle cố ép trống một chai để bàn sau khi trộn gần như chắc chắn còn nước đi.",
-    "Xóa lịch sử Undo sau Mega Shuffle tránh việc người chơi hoàn tác ngược lại trạng thái đã trộn."
+    "Mega Shuffle có nhánh cố tạo chai trống, đồng thời có tình huống kết quả vẫn kẹt. Không bảo đảm gần như chắc chắn có nước đi hoặc toàn bàn có lời giải.",
+    "Các hiệu ứng làm đổi bàn cần xác định lịch sử Undo còn hợp lệ; Shuffle đã có reset history, còn nhánh Mega và ranh giới collection cần trace/fixture riêng."
   ],
-  "categories": ["Cơ chế lõi", "Booster", "Kinh tế"]
+  "categories": [
+    "Cơ chế lõi",
+    "Booster",
+    "Kinh tế"
+  ]
 }
