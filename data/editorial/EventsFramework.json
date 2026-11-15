@@ -1,0 +1,176 @@
+{
+  "id": "EventsFramework",
+  "schema_version": 1,
+  "scope": "Diễn giải thiết kế từ client, default và bằng chứng ngày 15–16/11 đã ghi nguồn. Nội dung mã/default không được nâng thành runtime pass; giữ nguyên full data và UC của hồ sơ.",
+  "design_intent": "Cho nhiều sự kiện dùng chung vòng đời, thời gian, lưu trữ và chỗ hiển thị mà vẫn tách luật riêng. Tránh để mọi event cùng chen popup sau một level.",
+  "player_loop": "Nạp config → khởi tạo trạng thái đã lưu → fetch event → hiển thị entry hợp lệ → tiến triển/claim → reset khi vòng mới bắt đầu.",
+  "flow": [
+    {
+      "title": "Khởi động app: nạp remote config rồi mới dựng service sự kiện",
+      "actor": "Client",
+      "action": "Dựng service sau khi có remote config.",
+      "rule": "Initialize khác InitializeData; bước sau đọc save và có thể reset event đã hết.",
+      "outcome": "Service bắt đầu từ state có nguồn.",
+      "uc_ids": [
+        "UC-01"
+      ],
+      "source_refs": [
+        "gdd/EventsFramework.json#/use_cases/0",
+        "gdd/EventsFramework.json",
+        "site_meta/EventsFramework.json",
+        "facts/review_20261116/public_current_config_3129/defaults/ServerCommunicationModel.json"
+      ]
+    },
+    {
+      "title": "Xếp chỗ icon sự kiện ở Home (trái/phải, giới hạn số ô)",
+      "actor": "Client",
+      "action": "Cấp ô icon trái/phải cho dịch vụ lobby.",
+      "rule": "ILobbyShownService khai báo nhu cầu; CanShowService kiểm ô trống.",
+      "outcome": "Không có icon chưa đủ kết luận event không tồn tại.",
+      "uc_ids": [
+        "UC-04"
+      ],
+      "source_refs": [
+        "gdd/EventsFramework.json#/use_cases/3",
+        "gdd/EventsFramework.json",
+        "site_meta/EventsFramework.json",
+        "facts/review_20261116/public_current_config_3129/defaults/ServerCommunicationModel.json"
+      ]
+    },
+    {
+      "title": "Chuỗi popup khi quay về Home sau level",
+      "actor": "Client",
+      "action": "Chạy chuỗi khi về Home.",
+      "rule": "Có 4 chuỗi regular/daily × win/lose; mỗi command có skip/terminate/force riêng.",
+      "outcome": "Nội dung được điều phối thay vì mở đồng loạt.",
+      "uc_ids": [
+        "UC-05"
+      ],
+      "source_refs": [
+        "gdd/EventsFramework.json#/use_cases/4",
+        "gdd/EventsFramework.json",
+        "site_meta/EventsFramework.json",
+        "facts/review_20261116/public_current_config_3129/defaults/ServerCommunicationModel.json"
+      ]
+    },
+    {
+      "title": "Đồng bộ dữ liệu sự kiện lên server (ISyncable)",
+      "actor": "Client và server",
+      "action": "Gom dữ liệu ISyncable và gửi định kỳ.",
+      "rule": "Default communication interval là 60 giây; model dirty được lưu theo updater.",
+      "outcome": "Cục bộ và server có thời điểm cập nhật khác nhau.",
+      "uc_ids": [
+        "UC-09"
+      ],
+      "source_refs": [
+        "gdd/EventsFramework.json#/use_cases/8",
+        "gdd/EventsFramework.json",
+        "site_meta/EventsFramework.json",
+        "facts/review_20261116/public_current_config_3129/defaults/ServerCommunicationModel.json"
+      ]
+    }
+  ],
+  "rules": [
+    {
+      "title": "Thời gian có thẩm quyền",
+      "text": "Sự kiện so với RemoteTimeService; không lấy chỉnh giờ máy làm chứng minh đổi lịch server.",
+      "source_refs": [
+        "gdd/EventsFramework.json",
+        "site_meta/EventsFramework.json",
+        "facts/review_20261116/public_current_config_3129/defaults/ServerCommunicationModel.json"
+      ]
+    },
+    {
+      "title": "Tách trạng thái và hình ảnh",
+      "text": "Prefab tải được không có nghĩa người chơi đủ điều kiện join/claim.",
+      "source_refs": [
+        "gdd/EventsFramework.json",
+        "site_meta/EventsFramework.json",
+        "facts/review_20261116/public_current_config_3129/defaults/ServerCommunicationModel.json"
+      ]
+    },
+    {
+      "title": "Ngữ cảnh lượt mới",
+      "text": "Ảnh 062/066/095/098 hỗ trợ entry/queue; không phủ vòng đời mọi event.",
+      "source_refs": [
+        "gdd/EventsFramework.json",
+        "site_meta/EventsFramework.json",
+        "facts/review_20261116/public_current_config_3129/defaults/ServerCommunicationModel.json"
+      ]
+    }
+  ],
+  "decisions": [
+    {
+      "question": "Vì sao mỗi event cần state service?",
+      "answer": "Để entry, popup và claim cùng dựa trạng thái đã chuẩn hóa.",
+      "basis": "Các hàm IsInProgress/IsRemoteEnd/IsClaimed.",
+      "source_refs": [
+        "gdd/EventsFramework.json",
+        "site_meta/EventsFramework.json",
+        "facts/review_20261116/public_current_config_3129/defaults/ServerCommunicationModel.json"
+      ]
+    },
+    {
+      "question": "Không thấy icon có nghĩa tắt feature?",
+      "answer": "Không; còn giới hạn ô, điều kiện hiển thị, cache và thời điểm queue.",
+      "basis": "Lobby allocation và state tách rời.",
+      "source_refs": [
+        "gdd/EventsFramework.json",
+        "site_meta/EventsFramework.json",
+        "facts/review_20261116/public_current_config_3129/defaults/ServerCommunicationModel.json"
+      ]
+    }
+  ],
+  "segments_ab": {
+    "summary": "Các trục bên dưới mô tả điều kiện chọn hoặc trạng thái; chưa có assignment hay uplift để khẳng định A/B.",
+    "axes": [
+      {
+        "axis": "Eligibility và segment",
+        "selection": "Config theo dịch vụ cùng SegmentDataModel",
+        "effect": "Thay khả năng hiện, tiến độ hoặc reward consumer.",
+        "evidence_limit": "345 dòng segment là source review; không phải 345 experiment live.",
+        "source_refs": [
+          "gdd/EventsFramework.json",
+          "site_meta/EventsFramework.json",
+          "facts/review_20261116/public_current_config_3129/defaults/ServerCommunicationModel.json"
+        ]
+      }
+    ],
+    "unknowns": [
+      "Chưa có phân bổ ngẫu nhiên, cohort và kết quả nhân quả để đánh giá thử nghiệm."
+    ]
+  },
+  "recovery": [
+    {
+      "condition": "Request event lỗi",
+      "expected": "Giữ phân biệt cache, loading và lỗi; không tự tạo trạng thái server mới.",
+      "verified_scope": "Lượt offline có context riêng, chưa thử toàn bộ API.",
+      "uc_ids": [
+        "UC-13"
+      ]
+    },
+    {
+      "condition": "Vòng event đổi",
+      "expected": "Reset theo model và event identity đúng, không giữ tiến độ mùa cũ.",
+      "verified_scope": "Luật nguồn; cần server fixture để kiểm vòng mới.",
+      "uc_ids": [
+        "UC-11"
+      ]
+    }
+  ],
+  "takeaways": [
+    {
+      "text": "Thiết kế từng event phải ghi cả lifecycle chung lẫn luật riêng.",
+      "basis": "Chung framework không đồng nghĩa chung reward/state."
+    },
+    {
+      "text": "Popup queue là ngân sách chú ý người chơi.",
+      "basis": "Command có quyền skip hoặc dừng flow."
+    }
+  ],
+  "reviewed_source_paths": [
+    "gdd/EventsFramework.json",
+    "site_meta/EventsFramework.json",
+    "facts/review_20261116/public_current_config_3129/defaults/ServerCommunicationModel.json"
+  ]
+}

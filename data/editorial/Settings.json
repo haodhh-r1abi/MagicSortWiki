@@ -1,0 +1,187 @@
+{
+  "id": "Settings",
+  "schema_version": 1,
+  "scope": "Diễn giải thiết kế từ client, default và bằng chứng ngày 15–16/11 đã ghi nguồn. Nội dung mã/default không được nâng thành runtime pass; giữ nguyên full data và UC của hồ sơ.",
+  "design_intent": "Cho người chơi kiểm soát phản hồi âm thanh, rung và thông báo mà không đánh mất ngữ cảnh chơi; gom các lối vào tài khoản/hỗ trợ có rủi ro khác nhau.",
+  "player_loop": "Mở bánh răng → đọc trạng thái → đổi một preference hoặc mở trợ giúp → đóng và kiểm lại trạng thái.",
+  "flow": [
+    {
+      "title": "Bật/tắt hiệu ứng âm thanh",
+      "actor": "Người chơi và client",
+      "action": "Đổi hiệu ứng âm thanh.",
+      "rule": "IsSoundEffectOn được lưu; AudioMixer nhận thay đổi.",
+      "outcome": "Âm thanh phản hồi theo lựa chọn.",
+      "uc_ids": [
+        "UC-01"
+      ],
+      "source_refs": [
+        "gdd/Settings.json#/use_cases/0",
+        "gdd/Settings.json",
+        "site_meta/Settings.json",
+        "facts/review_cases_20261116_round2.json",
+        "facts/review_20261116_round2/cross_feature_evidence_context.json"
+      ]
+    },
+    {
+      "title": "Bật/tắt rung",
+      "actor": "Người chơi và client",
+      "action": "Đổi rung.",
+      "rule": "VibrationModel đánh dấu dirty rồi lưu LateUpdate.",
+      "outcome": "Không đồng nhất rung với toggle âm thanh.",
+      "uc_ids": [
+        "UC-05"
+      ],
+      "source_refs": [
+        "gdd/Settings.json#/use_cases/4",
+        "gdd/Settings.json",
+        "site_meta/Settings.json",
+        "facts/review_cases_20261116_round2.json",
+        "facts/review_20261116_round2/cross_feature_evidence_context.json"
+      ]
+    },
+    {
+      "title": "Bật/tắt thông báo đẩy từ Settings",
+      "actor": "Người chơi và client",
+      "action": "Bật/tắt thông báo.",
+      "rule": "Chuyển cho NotificationService; flag ứng dụng khác quyền hệ điều hành.",
+      "outcome": "Có thể tắt lịch cục bộ mà không sửa OS permission.",
+      "uc_ids": [
+        "UC-07"
+      ],
+      "source_refs": [
+        "gdd/Settings.json#/use_cases/6",
+        "gdd/Settings.json",
+        "site_meta/Settings.json",
+        "facts/review_cases_20261116_round2.json",
+        "facts/review_20261116_round2/cross_feature_evidence_context.json"
+      ]
+    },
+    {
+      "title": "Liên hệ hỗ trợ",
+      "actor": "Người chơi",
+      "action": "Chọn hỗ trợ hoặc tài khoản từ Settings.",
+      "rule": "Nút hiện diện là bằng chứng entry; chưa phải thao tác liên kết, restore hay xóa thành công.",
+      "outcome": "Các hành động rời game cần lối quay lại rõ.",
+      "uc_ids": [
+        "UC-15"
+      ],
+      "source_refs": [
+        "gdd/Settings.json#/use_cases/14",
+        "gdd/Settings.json",
+        "site_meta/Settings.json",
+        "facts/review_cases_20261116_round2.json",
+        "facts/review_20261116_round2/cross_feature_evidence_context.json"
+      ]
+    }
+  ],
+  "rules": [
+    {
+      "title": "Phản hồi là nhiều trục",
+      "text": "Nhạc, SFX, rung và thông báo có model/consumer riêng.",
+      "source_refs": [
+        "gdd/Settings.json",
+        "site_meta/Settings.json",
+        "facts/review_cases_20261116_round2.json",
+        "facts/review_20261116_round2/cross_feature_evidence_context.json"
+      ]
+    },
+    {
+      "title": "Không suy quyền OS từ toggle",
+      "text": "Toggle ON không có nghĩa Android cho phép delivery.",
+      "source_refs": [
+        "gdd/Settings.json",
+        "site_meta/Settings.json",
+        "facts/review_cases_20261116_round2.json",
+        "facts/review_20261116_round2/cross_feature_evidence_context.json"
+      ]
+    },
+    {
+      "title": "Ảnh ngữ cảnh",
+      "text": "Ảnh 059/060/061 và 074 cho thấy Settings trong lượt notification; không biến thành case Settings đầy đủ.",
+      "source_refs": [
+        "gdd/Settings.json",
+        "site_meta/Settings.json",
+        "facts/review_cases_20261116_round2.json",
+        "facts/review_20261116_round2/cross_feature_evidence_context.json"
+      ]
+    }
+  ],
+  "decisions": [
+    {
+      "question": "Vì sao cần giữ preference qua restart?",
+      "answer": "Người chơi kỳ vọng lựa chọn cá nhân không bị reset khi trở về game.",
+      "basis": "SaveLoad và LateUpdate persistence.",
+      "source_refs": [
+        "gdd/Settings.json",
+        "site_meta/Settings.json",
+        "facts/review_cases_20261116_round2.json",
+        "facts/review_20261116_round2/cross_feature_evidence_context.json"
+      ]
+    },
+    {
+      "question": "Restore có thể đánh dấu pass khi mở popup?",
+      "answer": "Không; mở entry và khôi phục giao dịch là hai kết quả khác nhau.",
+      "basis": "Backend/store transaction chưa được thực hiện.",
+      "source_refs": [
+        "gdd/Settings.json",
+        "site_meta/Settings.json",
+        "facts/review_cases_20261116_round2.json",
+        "facts/review_20261116_round2/cross_feature_evidence_context.json"
+      ]
+    }
+  ],
+  "segments_ab": {
+    "summary": "Các trục bên dưới mô tả điều kiện chọn hoặc trạng thái; chưa có assignment hay uplift để khẳng định A/B.",
+    "axes": [
+      {
+        "axis": "Thiết bị và nền tảng",
+        "selection": "Bố cục toggle, consent/ATT, vibration config",
+        "effect": "Thay nút hoặc loại phản hồi.",
+        "evidence_limit": "Không có kiểm tra nhiều thiết bị hay assignment thử nghiệm.",
+        "source_refs": [
+          "gdd/Settings.json",
+          "site_meta/Settings.json",
+          "facts/review_cases_20261116_round2.json",
+          "facts/review_20261116_round2/cross_feature_evidence_context.json"
+        ]
+      }
+    ],
+    "unknowns": [
+      "Chưa có phân bổ ngẫu nhiên, cohort và kết quả nhân quả để đánh giá thử nghiệm."
+    ]
+  },
+  "recovery": [
+    {
+      "condition": "Đổi thông báo rồi restart",
+      "expected": "Hiển thị preference đã lưu.",
+      "verified_scope": "Lượt 16/11 ON/OFF/ON và ON sau restart; chỉ nhánh notification.",
+      "uc_ids": [
+        "UC-07"
+      ]
+    },
+    {
+      "condition": "Restore hoặc liên kết thiếu mạng",
+      "expected": "Hiển thị gate/lỗi, không báo đã hoàn tất.",
+      "verified_scope": "Luật cần kiểm riêng, chưa có giao dịch restore.",
+      "uc_ids": [
+        "UC-14"
+      ]
+    }
+  ],
+  "takeaways": [
+    {
+      "text": "Tách điều khiển tức thời khỏi tác vụ tài khoản có mạng.",
+      "basis": "Mức rủi ro và điều kiện hoàn tất khác nhau."
+    },
+    {
+      "text": "Kiểm persistence bằng preference thực, không chỉ hình toggle.",
+      "basis": "Notification đã có so sánh allowlist."
+    }
+  ],
+  "reviewed_source_paths": [
+    "gdd/Settings.json",
+    "site_meta/Settings.json",
+    "facts/review_cases_20261116_round2.json",
+    "facts/review_20261116_round2/cross_feature_evidence_context.json"
+  ]
+}

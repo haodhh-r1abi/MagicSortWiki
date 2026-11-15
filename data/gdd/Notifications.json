@@ -829,5 +829,233 @@
       "UC-02"
     ],
     "full_uc_pass": false
+  },
+  "design_spec_20261116": {
+    "source": "editorial/Notifications.json",
+    "sha256": "a6a81675e0c039d083ec1329215088887ec65ac5510ea6984ccbea949f029172",
+    "scope": "Designer-facing interpretation; no new runtime verification. Original use_cases and evidence remain unchanged.",
+    "content": {
+      "id": "Notifications",
+      "schema_version": 1,
+      "scope": "Diễn giải thiết kế từ client, default và bằng chứng ngày 15–16/11 đã ghi nguồn. Nội dung mã/default không được nâng thành runtime pass; giữ nguyên full data và UC của hồ sơ.",
+      "design_intent": "Nhắc người chơi quay lại đúng ngữ cảnh nhưng cho họ kiểm soát việc bị làm phiền. Tách preference trong app, permission của OS và delivery thực tế.",
+      "player_loop": "Xin quyền → đọc lựa chọn người chơi → caller đặt lịch → thay/hủy lịch khi state đổi → kiểm lại lựa chọn sau restart.",
+      "flow": [
+        {
+          "title": "Xin quyền thông báo",
+          "actor": "Client và OS",
+          "action": "Chờ permission request kết thúc.",
+          "rule": "Native set initialized khi keepWaiting=false, không đọc Granted trong accepted path.",
+          "outcome": "Initialized không phải bằng chứng OS đã cấp quyền.",
+          "uc_ids": [
+            "UC-01"
+          ],
+          "source_refs": [
+            "gdd/Notifications.json#/use_cases/0",
+            "gdd/Notifications.json",
+            "site_meta/Notifications.json",
+            "facts/review_cases_20261116_round2.json",
+            "facts/review_20261116_round2/cross_feature_evidence_context.json",
+            "facts/review_20261116_round2/native_findings_chunk1.json",
+            "facts/review_20261116_round2/native_findings_chunk2.json"
+          ]
+        },
+        {
+          "title": "Huỷ và đặt lại thông báo cùng Id",
+          "actor": "Client",
+          "action": "Hủy lịch cùng ID trước khi tạo lịch mới.",
+          "rule": "SendNotification yêu cầu init gates; Cancel(id) chạy trước kiểm preference.",
+          "outcome": "Replace-by-ID tránh giữ lịch cũ cùng loại.",
+          "uc_ids": [
+            "UC-12"
+          ],
+          "source_refs": [
+            "gdd/Notifications.json#/use_cases/11",
+            "gdd/Notifications.json",
+            "site_meta/Notifications.json",
+            "facts/review_cases_20261116_round2.json",
+            "facts/review_20261116_round2/cross_feature_evidence_context.json",
+            "facts/review_20261116_round2/native_findings_chunk1.json",
+            "facts/review_20261116_round2/native_findings_chunk2.json"
+          ]
+        },
+        {
+          "title": "Bật/tắt toàn bộ thông báo",
+          "actor": "Người chơi và client",
+          "action": "Đổi toggle ON → OFF → ON.",
+          "rule": "Lượt mới flag true/false/true; hai Unity alarms thành 0 sau OFF và vẫn 0 ở snapshot sau ON.",
+          "outcome": "Bật lại không tự chứng minh mọi lịch được reschedule.",
+          "uc_ids": [
+            "UC-02"
+          ],
+          "source_refs": [
+            "gdd/Notifications.json#/use_cases/1",
+            "gdd/Notifications.json",
+            "site_meta/Notifications.json",
+            "facts/review_cases_20261116_round2.json",
+            "facts/review_20261116_round2/cross_feature_evidence_context.json",
+            "facts/review_20261116_round2/native_findings_chunk1.json",
+            "facts/review_20261116_round2/native_findings_chunk2.json"
+          ]
+        },
+        {
+          "title": "Nhắc giữ chân ngày đầu (D1)",
+          "actor": "Client",
+          "action": "Đặt D1 từ bootstrap Home.",
+          "rule": "Callsite native nằm trong BootstrapHomeContext, không đủ để suy mọi resume đều gửi.",
+          "outcome": "Thời điểm nhắc phải gắn caller thật.",
+          "uc_ids": [
+            "UC-04"
+          ],
+          "source_refs": [
+            "gdd/Notifications.json#/use_cases/3",
+            "gdd/Notifications.json",
+            "site_meta/Notifications.json",
+            "facts/review_cases_20261116_round2.json",
+            "facts/review_20261116_round2/cross_feature_evidence_context.json",
+            "facts/review_20261116_round2/native_findings_chunk1.json",
+            "facts/review_20261116_round2/native_findings_chunk2.json"
+          ]
+        }
+      ],
+      "rules": [
+        {
+          "title": "Một lần quan sát không phải quy luật delivery",
+          "text": "Alarms được đọc tuần tự, không atomic với ảnh/prefs; chưa kiểm Doze, permission dialog hay remote push.",
+          "source_refs": [
+            "gdd/Notifications.json",
+            "site_meta/Notifications.json",
+            "facts/review_cases_20261116_round2.json",
+            "facts/review_20261116_round2/cross_feature_evidence_context.json",
+            "facts/review_20261116_round2/native_findings_chunk1.json",
+            "facts/review_20261116_round2/native_findings_chunk2.json"
+          ]
+        },
+        {
+          "title": "WelcomeBack delay",
+          "text": "Caller native dùng 1.209.600 giây = 14 ngày; đây là reminder, không phải điều kiện backend cấp reward.",
+          "source_refs": [
+            "gdd/Notifications.json",
+            "site_meta/Notifications.json",
+            "facts/review_cases_20261116_round2.json",
+            "facts/review_20261116_round2/cross_feature_evidence_context.json",
+            "facts/review_20261116_round2/native_findings_chunk1.json",
+            "facts/review_20261116_round2/native_findings_chunk2.json"
+          ]
+        },
+        {
+          "title": "Persistence",
+          "text": "Sau restart ảnh 074 cho Settings ON; ảnh 073 chỉ là Home transition, không được dùng thay ảnh toggle.",
+          "source_refs": [
+            "gdd/Notifications.json",
+            "site_meta/Notifications.json",
+            "facts/review_cases_20261116_round2.json",
+            "facts/review_20261116_round2/cross_feature_evidence_context.json",
+            "facts/review_20261116_round2/native_findings_chunk1.json",
+            "facts/review_20261116_round2/native_findings_chunk2.json"
+          ]
+        }
+      ],
+      "decisions": [
+        {
+          "question": "OFF phải làm gì?",
+          "answer": "Hủy thông báo đã lên lịch và dismiss thông báo đã hiện theo handler nguồn.",
+          "basis": "Native và so sánh allowlist/alarm mới.",
+          "source_refs": [
+            "gdd/Notifications.json",
+            "site_meta/Notifications.json",
+            "facts/review_cases_20261116_round2.json",
+            "facts/review_20261116_round2/cross_feature_evidence_context.json",
+            "facts/review_20261116_round2/native_findings_chunk1.json",
+            "facts/review_20261116_round2/native_findings_chunk2.json"
+          ]
+        },
+        {
+          "question": "ON có cần lập lại lịch ngay?",
+          "answer": "Không thể khẳng định từ handler; ảnh mới ghi nhận 0 alarm tại snapshot sau ON.",
+          "basis": "Không thấy handler tự reschedule toàn bộ.",
+          "source_refs": [
+            "gdd/Notifications.json",
+            "site_meta/Notifications.json",
+            "facts/review_cases_20261116_round2.json",
+            "facts/review_20261116_round2/cross_feature_evidence_context.json",
+            "facts/review_20261116_round2/native_findings_chunk1.json",
+            "facts/review_20261116_round2/native_findings_chunk2.json"
+          ]
+        }
+      ],
+      "segments_ab": {
+        "summary": "Các trục bên dưới mô tả điều kiện chọn hoặc trạng thái; chưa có assignment hay uplift để khẳng định A/B.",
+        "axes": [
+          {
+            "axis": "Caller nhắc quay lại",
+            "selection": "Lives, daily, tournament, WelcomeBack và D1",
+            "effect": "Thay ID, delay và nội dung.",
+            "evidence_limit": "Không phải nhóm A/B trừ khi có assignment chứng minh.",
+            "source_refs": [
+              "gdd/Notifications.json",
+              "site_meta/Notifications.json",
+              "facts/review_cases_20261116_round2.json",
+              "facts/review_20261116_round2/cross_feature_evidence_context.json",
+              "facts/review_20261116_round2/native_findings_chunk1.json",
+              "facts/review_20261116_round2/native_findings_chunk2.json"
+            ]
+          },
+          {
+            "axis": "Permission và preference",
+            "selection": "Trạng thái OS khác bool lưu trong game",
+            "effect": "Có thể chặn delivery ở các lớp khác nhau.",
+            "evidence_limit": "Lượt mới chỉ kiểm bool và alarm allowlist.",
+            "source_refs": [
+              "gdd/Notifications.json",
+              "site_meta/Notifications.json",
+              "facts/review_cases_20261116_round2.json",
+              "facts/review_20261116_round2/cross_feature_evidence_context.json",
+              "facts/review_20261116_round2/native_findings_chunk1.json",
+              "facts/review_20261116_round2/native_findings_chunk2.json"
+            ]
+          }
+        ],
+        "unknowns": [
+          "Chưa có phân bổ ngẫu nhiên, cohort và kết quả nhân quả để đánh giá thử nghiệm."
+        ]
+      },
+      "recovery": [
+        {
+          "condition": "Người chơi tắt thông báo",
+          "expected": "Dừng tạo lịch mới sau bước cancel cùng ID.",
+          "verified_scope": "Native; toggle/alarm snapshot chỉ fixture hiện tại.",
+          "uc_ids": [
+            "UC-13"
+          ]
+        },
+        {
+          "condition": "Restart sau khi bật lại",
+          "expected": "Giữ preference đã lưu, không hứa lịch hoặc delivery chưa quan sát.",
+          "verified_scope": "Đã thấy ON sau restart; chưa kiểm delivery.",
+          "uc_ids": [
+            "UC-02"
+          ]
+        }
+      ],
+      "takeaways": [
+        {
+          "text": "Mô tả lịch nhắc bằng caller, ID, delay và điều kiện hủy.",
+          "basis": "Tên notification không đủ giải thích behavior."
+        },
+        {
+          "text": "Đếm alarm và đọc preference bổ sung cho ảnh toggle.",
+          "basis": "Ba lớp bằng chứng tránh nhầm ON với delivery."
+        }
+      ],
+      "reviewed_source_paths": [
+        "gdd/Notifications.json",
+        "site_meta/Notifications.json",
+        "facts/review_cases_20261116_round2.json",
+        "facts/review_20261116_round2/cross_feature_evidence_context.json",
+        "facts/review_20261116_round2/native_findings_chunk1.json",
+        "facts/review_20261116_round2/native_findings_chunk2.json"
+      ]
+    }
   }
 }

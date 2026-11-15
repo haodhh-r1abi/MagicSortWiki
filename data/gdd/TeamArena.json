@@ -3186,5 +3186,135 @@
     "round2_case_ids": [],
     "round2_branch_ucs": [],
     "full_uc_pass": false
+  },
+  "design_spec_20261116": {
+    "source": "editorial/TeamArena.json",
+    "sha256": "1ab2922d58537283343147f5b2417f10f5578c4266b798873ff2a153a59f24d7",
+    "scope": "Designer-facing interpretation; no new runtime verification. Original use_cases and evidence remain unchanged.",
+    "content": {
+      "id": "TeamArena",
+      "schema_version": 1,
+      "scope": "Diễn giải thiết kế từ nguồn đã đối chiếu; outcome là expected, không phải lượt playtest mới. Các giá trị default/native có build riêng, không tự coi đang hiệu lực production.",
+      "design_intent": "Đặt cạnh tranh đội bên cạnh mốc cá nhân, để đóng góp của một người có giá trị cả trước và sau lúc bảng đội chốt.",
+      "player_loop": "Đội đủ điều kiện → Join → góp điểm → nhận mốc cá nhân → đua hạng đội → nhận kết quả.",
+      "flow": [
+        {
+          "title": "Đưa đội vào giải",
+          "actor": "Người chơi và hệ thống",
+          "action": "Tham gia khi đội đủ điều kiện.",
+          "rule": "Mặc định cần ít nhất 10 thành viên; quyền đóng góp và cửa Join còn phụ thuộc response.",
+          "outcome": "Đội và người chơi có trạng thái sự kiện hợp lệ.",
+          "uc_ids": [
+            "UC-03"
+          ],
+          "source_refs": [
+            "gdd/TeamArena.json#use_cases/2"
+          ]
+        },
+        {
+          "title": "Nhận mốc riêng",
+          "actor": "Người chơi và hệ thống",
+          "action": "Thắng level để đạt điểm cá nhân.",
+          "rule": "Normal/Hard/SuperHard cho 1/3/5 điểm theo mặc định; Steps cá nhân khác tổng điểm đội.",
+          "outcome": "Nhận quà mốc mà không cần đợi bảng đội kết thúc.",
+          "uc_ids": [
+            "UC-05"
+          ],
+          "source_refs": [
+            "gdd/TeamArena.json#use_cases/4"
+          ]
+        },
+        {
+          "title": "Chốt kết quả hai bảng",
+          "actor": "Người chơi và hệ thống",
+          "action": "Xem hạng đội và hạng đóng góp của mình.",
+          "rule": "Top 3 đội mặc định nhận 2.000/1.000/500 coin; quà theo hạng đóng góp là một bảng riêng.",
+          "outcome": "Tách phần thưởng đội và phần thưởng cá nhân đúng nguồn.",
+          "uc_ids": [
+            "UC-08"
+          ],
+          "source_refs": [
+            "gdd/TeamArena.json#use_cases/7"
+          ]
+        }
+      ],
+      "rules": [
+        {
+          "title": "Đưa đội vào giải",
+          "text": "Mặc định cần ít nhất 10 thành viên; quyền đóng góp và cửa Join còn phụ thuộc response.",
+          "source_refs": [
+            "gdd/TeamArena.json#use_cases/2"
+          ]
+        },
+        {
+          "title": "Nhận mốc riêng",
+          "text": "Normal/Hard/SuperHard cho 1/3/5 điểm theo mặc định; Steps cá nhân khác tổng điểm đội.",
+          "source_refs": [
+            "gdd/TeamArena.json#use_cases/4"
+          ]
+        },
+        {
+          "title": "Chốt kết quả hai bảng",
+          "text": "Top 3 đội mặc định nhận 2.000/1.000/500 coin; quà theo hạng đóng góp là một bảng riêng.",
+          "source_refs": [
+            "gdd/TeamArena.json#use_cases/7"
+          ]
+        }
+      ],
+      "decisions": [
+        {
+          "question": "Vì sao hai leaderboard cần mô tả riêng?",
+          "answer": "Hạng đội so với đội khác quyết định quà đội; hạng cá nhân trong đội quyết định quà đóng góp. Nhầm hai loại làm sai kỳ vọng thưởng.",
+          "basis": "Suy luận thiết kế từ cơ chế có nguồn, chưa đo hiệu quả.",
+          "source_refs": [
+            "gdd/TeamArena.json#flow",
+            "gdd/TeamArena.json#configs"
+          ]
+        }
+      ],
+      "segments_ab": {
+        "summary": "Đội, Elo và Collection: Đổi quyền tham gia và phần thưởng theo bảng.",
+        "axes": [
+          {
+            "axis": "Đội, Elo và Collection",
+            "selection": "Đội, giải và quyền đóng góp là các gate; Collection chọn Steps và quà thay thế.",
+            "effect": "Đổi quyền tham gia và phần thưởng theo bảng.",
+            "evidence_limit": "Các field Elo trước và sau có trong dữ liệu và analytics, nhưng chưa có công thức ghép đội để khẳng định công bằng theo trình độ.",
+            "source_refs": [
+              "gdd/TeamArena.json#segment_ab_review_20261115",
+              "gdd/TeamArena.json#flow",
+              "gdd/TeamArena.json#configs"
+            ]
+          }
+        ],
+        "unknowns": [
+          "Các field Elo trước và sau có trong dữ liệu và analytics, nhưng chưa có công thức ghép đội để khẳng định công bằng theo trình độ."
+        ]
+      },
+      "recovery": [
+        {
+          "condition": "Gián đoạn hoặc kết thúc Đấu trường đội (Team Arena)",
+          "expected": "Đổi đội có reset cache theo sự kiện; cần kiểm quyền claim để tránh suy rằng đổi đội cho phép nhận lại.",
+          "verified_scope": "Theo source và UC trong dossier; các dependency backend/sync/RNG vẫn cần kiểm riêng.",
+          "uc_ids": [
+            "UC-09",
+            "UC-10",
+            "UC-14",
+            "UC-15"
+          ]
+        }
+      ],
+      "takeaways": [
+        {
+          "text": "Hạng đội so với đội khác quyết định quà đội; hạng cá nhân trong đội quyết định quà đóng góp. Nhầm hai loại làm sai kỳ vọng thưởng.",
+          "basis": "Phân tích thiết kế, không phải kết quả đo cohort."
+        }
+      ],
+      "reviewed_source_paths": [
+        "gdd/TeamArena.json",
+        "site_meta/TeamArena.json",
+        "facts/review_20261116/public_current_config_3129/defaults/TeamArenaConfigModel.json"
+      ]
+    }
   }
 }

@@ -1,0 +1,122 @@
+{
+  "id": "Inventory",
+  "schema_version": 1,
+  "scope": "Lớp diễn giải thiết kế từ source và dossier hiện có; outcome là expected. Quan sát round2 được gọi rõ; chưa phát sinh playtest hoặc xác nhận backend mới.",
+  "design_intent": "Giữ một sổ cái chung cho tiền, vật phẩm và quyền theo thời gian để mọi tính năng trao/tiêu cùng ngữ nghĩa. Người chơi cần phân biệt số lượng với thời hạn sử dụng.",
+  "player_loop": "Kiếm thưởng → chờ trình diễn/apply → xem số dư → tiêu cho mục tiêu → lưu và hồi theo thời gian.",
+  "flow": [
+    {
+      "title": "Nhận tài nguyên",
+      "actor": "Người chơi",
+      "action": "Nhận thưởng và theo dõi vật phẩm bay về thanh tiền tệ.",
+      "rule": "Có pending reward trước apply; animation và số dư cần được đọc cùng ledger.",
+      "outcome": "Không coi popup hiện số thưởng là số dư đã cộng.",
+      "uc_ids": [
+        "UC-02"
+      ],
+      "source_refs": [
+        "gdd/Inventory.json#use_cases/1"
+      ]
+    },
+    {
+      "title": "Theo dõi mạng hồi",
+      "actor": "Người chơi",
+      "action": "Mở ô mạng khi còn thiếu và xem thời gian hồi.",
+      "rule": "LifeFillDate là mốc thời gian; dùng UTC không tự chứng minh chống chỉnh giờ.",
+      "outcome": "Thời gian và số mạng được tính từ trạng thái kho.",
+      "uc_ids": [
+        "UC-06"
+      ],
+      "source_refs": [
+        "gdd/Inventory.json#use_cases/5"
+      ]
+    },
+    {
+      "title": "Mua đầy mạng",
+      "actor": "Người chơi",
+      "action": "Chọn Refill khi thiếu mạng và có coin.",
+      "rule": "Giá 900 coin trong các nguồn default/cache nêu tại config. Native 0.0.3063 trả trần Magic Pass là 8; chưa đối chiếu hàm này ở 0.0.3129 hoặc ledger finite-life của Pass active.",
+      "outcome": "Tiêu coin và phục hồi mạng theo nhánh hợp lệ.",
+      "uc_ids": [
+        "UC-08"
+      ],
+      "source_refs": [
+        "gdd/Inventory.json#use_cases/7"
+      ]
+    }
+  ],
+  "rules": [
+    {
+      "title": "Nhận tài nguyên",
+      "text": "Có pending reward trước apply; animation và số dư cần được đọc cùng ledger.",
+      "source_refs": [
+        "gdd/Inventory.json#use_cases/1"
+      ]
+    },
+    {
+      "title": "Theo dõi mạng hồi",
+      "text": "LifeFillDate là mốc thời gian; dùng UTC không tự chứng minh chống chỉnh giờ.",
+      "source_refs": [
+        "gdd/Inventory.json#use_cases/5"
+      ]
+    },
+    {
+      "title": "Mua đầy mạng",
+      "text": "Giá 900 coin trong các nguồn default/cache nêu tại config. Native 0.0.3063 trả trần Magic Pass là 8; chưa đối chiếu hàm này ở 0.0.3129 hoặc ledger finite-life của Pass active.",
+      "source_refs": [
+        "gdd/Inventory.json#use_cases/7"
+      ]
+    }
+  ],
+  "decisions": [
+    {
+      "question": "Vì sao pending cần tách khỏi số dư?",
+      "answer": "Lượt 352 → 353 cho thấy popup 20 coin trước thời điểm ledger cộng; phải chỉ đúng cửa sổ grant thay vì kết luận mất thưởng từ một frame.",
+      "basis": "Nhận định thiết kế từ cơ chế có nguồn; không phải hiệu quả đã đo.",
+      "source_refs": [
+        "gdd/Inventory.json#flow",
+        "gdd/Inventory.json#configs"
+      ]
+    }
+  ],
+  "segments_ab": {
+    "summary": "Dạng tiền và quyền theo thời gian: Một reward cùng biểu tượng có thể là số lượng hoặc thời gian dùng vô hạn.",
+    "axes": [
+      {
+        "axis": "Dạng tiền và quyền theo thời gian",
+        "selection": "CurrencyType và amount/timed/limitless chọn cách áp dụng.",
+        "effect": "Một reward cùng biểu tượng có thể là số lượng hoặc thời gian dùng vô hạn.",
+        "evidence_limit": "Đây là loại tài nguyên, không phải segment user hay A/B; backend sync chưa kiểm hai thiết bị.",
+        "source_refs": [
+          "gdd/Inventory.json#flow",
+          "gdd/Inventory.json#segment_ab_review_20261115"
+        ]
+      }
+    ],
+    "unknowns": [
+      "Đây là loại tài nguyên, không phải segment user hay A/B; backend sync chưa kiểm hai thiết bị."
+    ]
+  },
+  "recovery": [
+    {
+      "condition": "Nhánh lỗi, gián đoạn hoặc chuyển trạng thái của Kho đồ & tiền tệ",
+      "expected": "Thoát giữa animation cần kiểm pending/apply và persistence; không hứa chống mất thưởng ở mọi crash.",
+      "verified_scope": "Theo UC/source trong hồ sơ; runtime chỉ có giá trị ở đúng case và snapshot đã liên kết.",
+      "uc_ids": [
+        "UC-14",
+        "UC-17"
+      ]
+    }
+  ],
+  "takeaways": [
+    {
+      "text": "Lượt 352 → 353 cho thấy popup 20 coin trước thời điểm ledger cộng; phải chỉ đúng cửa sổ grant thay vì kết luận mất thưởng từ một frame.",
+      "basis": "Suy luận thiết kế; không thay bảng cấu hình hoặc giới hạn thực nghiệm."
+    }
+  ],
+  "reviewed_source_paths": [
+    "gdd/Inventory.json",
+    "site_meta/Inventory.json",
+    "facts/review_20261116/public_current_config_3129/defaults/GameEconomyModel.json"
+  ]
+}

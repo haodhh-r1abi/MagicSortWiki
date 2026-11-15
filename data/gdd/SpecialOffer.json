@@ -2587,5 +2587,135 @@
     "round2_case_ids": [],
     "round2_branch_ucs": [],
     "full_uc_pass": false
+  },
+  "design_spec_20261116": {
+    "source": "editorial/SpecialOffer.json",
+    "sha256": "a5f1503da504ae04c62a33710b28e1773bdc63b84c749137469da5f68e0fa8f1",
+    "scope": "Designer-facing interpretation; no new runtime verification. Original use_cases and evidence remain unchanged.",
+    "content": {
+      "id": "SpecialOffer",
+      "schema_version": 1,
+      "scope": "Lớp diễn giải thiết kế từ source và dossier hiện có; outcome là expected. Quan sát round2 được gọi rõ; chưa phát sinh playtest hoặc xác nhận backend mới.",
+      "design_intent": "Gói có chủ đề nối nhu cầu tài nguyên với một cửa sổ khuyến mãi; diện mạo mùa và giá trị kinh tế là hai lớp độc lập.",
+      "player_loop": "Mở icon hoặc lời mời → đọc gói theo chủ đề → so giá/hàng → mua hoặc đóng → chờ lần chào hợp lệ.",
+      "flow": [
+        {
+          "title": "Tải diện mạo offer",
+          "actor": "Người chơi",
+          "action": "Mở gói được chào ở Home.",
+          "rule": "Theme và popup type cần asset bundle tương ứng; theme không tự quyết reward.",
+          "outcome": "Popup hiện đúng nội dung của đợt.",
+          "uc_ids": [
+            "UC-03"
+          ],
+          "source_refs": [
+            "gdd/SpecialOffer.json#use_cases/2"
+          ]
+        },
+        {
+          "title": "Mua gói giới hạn",
+          "actor": "Người chơi",
+          "action": "Chọn mua một lần theo event.",
+          "rule": "Product/reward lấy segmented package, có fallback productId được mô tả trong UC.",
+          "outcome": "Kết quả mua quyết định quyền nhận và trạng thái đã mua.",
+          "uc_ids": [
+            "UC-05"
+          ],
+          "source_refs": [
+            "gdd/SpecialOffer.json#use_cases/4"
+          ]
+        },
+        {
+          "title": "Lời mời Ego khi kẹt",
+          "actor": "Người chơi",
+          "action": "Đọc offer trong bối cảnh hết nước cuối level.",
+          "rule": "ShouldShowEgoOffer và ShouldGivePlayOnAtEgo là cờ riêng; cache có thể tắt cả hai.",
+          "outcome": "Không khẳng định mọi SpecialOffer đều tặng Play On.",
+          "uc_ids": [
+            "UC-08"
+          ],
+          "source_refs": [
+            "gdd/SpecialOffer.json#use_cases/7"
+          ]
+        }
+      ],
+      "rules": [
+        {
+          "title": "Tải diện mạo offer",
+          "text": "Theme và popup type cần asset bundle tương ứng; theme không tự quyết reward.",
+          "source_refs": [
+            "gdd/SpecialOffer.json#use_cases/2"
+          ]
+        },
+        {
+          "title": "Mua gói giới hạn",
+          "text": "Product/reward lấy segmented package, có fallback productId được mô tả trong UC.",
+          "source_refs": [
+            "gdd/SpecialOffer.json#use_cases/4"
+          ]
+        },
+        {
+          "title": "Lời mời Ego khi kẹt",
+          "text": "ShouldShowEgoOffer và ShouldGivePlayOnAtEgo là cờ riêng; cache có thể tắt cả hai.",
+          "source_refs": [
+            "gdd/SpecialOffer.json#use_cases/7"
+          ]
+        }
+      ],
+      "decisions": [
+        {
+          "question": "Có thể dùng theme để định danh giá trị gói không?",
+          "answer": "Không: cùng diện mạo có thể đi với package khác; designer phải so productId, giá và RewardModels theo cùng snapshot.",
+          "basis": "Nhận định thiết kế từ cơ chế có nguồn; không phải hiệu quả đã đo.",
+          "source_refs": [
+            "gdd/SpecialOffer.json#flow",
+            "gdd/SpecialOffer.json#configs"
+          ]
+        }
+      ],
+      "segments_ab": {
+        "summary": "Theme và segmented package: Đổi diện mạo, hàng và vị trí chào.",
+        "axes": [
+          {
+            "axis": "Theme và segmented package",
+            "selection": "Server chọn theme/popup/package; tần suất ShowFrequency/MaxShowCount chặn tự mở.",
+            "effect": "Đổi diện mạo, hàng và vị trí chào.",
+            "evidence_limit": "Chưa chứng minh logic assignment hoặc cùng theme luôn cùng product.",
+            "source_refs": [
+              "gdd/SpecialOffer.json#flow",
+              "gdd/SpecialOffer.json#segment_ab_review_20261115"
+            ]
+          }
+        ],
+        "unknowns": [
+          "Chưa chứng minh logic assignment hoặc cùng theme luôn cùng product."
+        ]
+      },
+      "recovery": [
+        {
+          "condition": "Nhánh lỗi, gián đoạn hoặc chuyển trạng thái của Special Offer",
+          "expected": "Gói sai, hết hạn hoặc purchase thất bại phải có disposition riêng.",
+          "verified_scope": "Theo UC/source trong hồ sơ; runtime chỉ có giá trị ở đúng case và snapshot đã liên kết.",
+          "uc_ids": [
+            "UC-07",
+            "UC-11",
+            "UC-12"
+          ]
+        }
+      ],
+      "takeaways": [
+        {
+          "text": "Không: cùng diện mạo có thể đi với package khác; designer phải so productId, giá và RewardModels theo cùng snapshot.",
+          "basis": "Suy luận thiết kế; không thay bảng cấu hình hoặc giới hạn thực nghiệm."
+        }
+      ],
+      "reviewed_source_paths": [
+        "gdd/SpecialOffer.json",
+        "site_meta/SpecialOffer.json",
+        "facts/review_20261116/public_current_config_3129/defaults/AdaptiveSpecialOfferConfigModel.json",
+        "facts/review_20261116/public_current_config_3129/defaults/AreYouSureOfferConfigModel.json",
+        "facts/review_20261116/public_current_config_3129/defaults/SpecialOfferConfigModel.json"
+      ]
+    }
   }
 }

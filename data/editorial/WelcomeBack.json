@@ -1,0 +1,122 @@
+{
+  "id": "WelcomeBack",
+  "schema_version": 1,
+  "scope": "Lớp diễn giải thiết kế từ source và dossier hiện có; outcome là expected. Quan sát round2 được gọi rõ; chưa phát sinh playtest hoặc xác nhận backend mới.",
+  "design_intent": "Tạo cảm giác được đón lại bằng quà một lần, trong khi điều kiện nghỉ bao lâu thuộc quyết định backend.",
+  "player_loop": "Quay lại game → kiểm gói → xem chào mừng ở Home → nhận → ghi ID đã nhận.",
+  "flow": [
+    {
+      "title": "Kiểm quà trở lại",
+      "actor": "Người chơi và hệ thống",
+      "action": "Vào game sau thời gian vắng.",
+      "rule": "Backend trả WelcomeBackId và RewardModels; source client không cho ngưỡng số ngày nghỉ.",
+      "outcome": "Có gói chưa nhận mới cần thông báo.",
+      "uc_ids": [
+        "UC-01"
+      ],
+      "source_refs": [
+        "gdd/WelcomeBack.json#use_cases/0"
+      ]
+    },
+    {
+      "title": "Đón tại Home",
+      "actor": "Người chơi",
+      "action": "Đọc popup chào mừng và phần thưởng.",
+      "rule": "Có lối khi vào Home và khi về từ level; không cần suy popup bật ở mọi session.",
+      "outcome": "Người chơi thấy quà hợp lệ của mình.",
+      "uc_ids": [
+        "UC-03"
+      ],
+      "source_refs": [
+        "gdd/WelcomeBack.json#use_cases/2"
+      ]
+    },
+    {
+      "title": "Nhận và ghi lịch sử",
+      "actor": "Người chơi",
+      "action": "Nhận quà một lần.",
+      "rule": "Lưu ID đã nhận để tránh lặp, rồi báo claim.",
+      "outcome": "Quà không được phát lại chỉ vì quay lại Home.",
+      "uc_ids": [
+        "UC-05"
+      ],
+      "source_refs": [
+        "gdd/WelcomeBack.json#use_cases/4"
+      ]
+    }
+  ],
+  "rules": [
+    {
+      "title": "Kiểm quà trở lại",
+      "text": "Backend trả WelcomeBackId và RewardModels; source client không cho ngưỡng số ngày nghỉ.",
+      "source_refs": [
+        "gdd/WelcomeBack.json#use_cases/0"
+      ]
+    },
+    {
+      "title": "Đón tại Home",
+      "text": "Có lối khi vào Home và khi về từ level; không cần suy popup bật ở mọi session.",
+      "source_refs": [
+        "gdd/WelcomeBack.json#use_cases/2"
+      ]
+    },
+    {
+      "title": "Nhận và ghi lịch sử",
+      "text": "Lưu ID đã nhận để tránh lặp, rồi báo claim.",
+      "source_refs": [
+        "gdd/WelcomeBack.json#use_cases/4"
+      ]
+    }
+  ],
+  "decisions": [
+    {
+      "question": "Có nên công bố nghỉ 7 ngày sẽ nhận quà không?",
+      "answer": "Không có ngưỡng đó trong source hiện có; chỉ mô tả gói backend và điều kiện chưa biết.",
+      "basis": "Nhận định thiết kế từ cơ chế có nguồn; không phải hiệu quả đã đo.",
+      "source_refs": [
+        "gdd/WelcomeBack.json#flow",
+        "gdd/WelcomeBack.json#configs"
+      ]
+    }
+  ],
+  "segments_ab": {
+    "summary": "Eligibility backend: Chọn người nhận và quà trở lại.",
+    "axes": [
+      {
+        "axis": "Eligibility backend",
+        "selection": "Gói do schema welcome_back trả, không có ngưỡng nghỉ được xác minh.",
+        "effect": "Chọn người nhận và quà trở lại.",
+        "evidence_limit": "Lịch local reminder không chứng minh điều kiện phát gói; không biết cohort/A-B.",
+        "source_refs": [
+          "gdd/WelcomeBack.json#flow",
+          "gdd/WelcomeBack.json#segment_ab_review_20261115"
+        ]
+      }
+    ],
+    "unknowns": [
+      "Lịch local reminder không chứng minh điều kiện phát gói; không biết cohort/A-B."
+    ]
+  },
+  "recovery": [
+    {
+      "condition": "Nhánh lỗi, gián đoạn hoặc chuyển trạng thái của Welcome Back",
+      "expected": "Request lỗi có 5 lần retry cách 10 giây trong source; thiếu gói không tự sinh reward offline.",
+      "verified_scope": "Theo UC/source trong hồ sơ; runtime chỉ có giá trị ở đúng case và snapshot đã liên kết.",
+      "uc_ids": [
+        "UC-02",
+        "UC-08",
+        "UC-10"
+      ]
+    }
+  ],
+  "takeaways": [
+    {
+      "text": "Không có ngưỡng đó trong source hiện có; chỉ mô tả gói backend và điều kiện chưa biết.",
+      "basis": "Suy luận thiết kế; không thay bảng cấu hình hoặc giới hạn thực nghiệm."
+    }
+  ],
+  "reviewed_source_paths": [
+    "gdd/WelcomeBack.json",
+    "site_meta/WelcomeBack.json"
+  ]
+}

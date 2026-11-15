@@ -2290,5 +2290,134 @@
     "round2_case_ids": [],
     "round2_branch_ucs": [],
     "full_uc_pass": false
+  },
+  "design_spec_20261116": {
+    "source": "editorial/JetpackRaceWithStage.json",
+    "sha256": "eab602cc24df6c9896f66bf867dec1073f2d7d7b19b13c1c14bf733f7bf2378e",
+    "scope": "Designer-facing interpretation; no new runtime verification. Original use_cases and evidence remain unchanged.",
+    "content": {
+      "id": "JetpackRaceWithStage",
+      "schema_version": 1,
+      "scope": "Thiết kế đọc từ dossier và nguồn đã đối chiếu. Outcome là expected; câu ghi round2 là actual theo case, không phải full-feature pass.",
+      "design_intent": "Chia đua thành ba đích ngắn và cho phép cấu hình chế độ không mất chuỗi, giảm hoặc tăng sức ép tùy luật event.",
+      "player_loop": "Join stage → thắng level → nhận quà → chuyển stage → lặp chặng cuối trong giới hạn.",
+      "flow": [
+        {
+          "title": "Tiến trong chặng",
+          "actor": "Người chơi và hệ thống",
+          "action": "Thắng level để tăng điểm chặng.",
+          "rule": "currentStage 1/2/3 và maxReachableStageScore đến từ instance.",
+          "outcome": "Tiến độ không bị lẫn với số stage đã thắng.",
+          "uc_ids": [
+            "UC-04"
+          ],
+          "source_refs": [
+            "gdd/JetpackRaceWithStage.json#use_cases/3"
+          ]
+        },
+        {
+          "title": "Xét luật thua hiện hành",
+          "actor": "Người chơi và hệ thống",
+          "action": "Thua level khi đang đua.",
+          "rule": "StreakDisabled = true trong default: phải kiểm cờ trước khi áp reset chuỗi.",
+          "outcome": "Không bê luật mất chuỗi của Jetpack Race bản thường sang mọi trường hợp.",
+          "uc_ids": [
+            "UC-05"
+          ],
+          "source_refs": [
+            "gdd/JetpackRaceWithStage.json#use_cases/4"
+          ]
+        },
+        {
+          "title": "Nhận quà theo stage",
+          "actor": "Người chơi và hệ thống",
+          "action": "Hoàn thành chặng và nhận bộ quà.",
+          "rule": "Default stage 1: 100 coin + 15 phút, stage 2: 250 coin + 30 phút, stage 3: 500 coin + Shuffle + Undo + 45 phút; LastStageWinLimit = 100.",
+          "outcome": "Reward và quyền lặp gắn stage hiện tại.",
+          "uc_ids": [
+            "UC-10"
+          ],
+          "source_refs": [
+            "gdd/JetpackRaceWithStage.json#use_cases/9"
+          ]
+        }
+      ],
+      "rules": [
+        {
+          "title": "Tiến trong chặng",
+          "text": "currentStage 1/2/3 và maxReachableStageScore đến từ instance.",
+          "source_refs": [
+            "gdd/JetpackRaceWithStage.json#use_cases/3"
+          ]
+        },
+        {
+          "title": "Xét luật thua hiện hành",
+          "text": "StreakDisabled = true trong default: phải kiểm cờ trước khi áp reset chuỗi.",
+          "source_refs": [
+            "gdd/JetpackRaceWithStage.json#use_cases/4"
+          ]
+        },
+        {
+          "title": "Nhận quà theo stage",
+          "text": "Default stage 1: 100 coin + 15 phút, stage 2: 250 coin + 30 phút, stage 3: 500 coin + Shuffle + Undo + 45 phút; LastStageWinLimit = 100.",
+          "source_refs": [
+            "gdd/JetpackRaceWithStage.json#use_cases/9"
+          ]
+        }
+      ],
+      "decisions": [
+        {
+          "question": "Có thể gọi đây chỉ là reskin Jetpack Race không?",
+          "answer": "Không: stage, leaderboardID và StreakDisabled làm khác tiến trình và mức mất mát; cần bảng luật riêng.",
+          "basis": "Nhận định thiết kế dựa trên cơ chế, không phải kết quả A/B.",
+          "source_refs": [
+            "gdd/JetpackRaceWithStage.json#flow",
+            "gdd/JetpackRaceWithStage.json#configs"
+          ]
+        }
+      ],
+      "segments_ab": {
+        "summary": "StreakDisabled và stage: Đổi hình phạt thua và giá trị từng chặng.",
+        "axes": [
+          {
+            "axis": "StreakDisabled và stage",
+            "selection": "Cờ mất chuỗi cùng response stage quyết định luật áp dụng.",
+            "effect": "Đổi hình phạt thua và giá trị từng chặng.",
+            "evidence_limit": "Cờ default không chứng minh phân bổ A/B hoặc giá trị đang hiệu lực của mọi instance.",
+            "source_refs": [
+              "gdd/JetpackRaceWithStage.json#segment_ab_review_20261115",
+              "gdd/JetpackRaceWithStage.json#flow",
+              "gdd/JetpackRaceWithStage.json#configs"
+            ]
+          }
+        ],
+        "unknowns": [
+          "Cờ default không chứng minh phân bổ A/B hoặc giá trị đang hiệu lực của mọi instance."
+        ]
+      },
+      "recovery": [
+        {
+          "condition": "Gián đoạn hoặc kết thúc Đua Jetpack 3 chặng",
+          "expected": "Mất mạng hoặc chuyển stage phải đối chiếu tournamentID/leaderboardID, không tăng stage chỉ từ animation.",
+          "verified_scope": "Đọc source/UC; không thực hiện runtime mới trong lượt biên tập.",
+          "uc_ids": [
+            "UC-12",
+            "UC-15",
+            "UC-16"
+          ]
+        }
+      ],
+      "takeaways": [
+        {
+          "text": "Không: stage, leaderboardID và StreakDisabled làm khác tiến trình và mức mất mát; cần bảng luật riêng.",
+          "basis": "Phân tích thiết kế, chưa đo retention/conversion."
+        }
+      ],
+      "reviewed_source_paths": [
+        "gdd/JetpackRaceWithStage.json",
+        "site_meta/JetpackRaceWithStage.json",
+        "facts/review_20261116/public_current_config_3129/defaults/JetpackRaceWithStageConfigModel.json"
+      ]
+    }
   }
 }

@@ -1,0 +1,199 @@
+{
+  "id": "Leaderboards",
+  "schema_version": 1,
+  "scope": "Diễn giải thiết kế từ client, default và bằng chứng ngày 15–16/11 đã ghi nguồn. Nội dung mã/default không được nâng thành runtime pass; giữ nguyên full data và UC của hồ sơ.",
+  "design_intent": "Cho người chơi nhìn vị trí tương đối theo phạm vi phù hợp, đồng thời giữ dòng của mình dễ tìm giữa danh sách dài.",
+  "player_loop": "Mở bảng → chọn loại và phạm vi → đọc vị trí mình → xem đối thủ hoặc hồ sơ → quay lại chơi để tiến hạng.",
+  "flow": [
+    {
+      "title": "Nạp bảng xếp hạng sau đăng nhập",
+      "actor": "Client và server",
+      "action": "Lấy bảng sau login rồi cache.",
+      "rule": "IsFlatBuffer chọn giao thức FlatBuffers hoặc JSON; hai đường đổ cùng world/country model.",
+      "outcome": "UI dùng cache đã ánh xạ thay vì tự biết giao thức.",
+      "uc_ids": [
+        "UC-01"
+      ],
+      "source_refs": [
+        "gdd/Leaderboards.json#/use_cases/0",
+        "gdd/Leaderboards.json",
+        "site_meta/Leaderboards.json",
+        "facts/review_cases_20261116_round2.json",
+        "facts/review_20261116_round2/cross_feature_evidence_context.json"
+      ]
+    },
+    {
+      "title": "Xem bảng xếp hạng thế giới",
+      "actor": "Người chơi và client",
+      "action": "Mở Players/World.",
+      "rule": "Lượt mới thấy cache quanh hạng 994–999 và dòng mình1000+, level 352.",
+      "outcome": "Có mốc vị trí nhưng không chứng minh xếp hạng thời gian thực.",
+      "uc_ids": [
+        "UC-02"
+      ],
+      "source_refs": [
+        "gdd/Leaderboards.json#/use_cases/1",
+        "gdd/Leaderboards.json",
+        "site_meta/Leaderboards.json",
+        "facts/review_cases_20261116_round2.json",
+        "facts/review_20261116_round2/cross_feature_evidence_context.json"
+      ]
+    },
+    {
+      "title": "Ghim dòng của chính người chơi",
+      "actor": "Client",
+      "action": "Ghim dòng của người chơi khi cuộn.",
+      "rule": "StickyScrollElementsController giữ vị trí mình dễ tìm.",
+      "outcome": "Giảm chi phí tìm giữa nhiều dòng.",
+      "uc_ids": [
+        "UC-04"
+      ],
+      "source_refs": [
+        "gdd/Leaderboards.json#/use_cases/3",
+        "gdd/Leaderboards.json",
+        "site_meta/Leaderboards.json",
+        "facts/review_cases_20261116_round2.json",
+        "facts/review_20261116_round2/cross_feature_evidence_context.json"
+      ]
+    },
+    {
+      "title": "Xem bảng xếp hạng đội",
+      "actor": "Người chơi",
+      "action": "Chọn Teams.",
+      "rule": "Lượt mới có World/Country nhưng hiện Coming Soon!, khác lỗi No Internet của Friends.",
+      "outcome": "Mỗi tab có trạng thái sản phẩm riêng.",
+      "uc_ids": [
+        "UC-05"
+      ],
+      "source_refs": [
+        "gdd/Leaderboards.json#/use_cases/4",
+        "gdd/Leaderboards.json",
+        "site_meta/Leaderboards.json",
+        "facts/review_cases_20261116_round2.json",
+        "facts/review_20261116_round2/cross_feature_evidence_context.json"
+      ]
+    }
+  ],
+  "rules": [
+    {
+      "title": "Không cộng gộp tab",
+      "text": "Players, Teams, Friends và Weekly không cùng độ sẵn sàng.",
+      "source_refs": [
+        "gdd/Leaderboards.json",
+        "site_meta/Leaderboards.json",
+        "facts/review_cases_20261116_round2.json",
+        "facts/review_20261116_round2/cross_feature_evidence_context.json"
+      ]
+    },
+    {
+      "title": "Cache có tuổi",
+      "text": "Đọc được cache offline không chứng minh refresh sau thắng hoặc country đã tải mới.",
+      "source_refs": [
+        "gdd/Leaderboards.json",
+        "site_meta/Leaderboards.json",
+        "facts/review_cases_20261116_round2.json",
+        "facts/review_20261116_round2/cross_feature_evidence_context.json"
+      ]
+    },
+    {
+      "title": "Giữ bằng chứng phạm vi",
+      "text": "Weekly mới chỉ thấy Finished/cache; không gọi đó là giải đã join hay claim reward.",
+      "source_refs": [
+        "gdd/Leaderboards.json",
+        "site_meta/Leaderboards.json",
+        "facts/review_cases_20261116_round2.json",
+        "facts/review_20261116_round2/cross_feature_evidence_context.json"
+      ]
+    }
+  ],
+  "decisions": [
+    {
+      "question": "Tại sao ghim chính mình?",
+      "answer": "Để bảng vẫn trả lời tôi đang ở đâu khi top hoặc nhóm đối thủ ở xa.",
+      "basis": "Pinned own-row trong mã và ảnh cache.",
+      "source_refs": [
+        "gdd/Leaderboards.json",
+        "site_meta/Leaderboards.json",
+        "facts/review_cases_20261116_round2.json",
+        "facts/review_20261116_round2/cross_feature_evidence_context.json"
+      ]
+    },
+    {
+      "question": "Coming Soon có phải lỗi mạng?",
+      "answer": "Không; phải ghi nguyên nhãn và phân biệt với No Internet Connection.",
+      "basis": "Hai tab trong cùng lượt hiển thị hai trạng thái khác nhau.",
+      "source_refs": [
+        "gdd/Leaderboards.json",
+        "site_meta/Leaderboards.json",
+        "facts/review_cases_20261116_round2.json",
+        "facts/review_20261116_round2/cross_feature_evidence_context.json"
+      ]
+    }
+  ],
+  "segments_ab": {
+    "summary": "Các trục bên dưới mô tả điều kiện chọn hoặc trạng thái; chưa có assignment hay uplift để khẳng định A/B.",
+    "axes": [
+      {
+        "axis": "Phạm vi xếp hạng",
+        "selection": "World/Country, loại Players/Teams/Friends/Weekly",
+        "effect": "Thay tập đối tượng và dữ liệu hiển thị.",
+        "evidence_limit": "Đây là lựa chọn UI; chưa có thử nghiệm xếp hạng.",
+        "source_refs": [
+          "gdd/Leaderboards.json",
+          "site_meta/Leaderboards.json",
+          "facts/review_cases_20261116_round2.json",
+          "facts/review_20261116_round2/cross_feature_evidence_context.json"
+        ]
+      },
+      {
+        "axis": "Giao thức",
+        "selection": "IsFlatBuffer",
+        "effect": "Thay định dạng truyền, không mặc nhiên đổi luật rank.",
+        "evidence_limit": "Chưa kiểm cả hai protocol trong runtime.",
+        "source_refs": [
+          "gdd/Leaderboards.json",
+          "site_meta/Leaderboards.json",
+          "facts/review_cases_20261116_round2.json",
+          "facts/review_20261116_round2/cross_feature_evidence_context.json"
+        ]
+      }
+    ],
+    "unknowns": [
+      "Chưa có phân bổ ngẫu nhiên, cohort và kết quả nhân quả để đánh giá thử nghiệm."
+    ]
+  },
+  "recovery": [
+    {
+      "condition": "Offline",
+      "expected": "Chỉ trình bày dữ liệu cache có thật hoặc lỗi mạng đúng tab.",
+      "verified_scope": "Players cache đã thấy; không kiểm chính sách TTL.",
+      "uc_ids": [
+        "UC-11"
+      ]
+    },
+    {
+      "condition": "Sau thắng level",
+      "expected": "Đánh dấu cần sync và làm mới theo flow.",
+      "verified_scope": "Có source; chưa chứng minh response rank mới sau thắng.",
+      "uc_ids": [
+        "UC-10"
+      ]
+    }
+  ],
+  "takeaways": [
+    {
+      "text": "Thiết kế bảng là ma trận tab × phạm vi × trạng thái dữ liệu.",
+      "basis": "Một ảnh World không phủ cả tính năng."
+    },
+    {
+      "text": "Nhãn cache và vị trí mình quan trọng hơn chỉ top rank.",
+      "basis": "Fixture mới chủ yếu hỗ trợ hai điểm này."
+    }
+  ],
+  "reviewed_source_paths": [
+    "gdd/Leaderboards.json",
+    "site_meta/Leaderboards.json",
+    "facts/review_cases_20261116_round2.json",
+    "facts/review_20261116_round2/cross_feature_evidence_context.json"
+  ]
+}

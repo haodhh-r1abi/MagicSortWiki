@@ -5541,5 +5541,133 @@
     "round2_case_ids": [],
     "round2_branch_ucs": [],
     "full_uc_pass": false
+  },
+  "design_spec_20261116": {
+    "source": "editorial/ChampionsLeague.json",
+    "sha256": "6266e4e0d75d7669b0799a2dfb62826c2befa1d9d28389e971ea3423e58be3de",
+    "scope": "Designer-facing interpretation; no new runtime verification. Original use_cases and evidence remain unchanged.",
+    "content": {
+      "id": "ChampionsLeague",
+      "schema_version": 1,
+      "scope": "Thiết kế đọc từ dossier và nguồn đã đối chiếu. Outcome là expected; câu ghi round2 là actual theo case, không phải full-feature pass.",
+      "design_intent": "Cho người chơi tiến bộ dài hạn qua league và mùa, đồng thời có cửa vào để không ghép bảng quá muộn.",
+      "player_loop": "Pre-Join → thắng đủ điều kiện → vào bảng → kiếm crown → kết mùa → lên/giữ/xuống league.",
+      "flow": [
+        {
+          "title": "Hoàn tất Pre-Join",
+          "actor": "Người chơi và hệ thống",
+          "action": "Thắng level để đủ điểm ghi danh.",
+          "rule": "PreJoinTargetScore = 50 trong default/cache; cửa vào đóng ngày cuối theo luật UI/source.",
+          "outcome": "Đủ điều kiện để tham gia, chưa phải đã có rank.",
+          "uc_ids": [
+            "UC-03"
+          ],
+          "source_refs": [
+            "gdd/ChampionsLeague.json#use_cases/2"
+          ]
+        },
+        {
+          "title": "Kiếm crown trong mùa",
+          "actor": "Người chơi và hệ thống",
+          "action": "Tiếp tục thắng sau Join.",
+          "rule": "Điểm trong giải tách khỏi điểm pre-join và level chính.",
+          "outcome": "Crown cập nhật vị trí trên bảng.",
+          "uc_ids": [
+            "UC-05"
+          ],
+          "source_refs": [
+            "gdd/ChampionsLeague.json#use_cases/4"
+          ]
+        },
+        {
+          "title": "Chuyển league cuối mùa",
+          "actor": "Người chơi và hệ thống",
+          "action": "Xem kết quả lên/giữ/xuống hạng.",
+          "rule": "Có 5 league Bronze/Silver/Gold/Emerald/Diamond; thưởng theo league và rank.",
+          "outcome": "Mùa kế dùng trạng thái league sau kết quả.",
+          "uc_ids": [
+            "UC-10"
+          ],
+          "source_refs": [
+            "gdd/ChampionsLeague.json#use_cases/9"
+          ]
+        }
+      ],
+      "rules": [
+        {
+          "title": "Hoàn tất Pre-Join",
+          "text": "PreJoinTargetScore = 50 trong default/cache; cửa vào đóng ngày cuối theo luật UI/source.",
+          "source_refs": [
+            "gdd/ChampionsLeague.json#use_cases/2"
+          ]
+        },
+        {
+          "title": "Kiếm crown trong mùa",
+          "text": "Điểm trong giải tách khỏi điểm pre-join và level chính.",
+          "source_refs": [
+            "gdd/ChampionsLeague.json#use_cases/4"
+          ]
+        },
+        {
+          "title": "Chuyển league cuối mùa",
+          "text": "Có 5 league Bronze/Silver/Gold/Emerald/Diamond; thưởng theo league và rank.",
+          "source_refs": [
+            "gdd/ChampionsLeague.json#use_cases/9"
+          ]
+        }
+      ],
+      "decisions": [
+        {
+          "question": "Vì sao không đồng nhất level 300 với đã vào giải?",
+          "answer": "Mốc unlock chỉ mở khả năng tiếp cận; vẫn còn Pre-Join, cửa sổ tham gia và response bảng đấu.",
+          "basis": "Nhận định thiết kế dựa trên cơ chế, không phải kết quả A/B.",
+          "source_refs": [
+            "gdd/ChampionsLeague.json#flow",
+            "gdd/ChampionsLeague.json#configs"
+          ]
+        }
+      ],
+      "segments_ab": {
+        "summary": "League, capacity và bảng reward: Thay ngưỡng rank/thưởng và trình bày league.",
+        "axes": [
+          {
+            "axis": "League, capacity và bảng reward",
+            "selection": "Response và dữ liệu league xác định bảng đấu; có reward WithCollection.",
+            "effect": "Thay ngưỡng rank/thưởng và trình bày league.",
+            "evidence_limit": "Field Elo có nguồn nhưng không đủ mô tả công thức matchmaking hoặc fairness production.",
+            "source_refs": [
+              "gdd/ChampionsLeague.json#segment_ab_review_20261115",
+              "gdd/ChampionsLeague.json#flow",
+              "gdd/ChampionsLeague.json#configs"
+            ]
+          }
+        ],
+        "unknowns": [
+          "Field Elo có nguồn nhưng không đủ mô tả công thức matchmaking hoặc fairness production."
+        ]
+      },
+      "recovery": [
+        {
+          "condition": "Gián đoạn hoặc kết thúc Master League",
+          "expected": "Response hỏng/offline không tự tạo bảng hoặc kết quả promote.",
+          "verified_scope": "Đọc source/UC; không thực hiện runtime mới trong lượt biên tập.",
+          "uc_ids": [
+            "UC-15",
+            "UC-16"
+          ]
+        }
+      ],
+      "takeaways": [
+        {
+          "text": "Mốc unlock chỉ mở khả năng tiếp cận; vẫn còn Pre-Join, cửa sổ tham gia và response bảng đấu.",
+          "basis": "Phân tích thiết kế, chưa đo retention/conversion."
+        }
+      ],
+      "reviewed_source_paths": [
+        "gdd/ChampionsLeague.json",
+        "site_meta/ChampionsLeague.json",
+        "facts/review_20261116/public_current_config_3129/defaults/ChampionsLeagueConfigModel.json"
+      ]
+    }
   }
 }

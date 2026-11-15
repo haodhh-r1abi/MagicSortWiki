@@ -4502,5 +4502,134 @@
     "round2_case_ids": [],
     "round2_branch_ucs": [],
     "full_uc_pass": false
+  },
+  "design_spec_20261116": {
+    "source": "editorial/BroomStreak.json",
+    "sha256": "648baf8cd78585ab665f57f476715cbf8172360f8c525d805e5c3a2d2723a1f5",
+    "scope": "Designer-facing interpretation; no new runtime verification. Original use_cases and evidence remain unchanged.",
+    "content": {
+      "id": "BroomStreak",
+      "schema_version": 1,
+      "scope": "Thiết kế đọc từ dossier và nguồn đã đối chiếu. Outcome là expected; câu ghi round2 là actual theo case, không phải full-feature pass.",
+      "design_intent": "Giữ sức ép chuỗi thắng nhưng giảm mất mát bằng checkpoint, giúp người chơi thấy phần tiến bộ còn giữ được sau thất bại.",
+      "player_loop": "Thắng liên tiếp → qua checkpoint/rương → thua lùi checkpoint → leo tiếp.",
+      "flow": [
+        {
+          "title": "Leo thêm một bậc",
+          "actor": "Người chơi và hệ thống",
+          "action": "Thắng level rồi trở về Home.",
+          "rule": "Một chiến thắng tăng chuỗi; bảng có checkpoint riêng, không phải mọi rương là checkpoint.",
+          "outcome": "Mèo/chổi tiến lên mốc mới.",
+          "uc_ids": [
+            "UC-03"
+          ],
+          "source_refs": [
+            "gdd/BroomStreak.json#use_cases/2"
+          ]
+        },
+        {
+          "title": "Thua nhưng giữ nền tiến độ",
+          "actor": "Người chơi và hệ thống",
+          "action": "Thua một level trong chuỗi.",
+          "rule": "Rơi về checkpoint gần nhất; các checkpoint được ghi 0/5/11/22/33/60 trong hồ sơ.",
+          "outcome": "Không diễn giải như Tower reset về 0.",
+          "uc_ids": [
+            "UC-04"
+          ],
+          "source_refs": [
+            "gdd/BroomStreak.json#use_cases/3"
+          ]
+        },
+        {
+          "title": "Nhận rương mốc",
+          "actor": "Người chơi và hệ thống",
+          "action": "Vượt mốc có reward.",
+          "rule": "Default và cache 10/10 đổi quà ở mốc 2 và 5; phải đọc cùng snapshot.",
+          "outcome": "Rương nhận đúng phiên bản bảng thưởng.",
+          "uc_ids": [
+            "UC-06"
+          ],
+          "source_refs": [
+            "gdd/BroomStreak.json#use_cases/5"
+          ]
+        }
+      ],
+      "rules": [
+        {
+          "title": "Leo thêm một bậc",
+          "text": "Một chiến thắng tăng chuỗi; bảng có checkpoint riêng, không phải mọi rương là checkpoint.",
+          "source_refs": [
+            "gdd/BroomStreak.json#use_cases/2"
+          ]
+        },
+        {
+          "title": "Thua nhưng giữ nền tiến độ",
+          "text": "Rơi về checkpoint gần nhất; các checkpoint được ghi 0/5/11/22/33/60 trong hồ sơ.",
+          "source_refs": [
+            "gdd/BroomStreak.json#use_cases/3"
+          ]
+        },
+        {
+          "title": "Nhận rương mốc",
+          "text": "Default và cache 10/10 đổi quà ở mốc 2 và 5; phải đọc cùng snapshot.",
+          "source_refs": [
+            "gdd/BroomStreak.json#use_cases/5"
+          ]
+        }
+      ],
+      "decisions": [
+        {
+          "question": "Checkpoint thay đổi cảm giác thua thế nào?",
+          "answer": "Mất một phần đường leo thay vì toàn bộ chuỗi; đây là khác biệt luật cần ghi rõ khi đặt hai event cạnh nhau.",
+          "basis": "Nhận định thiết kế dựa trên cơ chế, không phải kết quả A/B.",
+          "source_refs": [
+            "gdd/BroomStreak.json#flow",
+            "gdd/BroomStreak.json#configs"
+          ]
+        }
+      ],
+      "segments_ab": {
+        "summary": "Checkpoint và reward Collection: Thay độ mất chuỗi và loại reward.",
+        "axes": [
+          {
+            "axis": "Checkpoint và reward Collection",
+            "selection": "Mốc IsCheckpoint điều khiển rơi; RewardModelWithCollection chọn quà có pack.",
+            "effect": "Thay độ mất chuỗi và loại reward.",
+            "evidence_limit": "Không có cohort so sánh để kết luận checkpoint tăng retention.",
+            "source_refs": [
+              "gdd/BroomStreak.json#segment_ab_review_20261115",
+              "gdd/BroomStreak.json#flow",
+              "gdd/BroomStreak.json#configs"
+            ]
+          }
+        ],
+        "unknowns": [
+          "Không có cohort so sánh để kết luận checkpoint tăng retention."
+        ]
+      },
+      "recovery": [
+        {
+          "condition": "Gián đoạn hoặc kết thúc Broom Streak (chuỗi thắng v2)",
+          "expected": "Nhận dồn sau offline cần tôn trọng mốc đã nhận và checkpoint, không phát lại rương cũ.",
+          "verified_scope": "Đọc source/UC; không thực hiện runtime mới trong lượt biên tập.",
+          "uc_ids": [
+            "UC-07",
+            "UC-14",
+            "UC-15"
+          ]
+        }
+      ],
+      "takeaways": [
+        {
+          "text": "Mất một phần đường leo thay vì toàn bộ chuỗi; đây là khác biệt luật cần ghi rõ khi đặt hai event cạnh nhau.",
+          "basis": "Phân tích thiết kế, chưa đo retention/conversion."
+        }
+      ],
+      "reviewed_source_paths": [
+        "gdd/BroomStreak.json",
+        "site_meta/BroomStreak.json",
+        "facts/review_20261116/public_current_config_3129/defaults/BroomStreakConfigModel.json"
+      ]
+    }
   }
 }

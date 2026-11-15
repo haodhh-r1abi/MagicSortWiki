@@ -4880,5 +4880,143 @@
       "UC-09"
     ],
     "full_uc_pass": false
+  },
+  "design_spec_20261116": {
+    "source": "editorial/DailyLevel.json",
+    "sha256": "598d020e113f4ed57251ef59c6c3f3c6fe361d75f421ab26ecfc08bbade3fc0d",
+    "scope": "Designer-facing interpretation; no new runtime verification. Original use_cases and evidence remain unchanged.",
+    "content": {
+      "id": "DailyLevel",
+      "schema_version": 1,
+      "scope": "Lớp diễn giải thiết kế từ source và dossier hiện có; outcome là expected. Quan sát round2 được gọi rõ; chưa phát sinh playtest hoặc xác nhận backend mới.",
+      "design_intent": "Tạo một điểm hẹn theo lịch bên cạnh tiến trình chính; thắng từng ngày tích thành quà tháng và luật thời gian tạo nhịp khác level thường.",
+      "player_loop": "Mở lịch → chọn ngày → chơi thử thách → thắng đánh dấu ngày → nhận mốc tháng.",
+      "flow": [
+        {
+          "title": "Đọc lịch tháng",
+          "actor": "Người chơi",
+          "action": "Mở lịch và xem ngày hiện tại cùng tiến độ.",
+          "rule": "Lượt round2 tháng 11/2026, ngày 16 có 0/30; chạm ngày 17 và 15 không đổi lựa chọn, không đủ chứng minh disabled.",
+          "outcome": "Biết ngày đang được mời chơi và các mốc tháng.",
+          "uc_ids": [
+            "UC-03"
+          ],
+          "source_refs": [
+            "gdd/DailyLevel.json#use_cases/2",
+            "facts/review_cases_20261116_round2.json"
+          ]
+        },
+        {
+          "title": "Bắt đầu một ngày",
+          "actor": "Người chơi",
+          "action": "Chọn ngày hợp lệ và bấm Play.",
+          "rule": "Daily có bàn và timer riêng; thao tác lịch round2 không bao gồm chơi bàn.",
+          "outcome": "Vào thử thách theo nguồn ngày đã chọn.",
+          "uc_ids": [
+            "UC-04"
+          ],
+          "source_refs": [
+            "gdd/DailyLevel.json#use_cases/3",
+            "facts/review_cases_20261116_round2.json"
+          ]
+        },
+        {
+          "title": "Tích quà tháng",
+          "actor": "Người chơi",
+          "action": "Thắng các ngày để tăng tiến độ tháng.",
+          "rule": "UI lượt 2 ghi 100 coin ở 3 ngày, 30 phút mạng ở 7 ngày, 500 coin ở 14 ngày và 2500 coin ở 25 ngày. Native 0.0.3063 trả MaxProgress=25; ảnh UI 0.0.3129 xác nhận mốc 25 trong fixture tháng 11, chưa phải kiểm thân hàm build mới hoặc mọi tháng.",
+          "outcome": "Thưởng mốc không đồng nghĩa mọi ngày trong tháng đều đã hoàn thành.",
+          "uc_ids": [
+            "UC-09"
+          ],
+          "source_refs": [
+            "gdd/DailyLevel.json#use_cases/8",
+            "facts/review_cases_20261116_round2.json"
+          ]
+        }
+      ],
+      "rules": [
+        {
+          "title": "Đọc lịch tháng",
+          "text": "Lượt round2 tháng 11/2026, ngày 16 có 0/30; chạm ngày 17 và 15 không đổi lựa chọn, không đủ chứng minh disabled.",
+          "source_refs": [
+            "gdd/DailyLevel.json#use_cases/2",
+            "facts/review_cases_20261116_round2.json"
+          ]
+        },
+        {
+          "title": "Bắt đầu một ngày",
+          "text": "Daily có bàn và timer riêng; thao tác lịch round2 không bao gồm chơi bàn.",
+          "source_refs": [
+            "gdd/DailyLevel.json#use_cases/3",
+            "facts/review_cases_20261116_round2.json"
+          ]
+        },
+        {
+          "title": "Tích quà tháng",
+          "text": "UI lượt 2 ghi 100 coin ở 3 ngày, 30 phút mạng ở 7 ngày, 500 coin ở 14 ngày và 2500 coin ở 25 ngày. Native 0.0.3063 trả MaxProgress=25; ảnh UI 0.0.3129 xác nhận mốc 25 trong fixture tháng 11, chưa phải kiểm thân hàm build mới hoặc mọi tháng.",
+          "source_refs": [
+            "gdd/DailyLevel.json#use_cases/8",
+            "facts/review_cases_20261116_round2.json"
+          ]
+        }
+      ],
+      "decisions": [
+        {
+          "question": "Vì sao cần tách đích nhận thưởng 25 ngày với tiến độ 0/30 trên lịch tháng?",
+          "answer": "Một số mô tả đích nhận thưởng, số kia là số ngày/thanh UI của tháng; gộp chúng thành cùng một giới hạn gây sai thiết kế.",
+          "basis": "Nhận định thiết kế từ cơ chế có nguồn; không phải hiệu quả đã đo.",
+          "source_refs": [
+            "gdd/DailyLevel.json#flow",
+            "gdd/DailyLevel.json#configs"
+          ]
+        }
+      ],
+      "segments_ab": {
+        "summary": "Ngày/tháng và cấu hình thử thách: Đổi bàn, lượt chơi bù và tiến độ tháng.",
+        "axes": [
+          {
+            "axis": "Ngày/tháng và cấu hình thử thách",
+            "selection": "Ngày hiện tại cùng ClaimedDays/UnlockedDays chọn nội dung/trạng thái.",
+            "effect": "Đổi bàn, lượt chơi bù và tiến độ tháng.",
+            "evidence_limit": "Phân lịch là chọn nội dung, chưa phải A/B; mới kiểm calendar UI, gameplay Daily chưa chạy ở round2.",
+            "source_refs": [
+              "gdd/DailyLevel.json#flow",
+              "gdd/DailyLevel.json#segment_ab_review_20261115"
+            ]
+          }
+        ],
+        "unknowns": [
+          "Phân lịch là chọn nội dung, chưa phải A/B; mới kiểm calendar UI, gameplay Daily chưa chạy ở round2."
+        ]
+      },
+      "recovery": [
+        {
+          "condition": "Nhánh lỗi, gián đoạn hoặc chuyển trạng thái của Thử thách hằng ngày (Daily)",
+          "expected": "Qua ngày/tháng hoặc thoát bàn cần đọc mask và state; không giả định tap ngày quá khứ mở được ngay.",
+          "verified_scope": "Theo UC/source trong hồ sơ; runtime chỉ có giá trị ở đúng case và snapshot đã liên kết.",
+          "uc_ids": [
+            "UC-10",
+            "UC-11",
+            "UC-13",
+            "UC-15"
+          ]
+        }
+      ],
+      "takeaways": [
+        {
+          "text": "Một số mô tả đích nhận thưởng, số kia là số ngày/thanh UI của tháng; gộp chúng thành cùng một giới hạn gây sai thiết kế.",
+          "basis": "Suy luận thiết kế; không thay bảng cấu hình hoặc giới hạn thực nghiệm."
+        }
+      ],
+      "reviewed_source_paths": [
+        "gdd/DailyLevel.json",
+        "site_meta/DailyLevel.json",
+        "facts/review_20261116/public_current_config_3129/defaults/BEDailyLevelConfig.json",
+        "facts/review_20261116/public_current_config_3129/defaults/DailyConfigModel.json",
+        "facts/review_20261116/public_current_config_3129/defaults/GrandRemoteDailyLevelsConfig.json",
+        "facts/review_cases_20261116_round2.json"
+      ]
+    }
   }
 }

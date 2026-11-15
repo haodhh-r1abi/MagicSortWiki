@@ -1,0 +1,81 @@
+{
+  "id": "WindQuest",
+  "schema_version": 1,
+  "scope": "Dấu vết cấu hình lịch sử và giới hạn tìm kiếm source; chưa xác lập luồng người chơi hay use case của Wind Quest.",
+  "design_intent": "Giữ một mục tra cứu cho dấu vết cấu hình chưa đủ để dựng thiết kế sản phẩm. Người đọc cần biết đã tìm thấy gì và thiếu gì trước khi quyết định nghiên cứu tiếp.",
+  "player_loop": "Chưa dựng được vòng lặp người chơi từ source hiện có.",
+  "flow": [],
+  "rules": [
+    {
+      "title": "Ba field có phạm vi lịch sử",
+      "text": "Firebase snapshot 10/09/2026 ghi IsEnabled=false, EventType=1, FirstLevelToShow=45. Đây là dữ liệu cấu hình tại snapshot, không phải bằng chứng một event đã phát hành.",
+      "source_refs": [
+        "gdd/WindQuest.json#summary",
+        "gdd/WindQuest.json#flow"
+      ]
+    },
+    {
+      "title": "Không bù khoảng trống bằng event tương tự",
+      "text": "Không có UC hay entry point đã xác lập; không mượn luồng Sky Jump/Team Quest để đặt Join, điểm hoặc thưởng cho Wind Quest.",
+      "source_refs": [
+        "gdd/WindQuest.json#summary",
+        "gdd/WindQuest.json#flow"
+      ]
+    },
+    {
+      "title": "Giới hạn tìm kiếm trong build mới",
+      "text": "Audit 0.0.3129 đã kiểm 9 nguồn và không tìm thấy tên type, symbol hoặc resource WindQuest. Đây là tìm kiếm tĩnh có giới hạn, không chứng minh mọi build hoặc backend đều không có tính năng.",
+      "source_refs": [
+        "facts/review_20261116_round2/windquest_source_availability_20261116.json"
+      ]
+    }
+  ],
+  "decisions": [
+    {
+      "question": "Có thể mô tả màn chơi chỉ từ tên và mốc level 45 không?",
+      "answer": "Không. Cần build có type/consumer, instance hợp lệ hoặc UI thực tế. Bật flag đơn lẻ không chứng minh client có asset và luồng hoàn chỉnh.",
+      "basis": "Nhận định thiết kế dựa trên cơ chế trong hồ sơ, không phải kết quả đo chuyển đổi.",
+      "source_refs": [
+        "gdd/WindQuest.json#flow"
+      ]
+    }
+  ],
+  "segments_ab": {
+    "summary": "Công tắc lịch sử: Không xác định tác động tới UI/điểm/thưởng vì thiếu consumer.",
+    "axes": [
+      {
+        "axis": "Công tắc lịch sử",
+        "selection": "Chỉ biết ba field trong WindQuestConfigModel của cache.",
+        "effect": "Không xác định tác động tới UI/điểm/thưởng vì thiếu consumer.",
+        "evidence_limit": "Không có assignment, variant, cohort hoặc outcome; không gọi field này là A/B đã chạy.",
+        "source_refs": [
+          "gdd/WindQuest.json#segment_ab_review_20261115",
+          "gdd/WindQuest.json#flow"
+        ]
+      }
+    ],
+    "unknowns": [
+      "Không có assignment, variant, cohort hoặc outcome; không gọi field này là A/B đã chạy."
+    ]
+  },
+  "recovery": [
+    {
+      "condition": "Không tìm thấy type hoặc instance",
+      "expected": "Giữ trạng thái source-limited và kế hoạch tìm build/instance phù hợp; không thử khôi phục một tiến độ chưa được chứng minh tồn tại.",
+      "verified_scope": "Đọc source và hồ sơ runtime có sẵn; chỉ xác minh nhánh được nêu rõ, không phát sinh playtest mới.",
+      "uc_ids": []
+    }
+  ],
+  "takeaways": [
+    {
+      "text": "Không. Cần build có type/consumer, instance hợp lệ hoặc UI thực tế. Bật flag đơn lẻ không chứng minh client có asset và luồng hoàn chỉnh.",
+      "basis": "Suy luận thiết kế; đọc cùng quyết định và source_refs, không phải uplift đã đo."
+    }
+  ],
+  "reviewed_source_paths": [
+    "gdd/WindQuest.json",
+    "site_meta/WindQuest.json",
+    "facts/review_20261116_round2/windquest_source_availability_20261116.json",
+    "facts/review_20261116/current_symbol_presence.json"
+  ]
+}

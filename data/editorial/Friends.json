@@ -1,0 +1,211 @@
+{
+  "id": "Friends",
+  "schema_version": 1,
+  "scope": "Diễn giải thiết kế từ client, default và bằng chứng ngày 15–16/11 đã ghi nguồn. Nội dung mã/default không được nâng thành runtime pass; giữ nguyên full data và UC của hồ sơ.",
+  "design_intent": "Biến một người quen thành kết nối lâu dài qua lời mời có thể quản lý, thay vì xem mở tab Friends là đã có mạng xã hội hoạt động.",
+  "player_loop": "Tải danh sách → tìm hoặc nhận gợi ý → gửi/duyệt lời mời → chơi cùng mạng bạn → quản lý thông báo và danh sách.",
+  "flow": [
+    {
+      "title": "Khởi tạo và đồng bộ danh sách bạn",
+      "actor": "Client và server",
+      "action": "Tải bạn, lời mời đến/đi và gợi ý.",
+      "rule": "Status chuyển Initializing sang Synced hoặc SyncFailed; avatar nạp riêng.",
+      "outcome": "UI có trạng thái tải và kết quả phân biệt.",
+      "uc_ids": [
+        "UC-01"
+      ],
+      "source_refs": [
+        "gdd/Friends.json#/use_cases/0",
+        "gdd/Friends.json",
+        "site_meta/Friends.json",
+        "facts/review_cases_20261116_round2.json",
+        "facts/review_20261116_round2/cross_feature_evidence_context.json",
+        "facts/review_20261116/public_current_config_3129/defaults/FriendsConfigModel.json"
+      ]
+    },
+    {
+      "title": "Gửi lời mời kết bạn",
+      "actor": "Người chơi và server",
+      "action": "Gửi lời mời từ một directory cụ thể.",
+      "rule": "Nguồn có friends_tab, profile, suggest, deeplink, fb và auto.",
+      "outcome": "Biết hành động bắt đầu ở đâu mà không đồng nhất các entry.",
+      "uc_ids": [
+        "UC-04"
+      ],
+      "source_refs": [
+        "gdd/Friends.json#/use_cases/3",
+        "gdd/Friends.json",
+        "site_meta/Friends.json",
+        "facts/review_cases_20261116_round2.json",
+        "facts/review_20261116_round2/cross_feature_evidence_context.json",
+        "facts/review_20261116/public_current_config_3129/defaults/FriendsConfigModel.json"
+      ]
+    },
+    {
+      "title": "Chấp nhận lời mời kết bạn",
+      "actor": "Người nhận và server",
+      "action": "Chấp nhận lời mời.",
+      "rule": "Bạn được chuyển từ nhóm request sang friends sau kết quả phù hợp.",
+      "outcome": "Kết nối chính thức khác lời mời đang chờ.",
+      "uc_ids": [
+        "UC-05"
+      ],
+      "source_refs": [
+        "gdd/Friends.json#/use_cases/4",
+        "gdd/Friends.json",
+        "site_meta/Friends.json",
+        "facts/review_cases_20261116_round2.json",
+        "facts/review_20261116_round2/cross_feature_evidence_context.json",
+        "facts/review_20261116/public_current_config_3129/defaults/FriendsConfigModel.json"
+      ]
+    },
+    {
+      "title": "Nhận thưởng liên kết Facebook một lần",
+      "actor": "Client và người chơi",
+      "action": "Nhận thưởng liên kết Facebook nếu đủ điều kiện.",
+      "rule": "Có cờ đã claim; default là CurrencyType 1 amount 300.",
+      "outcome": "Thưởng một lần cần rào chống lặp, chưa phải thao tác đã thực hiện.",
+      "uc_ids": [
+        "UC-11"
+      ],
+      "source_refs": [
+        "gdd/Friends.json#/use_cases/10",
+        "gdd/Friends.json",
+        "site_meta/Friends.json",
+        "facts/review_cases_20261116_round2.json",
+        "facts/review_20261116_round2/cross_feature_evidence_context.json",
+        "facts/review_20261116/public_current_config_3129/defaults/FriendsConfigModel.json"
+      ]
+    }
+  ],
+  "rules": [
+    {
+      "title": "Trần nguồn",
+      "text": "Default FriendsConfigModel giới hạn100 bạn, IsEnabled=false và IsFacebookFriendsEnabled=false; đây không phải kết luận production tắt Friends.",
+      "source_refs": [
+        "gdd/Friends.json",
+        "site_meta/Friends.json",
+        "facts/review_cases_20261116_round2.json",
+        "facts/review_20261116_round2/cross_feature_evidence_context.json",
+        "facts/review_20261116/public_current_config_3129/defaults/FriendsConfigModel.json"
+      ]
+    },
+    {
+      "title": "Không lẫn lỗi tab",
+      "text": "Lượt 16/11 Friends trong leaderboard hiện No Internet Connection; chưa truy cập danh sách hay gửi lời mời.",
+      "source_refs": [
+        "gdd/Friends.json",
+        "site_meta/Friends.json",
+        "facts/review_cases_20261116_round2.json",
+        "facts/review_20261116_round2/cross_feature_evidence_context.json",
+        "facts/review_20261116/public_current_config_3129/defaults/FriendsConfigModel.json"
+      ]
+    },
+    {
+      "title": "Chấm đỏ là trạng thái đã xem",
+      "text": "HasUnseenRequests và ResetNavBarNotif tác động dấu nhắc, không thay quan hệ bạn.",
+      "source_refs": [
+        "gdd/Friends.json",
+        "site_meta/Friends.json",
+        "facts/review_cases_20261116_round2.json",
+        "facts/review_20261116_round2/cross_feature_evidence_context.json",
+        "facts/review_20261116/public_current_config_3129/defaults/FriendsConfigModel.json"
+      ]
+    }
+  ],
+  "decisions": [
+    {
+      "question": "Có cần chia danh sách request và friend?",
+      "answer": "Có; lời mời chưa được chấp nhận chưa phải kết nối.",
+      "basis": "MapRequest/MapFriend và AnswerFriendRequest.",
+      "source_refs": [
+        "gdd/Friends.json",
+        "site_meta/Friends.json",
+        "facts/review_cases_20261116_round2.json",
+        "facts/review_20261116_round2/cross_feature_evidence_context.json",
+        "facts/review_20261116/public_current_config_3129/defaults/FriendsConfigModel.json"
+      ]
+    },
+    {
+      "question": "Entry lỗi có phủ tìm bạn không?",
+      "answer": "Không; chỉ chứng minh gate hiện tại, không phủ validation ID hay API tìm.",
+      "basis": "Không có runtime Friends primary case mới.",
+      "source_refs": [
+        "gdd/Friends.json",
+        "site_meta/Friends.json",
+        "facts/review_cases_20261116_round2.json",
+        "facts/review_20261116_round2/cross_feature_evidence_context.json",
+        "facts/review_20261116/public_current_config_3129/defaults/FriendsConfigModel.json"
+      ]
+    }
+  ],
+  "segments_ab": {
+    "summary": "Các trục bên dưới mô tả điều kiện chọn hoặc trạng thái; chưa có assignment hay uplift để khẳng định A/B.",
+    "axes": [
+      {
+        "axis": "Nguồn kết bạn",
+        "selection": "Directory khi gửi request",
+        "effect": "Thay attribution hành động, không mặc nhiên thay reward.",
+        "evidence_limit": "Không có so sánh conversion giữa nguồn.",
+        "source_refs": [
+          "gdd/Friends.json",
+          "site_meta/Friends.json",
+          "facts/review_cases_20261116_round2.json",
+          "facts/review_20261116_round2/cross_feature_evidence_context.json",
+          "facts/review_20261116/public_current_config_3129/defaults/FriendsConfigModel.json"
+        ]
+      },
+      {
+        "axis": "Enable và Facebook",
+        "selection": "Cờ config và trạng thái liên kết",
+        "effect": "Thay entry và auto-add.",
+        "evidence_limit": "Default không chứng minh remote effective flags.",
+        "source_refs": [
+          "gdd/Friends.json",
+          "site_meta/Friends.json",
+          "facts/review_cases_20261116_round2.json",
+          "facts/review_20261116_round2/cross_feature_evidence_context.json",
+          "facts/review_20261116/public_current_config_3129/defaults/FriendsConfigModel.json"
+        ]
+      }
+    ],
+    "unknowns": [
+      "Chưa có phân bổ ngẫu nhiên, cohort và kết quả nhân quả để đánh giá thử nghiệm."
+    ]
+  },
+  "recovery": [
+    {
+      "condition": "Không đồng bộ được",
+      "expected": "Giữ SyncFailed/lỗi mạng thay vì báo danh sách rỗng là không có bạn.",
+      "verified_scope": "Chỉ có gate offline mới.",
+      "uc_ids": [
+        "UC-18"
+      ]
+    },
+    {
+      "condition": "Mở tab sau request chưa xem",
+      "expected": "Reset dấu nhắc đúng lúc, không xóa request.",
+      "verified_scope": "Luật mã; chưa tạo request thực.",
+      "uc_ids": [
+        "UC-14"
+      ]
+    }
+  ],
+  "takeaways": [
+    {
+      "text": "Tách khởi tạo, lời mời và kết nối đã chấp nhận.",
+      "basis": "Ba trạng thái có kết quả khác nhau."
+    },
+    {
+      "text": "Không dùng social test để gửi lời mời ngoài phạm vi cho phép.",
+      "basis": "Lượt này không gửi cho người khác."
+    }
+  ],
+  "reviewed_source_paths": [
+    "gdd/Friends.json",
+    "site_meta/Friends.json",
+    "facts/review_cases_20261116_round2.json",
+    "facts/review_20261116_round2/cross_feature_evidence_context.json",
+    "facts/review_20261116/public_current_config_3129/defaults/FriendsConfigModel.json"
+  ]
+}

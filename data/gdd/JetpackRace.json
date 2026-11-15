@@ -1022,5 +1022,133 @@
     "round2_case_ids": [],
     "round2_branch_ucs": [],
     "full_uc_pass": false
+  },
+  "design_spec_20261116": {
+    "source": "editorial/JetpackRace.json",
+    "sha256": "8b33dac94430b87619a5264e620c4b25d4b493e1df412f5b6d4fd66a4f2bd468",
+    "scope": "Designer-facing interpretation; no new runtime verification. Original use_cases and evidence remain unchanged.",
+    "content": {
+      "id": "JetpackRace",
+      "schema_version": 1,
+      "scope": "Thiết kế đọc từ dossier và nguồn đã đối chiếu. Outcome là expected; câu ghi round2 là actual theo case, không phải full-feature pass.",
+      "design_intent": "Tạo cuộc đua nhóm nhỏ với sức ép bảo toàn chuỗi; đạt đích và đứng đầu mới là chiến thắng.",
+      "player_loop": "Join → thắng để bay lên → thua mất chuỗi → chạm đích/hết giờ → nhận kết quả.",
+      "flow": [
+        {
+          "title": "Join cuộc đua",
+          "actor": "Người chơi và hệ thống",
+          "action": "Tham gia bảng đua hiện tại.",
+          "rule": "Đối thủ có thể gồm bot; response cung cấp mốc đích.",
+          "outcome": "Có bảng đua riêng để theo dõi.",
+          "uc_ids": [
+            "UC-03"
+          ],
+          "source_refs": [
+            "gdd/JetpackRace.json#use_cases/2"
+          ]
+        },
+        {
+          "title": "Mất chuỗi khi thua",
+          "actor": "Người chơi và hệ thống",
+          "action": "Thua hoặc bỏ level.",
+          "rule": "TryResetScore đưa điểm về 0 theo luật bản này.",
+          "outcome": "Nhân vật rơi xuống; không coi đó là checkpoint.",
+          "uc_ids": [
+            "UC-05"
+          ],
+          "source_refs": [
+            "gdd/JetpackRace.json#use_cases/4"
+          ]
+        },
+        {
+          "title": "Nhận quà thắng",
+          "actor": "Người chơi và hệ thống",
+          "action": "Đạt điều kiện thắng và xem reward.",
+          "rule": "Cần MaxReachableScore và rank 1; default 500 coin + 15 phút mạng, WithCollection thêm pack 3.",
+          "outcome": "Trao bộ quà của phiên bản đang dùng.",
+          "uc_ids": [
+            "UC-10"
+          ],
+          "source_refs": [
+            "gdd/JetpackRace.json#use_cases/9"
+          ]
+        }
+      ],
+      "rules": [
+        {
+          "title": "Join cuộc đua",
+          "text": "Đối thủ có thể gồm bot; response cung cấp mốc đích.",
+          "source_refs": [
+            "gdd/JetpackRace.json#use_cases/2"
+          ]
+        },
+        {
+          "title": "Mất chuỗi khi thua",
+          "text": "TryResetScore đưa điểm về 0 theo luật bản này.",
+          "source_refs": [
+            "gdd/JetpackRace.json#use_cases/4"
+          ]
+        },
+        {
+          "title": "Nhận quà thắng",
+          "text": "Cần MaxReachableScore và rank 1; default 500 coin + 15 phút mạng, WithCollection thêm pack 3.",
+          "source_refs": [
+            "gdd/JetpackRace.json#use_cases/9"
+          ]
+        }
+      ],
+      "decisions": [
+        {
+          "question": "Vì sao đạt điểm đích chưa đủ?",
+          "answer": "Điều kiện rank 1 giữ ý nghĩa cạnh tranh; dùng chỉ điểm đích sẽ mô tả sai nhiều người cùng thắng.",
+          "basis": "Nhận định thiết kế dựa trên cơ chế, không phải kết quả A/B.",
+          "source_refs": [
+            "gdd/JetpackRace.json#flow",
+            "gdd/JetpackRace.json#configs"
+          ]
+        }
+      ],
+      "segments_ab": {
+        "summary": "Race và Collection: Đổi cuộc đua và bộ quà.",
+        "axes": [
+          {
+            "axis": "Race và Collection",
+            "selection": "Response chọn nhóm/mốc đích; Collection đang chạy chọn reward pack.",
+            "effect": "Đổi cuộc đua và bộ quà.",
+            "evidence_limit": "Có bot không cho biết tỉ lệ bot production hay cách ghép theo user.",
+            "source_refs": [
+              "gdd/JetpackRace.json#segment_ab_review_20261115",
+              "gdd/JetpackRace.json#flow",
+              "gdd/JetpackRace.json#configs"
+            ]
+          }
+        ],
+        "unknowns": [
+          "Có bot không cho biết tỉ lệ bot production hay cách ghép theo user."
+        ]
+      },
+      "recovery": [
+        {
+          "condition": "Gián đoạn hoặc kết thúc Đua Jetpack (streak race)",
+          "expected": "Offline/lỗi request cần giữ race identity và tránh tạo cuộc đua mới từ cache chưa claim.",
+          "verified_scope": "Đọc source/UC; không thực hiện runtime mới trong lượt biên tập.",
+          "uc_ids": [
+            "UC-15",
+            "UC-16"
+          ]
+        }
+      ],
+      "takeaways": [
+        {
+          "text": "Điều kiện rank 1 giữ ý nghĩa cạnh tranh; dùng chỉ điểm đích sẽ mô tả sai nhiều người cùng thắng.",
+          "basis": "Phân tích thiết kế, chưa đo retention/conversion."
+        }
+      ],
+      "reviewed_source_paths": [
+        "gdd/JetpackRace.json",
+        "site_meta/JetpackRace.json",
+        "facts/review_20261116/public_current_config_3129/defaults/JetpackRaceConfigModel.json"
+      ]
+    }
   }
 }

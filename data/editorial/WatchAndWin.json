@@ -1,0 +1,123 @@
+{
+  "id": "WatchAndWin",
+  "schema_version": 1,
+  "scope": "Lớp diễn giải thiết kế từ source và dossier hiện có; outcome là expected. Quan sát round2 được gọi rõ; chưa phát sinh playtest hoặc xác nhận backend mới.",
+  "design_intent": "Đổi nhiều lượt rewarded thành một mục tiêu mốc nhìn thấy trước, thay vì những lượt xem rời rạc không có đích.",
+  "player_loop": "Xem mốc → hoàn tất rewarded → tăng số lượt → nhận quà mốc → tiếp tục tới Grand Prize.",
+  "flow": [
+    {
+      "title": "Tích một lượt xem",
+      "actor": "Người chơi",
+      "action": "Chọn xem rewarded và hoàn tất.",
+      "rule": "Chỉ kết quả đủ điều kiện tăng ad count; bấm nút hay xem dở không phải một lượt tích.",
+      "outcome": "Tiến độ tăng cho một lượt thành công.",
+      "uc_ids": [
+        "UC-03"
+      ],
+      "source_refs": [
+        "gdd/WatchAndWin.json#use_cases/2"
+      ]
+    },
+    {
+      "title": "Nhận quà mốc",
+      "actor": "Người chơi",
+      "action": "Đạt TargetAdCount hoặc mốc tương ứng.",
+      "rule": "Bản tĩnh có hai mảng RequiredAdCountsToWatch/Rewards; bản động dùng từng WatchAndWinStep.",
+      "outcome": "Nhận đúng reward của mốc.",
+      "uc_ids": [
+        "UC-04"
+      ],
+      "source_refs": [
+        "gdd/WatchAndWin.json#use_cases/3"
+      ]
+    },
+    {
+      "title": "Kết thúc chuỗi",
+      "actor": "Người chơi",
+      "action": "Hoàn thành mọi mốc và đọc Grand Prize.",
+      "rule": "Cần theo chu kỳ hiện tại; không chuyển số lượt sang event khác bằng giả định.",
+      "outcome": "Chuỗi đi tới trạng thái hoàn tất.",
+      "uc_ids": [
+        "UC-06"
+      ],
+      "source_refs": [
+        "gdd/WatchAndWin.json#use_cases/5"
+      ]
+    }
+  ],
+  "rules": [
+    {
+      "title": "Tích một lượt xem",
+      "text": "Chỉ kết quả đủ điều kiện tăng ad count; bấm nút hay xem dở không phải một lượt tích.",
+      "source_refs": [
+        "gdd/WatchAndWin.json#use_cases/2"
+      ]
+    },
+    {
+      "title": "Nhận quà mốc",
+      "text": "Bản tĩnh có hai mảng RequiredAdCountsToWatch/Rewards; bản động dùng từng WatchAndWinStep.",
+      "source_refs": [
+        "gdd/WatchAndWin.json#use_cases/3"
+      ]
+    },
+    {
+      "title": "Kết thúc chuỗi",
+      "text": "Cần theo chu kỳ hiện tại; không chuyển số lượt sang event khác bằng giả định.",
+      "source_refs": [
+        "gdd/WatchAndWin.json#use_cases/5"
+      ]
+    }
+  ],
+  "decisions": [
+    {
+      "question": "Mốc động khác A/B ở đâu?",
+      "answer": "Mốc động là cấu trúc nội dung có selector cấu hình; muốn gọi A/B cần thêm bằng chứng phân bổ variant và cohort.",
+      "basis": "Nhận định thiết kế từ cơ chế có nguồn; không phải hiệu quả đã đo.",
+      "source_refs": [
+        "gdd/WatchAndWin.json#flow",
+        "gdd/WatchAndWin.json#configs"
+      ]
+    }
+  ],
+  "segments_ab": {
+    "summary": "Mốc tĩnh hoặc động: Đổi mục tiêu lượt xem và reward.",
+    "axes": [
+      {
+        "axis": "Mốc tĩnh hoặc động",
+        "selection": "IsDynamicStagesEnabled chọn DynamicStages thay bảng tĩnh; AdConfig cũng có quyền tắt feature.",
+        "effect": "Đổi mục tiêu lượt xem và reward.",
+        "evidence_limit": "Không có completed rewarded/experiment assignment của tài khoản thử.",
+        "source_refs": [
+          "gdd/WatchAndWin.json#flow",
+          "gdd/WatchAndWin.json#segment_ab_review_20261115"
+        ]
+      }
+    ],
+    "unknowns": [
+      "Không có completed rewarded/experiment assignment của tài khoản thử."
+    ]
+  },
+  "recovery": [
+    {
+      "condition": "Nhánh lỗi, gián đoạn hoặc chuyển trạng thái của Watch and Win",
+      "expected": "Không có ad hoặc xem dở giữ nhánh unavailable/cancel, không cộng mốc.",
+      "verified_scope": "Theo UC/source trong hồ sơ; runtime chỉ có giá trị ở đúng case và snapshot đã liên kết.",
+      "uc_ids": [
+        "UC-09",
+        "UC-10"
+      ]
+    }
+  ],
+  "takeaways": [
+    {
+      "text": "Mốc động là cấu trúc nội dung có selector cấu hình; muốn gọi A/B cần thêm bằng chứng phân bổ variant và cohort.",
+      "basis": "Suy luận thiết kế; không thay bảng cấu hình hoặc giới hạn thực nghiệm."
+    }
+  ],
+  "reviewed_source_paths": [
+    "gdd/WatchAndWin.json",
+    "site_meta/WatchAndWin.json",
+    "facts/review_20261116/public_current_config_3129/defaults/AdConfigModel.json",
+    "facts/review_20261116/public_current_config_3129/defaults/WatchAndWinConfigModel.json"
+  ]
+}

@@ -1885,5 +1885,134 @@
     "round2_case_ids": [],
     "round2_branch_ucs": [],
     "full_uc_pass": false
+  },
+  "design_spec_20261116": {
+    "source": "editorial/MagicStreakTournament.json",
+    "sha256": "e9ef4d460738781c6ca5405196e5e95d2f11eddd77109d136144e697575f5133",
+    "scope": "Designer-facing interpretation; no new runtime verification. Original use_cases and evidence remain unchanged.",
+    "content": {
+      "id": "MagicStreakTournament",
+      "schema_version": 1,
+      "scope": "Thiết kế đọc từ dossier và nguồn đã đối chiếu. Outcome là expected; câu ghi round2 là actual theo case, không phải full-feature pass.",
+      "design_intent": "Kết hợp cuộc đua hạng với phần thưởng tiến độ cá nhân, cho người chơi hai lý do tiếp tục dù không đứng đầu.",
+      "player_loop": "Thắng chuỗi → nhân điểm → đẩy rank và thanh cá nhân → nhận mốc → nhận thưởng cuối giải.",
+      "flow": [
+        {
+          "title": "Ghi điểm chuỗi",
+          "actor": "Người chơi và hệ thống",
+          "action": "Thắng level và theo dõi multiplier.",
+          "rule": "Hệ số 1/5/10/25/100 áp điểm giải và thanh cá nhân theo source.",
+          "outcome": "Tiến độ và rank cùng thay đổi nhưng quyền thưởng khác nhau.",
+          "uc_ids": [
+            "UC-03"
+          ],
+          "source_refs": [
+            "gdd/MagicStreakTournament.json#use_cases/2"
+          ]
+        },
+        {
+          "title": "Nhận mốc cá nhân",
+          "actor": "Người chơi và hệ thống",
+          "action": "Đạt các mốc ProgressbarRewardSteps.",
+          "rule": "Có 10 mốc từ 10 điểm/20 coin đến 1000 điểm/1000 coin trong default.",
+          "outcome": "Không phải đợi kết giải mới có mọi phần thưởng.",
+          "uc_ids": [
+            "UC-07"
+          ],
+          "source_refs": [
+            "gdd/MagicStreakTournament.json#use_cases/6"
+          ]
+        },
+        {
+          "title": "Chốt thưởng rank",
+          "actor": "Người chơi và hệ thống",
+          "action": "Mở result khi giải kết thúc.",
+          "rule": "Default rank 1/2/3 là 2000/1000/500 coin; rank 4–10 mỗi người 100.",
+          "outcome": "Thưởng rank tách khỏi mốc đã nhận.",
+          "uc_ids": [
+            "UC-11"
+          ],
+          "source_refs": [
+            "gdd/MagicStreakTournament.json#use_cases/10"
+          ]
+        }
+      ],
+      "rules": [
+        {
+          "title": "Ghi điểm chuỗi",
+          "text": "Hệ số 1/5/10/25/100 áp điểm giải và thanh cá nhân theo source.",
+          "source_refs": [
+            "gdd/MagicStreakTournament.json#use_cases/2"
+          ]
+        },
+        {
+          "title": "Nhận mốc cá nhân",
+          "text": "Có 10 mốc từ 10 điểm/20 coin đến 1000 điểm/1000 coin trong default.",
+          "source_refs": [
+            "gdd/MagicStreakTournament.json#use_cases/6"
+          ]
+        },
+        {
+          "title": "Chốt thưởng rank",
+          "text": "Default rank 1/2/3 là 2000/1000/500 coin; rank 4–10 mỗi người 100.",
+          "source_refs": [
+            "gdd/MagicStreakTournament.json#use_cases/10"
+          ]
+        }
+      ],
+      "decisions": [
+        {
+          "question": "Vì sao không gộp với MagicStreak GAE?",
+          "answer": "GAE là đường mốc cá nhân; Tournament có backend leaderboard và reward rank độc lập dù cùng multiplier.",
+          "basis": "Nhận định thiết kế dựa trên cơ chế, không phải kết quả A/B.",
+          "source_refs": [
+            "gdd/MagicStreakTournament.json#flow",
+            "gdd/MagicStreakTournament.json#configs"
+          ]
+        }
+      ],
+      "segments_ab": {
+        "summary": "Bảng giải và tần suất popup: Thay nhóm đối thủ và mức gián đoạn hiển thị.",
+        "axes": [
+          {
+            "axis": "Bảng giải và tần suất popup",
+            "selection": "Response chọn bảng; cờ rank-up cùng interval 10 level điều tiết auto-popup.",
+            "effect": "Thay nhóm đối thủ và mức gián đoạn hiển thị.",
+            "evidence_limit": "Không có chứng cứ random assignment hay leaderboard nhóm nào là production chuẩn.",
+            "source_refs": [
+              "gdd/MagicStreakTournament.json#segment_ab_review_20261115",
+              "gdd/MagicStreakTournament.json#flow",
+              "gdd/MagicStreakTournament.json#configs"
+            ]
+          }
+        ],
+        "unknowns": [
+          "Không có chứng cứ random assignment hay leaderboard nhóm nào là production chuẩn."
+        ]
+      },
+      "recovery": [
+        {
+          "condition": "Gián đoạn hoặc kết thúc Magic Streak Tournament",
+          "expected": "Lỗi gửi score cần giữ dữ liệu local/server tách rõ, không lấy UI rank cache làm xác nhận sync.",
+          "verified_scope": "Đọc source/UC; không thực hiện runtime mới trong lượt biên tập.",
+          "uc_ids": [
+            "UC-15",
+            "UC-16"
+          ]
+        }
+      ],
+      "takeaways": [
+        {
+          "text": "GAE là đường mốc cá nhân; Tournament có backend leaderboard và reward rank độc lập dù cùng multiplier.",
+          "basis": "Phân tích thiết kế, chưa đo retention/conversion."
+        }
+      ],
+      "reviewed_source_paths": [
+        "gdd/MagicStreakTournament.json",
+        "site_meta/MagicStreakTournament.json",
+        "facts/review_20261116/public_current_config_3129/defaults/MagicStreakTournamentConfigModel.json",
+        "facts/review_20261116/public_current_config_3129/defaults/StreakTournamentConfigModel.json"
+      ]
+    }
   }
 }

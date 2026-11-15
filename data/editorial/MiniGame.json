@@ -1,0 +1,143 @@
+{
+  "id": "MiniGame",
+  "schema_version": 1,
+  "scope": "Diễn giải thiết kế từ nguồn đã đối chiếu; outcome là expected, không phải lượt playtest mới. Các giá trị default/native có build riêng, không tự coi đang hiệu lực production.",
+  "design_intent": "Biến Trident thành lựa chọn dò ô và hoàn thành hình báu vật, với JellyFish tạo nhịp hỗ trợ thay đổi theo lượt.",
+  "player_loop": "Thắng kiếm Trident → chọn ô → lộ báu vật → đủ vật chặng → nhận quà → sang bàn tiếp.",
+  "flow": [
+    {
+      "title": "Kiếm lượt dò",
+      "actor": "Người chơi và hệ thống",
+      "action": "Thắng level chính và trở về sự kiện.",
+      "rule": "Trident nhận theo độ khó và hệ số thắng lần đầu; không phải mỗi chiến thắng luôn cho cùng lượng.",
+      "outcome": "Lượt dò được cộng trước khi tiêu trên lưới.",
+      "uc_ids": [
+        "UC-03"
+      ],
+      "source_refs": [
+        "gdd/MiniGame.json#use_cases/2"
+      ]
+    },
+    {
+      "title": "Mở một ô",
+      "actor": "Người chơi và hệ thống",
+      "action": "Chọn ô chưa đập trên bàn.",
+      "rule": "Mỗi lần đập tiêu 1 Trident và ghi cellId; bố cục chọn từ chỉ số seed của chặng.",
+      "outcome": "Ô lộ kết quả trúng hoặc trượt và cập nhật báu vật đã tìm.",
+      "uc_ids": [
+        "UC-05"
+      ],
+      "source_refs": [
+        "gdd/MiniGame.json#use_cases/4"
+      ]
+    },
+    {
+      "title": "Xét JellyFish",
+      "actor": "Người chơi và hệ thống",
+      "action": "Tiếp tục dò và xem booster có kích hoạt.",
+      "rule": "Mã native 0.0.3063 so lượt rút 1..99 với xác suất P; thất bại mới tăng P, đồng thời còn kiểm gate bàn và chặng. Không phải đợi thanh đạt 100 mới kích hoạt.",
+      "outcome": "Booster hoạt động theo xác suất và trạng thái, không hứa xuất hiện sau một số lượt cố định.",
+      "uc_ids": [
+        "UC-06"
+      ],
+      "source_refs": [
+        "gdd/MiniGame.json#use_cases/5"
+      ]
+    },
+    {
+      "title": "Hoàn thành chặng",
+      "actor": "Người chơi và hệ thống",
+      "action": "Tìm đủ các báu vật cần có.",
+      "rule": "Nguồn có 10 chặng × 10 bố cục, bàn từ 4 × 4 tới 8 × 8; trạng thái ô đã đập, seed và booster đổi theo chặng.",
+      "outcome": "Nhận quà chặng trước khi dựng bàn tiếp theo.",
+      "uc_ids": [
+        "UC-07"
+      ],
+      "source_refs": [
+        "gdd/MiniGame.json#use_cases/6"
+      ]
+    }
+  ],
+  "rules": [
+    {
+      "title": "Kiếm lượt dò",
+      "text": "Trident nhận theo độ khó và hệ số thắng lần đầu; không phải mỗi chiến thắng luôn cho cùng lượng.",
+      "source_refs": [
+        "gdd/MiniGame.json#use_cases/2"
+      ]
+    },
+    {
+      "title": "Mở một ô",
+      "text": "Mỗi lần đập tiêu 1 Trident và ghi cellId; bố cục chọn từ chỉ số seed của chặng.",
+      "source_refs": [
+        "gdd/MiniGame.json#use_cases/4"
+      ]
+    },
+    {
+      "title": "Xét JellyFish",
+      "text": "Mã native 0.0.3063 so lượt rút 1..99 với xác suất P; thất bại mới tăng P, đồng thời còn kiểm gate bàn và chặng. Không phải đợi thanh đạt 100 mới kích hoạt.",
+      "source_refs": [
+        "gdd/MiniGame.json#use_cases/5"
+      ]
+    },
+    {
+      "title": "Hoàn thành chặng",
+      "text": "Nguồn có 10 chặng × 10 bố cục, bàn từ 4 × 4 tới 8 × 8; trạng thái ô đã đập, seed và booster đổi theo chặng.",
+      "source_refs": [
+        "gdd/MiniGame.json#use_cases/6"
+      ]
+    }
+  ],
+  "decisions": [
+    {
+      "question": "Có thể dùng số lượt dự kiến để hứa JellyFish xuất hiện không?",
+      "answer": "Không. Xác suất tích lũy cùng lượt rút và các gate tạo kết quả biến thiên; cần nêu thuật toán và build nguồn thay vì biến thành một ngưỡng chắc chắn.",
+      "basis": "Suy luận thiết kế từ cơ chế có nguồn, chưa đo hiệu quả.",
+      "source_refs": [
+        "gdd/MiniGame.json#flow",
+        "gdd/MiniGame.json#configs"
+      ]
+    }
+  ],
+  "segments_ab": {
+    "summary": "Seed, Collection và Trident Deal: Đổi bàn, phần thưởng và gói bán thêm Trident.",
+    "axes": [
+      {
+        "axis": "Seed, Collection và Trident Deal",
+        "selection": "Seed chọn bố cục; trạng thái Collection chọn quà; offer có bảng sản phẩm theo nhóm chi tiêu.",
+        "effect": "Đổi bàn, phần thưởng và gói bán thêm Trident.",
+        "evidence_limit": "Bảng seed không xác lập seed runtime đã chọn; bảng sản phẩm không chứng minh assignment thực tế.",
+        "source_refs": [
+          "gdd/MiniGame.json#segment_ab_review_20261115",
+          "gdd/MiniGame.json#flow",
+          "gdd/MiniGame.json#configs"
+        ]
+      }
+    ],
+    "unknowns": [
+      "Bảng seed không xác lập seed runtime đã chọn; bảng sản phẩm không chứng minh assignment thực tế."
+    ]
+  },
+  "recovery": [
+    {
+      "condition": "Gián đoạn hoặc kết thúc Underwater Treasures",
+      "expected": "Sau khi offline hoặc khởi động lại cần giữ ô đã đập, seed chặng và Trident; chưa có phép kiểm RNG thống kê.",
+      "verified_scope": "Theo source và UC trong dossier; các dependency backend/sync/RNG vẫn cần kiểm riêng.",
+      "uc_ids": [
+        "UC-15"
+      ]
+    }
+  ],
+  "takeaways": [
+    {
+      "text": "Không. Xác suất tích lũy cùng lượt rút và các gate tạo kết quả biến thiên; cần nêu thuật toán và build nguồn thay vì biến thành một ngưỡng chắc chắn.",
+      "basis": "Phân tích thiết kế, không phải kết quả đo cohort."
+    }
+  ],
+  "reviewed_source_paths": [
+    "gdd/MiniGame.json",
+    "site_meta/MiniGame.json",
+    "facts/review_20261116/public_current_config_3129/defaults/MiniGameConfigModel.json",
+    "facts/review_20261116/public_current_config_3129/defaults/MiniGameOfferConfigModel.json"
+  ]
+}

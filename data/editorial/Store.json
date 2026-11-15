@@ -1,0 +1,135 @@
+{
+  "id": "Store",
+  "schema_version": 1,
+  "scope": "Diễn giải thiết kế từ hồ sơ đã đối chiếu; flow/outcome là hành vi mong đợi theo nguồn. Chỉ câu ghi rõ round2 là quan sát 16/11/2026 trên fixture 0.0.3129, không phải full UC pass.",
+  "design_intent": "Đặt các lựa chọn bổ sung tài nguyên cạnh nhau để người chơi so sánh, đồng thời giữ giao dịch và nhận hàng là hai trạng thái riêng. Cửa hàng có gói coin, bundle, dòng offer và lối sang WebShop; không phải mọi card xuất hiện ở mọi tài khoản.",
+  "player_loop": "Thiếu tài nguyên → mở Shop → so lượng hàng và giá bản địa hóa → chọn gói → xác nhận thanh toán → chờ xác thực → kiểm hàng trong kho.",
+  "flow": [
+    {
+      "title": "Duyệt hàng trước khi mua",
+      "actor": "Người chơi",
+      "action": "Mở Shop và cuộn qua bundle rồi tới các gói coin.",
+      "rule": "Catalog chia gói thường, gói đặc biệt theo rank và gói vĩnh viễn; giá lấy từ hệ thống IAP.",
+      "outcome": "Có thể so sánh card và tổng lượng hàng, chưa phát sinh giao dịch.",
+      "uc_ids": [
+        "UC-02"
+      ],
+      "source_refs": [
+        "gdd/Store.json#use_cases/1"
+      ]
+    },
+    {
+      "title": "Chọn và thanh toán",
+      "actor": "Người chơi",
+      "action": "Chọn đúng gói muốn mua và xác nhận trong giao diện thanh toán.",
+      "rule": "Chặn yêu cầu chồng khi còn giao dịch đang xử lý; mỗi sản phẩm gắn origin để trả kết quả về đúng tính năng.",
+      "outcome": "Kết quả mua được chuyển sang xác thực, không đồng nghĩa kho đã cộng.",
+      "uc_ids": [
+        "UC-04"
+      ],
+      "source_refs": [
+        "gdd/Store.json#use_cases/3"
+      ]
+    },
+    {
+      "title": "Nhận hàng sau xác thực",
+      "actor": "Hệ thống",
+      "action": "Đối chiếu giao dịch rồi phân phối phần thưởng.",
+      "rule": "Backend verification nằm trước bước grant theo luồng client được mô tả.",
+      "outcome": "Hàng hợp lệ được trao; lỗi hoặc hủy phải đi theo nhánh thất bại.",
+      "uc_ids": [
+        "UC-05"
+      ],
+      "source_refs": [
+        "gdd/Store.json#use_cases/4"
+      ]
+    },
+    {
+      "title": "Mua qua web rồi quay lại",
+      "actor": "Người chơi",
+      "action": "Mở checkout WebShop, hoàn tất hoặc hủy rồi quay lại app.",
+      "rule": "Đường web có theo dõi trạng thái và nhận bù riêng; không coi mở URL là mua thành công.",
+      "outcome": "App kiểm tra giao dịch web để nhận hàng theo trạng thái thực.",
+      "uc_ids": [
+        "UC-13"
+      ],
+      "source_refs": [
+        "gdd/Store.json#use_cases/12"
+      ]
+    }
+  ],
+  "rules": [
+    {
+      "title": "Rank không phải A/B",
+      "text": "CurrentSpecialOfferRank và MaxPurchasedBundleIndex dùng lịch sử mua để chọn gói đặc biệt; đây là tiến trình thương mại phía client, chưa chứng minh phân bổ experiment.",
+      "source_refs": [
+        "gdd/Store.json#summary",
+        "gdd/Store.json#flow"
+      ]
+    },
+    {
+      "title": "Catalog đã nhìn thấy",
+      "text": "Lượt 16/11 round2 ghi 6 bundle và 6 gói coin với giá VND. Chỉ chứng minh 12 card trong fixture này, chưa xác minh checkout hoặc quyền No Ads.",
+      "source_refs": [
+        "gdd/Store.json#summary",
+        "gdd/Store.json#flow",
+        "facts/review_cases_20261116_round2.json"
+      ]
+    }
+  ],
+  "decisions": [
+    {
+      "question": "Vì sao tách giá, purchase và grant?",
+      "answer": "Giá hiển thị có thể còn trong cache khi offline; chỉ nhìn thấy card hoặc giá không đủ để kết luận sản phẩm mua được hay đã nhận hàng.",
+      "basis": "Nhận định thiết kế dựa trên cơ chế trong hồ sơ, không phải kết quả đo chuyển đổi.",
+      "source_refs": [
+        "gdd/Store.json#flow"
+      ]
+    }
+  ],
+  "segments_ab": {
+    "summary": "Lịch sử mua và quyền No Ads: Thay gói đề xuất hoặc ẩn bundle kèm quyền đã sở hữu.",
+    "axes": [
+      {
+        "axis": "Lịch sử mua và quyền No Ads",
+        "selection": "Rank gói đặc biệt, index đã mua và kiểm quyền No Ads chọn nội dung được chào.",
+        "effect": "Thay gói đề xuất hoặc ẩn bundle kèm quyền đã sở hữu.",
+        "evidence_limit": "Chưa biết quy tắc backend chọn catalog và chưa có giao dịch thành công của tài khoản thử.",
+        "source_refs": [
+          "gdd/Store.json#segment_ab_review_20261115",
+          "gdd/Store.json#flow"
+        ]
+      }
+    ],
+    "unknowns": [
+      "Chưa biết quy tắc backend chọn catalog và chưa có giao dịch thành công của tài khoản thử."
+    ]
+  },
+  "recovery": [
+    {
+      "condition": "Hủy, lỗi verify hoặc giao dịch web về trễ",
+      "expected": "Giữ kết quả thanh toán tách khỏi trạng thái trao hàng; dùng luồng restore/kiểm tra web phù hợp thay vì cộng lại theo việc mở popup.",
+      "verified_scope": "Đọc source và hồ sơ runtime có sẵn; chỉ xác minh nhánh được nêu rõ, không phát sinh playtest mới.",
+      "uc_ids": [
+        "UC-07",
+        "UC-08",
+        "UC-14",
+        "UC-15"
+      ]
+    }
+  ],
+  "takeaways": [
+    {
+      "text": "Giá hiển thị có thể còn trong cache khi offline; chỉ nhìn thấy card hoặc giá không đủ để kết luận sản phẩm mua được hay đã nhận hàng.",
+      "basis": "Suy luận thiết kế; đọc cùng quyết định và source_refs, không phải uplift đã đo."
+    }
+  ],
+  "reviewed_source_paths": [
+    "gdd/Store.json",
+    "site_meta/Store.json",
+    "facts/review_20261116/public_current_config_3129/defaults/StoreConfigModelV2.json",
+    "facts/review_20261116/public_current_config_3129/defaults/StoreConfigModelV3.json",
+    "facts/review_20261116/public_current_config_3129/defaults/WebShopConfigModel.json",
+    "facts/review_cases_20261116_round2.json"
+  ]
+}

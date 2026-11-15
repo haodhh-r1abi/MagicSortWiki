@@ -1,0 +1,125 @@
+{
+  "id": "MagicPass",
+  "schema_version": 1,
+  "scope": "Thiết kế đọc từ dossier và nguồn đã đối chiếu. Outcome là expected; câu ghi round2 là actual theo case, không phải full-feature pass.",
+  "design_intent": "Đặt tiến độ chơi miễn phí song song quyền lợi trả tiền, để người chơi thấy giá trị tích lũy trước khi quyết định kích hoạt.",
+  "player_loop": "Thắng kiếm Key → mở mốc → nhận Free → cân nhắc Paid → tích Bonus Vault → kết mùa.",
+  "flow": [
+    {
+      "title": "Kiếm Key",
+      "actor": "Người chơi và hệ thống",
+      "action": "Thắng level theo độ khó.",
+      "rule": "Default/cache Normal/Hard/SuperHard 1/3/5 Key; bảng mốc thuộc instance mùa.",
+      "outcome": "Key tiến trên cùng một đường tiến độ.",
+      "uc_ids": [
+        "UC-03"
+      ],
+      "source_refs": [
+        "gdd/MagicPass.json#use_cases/2"
+      ]
+    },
+    {
+      "title": "Nhận nhánh trả phí",
+      "actor": "Người chơi và hệ thống",
+      "action": "Kích hoạt Pass rồi chọn quà Paid đã đủ mốc.",
+      "rule": "Paid cần quyền active; Free không đòi purchase. GetMagicPassMaxLifeAmount trả literal 8 trong native 0.0.3063 đã đọc; cần đối chiếu native 0.0.3129 và active-pass finite-life ledger trước khi kết luận runtime bản mới.",
+      "outcome": "Mua quyền không tự có nghĩa mọi mốc chưa đạt được nhận.",
+      "uc_ids": [
+        "UC-06"
+      ],
+      "source_refs": [
+        "gdd/MagicPass.json#use_cases/5"
+      ]
+    },
+    {
+      "title": "Tích Bonus Vault",
+      "actor": "Người chơi và hệ thống",
+      "action": "Tiếp tục kiếm Key sau mốc thường cuối.",
+      "rule": "Vault cộng dồn và lĩnh khi kết event theo luật hồ sơ.",
+      "outcome": "Tiến độ dư có mục tiêu nhưng chưa phải coin được cộng ngay.",
+      "uc_ids": [
+        "UC-09"
+      ],
+      "source_refs": [
+        "gdd/MagicPass.json#use_cases/8"
+      ]
+    }
+  ],
+  "rules": [
+    {
+      "title": "Kiếm Key",
+      "text": "Default/cache Normal/Hard/SuperHard 1/3/5 Key; bảng mốc thuộc instance mùa.",
+      "source_refs": [
+        "gdd/MagicPass.json#use_cases/2"
+      ]
+    },
+    {
+      "title": "Nhận nhánh trả phí",
+      "text": "Paid cần quyền active; Free không đòi purchase. GetMagicPassMaxLifeAmount trả literal 8 trong native 0.0.3063 đã đọc; cần đối chiếu native 0.0.3129 và active-pass finite-life ledger trước khi kết luận runtime bản mới.",
+      "source_refs": [
+        "gdd/MagicPass.json#use_cases/5"
+      ]
+    },
+    {
+      "title": "Tích Bonus Vault",
+      "text": "Vault cộng dồn và lĩnh khi kết event theo luật hồ sơ.",
+      "source_refs": [
+        "gdd/MagicPass.json#use_cases/8"
+      ]
+    }
+  ],
+  "decisions": [
+    {
+      "question": "Vì sao không gọi mua Pass là mua toàn bộ phần thưởng?",
+      "answer": "Purchase mở quyền Paid, còn Key mở mốc; hai điều kiện cùng tồn tại và Vault có thời điểm lĩnh riêng.",
+      "basis": "Nhận định thiết kế dựa trên cơ chế, không phải kết quả A/B.",
+      "source_refs": [
+        "gdd/MagicPass.json#flow",
+        "gdd/MagicPass.json#configs"
+      ]
+    }
+  ],
+  "segments_ab": {
+    "summary": "Product theo segment và trạng thái mùa: Đổi sản phẩm chào, quyền lợi và bảng reward theo nguồn.",
+    "axes": [
+      {
+        "axis": "Product theo segment và trạng thái mùa",
+        "selection": "IAPConfigModelsSegmented chứa bảng sản phẩm; event response có Segment.",
+        "effect": "Đổi sản phẩm chào, quyền lợi và bảng reward theo nguồn.",
+        "evidence_limit": "Bảng sản phẩm không chứng minh user được assign hoặc đã mua; verify/restore thành công còn thiếu.",
+        "source_refs": [
+          "gdd/MagicPass.json#segment_ab_review_20261115",
+          "gdd/MagicPass.json#flow",
+          "gdd/MagicPass.json#configs"
+        ]
+      }
+    ],
+    "unknowns": [
+      "Bảng sản phẩm không chứng minh user được assign hoặc đã mua; verify/restore thành công còn thiếu."
+    ]
+  },
+  "recovery": [
+    {
+      "condition": "Gián đoạn hoặc kết thúc Magic Pass",
+      "expected": "Mua/verify lỗi dùng nhánh fallback có source; expiry phải tách quyền hết hạn khỏi reward đang chờ.",
+      "verified_scope": "Đọc source/UC; không thực hiện runtime mới trong lượt biên tập.",
+      "uc_ids": [
+        "UC-08",
+        "UC-10",
+        "UC-16",
+        "UC-17"
+      ]
+    }
+  ],
+  "takeaways": [
+    {
+      "text": "Purchase mở quyền Paid, còn Key mở mốc; hai điều kiện cùng tồn tại và Vault có thời điểm lĩnh riêng.",
+      "basis": "Phân tích thiết kế, chưa đo retention/conversion."
+    }
+  ],
+  "reviewed_source_paths": [
+    "gdd/MagicPass.json",
+    "site_meta/MagicPass.json",
+    "facts/review_20261116/public_current_config_3129/defaults/MagicPassConfigModel.json"
+  ]
+}

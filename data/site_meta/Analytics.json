@@ -26,8 +26,8 @@
   ],
   "description": [
     "Đường ống chính là EventSender (singleton): mọi tính năng gọi một hàm Send*Event dựng đối tượng Event gồm tên và Dictionary<string,object>.",
-    "Trước khi gửi, EventSender tự chèn 6 tham số kho đồ và tham số tiến độ (progress, segment) vào mọi sự kiện.",
-    "Danh sách người nhận là IEventSender; hiện chỉ có FirebaseEventSender đẩy lên Firebase Analytics.",
+    "Đường EventSender.SendEvent gộp 6 tham số kho đồ trước khi chuyển tới sender. SendEventWithoutExtraParameter bỏ bước gộp này; tham số tiến độ hoặc segment còn tùy hàm dựng từng event.",
+    "Constructor EventSender 0.0.3063 đã đọc thêm FirebaseEventSender vào danh sách IEventSender; kết luận này không bao quát các thay đổi danh sách sau constructor hoặc build khác.",
     "Đường ống thứ hai là GrandEventSender: gửi mốc kỹ thuật dạng chỉ tên sự kiện (không tham số) tới endpoint be-event của backend Grand Games.",
     "Vì payload chỉ có ClientId và EventName, GrandEventSender nhét dữ liệu thẳng vào tên sự kiện bằng các hậu tố động.",
     "Khi cần chẩn đoán lỗi, client chụp màn hình và gửi bytes qua endpoint be-event-image-send.",
@@ -661,8 +661,8 @@
     }
   ],
   "tips": [
-    "Chèn sẵn kho đồ vào mọi sự kiện cho phép phân tích hành vi theo trạng thái tài nguyên mà không cần join bảng.",
-    "Đường ống be-event chỉ nhận tên nên nhẹ và bền, phù hợp cho mốc kỹ thuật lúc khởi động khi chưa có Firebase.",
+    "Đường SendEvent bổ sung ngữ cảnh kho giúp phân tích tài nguyên ngay tại hành động; SendEventWithoutExtraParameter bỏ phần bổ sung này, nên không áp dụng cho mọi sự kiện.",
+    "Payload be-event chỉ có tên và định danh theo source, thích hợp cho mốc kỹ thuật gọn. Độ bền khi lỗi mạng hoặc delivery thực tế cần kiểm riêng; payload nhỏ không tự bảo đảm gửi thành công.",
     "Gắn FPS và số spike vào tên app_focus_lost cho phép phát hiện thiết bị yếu ngay từ dữ liệu tên sự kiện.",
     "Bộ sự kiện _d14 tách riêng giúp đo LTV sớm — chỉ số quyết định trong tối ưu chiến dịch quảng cáo."
   ],

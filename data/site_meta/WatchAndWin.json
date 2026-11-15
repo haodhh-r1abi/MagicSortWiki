@@ -3,16 +3,46 @@
   "title": "Xem và thắng (Watch and Win)",
   "tagline": "Xem quảng cáo có thưởng để tiến qua các mốc và nhận thưởng, mốc cuối là Grand Prize.",
   "infobox": [
-    ["Loại", "Kinh tế"],
-    ["Mở khóa", "Level 30 (FirstLevelToShow, client default)"],
-    ["Thời lượng", "Theo StartTime/FinishTime của từng chu kỳ (server)"],
-    ["Chu kỳ / lịch", "Theo chu kỳ sự kiện; hết hạn thì fetch chu kỳ mới"],
-    ["Tham gia", "Cá nhân"],
-    ["Vật phẩm thu thập", "Số quảng cáo đã xem (AdProgress)"],
-    ["Tiền tệ", "Coin"],
-    ["Thưởng chính", "100 coin, 200 coin, 500 coin theo 3 mốc mặc định; mốc cuối là Grand Prize"],
-    ["Điều kiện / phụ thuộc", "AdService và cờ bật trong AdConfigModel do backend gửi"],
-    ["Manager", "WatchAndWinService"]
+    [
+      "Loại",
+      "Kinh tế"
+    ],
+    [
+      "Mở khóa",
+      "Level 30 (FirstLevelToShow, client default)"
+    ],
+    [
+      "Thời lượng",
+      "Theo StartTime/FinishTime của từng chu kỳ (server)"
+    ],
+    [
+      "Chu kỳ / lịch",
+      "Theo chu kỳ sự kiện; hết hạn thì fetch chu kỳ mới"
+    ],
+    [
+      "Tham gia",
+      "Cá nhân"
+    ],
+    [
+      "Vật phẩm thu thập",
+      "Số quảng cáo đã xem (AdProgress)"
+    ],
+    [
+      "Tiền tệ",
+      "Coin"
+    ],
+    [
+      "Thưởng chính",
+      "100 coin, 200 coin, 500 coin theo 3 mốc mặc định; mốc cuối là Grand Prize"
+    ],
+    [
+      "Điều kiện / phụ thuộc",
+      "AdService và cờ bật trong AdConfigModel do backend gửi"
+    ],
+    [
+      "Manager",
+      "WatchAndWinService"
+    ]
   ],
   "description": [
     "Watch and Win thưởng người chơi theo số quảng cáo có thưởng đã xem: mỗi lần xem trọn cộng 1 vào tiến độ.",
@@ -32,7 +62,7 @@
     "Lưu ý: máy trạng thái WatchAndWinState thiếu giá trị 5 (nhảy từ LocalTimeIsUp=4 sang Claimed=6).",
     "Lưu ý: request lấy chu kỳ mới không được gửi khi popup 'WatchAndWinPopup' đang mở.",
     "Lưu ý: tiến độ chưa đạt mốc có thể bị mất khi hết hạn chu kỳ (suy luận từ ClearWatchAndWinData).",
-    "Lưu ý: AdProgress được đồng bộ qua khối 'WatchAndWinSyncableDataModel' nên không mất khi đổi thiết bị.",
+    "Lưu ý: AdProgress có biểu diễn trong WatchAndWinSyncableDataModel. Chưa xác minh chuyển thiết bị, xung đột hoặc retry để kết luận tiến độ luôn được giữ.",
     "Lưu ý: ngưỡng PopupTriggerCount để ép mở popup không tìm thấy hằng số trong client (server hoặc chưa giải mã).",
     "Lưu ý: các mốc và thưởng thực tế nằm hoàn toàn trong remote config — số ở đây là client default."
   ],
@@ -56,85 +86,333 @@
   "reward_tables": [
     {
       "title": "MỐC VÀ PHẦN THƯỞNG (WatchAndWinConfigModel.json, client default)",
-      "columns": ["Mốc", "Điều kiện", "Phần thưởng"],
+      "columns": [
+        "Mốc",
+        "Điều kiện",
+        "Phần thưởng"
+      ],
       "rows": [
-        ["Mốc 1", "Xem 1 quảng cáo", "100 coin"],
-        ["Mốc 2", "Xem 2 quảng cáo", "200 coin"],
-        ["Mốc 3 (Grand Prize)", "Xem 3 quảng cáo", "500 coin"]
+        [
+          "Mốc 1",
+          "Xem 1 quảng cáo",
+          "100 coin"
+        ],
+        [
+          "Mốc 2",
+          "Xem 2 quảng cáo",
+          "200 coin"
+        ],
+        [
+          "Mốc 3 (Grand Prize)",
+          "Xem 3 quảng cáo",
+          "500 coin"
+        ]
       ]
     },
     {
       "title": "CẤU TRÚC THƯỞNG THEO CHẾ ĐỘ",
-      "columns": ["Chế độ", "Nguồn dữ liệu", "Phần thưởng"],
+      "columns": [
+        "Chế độ",
+        "Nguồn dữ liệu",
+        "Phần thưởng"
+      ],
       "rows": [
-        ["Tĩnh (mặc định)", "RequiredAdCountsToWatch + Rewards song song", "RewardModel theo bước (server ghi đè được)"],
-        ["Động (IsDynamicStagesEnabled = true)", "DynamicStages: WatchAndWinStep{TargetAdCount, Reward}", "Reward gắn trực tiếp vào từng mốc (server)"],
-        ["Grand Prize", "Mốc cuối của danh sách đang dùng", "Hiển thị bằng WatchAndWinGrandPrizeView (server)"]
+        [
+          "Tĩnh (mặc định)",
+          "RequiredAdCountsToWatch + Rewards song song",
+          "RewardModel theo bước (server ghi đè được)"
+        ],
+        [
+          "Động (IsDynamicStagesEnabled = true)",
+          "DynamicStages: WatchAndWinStep{TargetAdCount, Reward}",
+          "Reward gắn trực tiếp vào từng mốc (server)"
+        ],
+        [
+          "Grand Prize",
+          "Mốc cuối của danh sách đang dùng",
+          "Hiển thị bằng WatchAndWinGrandPrizeView (server)"
+        ]
       ]
     },
     {
       "title": "TRẠNG THÁI (WatchAndWinState)",
-      "columns": ["Mã", "Trạng thái", "Ý nghĩa"],
+      "columns": [
+        "Mã",
+        "Trạng thái",
+        "Ý nghĩa"
+      ],
       "rows": [
-        ["0", "Disable", "IsEnabled = false"],
-        ["1", "ProgressNotEnough", "Level dưới FirstLevelToShow"],
-        ["2", "NoCache", "Chưa có WatchAndWinResponse"],
-        ["3", "Enable", "Đang chạy, có thể xem quảng cáo"],
-        ["4", "LocalTimeIsUp", "Hết hạn chu kỳ ở client"],
-        ["6", "Claimed", "Đã hoàn thành toàn bộ mốc (không có giá trị 5)"]
+        [
+          "0",
+          "Disable",
+          "IsEnabled = false"
+        ],
+        [
+          "1",
+          "ProgressNotEnough",
+          "Level dưới FirstLevelToShow"
+        ],
+        [
+          "2",
+          "NoCache",
+          "Chưa có WatchAndWinResponse"
+        ],
+        [
+          "3",
+          "Enable",
+          "Đang chạy, có thể xem quảng cáo"
+        ],
+        [
+          "4",
+          "LocalTimeIsUp",
+          "Hết hạn chu kỳ ở client"
+        ],
+        [
+          "6",
+          "Claimed",
+          "Đã hoàn thành toàn bộ mốc (không có giá trị 5)"
+        ]
       ]
     }
   ],
   "key_numbers": [
-    {"label": "Level mở khoá", "value": "30 (client default)", "source": "WatchAndWinConfigModel.json: FirstLevelToShow"},
-    {"label": "Trạng thái bật/tắt mặc định", "value": "false", "source": "WatchAndWinConfigModel.json: IsEnabled"},
-    {"label": "EventType gửi backend", "value": "1", "source": "WatchAndWinConfigModel.json: EventType"},
-    {"label": "Các mốc quảng cáo mặc định", "value": "[1, 2, 3]", "source": "WatchAndWinConfigModel.json: RequiredAdCountsToWatch"},
-    {"label": "Thưởng mốc 1", "value": "100 coin (CurrencyType 1)", "source": "WatchAndWinConfigModel.json: Rewards[0]"},
-    {"label": "Thưởng mốc 2", "value": "200 coin (CurrencyType 1)", "source": "WatchAndWinConfigModel.json: Rewards[1]"},
-    {"label": "Thưởng mốc 3", "value": "500 coin (CurrencyType 1)", "source": "WatchAndWinConfigModel.json: Rewards[2]"},
-    {"label": "Tổng coin nếu xem đủ 3 quảng cáo", "value": "800 coin (suy luận từ 100 + 200 + 500)", "source": "WatchAndWinConfigModel.json: Rewards"},
-    {"label": "Nguồn yêu cầu quảng cáo", "value": "AdRequestSource.WatchAndWin = 8", "source": "AdRequestSource"},
-    {"label": "Lý do nhận thưởng", "value": "CurrencyEarnReason.WatchAndWin = 32", "source": "CurrencyEarnReason"},
-    {"label": "Số trạng thái", "value": "6 giá trị (0–4 và 6, thiếu 5)", "source": "WatchAndWinState"},
-    {"label": "Nguồn mở popup", "value": "None=0, LobbyIcon=1, ForceShow=2", "source": "WatchAndWinPopupImpressionSource"},
-    {"label": "Tên popup kiểm tra trước khi fetch", "value": "\"WatchAndWinPopup\"", "source": "WatchAndWinStateService.ShouldSendGetRequest"},
-    {"label": "Tên khối sync", "value": "WatchAndWinSyncableDataModel", "source": "WatchAndWinDataService.GetSyncName"},
-    {"label": "Số field WatchAndWinAnimationConfig", "value": "14", "source": "WatchAndWinAnimationConfig"},
-    {"label": "Số field WatchAndWinLobbyButtonAnimationConfig", "value": "13", "source": "WatchAndWinLobbyButtonAnimationConfig"},
-    {"label": "Trường lưu tiến độ", "value": "WatchAndWinModel.AdProgress", "source": "WatchAndWinDataService.GetAdProgress"},
-    {"label": "Trường kiểm soát tần suất popup", "value": "PopupTriggerCount, IsPopupShown", "source": "WatchAndWinModel"},
-    {"label": "Chu kỳ sự kiện", "value": "StartTime / FinishTime (server)", "source": "WatchAndWinResponse"},
-    {"label": "Phân khúc người chơi", "value": "Segment (server)", "source": "WatchAndWinResponse.Segment"}
+    {
+      "label": "Level mở khoá",
+      "value": "30 (client default)",
+      "source": "WatchAndWinConfigModel.json: FirstLevelToShow"
+    },
+    {
+      "label": "Trạng thái bật/tắt mặc định",
+      "value": "false",
+      "source": "WatchAndWinConfigModel.json: IsEnabled"
+    },
+    {
+      "label": "EventType gửi backend",
+      "value": "1",
+      "source": "WatchAndWinConfigModel.json: EventType"
+    },
+    {
+      "label": "Các mốc quảng cáo mặc định",
+      "value": "[1, 2, 3]",
+      "source": "WatchAndWinConfigModel.json: RequiredAdCountsToWatch"
+    },
+    {
+      "label": "Thưởng mốc 1",
+      "value": "100 coin (CurrencyType 1)",
+      "source": "WatchAndWinConfigModel.json: Rewards[0]"
+    },
+    {
+      "label": "Thưởng mốc 2",
+      "value": "200 coin (CurrencyType 1)",
+      "source": "WatchAndWinConfigModel.json: Rewards[1]"
+    },
+    {
+      "label": "Thưởng mốc 3",
+      "value": "500 coin (CurrencyType 1)",
+      "source": "WatchAndWinConfigModel.json: Rewards[2]"
+    },
+    {
+      "label": "Tổng coin nếu xem đủ 3 quảng cáo",
+      "value": "800 coin (suy luận từ 100 + 200 + 500)",
+      "source": "WatchAndWinConfigModel.json: Rewards"
+    },
+    {
+      "label": "Nguồn yêu cầu quảng cáo",
+      "value": "AdRequestSource.WatchAndWin = 8",
+      "source": "AdRequestSource"
+    },
+    {
+      "label": "Lý do nhận thưởng",
+      "value": "CurrencyEarnReason.WatchAndWin = 32",
+      "source": "CurrencyEarnReason"
+    },
+    {
+      "label": "Số trạng thái",
+      "value": "6 giá trị (0–4 và 6, thiếu 5)",
+      "source": "WatchAndWinState"
+    },
+    {
+      "label": "Nguồn mở popup",
+      "value": "None=0, LobbyIcon=1, ForceShow=2",
+      "source": "WatchAndWinPopupImpressionSource"
+    },
+    {
+      "label": "Tên popup kiểm tra trước khi fetch",
+      "value": "\"WatchAndWinPopup\"",
+      "source": "WatchAndWinStateService.ShouldSendGetRequest"
+    },
+    {
+      "label": "Tên khối sync",
+      "value": "WatchAndWinSyncableDataModel",
+      "source": "WatchAndWinDataService.GetSyncName"
+    },
+    {
+      "label": "Số field WatchAndWinAnimationConfig",
+      "value": "14",
+      "source": "WatchAndWinAnimationConfig"
+    },
+    {
+      "label": "Số field WatchAndWinLobbyButtonAnimationConfig",
+      "value": "13",
+      "source": "WatchAndWinLobbyButtonAnimationConfig"
+    },
+    {
+      "label": "Trường lưu tiến độ",
+      "value": "WatchAndWinModel.AdProgress",
+      "source": "WatchAndWinDataService.GetAdProgress"
+    },
+    {
+      "label": "Trường kiểm soát tần suất popup",
+      "value": "PopupTriggerCount, IsPopupShown",
+      "source": "WatchAndWinModel"
+    },
+    {
+      "label": "Chu kỳ sự kiện",
+      "value": "StartTime / FinishTime (server)",
+      "source": "WatchAndWinResponse"
+    },
+    {
+      "label": "Phân khúc người chơi",
+      "value": "Segment (server)",
+      "source": "WatchAndWinResponse.Segment"
+    }
   ],
   "config_highlights": [
-    {"key": "WatchAndWinConfigModel.json: IsEnabled", "value": "false", "meaning": "Bật/tắt Watch and Win (client default)"},
-    {"key": "WatchAndWinConfigModel.json: FirstLevelToShow", "value": "30", "meaning": "Level tối thiểu để thấy tính năng"},
-    {"key": "WatchAndWinConfigModel.json: EventType", "value": "1", "meaning": "Loại sự kiện gửi lên backend"},
-    {"key": "WatchAndWinConfigModel.json: RequiredAdCountsToWatch", "value": "[1, 2, 3]", "meaning": "Các mốc số quảng cáo phải xem"},
-    {"key": "WatchAndWinConfigModel.json: Rewards[0]", "value": "CurrencyType 1, Amount 100", "meaning": "Thưởng mốc 1: 100 coin"},
-    {"key": "WatchAndWinConfigModel.json: Rewards[1]", "value": "CurrencyType 1, Amount 200", "meaning": "Thưởng mốc 2: 200 coin"},
-    {"key": "WatchAndWinConfigModel.json: Rewards[2]", "value": "CurrencyType 1, Amount 500", "meaning": "Thưởng mốc 3: 500 coin"},
-    {"key": "WatchAndWinConfigModel.IsDynamicStagesEnabled", "value": "server", "meaning": "Chuyển sang chế độ mốc động"},
-    {"key": "WatchAndWinConfigModel.DynamicStages", "value": "List<WatchAndWinStep{TargetAdCount, Reward}> (server)", "meaning": "Mốc động thay cho cặp RequiredAdCountsToWatch + Rewards"},
-    {"key": "AdConfigModel – cờ bật Watch and Win", "value": "server", "meaning": "Cổng thứ hai: cấu hình quảng cáo backend phải cho phép"},
-    {"key": "WatchAndWinState", "value": "Disable=0, ProgressNotEnough=1, NoCache=2, Enable=3, LocalTimeIsUp=4, Claimed=6", "meaning": "Máy trạng thái (thiếu giá trị 5)"},
-    {"key": "WatchAndWinPopupImpressionSource", "value": "None=0, LobbyIcon=1, ForceShow=2", "meaning": "Nguồn mở popup cho analytics"},
-    {"key": "AdRequestSource.WatchAndWin", "value": "8", "meaning": "Nguồn yêu cầu quảng cáo, dùng phân loại doanh thu"},
-    {"key": "CurrencyEarnReason.WatchAndWin", "value": "32", "meaning": "Lý do nhận thưởng ghi vào inventory"},
-    {"key": "Popup key", "value": "\"WatchAndWinPopup\"", "meaning": "Popup này đang mở thì không gửi request lấy chu kỳ"},
-    {"key": "WatchAndWinResponse", "value": "EventId, EventType, StartTime, FinishTime, Segment", "meaning": "Chu kỳ sự kiện từ server"},
-    {"key": "WatchAndWinRequestModel", "value": "EventType", "meaning": "Payload request lấy chu kỳ"},
-    {"key": "WatchAndWinSyncableDataModel", "value": "sync name", "meaning": "Tên bản ghi đồng bộ AdProgress"},
-    {"key": "WatchAndWinModel.AdProgress", "value": "int, client + server", "meaning": "Số quảng cáo đã xem trong chu kỳ"},
-    {"key": "WatchAndWinModel.PopupTriggerCount / IsPopupShown", "value": "int / bool (client)", "meaning": "Kiểm soát tần suất mở popup"},
-    {"key": "WatchAndWinModel.WatchAndWinResponse", "value": "client cache", "meaning": "Cache phản hồi backend"},
-    {"key": "WatchAndWinAnimationConfig", "value": "ScriptableObject, 14 field", "meaning": "Cấu hình hoạt ảnh popup"},
-    {"key": "WatchAndWinLobbyButtonAnimationConfig", "value": "ScriptableObject, 13 field", "meaning": "Cấu hình hoạt ảnh icon lobby"},
-    {"key": "WatchAndWinLobbyButtonViewModel", "value": "CurrentProgress, TotalProgress", "meaning": "Dữ liệu vòng tiến độ trên icon"},
-    {"key": "WatchAndWinStagesViewModel", "value": "CurrentStage, TotalStageCount, ProgressViewModels", "meaning": "Dữ liệu danh sách mốc trong popup"},
-    {"key": "DynamicWatchAndWinView / WatchAndWinDynamicRewardView", "value": "UI chế độ động", "meaning": "Hiển thị DynamicStages"},
-    {"key": "WatchAndWinGrandPrizeView", "value": "UI mốc cuối", "meaning": "Hiển thị Grand Prize"}
+    {
+      "key": "WatchAndWinConfigModel.json: IsEnabled",
+      "value": "false",
+      "meaning": "Bật/tắt Watch and Win (client default)"
+    },
+    {
+      "key": "WatchAndWinConfigModel.json: FirstLevelToShow",
+      "value": "30",
+      "meaning": "Level tối thiểu để thấy tính năng"
+    },
+    {
+      "key": "WatchAndWinConfigModel.json: EventType",
+      "value": "1",
+      "meaning": "Loại sự kiện gửi lên backend"
+    },
+    {
+      "key": "WatchAndWinConfigModel.json: RequiredAdCountsToWatch",
+      "value": "[1, 2, 3]",
+      "meaning": "Các mốc số quảng cáo phải xem"
+    },
+    {
+      "key": "WatchAndWinConfigModel.json: Rewards[0]",
+      "value": "CurrencyType 1, Amount 100",
+      "meaning": "Thưởng mốc 1: 100 coin"
+    },
+    {
+      "key": "WatchAndWinConfigModel.json: Rewards[1]",
+      "value": "CurrencyType 1, Amount 200",
+      "meaning": "Thưởng mốc 2: 200 coin"
+    },
+    {
+      "key": "WatchAndWinConfigModel.json: Rewards[2]",
+      "value": "CurrencyType 1, Amount 500",
+      "meaning": "Thưởng mốc 3: 500 coin"
+    },
+    {
+      "key": "WatchAndWinConfigModel.IsDynamicStagesEnabled",
+      "value": "server",
+      "meaning": "Chuyển sang chế độ mốc động"
+    },
+    {
+      "key": "WatchAndWinConfigModel.DynamicStages",
+      "value": "List<WatchAndWinStep{TargetAdCount, Reward}> (server)",
+      "meaning": "Mốc động thay cho cặp RequiredAdCountsToWatch + Rewards"
+    },
+    {
+      "key": "AdConfigModel – cờ bật Watch and Win",
+      "value": "server",
+      "meaning": "Cổng thứ hai: cấu hình quảng cáo backend phải cho phép"
+    },
+    {
+      "key": "WatchAndWinState",
+      "value": "Disable=0, ProgressNotEnough=1, NoCache=2, Enable=3, LocalTimeIsUp=4, Claimed=6",
+      "meaning": "Máy trạng thái (thiếu giá trị 5)"
+    },
+    {
+      "key": "WatchAndWinPopupImpressionSource",
+      "value": "None=0, LobbyIcon=1, ForceShow=2",
+      "meaning": "Nguồn mở popup cho analytics"
+    },
+    {
+      "key": "AdRequestSource.WatchAndWin",
+      "value": "8",
+      "meaning": "Nguồn yêu cầu quảng cáo, dùng phân loại doanh thu"
+    },
+    {
+      "key": "CurrencyEarnReason.WatchAndWin",
+      "value": "32",
+      "meaning": "Lý do nhận thưởng ghi vào inventory"
+    },
+    {
+      "key": "Popup key",
+      "value": "\"WatchAndWinPopup\"",
+      "meaning": "Popup này đang mở thì không gửi request lấy chu kỳ"
+    },
+    {
+      "key": "WatchAndWinResponse",
+      "value": "EventId, EventType, StartTime, FinishTime, Segment",
+      "meaning": "Chu kỳ sự kiện từ server"
+    },
+    {
+      "key": "WatchAndWinRequestModel",
+      "value": "EventType",
+      "meaning": "Payload request lấy chu kỳ"
+    },
+    {
+      "key": "WatchAndWinSyncableDataModel",
+      "value": "sync name",
+      "meaning": "Tên bản ghi đồng bộ AdProgress"
+    },
+    {
+      "key": "WatchAndWinModel.AdProgress",
+      "value": "int, client + server",
+      "meaning": "Số quảng cáo đã xem trong chu kỳ"
+    },
+    {
+      "key": "WatchAndWinModel.PopupTriggerCount / IsPopupShown",
+      "value": "int / bool (client)",
+      "meaning": "Kiểm soát tần suất mở popup"
+    },
+    {
+      "key": "WatchAndWinModel.WatchAndWinResponse",
+      "value": "client cache",
+      "meaning": "Cache phản hồi backend"
+    },
+    {
+      "key": "WatchAndWinAnimationConfig",
+      "value": "ScriptableObject, 14 field",
+      "meaning": "Cấu hình hoạt ảnh popup"
+    },
+    {
+      "key": "WatchAndWinLobbyButtonAnimationConfig",
+      "value": "ScriptableObject, 13 field",
+      "meaning": "Cấu hình hoạt ảnh icon lobby"
+    },
+    {
+      "key": "WatchAndWinLobbyButtonViewModel",
+      "value": "CurrentProgress, TotalProgress",
+      "meaning": "Dữ liệu vòng tiến độ trên icon"
+    },
+    {
+      "key": "WatchAndWinStagesViewModel",
+      "value": "CurrentStage, TotalStageCount, ProgressViewModels",
+      "meaning": "Dữ liệu danh sách mốc trong popup"
+    },
+    {
+      "key": "DynamicWatchAndWinView / WatchAndWinDynamicRewardView",
+      "value": "UI chế độ động",
+      "meaning": "Hiển thị DynamicStages"
+    },
+    {
+      "key": "WatchAndWinGrandPrizeView",
+      "value": "UI mốc cuối",
+      "meaning": "Hiển thị Grand Prize"
+    }
   ],
   "tips": [
     "Ba mốc mặc định rất ngắn (1, 2, 3 quảng cáo) — thiết kế để người chơi thấy phần thưởng đầu tiên gần như ngay lập tức.",
@@ -143,5 +421,9 @@
     "Kiểm soát tần suất popup bằng bộ đếm giúp giữ cân bằng giữa doanh thu quảng cáo và trải nghiệm.",
     "Chế độ mốc động cho phép A/B test số quảng cáo và giá trị thưởng mà không cần cập nhật client."
   ],
-  "categories": ["Kinh tế", "Live-ops", "Meta"]
+  "categories": [
+    "Kinh tế",
+    "Live-ops",
+    "Meta"
+  ]
 }

@@ -3468,5 +3468,209 @@
     "round2_case_ids": [],
     "round2_branch_ucs": [],
     "full_uc_pass": false
+  },
+  "design_spec_20261116": {
+    "source": "editorial/Analytics.json",
+    "sha256": "1b2de8fba452cbd627b5d40e89cc16f71e53220fc4bd8365a889109e1dbb4182",
+    "scope": "Designer-facing interpretation; no new runtime verification. Original use_cases and evidence remain unchanged.",
+    "content": {
+      "id": "Analytics",
+      "schema_version": 1,
+      "scope": "Diễn giải thiết kế từ client, default và bằng chứng ngày 15–16/11 đã ghi nguồn. Nội dung mã/default không được nâng thành runtime pass; giữ nguyên full data và UC của hồ sơ.",
+      "design_intent": "Biến hành động và trạng thái game thành tín hiệu đo được, đồng thời giữ phân biệt giữa việc client gọi event và việc backend thực nhận.",
+      "player_loop": "Hành động → dựng event/tham số → thêm ngữ cảnh kho nếu cần → gửi qua provider → đối chiếu log/response trước khi kết luận.",
+      "flow": [
+        {
+          "title": "Gửi một sự kiện có kèm tham số kho đồ",
+          "actor": "Client",
+          "action": "Tạo Event rồi gộp tham số kho.",
+          "rule": "SendEvent thêm 6 tham số kho; SendEventWithoutExtraParameter bỏ bước này.",
+          "outcome": "Các event có mức ngữ cảnh khác nhau.",
+          "uc_ids": [
+            "UC-01"
+          ],
+          "source_refs": [
+            "gdd/Analytics.json#/use_cases/0",
+            "gdd/Analytics.json",
+            "site_meta/Analytics.json",
+            "facts/review_20261116_round2/native_findings_chunk1.json",
+            "facts/review_20261116_round2/native_findings_chunk2.json"
+          ]
+        },
+        {
+          "title": "Theo dõi phiên chơi",
+          "actor": "Client",
+          "action": "Đánh giá bắt đầu session khi focus quay lại.",
+          "rule": "Native 3129 chỉ mở session mới khi khoảng UTC vượt timeout; bằng timeout chưa vượt predicate.",
+          "outcome": "Không đếm mọi focus-resume thành session mới.",
+          "uc_ids": [
+            "UC-05"
+          ],
+          "source_refs": [
+            "gdd/Analytics.json#/use_cases/4",
+            "gdd/Analytics.json",
+            "site_meta/Analytics.json",
+            "facts/review_20261116_round2/native_findings_chunk1.json",
+            "facts/review_20261116_round2/native_findings_chunk2.json"
+          ]
+        },
+        {
+          "title": "Đo FPS và spike hiệu năng",
+          "actor": "Client",
+          "action": "Đưa FPS/spike và moves vào sự kiện mất focus.",
+          "rule": "Nguồn có cửa sổ FPS 30 giây; tên event có thể chứa hậu tố động.",
+          "outcome": "Cần chuẩn hóa khi đọc telemetry.",
+          "uc_ids": [
+            "UC-06"
+          ],
+          "source_refs": [
+            "gdd/Analytics.json#/use_cases/5",
+            "gdd/Analytics.json",
+            "site_meta/Analytics.json",
+            "facts/review_20261116_round2/native_findings_chunk1.json",
+            "facts/review_20261116_round2/native_findings_chunk2.json"
+          ]
+        },
+        {
+          "title": "Bắn Adjust event token theo mốc level",
+          "actor": "Client và SDK",
+          "action": "Gửi token Adjust theo mốc level.",
+          "rule": "Nguồn lịch sử liệt kê 35 mốc từ 5 đến 4.000; mapping không phải bằng chứng delivery.",
+          "outcome": "Attribution và tiến độ được đo qua đường riêng.",
+          "uc_ids": [
+            "UC-09"
+          ],
+          "source_refs": [
+            "gdd/Analytics.json#/use_cases/8",
+            "gdd/Analytics.json",
+            "site_meta/Analytics.json",
+            "facts/review_20261116_round2/native_findings_chunk1.json",
+            "facts/review_20261116_round2/native_findings_chunk2.json"
+          ]
+        }
+      ],
+      "rules": [
+        {
+          "title": "Độ tin cậy bằng chứng",
+          "text": "Timestamp ảnh/prefs không tự chứng minh event đã được phát hoặc nhận.",
+          "source_refs": [
+            "gdd/Analytics.json",
+            "site_meta/Analytics.json",
+            "facts/review_20261116_round2/native_findings_chunk1.json",
+            "facts/review_20261116_round2/native_findings_chunk2.json"
+          ]
+        },
+        {
+          "title": "Đồng hồ session",
+          "text": "SaveLastData lưu UTC; Update cộng unscaledDeltaTime trong body đã đọc.",
+          "source_refs": [
+            "gdd/Analytics.json",
+            "site_meta/Analytics.json",
+            "facts/review_20261116_round2/native_findings_chunk1.json",
+            "facts/review_20261116_round2/native_findings_chunk2.json"
+          ]
+        },
+        {
+          "title": "Không lộ định danh",
+          "text": "Attribution, screenshot chẩn đoán và payload có thể chứa ID; bản công khai chỉ giữ phần allowlist cần thiết.",
+          "source_refs": [
+            "gdd/Analytics.json",
+            "site_meta/Analytics.json",
+            "facts/review_20261116_round2/native_findings_chunk1.json",
+            "facts/review_20261116_round2/native_findings_chunk2.json"
+          ]
+        }
+      ],
+      "decisions": [
+        {
+          "question": "Tại sao không suy session từ lần mở màn?",
+          "answer": "Session có predicate thời gian và dữ liệu đã lưu riêng.",
+          "basis": "Native SessionTracker 3129.",
+          "source_refs": [
+            "gdd/Analytics.json",
+            "site_meta/Analytics.json",
+            "facts/review_20261116_round2/native_findings_chunk1.json",
+            "facts/review_20261116_round2/native_findings_chunk2.json"
+          ]
+        },
+        {
+          "question": "Event có kho giúp gì?",
+          "answer": "Cho ngữ cảnh tài nguyên tại hành động, nhưng cần biết event nào bỏ extras.",
+          "basis": "Hai đường SendEvent khác nhau.",
+          "source_refs": [
+            "gdd/Analytics.json",
+            "site_meta/Analytics.json",
+            "facts/review_20261116_round2/native_findings_chunk1.json",
+            "facts/review_20261116_round2/native_findings_chunk2.json"
+          ]
+        }
+      ],
+      "segments_ab": {
+        "summary": "Các trục bên dưới mô tả điều kiện chọn hoặc trạng thái; chưa có assignment hay uplift để khẳng định A/B.",
+        "axes": [
+          {
+            "axis": "Provider và payload",
+            "selection": "Firebase, Grand, Adjust, AppLovin",
+            "effect": "Thay giao thức, token và trường đo.",
+            "evidence_limit": "Chưa đối chiếu delivery giữa provider.",
+            "source_refs": [
+              "gdd/Analytics.json",
+              "site_meta/Analytics.json",
+              "facts/review_20261116_round2/native_findings_chunk1.json",
+              "facts/review_20261116_round2/native_findings_chunk2.json"
+            ]
+          },
+          {
+            "axis": "Segment trong event",
+            "selection": "Ngữ cảnh nguồn được gắn theo consumer",
+            "effect": "Hỗ trợ phân tích cohort.",
+            "evidence_limit": "Không có assignment log hay uplift để kết luận A/B.",
+            "source_refs": [
+              "gdd/Analytics.json",
+              "site_meta/Analytics.json",
+              "facts/review_20261116_round2/native_findings_chunk1.json",
+              "facts/review_20261116_round2/native_findings_chunk2.json"
+            ]
+          }
+        ],
+        "unknowns": [
+          "Chưa có phân bổ ngẫu nhiên, cohort và kết quả nhân quả để đánh giá thử nghiệm."
+        ]
+      },
+      "recovery": [
+        {
+          "condition": "Kiểu parameter không hỗ trợ",
+          "expected": "Ghi lỗi thay vì giả dữ liệu đã hợp lệ.",
+          "verified_scope": "Đường FirebaseEventSender nguồn.",
+          "uc_ids": [
+            "UC-15"
+          ]
+        },
+        {
+          "condition": "Quay lại đúng bằng timeout",
+          "expected": "Không mở session mới theo phép so lớn hơn nghiêm ngặt.",
+          "verified_scope": "Native predicate; chưa chạy clock-controlled runtime.",
+          "uc_ids": [
+            "UC-05"
+          ]
+        }
+      ],
+      "takeaways": [
+        {
+          "text": "Đặc tả event cần tên, trigger, ngữ cảnh và mức xác minh.",
+          "basis": "Một tên event không đủ để triển khai đo."
+        },
+        {
+          "text": "Không dùng playtest offline làm bằng chứng backend telemetry.",
+          "basis": "Lượt mới không có xác nhận ingestion."
+        }
+      ],
+      "reviewed_source_paths": [
+        "gdd/Analytics.json",
+        "site_meta/Analytics.json",
+        "facts/review_20261116_round2/native_findings_chunk1.json",
+        "facts/review_20261116_round2/native_findings_chunk2.json"
+      ]
+    }
   }
 }

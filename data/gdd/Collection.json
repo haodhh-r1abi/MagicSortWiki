@@ -9,7 +9,7 @@
     "Modules.Contexts.Home.Collection.Scripts.CollectionRemoteService",
     "Modules.Contexts.Home.Collection.Scripts.CollectionConfigModel"
   ],
-  "summary": "Collection là sự kiện sưu tập thẻ theo mùa. Dữ liệu collection_4 và collection_5 trong export có15theme, mỗi theme9thẻ, tổng135thẻ; chưa có full data collection_1/2/3 để khái quát. Trong hai bộ đã có nguồn, thẻ có 1–5 sao và một số thẻ Gold ở các theme cuối. Người chơi mở gói thẻ (CollectionPack, 5 loại chứa 2/3/4/5/6 thẻ) nhận được từ level, sự kiện, rương, offer; thẻ trùng biến thành sao dư dùng để mở Bonus Chest theo mốc sao. Hoàn thành đủ 9 thẻ của một theme được thưởng theme; hoàn thành cả 15 theme được token (ví dụ 'Summer Badge') và mở lượt chơi Gold Collection — vòng thứ hai với thẻ vàng và token vàng ('Grand Summer Badge'). Trong team, người chơi có thể tặng thẻ trùng và xin thẻ thiếu (giới hạn theo ngày). Token nhận được có thể trang bị lên hồ sơ.",
+  "summary": "Collection là sự kiện sưu tập thẻ theo mùa. Hai resource collection_4/5 có 15 theme × 9 thẻ = 135 thẻ; chưa có định nghĩa chính thức đầy đủ mùa 1–3. Thẻ có 1–5 sao và một số thẻ Gold ở theme cuối. Năm loại gói có 2/3/4/5/6 thẻ; thẻ trùng thành sao dư để mở Bonus Chest. Native 0.0.3129 có ba phase: Normal (0), Gold (1), Repeat (2); Repeat được ưu tiên trước Gold. Normal hoàn thành mở Gold. Gold hoàn thành chỉ mở Repeat khi AdditionalCompleteCollectionCount != 0; nếu không thì gọi TryClaimEvent. Repeat hoàn thành tăng RepeatCompletedCount, rồi kiểm >= AdditionalCompleteCollectionCount: đạt cap thì gọi claim, chưa đạt thì reset inventory và xóa activation-claimed. Default count=0; chưa xác minh giá trị remote có hiệu lực. Normal dùng CollectionReward và token thường; Gold dùng GoldCollectionReward và token vàng. Repeat dùng RepeatCollectionReward khác null, nếu null thì fallback GoldCollectionReward; Repeat không thêm token (tokenId=null). RepeatThemeRewards khác null được chọn trong Repeat; null fallback ThemeRewards, nhưng mảng rỗng không fallback. Tặng/xin thẻ và trang bị token hồ sơ là các nhánh riêng.",
   "unlock": "CollectionService.IsEligible() dùng CollectionStateService.IsEligible(): CollectionConfigModel.IsEnabled && level >= CollectionConfigModel.FirstLevelToShow (GetCollectionUnlockLevel() trả thẳng FirstLevelToShow; UI hiển thị 'Unlock Collection at Level {0}!' — localization CollectionUnlock). Ngoài ra asset bundle của bộ sưu tập phải tải xong: IsPlayerLevelEnoughForBundleDownload() so level với CollectionConfigModel.MinBundleDownloadLevel, IsCollectionAssetsDownloadedAndLoaded(bundleName).",
   "entry_points": [
     "Icon Collection ở Home (CollectionController / CollectionView)",
@@ -135,17 +135,17 @@
       "trigger": "Hoàn thành đủ 15 theme",
       "precondition": "CollectionService.IsCollectionCompleted() == true",
       "steps": [
-        "Xác định CollectionPhase: Repeat nếu cache.IsRepeatCollectionActive, nếu khôngGold khi IsGoldCollectionActive, còn lạiNormal.",
-        "Lấy reward qua GetActiveCollectionReward; riêng RepeatReward null fallback GoldCollectionReward.",
-        "GetActiveCollectionRewardWithToken thêm token cho Normal/Gold; Repeat không thêm token, GetActiveCollectionTokenId trả null.",
-        "OnCollectionCompleted gửi event và tăng TotalCollectionCompletedCount; phase Normal mởGold.",
-        "KhiGold hoàn thành: nếu AdditionalCompleteCollectionCount !=0 thì reset inventory, xóa activation-claimed và bật Repeat; ngược lại TryClaimEvent.",
-        "KhiRepeat hoàn thành: tăng RepeatCompletedCount, so >=AdditionalCompleteCollectionCount; đạt cap thìTryClaimEvent, chưa đạt thì reset inventory và xóa activation-claimed.",
-        "Chụp reward/counter/phase và ledger khi kiểm runtime; static branch không chứng minh grant hoặc server claim."
+        "Xác định phase: ưu tiên Repeat, sau đó Gold, còn lại Normal.",
+        "Lấy reward theo phase; Repeat reward null fallback Gold reward.",
+        "Normal/Gold thêm token tương ứng; Repeat tokenId=null và không thêm token.",
+        "OnCollectionCompleted gửi event và tăng TotalCollectionCompletedCount; Normal chuyển Gold.",
+        "Hoàn thành Gold: AdditionalCompleteCollectionCount !=0 thì reset inventory, xóa activation-claimed và bật Repeat; nếu không thì gọi TryClaimEvent.",
+        "Hoàn thành Repeat: tăng RepeatCompletedCount rồi kiểm >= AdditionalCompleteCollectionCount; đạt cap thì gọi claim, chưa đạt thì reset inventory và xóa activation-claimed.",
+        "Khi playtest, ghi phase/counter/reward và ledger; lời gọi client không chứng minh grant hoặc claim backend."
       ],
-      "result": "Phần thưởng và bước chuyển tiếp phụ thuộc phase. Normal mởGold; Gold có thể mởRepeat hoặc kết thúc; Repeat tăngcounter tới cap. Repeat không cấp token mới qua các method đã đọc. Chưa xác minh runtime/backend grant.",
-      "rules": "Native0.0.3129: GetReadableEventId dùng suffix 0 (Normal),1 (Gold), hoặc RepeatCompletedCount+2(Repeat). Grand numeral củaRepeat là Roman(count+2-(limitReached?1:0)). GetActiveThemeRewards dùng RepeatThemeRewards nonnull cho Repeat, nếu null fallback ThemeRewards; empty array không fallback. Default AdditionalCompleteCollectionCount=0, gate native là!=0.",
-      "evidence": "CollectionService.OnCollectionCompleted; CollectionService.GetActiveTokenReward; CollectionService.AddCollectionTokenToPlayerData; CollectionService.EquipCollectionToken; CollectionService.SetGoldCollectionActive; CollectionService.GetReadableEventId; EventSender.SendCollectionCompleted"
+      "result": "Phần thưởng và chuyển phase phụ thuộc Normal/Gold/Repeat. Repeat không cấp token qua các method đã đọc; default và cap không thay thế bằng chứng remote/grant thực tế.",
+      "rules": "Native 0.0.3129 có ba phase: Normal (0), Gold (1), Repeat (2); Repeat được ưu tiên trước Gold. Normal hoàn thành mở Gold. Gold hoàn thành chỉ mở Repeat khi AdditionalCompleteCollectionCount != 0; nếu không thì gọi TryClaimEvent. Repeat hoàn thành tăng RepeatCompletedCount, rồi kiểm >= AdditionalCompleteCollectionCount: đạt cap thì gọi claim, chưa đạt thì reset inventory và xóa activation-claimed. Default count=0; chưa xác minh giá trị remote có hiệu lực. Normal dùng CollectionReward và token thường; Gold dùng GoldCollectionReward và token vàng. Repeat dùng RepeatCollectionReward khác null, nếu null thì fallback GoldCollectionReward; Repeat không thêm token (tokenId=null). RepeatThemeRewards khác null được chọn trong Repeat; null fallback ThemeRewards, nhưng mảng rỗng không fallback. Event id suffix là 0 (Normal), 1 (Gold), hoặc RepeatCompletedCount+2 (Repeat); Grand numeral là Roman(count+2-(limitReached?1:0)).",
+      "evidence": "CollectionService.GetActivePhase; CanOpenRepeatCollection; IsRepeatLimitReached; GetActiveThemeRewards; GetActiveCollectionReward; GetActiveCollectionRewardWithToken; GetActiveCollectionTokenId; OnGoldCollectionCompleted; OnRepeatCollectionCompleted; facts/review_20261116_round2/collection_repeat_contract.json"
     },
     {
       "id": "UC-08",
@@ -2784,8 +2784,8 @@
     },
     {
       "context": "Hoàn thành cả bộ",
-      "reward": "CollectionConfigModel.CollectionReward / GoldCollectionReward + token (CurrencyType.ProfileToken với TokenId hoặc GoldTokenId) — CurrencyEarnReason.CollectionCompleted (35)",
-      "evidence": "CollectionService.OnCollectionCompleted; CollectionService.GetActiveTokenReward"
+      "reward": "Normal dùng CollectionReward và token thường; Gold dùng GoldCollectionReward và token vàng. Repeat dùng RepeatCollectionReward khác null, nếu null thì fallback GoldCollectionReward; Repeat không thêm token (tokenId=null). RepeatThemeRewards khác null được chọn trong Repeat; null fallback ThemeRewards, nhưng mảng rỗng không fallback. CurrencyEarnReason.CollectionCompleted (35).",
+      "evidence": "GetActiveCollectionReward; GetActiveCollectionRewardWithToken; GetActiveCollectionTokenId; facts/review_20261116_round2/collection_repeat_contract.json"
     },
     {
       "context": "Kích hoạt bộ sưu tập",
@@ -4004,5 +4004,167 @@
       "UC-12"
     ],
     "full_uc_pass": false
+  },
+  "design_spec_20261116": {
+    "source": "editorial/Collection.json",
+    "sha256": "eb57037532f44089fc2914a28e93e9588036f7568703abc1a52127c2ffe06233",
+    "scope": "Designer-facing interpretation; no new runtime verification. Original use_cases and evidence remain unchanged.",
+    "content": {
+      "id": "Collection",
+      "schema_version": 1,
+      "scope": "Diễn giải thiết kế từ hồ sơ đã đối chiếu; flow/outcome là hành vi mong đợi theo nguồn. Chỉ câu ghi rõ round2 là quan sát 16/11/2026 trên fixture 0.0.3129, không phải full UC pass.",
+      "design_intent": "Biến phần thưởng từ nhiều sự kiện thành mục tiêu sưu tập dài hạn: thẻ mới tiến tới đủ bộ, thẻ trùng vẫn có ích qua sao dư và giao tiếp đội. Nhịp album dài hơn một phiên chơi nên trạng thái đã xem, phase và hạn mùa phải dễ hiểu.",
+      "player_loop": "Nhận gói → mở thẻ → xem thẻ mới và bộ còn thiếu → hoàn thành theme hoặc dùng sao dư → nhận quà → tiếp tục album theo phase.",
+      "flow": [
+        {
+          "title": "Mở album đang hoạt động",
+          "actor": "Người chơi",
+          "action": "Chạm Collection ở Home và xem các bộ thẻ.",
+          "rule": "Cần đủ level, event và asset của CollectionId; hai bộ collection_4/5 hiện có đều 15 theme × 9 thẻ.",
+          "outcome": "Album hiển thị tiến độ theo dữ liệu mùa, không mặc định mọi CollectionId đều 135 thẻ.",
+          "uc_ids": [
+            "UC-01"
+          ],
+          "source_refs": [
+            "gdd/Collection.json#use_cases/0"
+          ]
+        },
+        {
+          "title": "Mở gói và phân biệt thẻ mới/trùng",
+          "actor": "Người chơi",
+          "action": "Nhận gói từ một nguồn thưởng rồi xem kết quả mở.",
+          "rule": "5 loại pack có 2/3/4/5/6 thẻ; nhánh pack cơ bản, trung và cao cấp có cơ chế lựa chọn riêng.",
+          "outcome": "Thẻ được ghi vào inventory; bản sao dư đóng góp sao thay vì chỉ là kết quả hụt.",
+          "uc_ids": [
+            "UC-02"
+          ],
+          "source_refs": [
+            "gdd/Collection.json#use_cases/1"
+          ]
+        },
+        {
+          "title": "Đổi sao dư lấy rương",
+          "actor": "Người chơi",
+          "action": "Mở Bonus Chest, xem preview rồi chọn rương khi đủ sao.",
+          "rule": "Sao dư là tổng (số lượng thẻ − 1) × số sao trên từng thẻ có bản dư; ngưỡng đổi rương lấy từ cấu hình của rương.",
+          "outcome": "Thiếu sao không được suy thành một lượt mở hay grant; preview chỉ cho biết hàng có thể nhận.",
+          "uc_ids": [
+            "UC-06"
+          ],
+          "source_refs": [
+            "gdd/Collection.json#use_cases/5"
+          ]
+        },
+        {
+          "title": "Chuyển vòng sau khi đủ bộ",
+          "actor": "Người chơi",
+          "action": "Hoàn thành album và nhận thưởng của phase hiện tại.",
+          "rule": "Native 0.0.3129 chọn Repeat trước Gold rồi Normal; reward Repeat null có nhánh fallback Gold.",
+          "outcome": "Tiến độ và quà phải gắn phase, không mô tả chỉ hai vòng Normal/Gold.",
+          "uc_ids": [
+            "UC-07"
+          ],
+          "source_refs": [
+            "gdd/Collection.json#use_cases/6"
+          ]
+        },
+        {
+          "title": "Xem thẻ và xóa dấu mới",
+          "actor": "Người chơi",
+          "action": "Mở bộ có badge, xem thẻ rồi đóng và mở lại album.",
+          "rule": "Round2 quan sát badge/New của Wonderland mất qua mở lại và cold restart, tổng 8/135 không đổi.",
+          "outcome": "Xem thẻ thay đổi trạng thái thông báo, không làm tăng số thẻ sở hữu.",
+          "uc_ids": [
+            "UC-12"
+          ],
+          "source_refs": [
+            "gdd/Collection.json#use_cases/11",
+            "facts/review_cases_20261116_round2.json"
+          ]
+        }
+      ],
+      "rules": [
+        {
+          "title": "Tách xác suất công bố và thuật toán",
+          "text": "Trang hỗ trợ chính thức công bố luật pack; không lấy bảng web làm effective config hay kết quả RNG của fixture. Phải giữ đối chiếu riêng khi số liệu đóng gói và website khác nhau.",
+          "source_refs": [
+            "gdd/Collection.json#summary",
+            "gdd/Collection.json#flow",
+            "facts/review_20261116_round2/collection_support_page_20261116.json"
+          ]
+        },
+        {
+          "title": "Tách có thẻ, đủ bộ và trang bị token",
+          "text": "Sở hữu một thẻ không tự mở token; preview token khóa và bấm Equip không thành công đã được quan sát qua Profile. Thưởng theme/album vẫn phụ thuộc đủ bộ và phase.",
+          "source_refs": [
+            "gdd/Collection.json#summary",
+            "gdd/Collection.json#flow",
+            "gdd/Profile.json#runtime_review_20261116_round2"
+          ]
+        },
+        {
+          "title": "Thứ tự chọn phase khác hướng chuyển vòng",
+          "text": "GetActivePhase ưu tiên đọc trạng thái Repeat rồi Gold rồi Normal. Hướng tiến triển lại là Normal → Gold → Repeat, và chỉ có Repeat khi AdditionalCompleteCollectionCount khác 0; giá trị mặc định hiện có là 0. Repeat có giới hạn số vòng và không trao token. Fallback reward chỉ áp dụng khi null, không được hiểu mảng rỗng cũng fallback.",
+          "source_refs": [
+            "gdd/Collection.json#flow",
+            "facts/review_20261116_round2/collection_repeat_contract.json"
+          ]
+        }
+      ],
+      "decisions": [
+        {
+          "question": "Vì sao thẻ trùng vẫn có giá trị?",
+          "answer": "Sao dư tạo một đường tích lũy khác bên cạnh tìm thẻ thiếu; người chơi có quyết định đổi rương thay vì chỉ chờ RNG. Giá trị kinh tế phải đọc cả ngưỡng sao và reward rương.",
+          "basis": "Nhận định thiết kế dựa trên cơ chế trong hồ sơ, không phải kết quả đo chuyển đổi.",
+          "source_refs": [
+            "gdd/Collection.json#flow"
+          ]
+        }
+      ],
+      "segments_ab": {
+        "summary": "Mùa, phase và trạng thái Collection: Đổi bộ thẻ, reward và nhánh mở gói; Collection có hoạt động còn ảnh hưởng reward của sự kiện nguồn.",
+        "axes": [
+          {
+            "axis": "Mùa, phase và trạng thái Collection",
+            "selection": "Response mang Segment và CollectionId; nội dung phase chọn Normal/Gold/Repeat theo trạng thái album.",
+            "effect": "Đổi bộ thẻ, reward và nhánh mở gói; Collection có hoạt động còn ảnh hưởng reward của sự kiện nguồn.",
+            "evidence_limit": "Chưa có bằng chứng phân bổ A/B; probability công bố không chứng minh kết quả thực nghiệm hoặc assignment.",
+            "source_refs": [
+              "gdd/Collection.json#segment_ab_review_20261115",
+              "gdd/Collection.json#flow"
+            ]
+          }
+        ],
+        "unknowns": [
+          "Chưa có bằng chứng phân bổ A/B; probability công bố không chứng minh kết quả thực nghiệm hoặc assignment."
+        ]
+      },
+      "recovery": [
+        {
+          "condition": "Đóng album hoặc khởi động lại sau khi xem thẻ mới",
+          "expected": "Giữ trạng thái đã xem riêng với số lượng thẻ; round2 xác minh badge Wonderland không trở lại sau restart, các badge chưa xem còn nguyên.",
+          "verified_scope": "Đọc source và hồ sơ runtime có sẵn; chỉ xác minh nhánh được nêu rõ, không phát sinh playtest mới.",
+          "uc_ids": [
+            "UC-12",
+            "UC-16"
+          ]
+        }
+      ],
+      "takeaways": [
+        {
+          "text": "Sao dư tạo một đường tích lũy khác bên cạnh tìm thẻ thiếu; người chơi có quyết định đổi rương thay vì chỉ chờ RNG. Giá trị kinh tế phải đọc cả ngưỡng sao và reward rương.",
+          "basis": "Suy luận thiết kế; đọc cùng quyết định và source_refs, không phải uplift đã đo."
+        }
+      ],
+      "reviewed_source_paths": [
+        "gdd/Collection.json",
+        "site_meta/Collection.json",
+        "facts/review_cases_20261116_round2.json",
+        "facts/review_20261116_round2/collection_support_page_20261116.json",
+        "facts/review_20261116/public_current_config_3129/defaults/CollectionConfigModel.json",
+        "gdd/Profile.json",
+        "facts/review_20261116_round2/collection_repeat_contract.json"
+      ]
+    }
   }
 }

@@ -1,0 +1,123 @@
+{
+  "id": "NoAdsOffer",
+  "schema_version": 1,
+  "scope": "Lớp diễn giải thiết kế từ source và dossier hiện có; outcome là expected. Quan sát round2 được gọi rõ; chưa phát sinh playtest hoặc xác nhận backend mới.",
+  "design_intent": "Chào quyền bỏ quảng cáo bắt buộc đúng bối cảnh người chơi vừa trải nghiệm interstitial, với tần suất chặn theo nhiều cửa sổ.",
+  "player_loop": "Xem interstitial → đủ điều kiện chào → đọc quyền/gói → mua → kiểm quyền đã sở hữu.",
+  "flow": [
+    {
+      "title": "Đếm trải nghiệm quảng cáo",
+      "actor": "Người chơi",
+      "action": "Tiếp tục chơi sau interstitial.",
+      "rule": "PopupIntervalAsAdCount điều tiết thời điểm chào; không lấy rewarded thay mọi interstitial.",
+      "outcome": "Offer chỉ là ứng viên khi đủ điều kiện.",
+      "uc_ids": [
+        "UC-03"
+      ],
+      "source_refs": [
+        "gdd/NoAdsOffer.json#use_cases/2"
+      ]
+    },
+    {
+      "title": "Giới hạn tự mở",
+      "actor": "Người chơi",
+      "action": "Quay lại trong cùng phiên hoặc ngày.",
+      "rule": "Ba bộ đếm session/day/lifetime có thể chặn popup; default và cache khác nhau nên không dùng một con số chung.",
+      "outcome": "Không lặp lời mời vô hạn.",
+      "uc_ids": [
+        "UC-04"
+      ],
+      "source_refs": [
+        "gdd/NoAdsOffer.json#use_cases/3"
+      ]
+    },
+    {
+      "title": "Mua quyền",
+      "actor": "Người chơi",
+      "action": "Xác nhận gói No Ads.",
+      "rule": "Entitlement phải kiểm qua lịch sử mua/restore; nhãn Remove forced ads không chứng minh rewarded bị bỏ.",
+      "outcome": "Quyền và quà kèm được xử lý sau kết quả mua.",
+      "uc_ids": [
+        "UC-07"
+      ],
+      "source_refs": [
+        "gdd/NoAdsOffer.json#use_cases/6"
+      ]
+    }
+  ],
+  "rules": [
+    {
+      "title": "Đếm trải nghiệm quảng cáo",
+      "text": "PopupIntervalAsAdCount điều tiết thời điểm chào; không lấy rewarded thay mọi interstitial.",
+      "source_refs": [
+        "gdd/NoAdsOffer.json#use_cases/2"
+      ]
+    },
+    {
+      "title": "Giới hạn tự mở",
+      "text": "Ba bộ đếm session/day/lifetime có thể chặn popup; default và cache khác nhau nên không dùng một con số chung.",
+      "source_refs": [
+        "gdd/NoAdsOffer.json#use_cases/3"
+      ]
+    },
+    {
+      "title": "Mua quyền",
+      "text": "Entitlement phải kiểm qua lịch sử mua/restore; nhãn Remove forced ads không chứng minh rewarded bị bỏ.",
+      "source_refs": [
+        "gdd/NoAdsOffer.json#use_cases/6"
+      ]
+    }
+  ],
+  "decisions": [
+    {
+      "question": "Quyền No Ads có nên tắt nút rewarded không?",
+      "answer": "Thông điệp bán là bỏ quảng cáo bắt buộc; cần kiểm chính sách rewarded riêng thay vì suy từ tên No Ads.",
+      "basis": "Nhận định thiết kế từ cơ chế có nguồn; không phải hiệu quả đã đo.",
+      "source_refs": [
+        "gdd/NoAdsOffer.json#flow",
+        "gdd/NoAdsOffer.json#configs"
+      ]
+    }
+  ],
+  "segments_ab": {
+    "summary": "Quyền sở hữu và tần suất: Ẩn offer hoặc bundle kèm quyền đã sở hữu.",
+    "axes": [
+      {
+        "axis": "Quyền sở hữu và tần suất",
+        "selection": "Lịch sử NoAds và bộ đếm session/day/lifetime quyết định chào bán.",
+        "effect": "Ẩn offer hoặc bundle kèm quyền đã sở hữu.",
+        "evidence_limit": "Chưa kiểm purchase/restore thực; giới hạn cache0không được gọi là default 3/7 đang hiệu lực.",
+        "source_refs": [
+          "gdd/NoAdsOffer.json#flow",
+          "gdd/NoAdsOffer.json#segment_ab_review_20261115"
+        ]
+      }
+    ],
+    "unknowns": [
+      "Chưa kiểm purchase/restore thực; giới hạn cache0không được gọi là default 3/7 đang hiệu lực."
+    ]
+  },
+  "recovery": [
+    {
+      "condition": "Nhánh lỗi, gián đoạn hoặc chuyển trạng thái của No Ads Offer",
+      "expected": "Verify thất bại không được coi đã sở hữu; restore là nhánh riêng cần kiểm.",
+      "verified_scope": "Theo UC/source trong hồ sơ; runtime chỉ có giá trị ở đúng case và snapshot đã liên kết.",
+      "uc_ids": [
+        "UC-09",
+        "UC-10"
+      ]
+    }
+  ],
+  "takeaways": [
+    {
+      "text": "Thông điệp bán là bỏ quảng cáo bắt buộc; cần kiểm chính sách rewarded riêng thay vì suy từ tên No Ads.",
+      "basis": "Suy luận thiết kế; không thay bảng cấu hình hoặc giới hạn thực nghiệm."
+    }
+  ],
+  "reviewed_source_paths": [
+    "gdd/NoAdsOffer.json",
+    "site_meta/NoAdsOffer.json",
+    "facts/review_20261116/public_current_config_3129/defaults/NoAdsBundleFeatureFlag.json",
+    "facts/review_20261116/public_current_config_3129/defaults/NoAdsOfferConfigModel.json"
+  ]
+}

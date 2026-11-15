@@ -1,0 +1,174 @@
+{
+  "id": "HomeUI",
+  "schema_version": 1,
+  "scope": "Diễn giải thiết kế từ nguồn ghi rõ build/ngày; mô tả mã và default không thay thế kiểm chứng runtime. Phần full data, reward và UC gốc được giữ ở hồ sơ nguồn.",
+  "design_intent": "Home là điểm định hướng giữa tiến độ màn chơi, kinh tế và nội dung đang mở. Quyết định thiết kế chính là cho người chơi thấy việc tiếp theo mà không để popup và icon tranh quyền điều khiển.",
+  "player_loop": "Về Home → đọc level và số dư → chọn Play hoặc một đích khác → quay lại cùng ngữ cảnh.",
+  "flow": [
+    {
+      "title": "Chuẩn bị điểm xuất phát",
+      "actor": "Client",
+      "action": "Dựng Home và đặt level lên vạc.",
+      "rule": "Bố cục còn phụ thuộc Journey, nền và biến thể icon; không xem một ảnh là toàn bộ layout.",
+      "outcome": "Người chơi nhận ra tiến độ và hành động chính.",
+      "uc_ids": [
+        "UC-01",
+        "UC-05"
+      ],
+      "source_refs": [
+        "gdd/HomeUI.json#/use_cases/0",
+        "gdd/HomeUI.json",
+        "site_meta/HomeUI.json",
+        "facts/review_cases_20261116_round2.json"
+      ]
+    },
+    {
+      "title": "Đổi trang bằng kéo",
+      "actor": "Người chơi và client",
+      "action": "Kéo giữa Home, Leaderboard và Shop.",
+      "rule": "Mã dùng ngưỡng 0,2 và lực cản biên 5; lượt 16/11 chỉ thử kéo 650 ms hai chiều, không đo ngưỡng.",
+      "outcome": "Ba trang đổi đúng hướng; kéo vượt đầu Shop vẫn ở Shop, số dư không đổi.",
+      "uc_ids": [
+        "UC-02"
+      ],
+      "source_refs": [
+        "gdd/HomeUI.json#/use_cases/1",
+        "gdd/HomeUI.json",
+        "site_meta/HomeUI.json",
+        "facts/review_cases_20261116_round2.json"
+      ]
+    },
+    {
+      "title": "Đọc nội dung phụ rồi trở lại",
+      "actor": "Người chơi và client",
+      "action": "Chạm icon để xem toolbar hoặc popup; đóng để tiếp tục.",
+      "rule": "Toolbar chọn bố cục theo ngữ cảnh và số reward; chuỗi về Home quyết định thứ tự popup.",
+      "outcome": "Giải thích tại chỗ thay vì bắt người chơi rời vòng chính.",
+      "uc_ids": [
+        "UC-08",
+        "UC-11",
+        "UC-14"
+      ],
+      "source_refs": [
+        "gdd/HomeUI.json#/use_cases/7",
+        "gdd/HomeUI.json",
+        "site_meta/HomeUI.json",
+        "facts/review_cases_20261116_round2.json"
+      ]
+    }
+  ],
+  "rules": [
+    {
+      "title": "Không đồng nhất thao tác",
+      "text": "Kéo trang đã được quan sát; nhảy trang, preload và snapback ngắn là các nhánh riêng.",
+      "source_refs": [
+        "gdd/HomeUI.json",
+        "site_meta/HomeUI.json",
+        "facts/review_cases_20261116_round2.json"
+      ]
+    },
+    {
+      "title": "Ưu tiên thị giác",
+      "text": "Các ô icon trái/phải có giới hạn và được xếp lại khi trạng thái sự kiện đổi.",
+      "source_refs": [
+        "gdd/HomeUI.json",
+        "site_meta/HomeUI.json",
+        "facts/review_cases_20261116_round2.json"
+      ]
+    },
+    {
+      "title": "Nhịp chuyển trạng thái",
+      "text": "Hiệu ứng đổi số level có độ trễ nguồn 1,25 giây ở màn thường và 0,1 giây ở màn khó; đây là hằng mã, chưa đo bằng runtime mới.",
+      "source_refs": [
+        "gdd/HomeUI.json",
+        "site_meta/HomeUI.json",
+        "facts/review_cases_20261116_round2.json"
+      ]
+    }
+  ],
+  "decisions": [
+    {
+      "question": "Vì sao cần lực cản ở biên?",
+      "answer": "Cho phản hồi rằng danh sách đã hết mà không điều hướng sang đích không tồn tại.",
+      "basis": "Native flow và trường hợp kéo vượt Shop.",
+      "source_refs": [
+        "gdd/HomeUI.json",
+        "site_meta/HomeUI.json",
+        "facts/review_cases_20261116_round2.json"
+      ]
+    },
+    {
+      "question": "Toolbar thay popup lớn khi nào?",
+      "answer": "Khi chỉ cần giải thích reward hoặc một nhãn theo ngữ cảnh.",
+      "basis": "Các hàm dựng toolbar riêng và thao tác đóng ngoài.",
+      "source_refs": [
+        "gdd/HomeUI.json",
+        "site_meta/HomeUI.json",
+        "facts/review_cases_20261116_round2.json"
+      ]
+    },
+    {
+      "question": "Ảnh Home có chứng minh event đang chạy không?",
+      "answer": "Chỉ chứng minh icon hoặc trạng thái nhìn thấy tại thời điểm đó; cần cache và entry riêng.",
+      "basis": "Fixture offline và nguồn trạng thái sự kiện tách riêng.",
+      "source_refs": [
+        "gdd/HomeUI.json",
+        "site_meta/HomeUI.json",
+        "facts/review_cases_20261116_round2.json"
+      ]
+    }
+  ],
+  "segments_ab": {
+    "summary": "Tách trục chọn cấu hình, trạng thái người chơi và thí nghiệm. Chưa có bằng chứng assignment hoặc uplift của lượt này.",
+    "axes": [
+      {
+        "axis": "Biến thể lobby",
+        "selection": "Cờ icon mới, nền, màu và Journey",
+        "effect": "Thay hình thức và tập trang.",
+        "evidence_limit": "Có mã chọn, chưa có assignment hoặc so sánh cohort.",
+        "source_refs": [
+          "gdd/HomeUI.json",
+          "site_meta/HomeUI.json",
+          "facts/review_cases_20261116_round2.json"
+        ]
+      }
+    ],
+    "unknowns": [
+      "Không có phân bổ ngẫu nhiên, kích thước mẫu hoặc kết quả A/B để kết luận tác động nhân quả."
+    ]
+  },
+  "recovery": [
+    {
+      "condition": "Kéo quá biên",
+      "expected": "Giữ đích hợp lệ và phản hồi lực cản.",
+      "verified_scope": "Đã quan sát ở đầu Shop; không kiểm mọi biên.",
+      "uc_ids": [
+        "UC-02"
+      ]
+    },
+    {
+      "condition": "Popup đang chiếm Home",
+      "expected": "Chờ điều kiện rảnh tay hoặc đóng popup trước thao tác khác.",
+      "verified_scope": "Luật nguồn; chưa đo mọi interceptor.",
+      "uc_ids": [
+        "UC-13",
+        "UC-14"
+      ]
+    }
+  ],
+  "takeaways": [
+    {
+      "text": "Đặt Play và tiến độ làm trục, icon là nhánh phụ.",
+      "basis": "Cấu trúc Home và chuỗi về Home."
+    },
+    {
+      "text": "Kiểm riêng gesture, navigation và popup queue.",
+      "basis": "Một lượt kéo thành công không phủ các UC khác."
+    }
+  ],
+  "reviewed_source_paths": [
+    "gdd/HomeUI.json",
+    "site_meta/HomeUI.json",
+    "facts/review_cases_20261116_round2.json"
+  ]
+}

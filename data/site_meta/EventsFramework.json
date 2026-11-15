@@ -13,7 +13,7 @@
     ],
     [
       "Chu kỳ / lịch",
-      "Thời gian mọi sự kiện tính theo giờ server lấy từ endpoint get-time"
+      "Nhiều event dùng RemoteTimeService để so thời gian; service lấy giờ qua get-time. Cần kiểm trạng thái đồng bộ và caller từng event, không coi mọi timestamp đã có giờ server hợp lệ."
     ],
     [
       "Tham gia",
@@ -35,7 +35,7 @@
     "Vòng đời do container DI điều khiển qua các interface IService, IInitializable, IDataInitializable, IRestartableService, IIntervalUpdate, ISecondUpdate, ILateUpdate, ISyncable, IDeletable.",
     "Icon sự kiện ở Home được xếp vào hai cột trái và phải, mỗi cột có hạn ngạch ô nên không phải sự kiện nào cũng hiện cùng lúc.",
     "ReturnToHome chọn một trong4danh sách của code0.0.3063: thua thường9, thắng thường57, thua daily2, thắng daily6 command. Mỗi command có gate/skip riêng; số command không là số popup thực hiện.",
-    "Thời gian sự kiện luôn tính theo giờ server để chống chỉnh giờ máy; segment người chơi lấy từ endpoint get-user-segment.",
+    "Nhiều event dùng RemoteTimeService để so thời gian; segment có đường lấy từ endpoint get-user-segment. Phải kiểm trạng thái đồng bộ giờ và từng caller, không suy thành bảo đảm chống mọi thao tác chỉnh đồng hồ.",
     "Dữ liệu sự kiện được gom bởi SyncService và đẩy lên endpoint sync-data theo chu kỳ mặc định 60 giây.",
     "Config hỏng được phát hiện bằng IRemoteConfigValidatable và tự quay về bản cache hoặc bản mặc định, đồng thời bắn analytics invalid_config_fetched."
   ],
@@ -541,7 +541,7 @@
     },
     {
       "label": "Số key remote config được đọc",
-      "value": "khoảng 82",
+      "value": "Khoảng 82 trong danh sách mã lịch sử 0.0.3063; không phải số key remote effective hiện tại",
       "source": "FirebaseRemoteConfigResolver.ResolveAndGetConfigService"
     },
     {
@@ -754,7 +754,7 @@
     {
       "key": "ReturnToHomeSequenceService.IsPopupLimitAbEnabled",
       "value": "server",
-      "meaning": "Cờ A/B cho cơ chế giới hạn popup"
+      "meaning": "Cờ chọn nhánh giới hạn popup trong source; tên Ab không chứng minh assignment, traffic allocation hoặc kết quả A/B đã đo."
     },
     {
       "key": "FirebaseConfigPersistenceService",
@@ -769,7 +769,7 @@
     {
       "key": "SegmentResponse.Segment",
       "value": "server",
-      "meaning": "Mã phân khúc người chơi gửi kèm mọi analytics"
+      "meaning": "Nhãn segment có thể được hàm dựng event đưa vào analytics; không khẳng định mọi event hoặc mọi sender đều kèm trường này."
     },
     {
       "key": "SegmentResponse.IsAdsDisabled",

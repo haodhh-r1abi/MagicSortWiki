@@ -5689,5 +5689,134 @@
     "round2_case_ids": [],
     "round2_branch_ucs": [],
     "full_uc_pass": false
+  },
+  "design_spec_20261116": {
+    "source": "editorial/DailyReward.json",
+    "sha256": "21e736f02622e3e596dfe7f3d518ae9d90a1f2419d0af2e3d33ce6f415e5a18d",
+    "scope": "Designer-facing interpretation; no new runtime verification. Original use_cases and evidence remain unchanged.",
+    "content": {
+      "id": "DailyReward",
+      "schema_version": 1,
+      "scope": "Thiết kế đọc từ dossier và nguồn đã đối chiếu. Outcome là expected; câu ghi round2 là actual theo case, không phải full-feature pass.",
+      "design_intent": "Tạo nghi thức mở quà hằng ngày có điều chỉnh theo nhu cầu, khác một bảng quà cố định theo số ngày liên tiếp.",
+      "player_loop": "Mở Daily Bonus → chọn hộp → nhận quà → tiếp tục số lượt còn lại → kết chu kỳ.",
+      "flow": [
+        {
+          "title": "Chọn pool quà",
+          "actor": "Người chơi và hệ thống",
+          "action": "Mở Daily Bonus ở trạng thái hiện tại.",
+          "rule": "V2 phân ngày đầu, khó/hết mạng và trường hợp khác; mỗi bảng còn có nhánh Collection.",
+          "outcome": "Pool dùng đúng hoàn cảnh trước khi rút.",
+          "uc_ids": [
+            "UC-03"
+          ],
+          "source_refs": [
+            "gdd/DailyReward.json#use_cases/2"
+          ]
+        },
+        {
+          "title": "Mở một hộp",
+          "actor": "Người chơi và hệ thống",
+          "action": "Chọn ô quà chưa mở.",
+          "rule": "Reward được rút theo pool; biểu tượng hộp không chứng minh nội dung đã cố định từ trước.",
+          "outcome": "Một phần thưởng được trình diễn và ghi nhận.",
+          "uc_ids": [
+            "UC-04"
+          ],
+          "source_refs": [
+            "gdd/DailyReward.json#use_cases/3"
+          ]
+        },
+        {
+          "title": "Cơ hội mạng vô hạn thay đổi",
+          "actor": "Người chơi và hệ thống",
+          "action": "Mở thêm ô trong cùng ngày.",
+          "rule": "Hàm nguồn có dãy 34/50/60/70/80/90/100 theo số ô đã mở; không gộp với xác suất mọi loại quà.",
+          "outcome": "Tỉ lệ của nhánh mạng vô hạn được xét đúng bước.",
+          "uc_ids": [
+            "UC-05"
+          ],
+          "source_refs": [
+            "gdd/DailyReward.json#use_cases/4"
+          ]
+        }
+      ],
+      "rules": [
+        {
+          "title": "Chọn pool quà",
+          "text": "V2 phân ngày đầu, khó/hết mạng và trường hợp khác; mỗi bảng còn có nhánh Collection.",
+          "source_refs": [
+            "gdd/DailyReward.json#use_cases/2"
+          ]
+        },
+        {
+          "title": "Mở một hộp",
+          "text": "Reward được rút theo pool; biểu tượng hộp không chứng minh nội dung đã cố định từ trước.",
+          "source_refs": [
+            "gdd/DailyReward.json#use_cases/3"
+          ]
+        },
+        {
+          "title": "Cơ hội mạng vô hạn thay đổi",
+          "text": "Hàm nguồn có dãy 34/50/60/70/80/90/100 theo số ô đã mở; không gộp với xác suất mọi loại quà.",
+          "source_refs": [
+            "gdd/DailyReward.json#use_cases/4"
+          ]
+        }
+      ],
+      "decisions": [
+        {
+          "question": "Vì sao không viết mỗi hộp có xác suất giống nhau?",
+          "answer": "Số ô đã mở và hoàn cảnh đều có thể đổi lựa chọn; cơ chế chống lặp còn điều chỉnh khi hai quà gần nhất trùng.",
+          "basis": "Nhận định thiết kế dựa trên cơ chế, không phải kết quả A/B.",
+          "source_refs": [
+            "gdd/DailyReward.json#flow",
+            "gdd/DailyReward.json#configs"
+          ]
+        }
+      ],
+      "segments_ab": {
+        "summary": "Hoàn cảnh và nhánh Collection: Đổi phân phối quà chứ không chỉ diện mạo hộp.",
+        "axes": [
+          {
+            "axis": "Hoàn cảnh và nhánh Collection",
+            "selection": "DayOne/HardLevelOrNoLife/Others cùng trạng thái Collection chọn bảng.",
+            "effect": "Đổi phân phối quà chứ không chỉ diện mạo hộp.",
+            "evidence_limit": "Nhãn non-purchaser trong cache không chứng minh ba hoàn cảnh là A/B được randomize.",
+            "source_refs": [
+              "gdd/DailyReward.json#segment_ab_review_20261115",
+              "gdd/DailyReward.json#flow",
+              "gdd/DailyReward.json#configs"
+            ]
+          }
+        ],
+        "unknowns": [
+          "Nhãn non-purchaser trong cache không chứng minh ba hoàn cảnh là A/B được randomize."
+        ]
+      },
+      "recovery": [
+        {
+          "condition": "Gián đoạn hoặc kết thúc Daily Bonus",
+          "expected": "Offline/restart cần giữ lượt đã mở và quà đang chờ; chưa có kiểm RNG thống kê.",
+          "verified_scope": "Đọc source/UC; không thực hiện runtime mới trong lượt biên tập.",
+          "uc_ids": [
+            "UC-06",
+            "UC-12"
+          ]
+        }
+      ],
+      "takeaways": [
+        {
+          "text": "Số ô đã mở và hoàn cảnh đều có thể đổi lựa chọn; cơ chế chống lặp còn điều chỉnh khi hai quà gần nhất trùng.",
+          "basis": "Phân tích thiết kế, chưa đo retention/conversion."
+        }
+      ],
+      "reviewed_source_paths": [
+        "gdd/DailyReward.json",
+        "site_meta/DailyReward.json",
+        "facts/review_20261116/public_current_config_3129/defaults/DailyRewardConfigModel.json",
+        "facts/review_20261116/public_current_config_3129/defaults/DailyRewardConfigModelV2.json"
+      ]
+    }
   }
 }

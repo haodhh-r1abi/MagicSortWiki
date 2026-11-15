@@ -8132,5 +8132,134 @@
       "UC-16"
     ],
     "full_uc_pass": false
+  },
+  "design_spec_20261116": {
+    "source": "editorial/BoatRush.json",
+    "sha256": "c18288f0fac48081d599b0f32e63354f102d47faaea7da08a4a0282ea841e703",
+    "scope": "Designer-facing interpretation; no new runtime verification. Original use_cases and evidence remain unchanged.",
+    "content": {
+      "id": "BoatRush",
+      "schema_version": 1,
+      "scope": "Thiết kế đọc từ dossier và nguồn đã đối chiếu. Outcome là expected; câu ghi round2 là actual theo case, không phải full-feature pass.",
+      "design_intent": "Nối các cuộc đua ngắn thành hành trình tier, tạo mục tiêu gần là thắng stage và mục tiêu xa là rương tier.",
+      "player_loop": "Join race → thắng level để tiến → nhận kết quả stage → chuyển stage/tier.",
+      "flow": [
+        {
+          "title": "Vào cuộc đua",
+          "actor": "Người chơi và hệ thống",
+          "action": "Chọn tham gia race từ bản đồ.",
+          "rule": "Race có nhóm đối thủ và mốc đích riêng; không dùng tổng điểm tier làm điểm race.",
+          "outcome": "Bảng đua hiện đối thủ và tiến độ hiện tại.",
+          "uc_ids": [
+            "UC-04"
+          ],
+          "source_refs": [
+            "gdd/BoatRush.json#use_cases/3"
+          ]
+        },
+        {
+          "title": "Chạm đích chặng",
+          "actor": "Người chơi và hệ thống",
+          "action": "Thắng level để tới MaxReachableScore.",
+          "rule": "WinnerCount quyết định số người thắng; phần thưởng stage khác rương tier.",
+          "outcome": "Kết quả race được xác định trước khi chuyển chặng.",
+          "uc_ids": [
+            "UC-06"
+          ],
+          "source_refs": [
+            "gdd/BoatRush.json#use_cases/5"
+          ]
+        },
+        {
+          "title": "Hoàn thành tier",
+          "actor": "Người chơi và hệ thống",
+          "action": "Đi hết các stage của tier.",
+          "rule": "TierReward có nhánh WithCollection; một stage thắng không đồng nghĩa xong tier.",
+          "outcome": "Nhận rương tier đúng điều kiện.",
+          "uc_ids": [
+            "UC-08"
+          ],
+          "source_refs": [
+            "gdd/BoatRush.json#use_cases/7"
+          ]
+        }
+      ],
+      "rules": [
+        {
+          "title": "Vào cuộc đua",
+          "text": "Race có nhóm đối thủ và mốc đích riêng; không dùng tổng điểm tier làm điểm race.",
+          "source_refs": [
+            "gdd/BoatRush.json#use_cases/3"
+          ]
+        },
+        {
+          "title": "Chạm đích chặng",
+          "text": "WinnerCount quyết định số người thắng; phần thưởng stage khác rương tier.",
+          "source_refs": [
+            "gdd/BoatRush.json#use_cases/5"
+          ]
+        },
+        {
+          "title": "Hoàn thành tier",
+          "text": "TierReward có nhánh WithCollection; một stage thắng không đồng nghĩa xong tier.",
+          "source_refs": [
+            "gdd/BoatRush.json#use_cases/7"
+          ]
+        }
+      ],
+      "decisions": [
+        {
+          "question": "Vì sao phải tách entry khỏi kết quả hậu level?",
+          "answer": "Round2 icon Home trả No Internet, nhưng sau thắng level 352 popup cached Stage 1/4 vẫn mở và Continue dẫn tới Duck; đó là hai nhánh khác nhau.",
+          "basis": "Nhận định thiết kế dựa trên cơ chế, không phải kết quả A/B.",
+          "source_refs": [
+            "gdd/BoatRush.json#flow",
+            "gdd/BoatRush.json#configs"
+          ]
+        }
+      ],
+      "segments_ab": {
+        "summary": "Đường đi và nhánh Collection: Đổi đường trình bày và quà, không tự đổi luật thắng.",
+        "axes": [
+          {
+            "axis": "Đường đi và nhánh Collection",
+            "selection": "PathVariantIndex chọn diện mạo bản đồ; response chọn race/tier và Collection quyết định reward thay thế.",
+            "effect": "Đổi đường trình bày và quà, không tự đổi luật thắng.",
+            "evidence_limit": "Có variant config nhưng thiếu assignment experiment; offline entry lỗi không phủ định cached result có thể mở.",
+            "source_refs": [
+              "gdd/BoatRush.json#segment_ab_review_20261115",
+              "gdd/BoatRush.json#flow",
+              "gdd/BoatRush.json#configs"
+            ]
+          }
+        ],
+        "unknowns": [
+          "Có variant config nhưng thiếu assignment experiment; offline entry lỗi không phủ định cached result có thể mở."
+        ]
+      },
+      "recovery": [
+        {
+          "condition": "Gián đoạn hoặc kết thúc Boat Rush (đua thuyền)",
+          "expected": "Kết quả cache không chứng minh đã claim backend; cần kiểm raceId/tier và trạng thái trước grant.",
+          "verified_scope": "Đọc source/UC; không thực hiện runtime mới trong lượt biên tập.",
+          "uc_ids": [
+            "UC-14",
+            "UC-16"
+          ]
+        }
+      ],
+      "takeaways": [
+        {
+          "text": "Round2 icon Home trả No Internet, nhưng sau thắng level 352 popup cached Stage 1/4 vẫn mở và Continue dẫn tới Duck; đó là hai nhánh khác nhau.",
+          "basis": "Phân tích thiết kế, chưa đo retention/conversion."
+        }
+      ],
+      "reviewed_source_paths": [
+        "gdd/BoatRush.json",
+        "site_meta/BoatRush.json",
+        "facts/review_20261116/public_current_config_3129/defaults/BoatRushConfigModel.json",
+        "facts/review_cases_20261116_round2.json"
+      ]
+    }
   }
 }

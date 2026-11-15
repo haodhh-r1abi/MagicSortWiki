@@ -1,7 +1,7 @@
 {
   "id": "Collection",
   "title": "Collection (Bộ sưu tập thẻ)",
-  "tagline": "Hai bộ collection_4/5 có135thẻ/15theme; mở gói, đổi sao dư và vòng Gold. Bộ1/2/3 còn thiếu dữ liệu.",
+  "tagline": "Collection mùa 4/5: 15 theme × 9 thẻ; ba phase Normal/Gold/Repeat theo native 0.0.3129. Repeat có điều kiện, cap và không cấp token.",
   "infobox": [
     [
       "Loại",
@@ -33,7 +33,7 @@
     ],
     [
       "Thưởng chính",
-      "Thưởng mỗi theme, rương sao 100/250/500, hoàn thành bộ nhận 10000 coin và token hồ sơ"
+      "Default 0.0.3129: Normal 10.000 coin + token; Gold 15.000 coin + token vàng; Repeat 8.000 coin, không token và chỉ khi đã được mở. Còn có booster/theme/chest rewards."
     ],
     [
       "Điều kiện / phụ thuộc",
@@ -45,13 +45,13 @@
     ]
   ],
   "description": [
-    "Hai bộ collection_4/5 có dữ liệu trong export gồm15theme×9thẻ=135; chưa xác minh cardinality bộ1/2/3. Trong hai bộ có nguồn, thẻ có từ 1 tới 5 sao và một số thẻ Gold ở các theme cuối.",
+    "Hai resource collection_4/5 có 15 theme × 9 thẻ = 135 thẻ; không suy cardinality mùa 1–3 từ tên token.",
     "Bản đóng gói có collection_4 'Summer Collection' và collection_5 'Wonderland Collection'.",
     "Người chơi mở gói thẻ (Collection Pack, 5 loại chứa 2, 3, 4, 5 hoặc 6 thẻ) nhận từ level, sự kiện, rương và offer.",
     "Thẻ trùng biến thành sao dư, dùng để mở Bonus Chest ở các mốc 100, 250 và 500 sao.",
     "Hoàn thành đủ 9 thẻ của một theme được thưởng theme; độ khó tăng dần vì thẻ nhiều sao và thẻ Gold dồn về theme cuối.",
-    "Hoàn thành cả 15 theme nhận token hồ sơ (ví dụ 'Summer Badge') và mở vòng Gold Collection với thẻ vàng.",
-    "Vòng Gold trao token vàng ('Grand Summer Badge') và bộ thưởng lớn hơn hẳn vòng thường.",
+    "Hoàn thành Normal nhận reward và token thường rồi chuyển Gold. Gold nhận reward và token vàng; đây là contract/default nguồn, chưa phải grant đã xác minh.",
+    "Native 0.0.3129 có ba phase: Normal (0), Gold (1), Repeat (2); Repeat được ưu tiên trước Gold. Normal hoàn thành mở Gold. Gold hoàn thành chỉ mở Repeat khi AdditionalCompleteCollectionCount != 0; nếu không thì gọi TryClaimEvent. Repeat hoàn thành tăng RepeatCompletedCount, rồi kiểm >= AdditionalCompleteCollectionCount: đạt cap thì gọi claim, chưa đạt thì reset inventory và xóa activation-claimed. Default count=0; chưa xác minh giá trị remote có hiệu lực.",
     "Gói thẻ loại 4 có cơ chế pity: liên tiếp không ra thẻ mới thì boost tăng, đạt 100 là chắc chắn ép một thẻ mới.",
     "Gói thẻ loại 5 (cao cấp) đảm bảo có ít nhất một thẻ từ 3 sao trở lên hoặc thẻ Gold.",
     "Trong team, người chơi tặng được thẻ trùng và xin thẻ thiếu, với giới hạn theo ngày; thẻ Gold không tặng và không xin được."
@@ -59,13 +59,15 @@
   "notes": [
     "Lưu ý: sao dư tính bằng tổng (CardCount − 1) × StarCount trên toàn kho thẻ.",
     "Lưu ý: mỗi Bonus Chest có hai biến thể — ChestReward khi bộ sưu tập đang chạy và ChestRewardWithoutCollection khi không.",
-    "Lưu ý: hoàn thành bộ sẽ xóa sạch kho thẻ (ResetInventory) rồi bật vòng Gold.",
+    "Native 0.0.3129 có ba phase: Normal (0), Gold (1), Repeat (2); Repeat được ưu tiên trước Gold. Normal hoàn thành mở Gold. Gold hoàn thành chỉ mở Repeat khi AdditionalCompleteCollectionCount != 0; nếu không thì gọi TryClaimEvent. Repeat hoàn thành tăng RepeatCompletedCount, rồi kiểm >= AdditionalCompleteCollectionCount: đạt cap thì gọi claim, chưa đạt thì reset inventory và xóa activation-claimed. Default count=0; chưa xác minh giá trị remote có hiệu lực.",
     "Lưu ý: trọng số rút thẻ giảm dần theo độ hiếm — thẻ 1 sao trọng số 32, còn thẻ 5 sao Gold chỉ 8.",
     "Lưu ý: pity chỉ áp dụng cho gói loại 4; mở trúng thẻ mới thì boost reset về 0, không thì cộng thêm 50.",
     "Lưu ý: ngưỡng '3 sao trở lên' của gói cao cấp là hằng số trong code, không phải config.",
     "Lưu ý: giới hạn xin thẻ là 1 lần mỗi ngày (hằng số client), còn giới hạn tặng thẻ do Teams quyết định (server).",
     "Lưu ý: thẻ đã gửi và nhận được đồng bộ hai chiều với server để tránh nhận trùng khi đổi thiết bị.",
-    "Lưu ý: chưa đủ level hiện 'Unlock Collection at Level {0}!'; chưa có bộ mới hiện 'New Collection will be coming soon!'."
+    "Lưu ý: chưa đủ level hiện 'Unlock Collection at Level {0}!'; chưa có bộ mới hiện 'New Collection will be coming soon!'.",
+    "Normal dùng CollectionReward và token thường; Gold dùng GoldCollectionReward và token vàng. Repeat dùng RepeatCollectionReward khác null, nếu null thì fallback GoldCollectionReward; Repeat không thêm token (tokenId=null). RepeatThemeRewards khác null được chọn trong Repeat; null fallback ThemeRewards, nhưng mảng rỗng không fallback.",
+    "Luật công bố trên trang hỗ trợ Collection là nguồn riêng; bảng xác suất công bố khác phép tính từ default weights và không phải đo RNG thực nghiệm."
   ],
   "how_it_works": [
     "CollectionStateService.GetEventState() xét NoCachedEvent (0), NotIntroduced (1), InProgress (2), TimeIsUp (3), Claimed (4), ClaimedAndTimeIsUp (5), InsufficientLevel (6), Disable (7).",
@@ -81,8 +83,8 @@
     "AddOpenedPackCardsToInventory() cộng thẻ vào CardInventory (CardId, CardCount, IsNewCard) và bắn card_received.",
     "Sao dư đủ mốc thì OpenBonusChest(chestIndex) trao thưởng với CurrencyEarnReason.CollectionChest (33) và bắn star_chest_opened.",
     "IsThemeCompleted(themeData) kiểm đủ 9 thẻ thì AddCompletedTheme() và trao ThemeReward với CurrencyEarnReason.CollectionThemeCompleted (34).",
-    "IsCollectionCompleted() kích OnCollectionCompleted(): trao CollectionReward hoặc GoldCollectionReward cộng token (CurrencyType.ProfileToken = 15) với CurrencyEarnReason.CollectionCompleted (35).",
-    "Sau đó ResetInventory() xóa kho thẻ và SetGoldCollectionActive(true) mở vòng Gold; readable event id đổi từ '<collectionId>_0' sang '<collectionId>_1'."
+    "Normal dùng CollectionReward và token thường; Gold dùng GoldCollectionReward và token vàng. Repeat dùng RepeatCollectionReward khác null, nếu null thì fallback GoldCollectionReward; Repeat không thêm token (tokenId=null). RepeatThemeRewards khác null được chọn trong Repeat; null fallback ThemeRewards, nhưng mảng rỗng không fallback.",
+    "Native 0.0.3129 có ba phase: Normal (0), Gold (1), Repeat (2); Repeat được ưu tiên trước Gold. Normal hoàn thành mở Gold. Gold hoàn thành chỉ mở Repeat khi AdditionalCompleteCollectionCount != 0; nếu không thì gọi TryClaimEvent. Repeat hoàn thành tăng RepeatCompletedCount, rồi kiểm >= AdditionalCompleteCollectionCount: đạt cap thì gọi claim, chưa đạt thì reset inventory và xóa activation-claimed. Default count=0; chưa xác minh giá trị remote có hiệu lực."
   ],
   "reward_tables": [
     {
@@ -211,7 +213,7 @@
       ]
     },
     {
-      "title": "THƯỞNG HOÀN THÀNH CẢ BỘ",
+      "title": "THƯỞNG THEO PHASE — default 0.0.3129, chưa xác minh grant",
       "columns": [
         "Mốc",
         "Điều kiện",
@@ -237,6 +239,11 @@
           "Token vàng",
           "Hoàn thành vòng Gold",
           "1 token hồ sơ vàng (collection_4_token_gold 'Grand Summer Badge')"
+        ],
+        [
+          "Repeat",
+          "Vòng lặp nếu đã mở; không thêm token",
+          "8000 coin, 4 Extra Bottle, 4 Shuffle, 4 Undo"
         ]
       ]
     },
@@ -534,6 +541,91 @@
           "'CollectionNeedJoinTeam'"
         ]
       ]
+    },
+    {
+      "title": "THƯỞNG THEME TRONG REPEAT — đủ 15 hàng, default 0.0.3129",
+      "columns": [
+        "ThemeId",
+        "CurrencyType",
+        "Amount hoặc TimeSpan"
+      ],
+      "rows": [
+        [
+          "theme_1",
+          2,
+          "01:00:00"
+        ],
+        [
+          "theme_2",
+          5,
+          1
+        ],
+        [
+          "theme_3",
+          1,
+          100
+        ],
+        [
+          "theme_4",
+          4,
+          1
+        ],
+        [
+          "theme_5",
+          5,
+          1
+        ],
+        [
+          "theme_6",
+          1,
+          200
+        ],
+        [
+          "theme_7",
+          6,
+          1
+        ],
+        [
+          "theme_8",
+          1,
+          300
+        ],
+        [
+          "theme_9",
+          5,
+          2
+        ],
+        [
+          "theme_10",
+          6,
+          1
+        ],
+        [
+          "theme_11",
+          1,
+          400
+        ],
+        [
+          "theme_12",
+          5,
+          2
+        ],
+        [
+          "theme_13",
+          1,
+          500
+        ],
+        [
+          "theme_14",
+          6,
+          2
+        ],
+        [
+          "theme_15",
+          1,
+          750
+        ]
+      ]
     }
   ],
   "key_numbers": [
@@ -661,6 +753,26 @@
       "label": "Số trạng thái nút gửi/xin thẻ",
       "value": "8 (SendActive=0 … TeamsNotEnabled=7)",
       "source": "CardSendRequestState"
+    },
+    {
+      "label": "Phase có trong client",
+      "value": "Normal / Gold / Repeat",
+      "source": "CollectionPhase, native 0.0.3129"
+    },
+    {
+      "label": "AdditionalCompleteCollectionCount",
+      "value": "0 default; gate mở Repeat là !=0",
+      "source": "CollectionConfigModel.json 0.0.3129; CanOpenRepeatCollection"
+    },
+    {
+      "label": "Cap Repeat",
+      "value": "RepeatCompletedCount >= AdditionalCompleteCollectionCount",
+      "source": "IsRepeatLimitReached, native 0.0.3129"
+    },
+    {
+      "label": "Token trong Repeat",
+      "value": "Không thêm token; tokenId=null",
+      "source": "GetActiveCollectionTokenId; GetActiveCollectionRewardWithToken"
     }
   ],
   "config_highlights": [
@@ -813,13 +925,18 @@
       "key": "Localization chính",
       "value": "CollectionUnlock 'Unlock Collection at Level {0}!', CollectionNewComingSoon, CollectionCompleted '{0}\\nCompleted!', CollectionYouGotToken 'You got\\n{0}!', CollectionCardReceived 'Card Received!'",
       "meaning": "Text UI được tham chiếu trực tiếp trong code"
+    },
+    {
+      "key": "CollectionConfigModel.AdditionalCompleteCollectionCount",
+      "value": 0,
+      "meaning": "Default 0.0.3129; gate native !=0, không chứng minh remote effective."
     }
   ],
   "tips": [
     "Dồn thẻ nhiều sao và thẻ Gold về các theme cuối tạo đường cong khó tăng dần mà không cần thay đổi luật.",
     "Biến thẻ trùng thành sao dư loại bỏ cảm giác 'mở gói vô ích' — mọi lần mở đều tiến bộ theo một trục nào đó.",
     "Pity trên gói loại 4 giữ cảm giác công bằng ở tầm giữa mà không làm gói cao cấp mất giá trị.",
-    "Vòng Gold cho phép tái sử dụng toàn bộ nội dung một mùa với đường cong khó hơn và thưởng lớn hơn.",
+    "Gold và Repeat tái sử dụng nội dung theo phase khác nhau; Repeat có cap và không thêm token. Đây là nhận định thiết kế, không phải bằng chứng hoàn thành runtime.",
     "Tặng và xin thẻ trong team biến bộ sưu tập cá nhân thành lý do để trò chuyện và gắn bó với đội."
   ],
   "categories": [

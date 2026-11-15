@@ -1039,5 +1039,133 @@
     "round2_case_ids": [],
     "round2_branch_ucs": [],
     "full_uc_pass": false
+  },
+  "design_spec_20261116": {
+    "source": "editorial/PawTouchOffer.json",
+    "sha256": "b9c31de439678ae750a4438321f299a2788c76b9477a078dfed64308c503f562",
+    "scope": "Designer-facing interpretation; no new runtime verification. Original use_cases and evidence remain unchanged.",
+    "content": {
+      "id": "PawTouchOffer",
+      "schema_version": 1,
+      "scope": "Lớp diễn giải thiết kế từ source và dossier hiện có; outcome là expected. Quan sát round2 được gọi rõ; chưa phát sinh playtest hoặc xác nhận backend mới.",
+      "design_intent": "Đặt một lựa chọn mua ở khoảnh khắc thiếu nguồn lực để tiếp tục, nhưng tách ngưỡng coin, thời gian container và hạn event.",
+      "player_loop": "Bị kẹt → đủ điều kiện coin → thấy offer Play On → mua hoặc bỏ → container hết hạn.",
+      "flow": [
+        {
+          "title": "Kiểm coin trước khi chào",
+          "actor": "Người chơi",
+          "action": "Mở tình huống Play On khi ít coin.",
+          "rule": "Source nêu coin nhỏ hơn 2000; đây là eligibility, không phải giá của gói.",
+          "outcome": "Không chào cùng điều kiện cho mọi mức coin.",
+          "uc_ids": [
+            "UC-02"
+          ],
+          "source_refs": [
+            "gdd/PawTouchOffer.json#use_cases/1"
+          ]
+        },
+        {
+          "title": "Đọc lời mời trong Play On",
+          "actor": "Người chơi",
+          "action": "Xem gói hàng trong container đang hiện.",
+          "rule": "ShowDurationInSeconds và hạn đợt offer là hai cửa sổ riêng; các snapshot không được trộn.",
+          "outcome": "Biết gói đang được chào trong bối cảnh tiếp tục.",
+          "uc_ids": [
+            "UC-04"
+          ],
+          "source_refs": [
+            "gdd/PawTouchOffer.json#use_cases/3"
+          ]
+        },
+        {
+          "title": "Mua gói",
+          "actor": "Người chơi",
+          "action": "Chọn giá và xác nhận thanh toán.",
+          "rule": "Package có productId/discount/reward; fallback tra theo cấu hình khi cần.",
+          "outcome": "Trao đúng reward thay vì mặc định cộng một lượt Play On.",
+          "uc_ids": [
+            "UC-05"
+          ],
+          "source_refs": [
+            "gdd/PawTouchOffer.json#use_cases/4"
+          ]
+        }
+      ],
+      "rules": [
+        {
+          "title": "Kiểm coin trước khi chào",
+          "text": "Source nêu coin nhỏ hơn 2000; đây là eligibility, không phải giá của gói.",
+          "source_refs": [
+            "gdd/PawTouchOffer.json#use_cases/1"
+          ]
+        },
+        {
+          "title": "Đọc lời mời trong Play On",
+          "text": "ShowDurationInSeconds và hạn đợt offer là hai cửa sổ riêng; các snapshot không được trộn.",
+          "source_refs": [
+            "gdd/PawTouchOffer.json#use_cases/3"
+          ]
+        },
+        {
+          "title": "Mua gói",
+          "text": "Package có productId/discount/reward; fallback tra theo cấu hình khi cần.",
+          "source_refs": [
+            "gdd/PawTouchOffer.json#use_cases/4"
+          ]
+        }
+      ],
+      "decisions": [
+        {
+          "question": "Vì sao cần hai đồng hồ?",
+          "answer": "Container hết thời gian hiện không nhất thiết bằng event kết thúc; gộp chúng làm sai thời điểm có thể chào lại.",
+          "basis": "Nhận định thiết kế từ cơ chế có nguồn; không phải hiệu quả đã đo.",
+          "source_refs": [
+            "gdd/PawTouchOffer.json#flow",
+            "gdd/PawTouchOffer.json#configs"
+          ]
+        }
+      ],
+      "segments_ab": {
+        "summary": "Ngưỡng coin và gói server: Chọn người được thấy và hàng được bán.",
+        "axes": [
+          {
+            "axis": "Ngưỡng coin và gói server",
+            "selection": "Coin < 2000 là điều kiện client; package cụ thể do response chọn.",
+            "effect": "Chọn người được thấy và hàng được bán.",
+            "evidence_limit": "Ngưỡng không mô tả selector chi tiêu phía backend; chưa có assignment hoặc purchase.",
+            "source_refs": [
+              "gdd/PawTouchOffer.json#flow",
+              "gdd/PawTouchOffer.json#segment_ab_review_20261115"
+            ]
+          }
+        ],
+        "unknowns": [
+          "Ngưỡng không mô tả selector chi tiêu phía backend; chưa có assignment hoặc purchase."
+        ]
+      },
+      "recovery": [
+        {
+          "condition": "Nhánh lỗi, gián đoạn hoặc chuyển trạng thái của Paw Touch Offer",
+          "expected": "Mua lỗi hoặc hết thời gian không tự đánh dấu gói đã nhận.",
+          "verified_scope": "Theo UC/source trong hồ sơ; runtime chỉ có giá trị ở đúng case và snapshot đã liên kết.",
+          "uc_ids": [
+            "UC-08",
+            "UC-09",
+            "UC-11"
+          ]
+        }
+      ],
+      "takeaways": [
+        {
+          "text": "Container hết thời gian hiện không nhất thiết bằng event kết thúc; gộp chúng làm sai thời điểm có thể chào lại.",
+          "basis": "Suy luận thiết kế; không thay bảng cấu hình hoặc giới hạn thực nghiệm."
+        }
+      ],
+      "reviewed_source_paths": [
+        "gdd/PawTouchOffer.json",
+        "site_meta/PawTouchOffer.json",
+        "facts/review_20261116/public_current_config_3129/defaults/PawTouchOfferConfig.json"
+      ]
+    }
   }
 }

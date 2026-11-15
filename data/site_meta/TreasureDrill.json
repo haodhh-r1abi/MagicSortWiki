@@ -3,16 +3,46 @@
   "title": "Khoan kho báu (Treasure Drill)",
   "tagline": "Thắng level để mũi khoan đi xuống, nhưng phải mua gói IAP mới mở được thưởng đã tích.",
   "infobox": [
-    ["Loại", "Offer"],
-    ["Mở khóa", "Level 110 (FirstLevelToShow, client default)"],
-    ["Thời lượng", "Theo startTime/finishTime do server gửi (server)"],
-    ["Chu kỳ / lịch", "Live-ops, bật/tắt bằng IsEnabled (mặc định false)"],
-    ["Tham gia", "Cá nhân"],
-    ["Vật phẩm thu thập", "Tiến độ nhiệm vụ thắng level theo từng bậc"],
-    ["Tiền tệ", "Tiền thật (IAP $2 – $25 theo phân khúc)"],
-    ["Thưởng chính", "Phần thưởng từng bậc do server gửi, kèm grand prize ở bậc cuối"],
-    ["Điều kiện / phụ thuộc", "IAPService, SegmentService, AdService, Collection"],
-    ["Manager", "TreasureDrillService"]
+    [
+      "Loại",
+      "Offer"
+    ],
+    [
+      "Mở khóa",
+      "Level 110 (FirstLevelToShow, client default)"
+    ],
+    [
+      "Thời lượng",
+      "Theo startTime/finishTime do server gửi (server)"
+    ],
+    [
+      "Chu kỳ / lịch",
+      "Live-ops, bật/tắt bằng IsEnabled (mặc định false)"
+    ],
+    [
+      "Tham gia",
+      "Cá nhân"
+    ],
+    [
+      "Vật phẩm thu thập",
+      "Tiến độ nhiệm vụ thắng level theo từng bậc"
+    ],
+    [
+      "Tiền tệ",
+      "Tiền thật (IAP $2 – $25 theo phân khúc)"
+    ],
+    [
+      "Thưởng chính",
+      "Phần thưởng từng bậc do server gửi, kèm grand prize ở bậc cuối"
+    ],
+    [
+      "Điều kiện / phụ thuộc",
+      "IAPService, SegmentService, AdService, Collection"
+    ],
+    [
+      "Manager",
+      "TreasureDrillService"
+    ]
   ],
   "description": [
     "Treasure Drill là sự kiện monetization: mũi khoan đi xuống từng bậc, mỗi bậc gắn một nhiệm vụ thắng N level.",
@@ -29,7 +59,7 @@
   "notes": [
     "Lưu ý: hoàn thành nhiệm vụ KHÔNG đủ để nhận thưởng — bậc phải vừa hoàn thành nhiệm vụ vừa có IsPurchased = true.",
     "Lưu ý: level mở khoá 110 rất cao, nhắm vào người chơi đã gắn bó lâu.",
-    "Lưu ý: cờ IsPurchased nằm trong TreasureDrillCacheModel và được đồng bộ qua sync, nên giao dịch không mất khi đổi máy.",
+    "Lưu ý: IsPurchased nằm trong TreasureDrillCacheModel và được biểu diễn trong đường sync; điều đó chưa chứng minh restore hoặc chuyển thiết bị luôn giữ đúng quyền mua.",
     "Lưu ý: có luồng fallback (treasure_drill_purchased_fallback) khi mua thành công nhưng không ghi nhận được.",
     "Lưu ý: tiến độ nhiệm vụ vẫn tăng khi offline vì được tính ở client.",
     "Lưu ý: số bậc, nội dung thưởng và RequiredAmount của nhiệm vụ hoàn toàn do server gửi — client không có mặc định.",
@@ -56,95 +86,383 @@
   "reward_tables": [
     {
       "title": "GIÁ GÓI THEO PHÂN KHÚC CHI TIÊU (TreasureDrillConfigModel.json)",
-      "columns": ["Phân khúc", "ProductId", "Giá quy đổi"],
+      "columns": [
+        "Phân khúc",
+        "ProductId",
+        "Giá quy đổi"
+      ],
       "rows": [
-        ["non-purchaser (chưa từng mua)", "sort.treasuredrill2", "2 USD (DollarEquivalent 2, ProductType 0)"],
-        ["poor", "sort.treasuredrill5", "5 USD (DollarEquivalent 5, ProductType 0)"],
-        ["hamsi", "sort.treasuredrill10", "10 USD (DollarEquivalent 10, ProductType 0)"],
-        ["dolphin", "sort.treasuredrill15", "15 USD (DollarEquivalent 15, ProductType 0)"],
-        ["whale", "sort.treasuredrill25", "25 USD (DollarEquivalent 25, ProductType 0)"]
+        [
+          "non-purchaser (chưa từng mua)",
+          "sort.treasuredrill2",
+          "2 USD (DollarEquivalent 2, ProductType 0)"
+        ],
+        [
+          "poor",
+          "sort.treasuredrill5",
+          "5 USD (DollarEquivalent 5, ProductType 0)"
+        ],
+        [
+          "hamsi",
+          "sort.treasuredrill10",
+          "10 USD (DollarEquivalent 10, ProductType 0)"
+        ],
+        [
+          "dolphin",
+          "sort.treasuredrill15",
+          "15 USD (DollarEquivalent 15, ProductType 0)"
+        ],
+        [
+          "whale",
+          "sort.treasuredrill25",
+          "25 USD (DollarEquivalent 25, ProductType 0)"
+        ]
       ]
     },
     {
       "title": "PHẦN THƯỞNG BẬC (cấu trúc, do server gửi)",
-      "columns": ["Thành phần", "Điều kiện", "Phần thưởng"],
+      "columns": [
+        "Thành phần",
+        "Điều kiện",
+        "Phần thưởng"
+      ],
       "rows": [
-        ["Bậc thường (TreasureDrillRemoteStepModel)", "Hoàn thành nhiệm vụ LevelWin của bậc VÀ đã mua gói", "RewardModel của bậc đó (server)"],
-        ["Bậc khi Collection bật", "Cùng điều kiện, CollectionService đang bật", "RewardModelWithCollection, chứa CollectionPack (server)"],
-        ["Bậc cuối", "Hoàn thành toàn bộ bậc", "Grand prize (GetGrandPrize) (server)"],
-        ["Chưa mua gói", "Hoàn thành nhiệm vụ nhưng IsPurchased = false", "Không nhận được gì; mất hết khi sự kiện kết thúc"]
+        [
+          "Bậc thường (TreasureDrillRemoteStepModel)",
+          "Hoàn thành nhiệm vụ LevelWin của bậc VÀ đã mua gói",
+          "RewardModel của bậc đó (server)"
+        ],
+        [
+          "Bậc khi Collection bật",
+          "Cùng điều kiện, CollectionService đang bật",
+          "RewardModelWithCollection, chứa CollectionPack (server)"
+        ],
+        [
+          "Bậc cuối",
+          "Hoàn thành toàn bộ bậc",
+          "Grand prize (GetGrandPrize) (server)"
+        ],
+        [
+          "Chưa mua gói",
+          "Hoàn thành nhiệm vụ nhưng IsPurchased = false",
+          "Không nhận được gì; mất hết khi sự kiện kết thúc"
+        ]
       ]
     },
     {
       "title": "TRẠNG THÁI SỰ KIỆN (TreasureDrillState)",
-      "columns": ["Mã", "Trạng thái", "Ý nghĩa"],
+      "columns": [
+        "Mã",
+        "Trạng thái",
+        "Ý nghĩa"
+      ],
       "rows": [
-        ["0", "Disable", "IsEnabled = false"],
-        ["1", "NoCache", "Chưa fetch được sự kiện"],
-        ["2", "NotIntroduced", "Chưa giới thiệu cho người chơi"],
-        ["3", "InsufficientLevel", "Level dưới FirstLevelToShow"],
-        ["4", "InProgress", "Đang chạy"],
-        ["5", "TimeIsUp", "Hết giờ"],
-        ["6", "ClaimedAndTimeIsUp", "Đã nhận và hết giờ"],
-        ["7", "Claimed", "Đã nhận"]
+        [
+          "0",
+          "Disable",
+          "IsEnabled = false"
+        ],
+        [
+          "1",
+          "NoCache",
+          "Chưa fetch được sự kiện"
+        ],
+        [
+          "2",
+          "NotIntroduced",
+          "Chưa giới thiệu cho người chơi"
+        ],
+        [
+          "3",
+          "InsufficientLevel",
+          "Level dưới FirstLevelToShow"
+        ],
+        [
+          "4",
+          "InProgress",
+          "Đang chạy"
+        ],
+        [
+          "5",
+          "TimeIsUp",
+          "Hết giờ"
+        ],
+        [
+          "6",
+          "ClaimedAndTimeIsUp",
+          "Đã nhận và hết giờ"
+        ],
+        [
+          "7",
+          "Claimed",
+          "Đã nhận"
+        ]
       ]
     }
   ],
   "key_numbers": [
-    {"label": "Level mở khoá", "value": "110", "source": "TreasureDrillConfigModel.FirstLevelToShow"},
-    {"label": "Trạng thái bật/tắt mặc định", "value": "false", "source": "TreasureDrillConfigModel.IsEnabled"},
-    {"label": "EventType gửi backend", "value": "1", "source": "TreasureDrillConfigModel.EventType"},
-    {"label": "Số mức giá theo phân khúc", "value": "5 (2, 5, 10, 15, 25 USD)", "source": "TreasureDrillConfigModel.SegmentedIAPModel"},
-    {"label": "Giá gói non-purchaser", "value": "2 USD — sort.treasuredrill2", "source": "SegmentedIAPModel['non-purchaser']"},
-    {"label": "Giá gói poor", "value": "5 USD — sort.treasuredrill5", "source": "SegmentedIAPModel['poor']"},
-    {"label": "Giá gói hamsi", "value": "10 USD — sort.treasuredrill10", "source": "SegmentedIAPModel['hamsi']"},
-    {"label": "Giá gói dolphin", "value": "15 USD — sort.treasuredrill15", "source": "SegmentedIAPModel['dolphin']"},
-    {"label": "Giá gói whale", "value": "25 USD — sort.treasuredrill25", "source": "SegmentedIAPModel['whale']"},
-    {"label": "ProductType của cả 5 gói", "value": "0 (consumable)", "source": "SegmentedIAPModel"},
-    {"label": "Loại nhiệm vụ", "value": "None=0, LevelWin=1", "source": "TreasureDrillTaskType"},
-    {"label": "Số trạng thái sự kiện", "value": "8 (Disable=0 … Claimed=7)", "source": "TreasureDrillState"},
-    {"label": "Nguồn kích hoạt gói", "value": "Home=0, Stuck=1, None=2", "source": "TreasureDrillActivationSource"},
-    {"label": "Nguồn mở popup", "value": "None=0, LobbyIcon=1, TaskCompleted=2", "source": "TreasureDrillPopupImpressionSource"},
-    {"label": "Kích thước bước khoan", "value": "1.65", "source": "TreasureDrillAnimationConfig.DrillStepSize"},
-    {"label": "Thời gian khoan qua một bậc", "value": "1 giây", "source": "TreasureDrillAnimationConfig.DrillAnimationStepPassDuration"},
-    {"label": "Giới hạn bậc chạy hoạt ảnh liên tiếp", "value": "3", "source": "TreasureDrillAnimationConfig.StepThresholdCap"},
-    {"label": "Góc mở ổ khoá", "value": "-45 độ", "source": "TreasureDrillAnimationConfig.LockOpenAngle"},
-    {"label": "Thời gian ổ khoá rơi", "value": "0.9 giây", "source": "TreasureDrillAnimationConfig.LockFallDuration"},
-    {"label": "Chiều rộng thanh tiến độ", "value": "2.93", "source": "TreasureDrillPopUpConfig._progressBarWidth"},
-    {"label": "Tỉ lệ đầy tối thiểu thanh tiến độ", "value": "0.1", "source": "TreasureDrillPopUpConfig.ProgressBarMinFillRatio"},
-    {"label": "Tên khối sync", "value": "TreasureDrillSyncableDataModel", "source": "TreasureDrillDataService.GetSyncName"},
-    {"label": "Endpoint lấy sự kiện", "value": "/v1/get-treasure-drill-event", "source": "treasureDrillGetUrl"},
-    {"label": "Số bậc và nội dung thưởng", "value": "Do server gửi qua stages/stagesV2 (server)", "source": "TreasureDrillInfoResponse"}
+    {
+      "label": "Level mở khoá",
+      "value": "110",
+      "source": "TreasureDrillConfigModel.FirstLevelToShow"
+    },
+    {
+      "label": "Trạng thái bật/tắt mặc định",
+      "value": "false",
+      "source": "TreasureDrillConfigModel.IsEnabled"
+    },
+    {
+      "label": "EventType gửi backend",
+      "value": "1",
+      "source": "TreasureDrillConfigModel.EventType"
+    },
+    {
+      "label": "Số mức giá theo phân khúc",
+      "value": "5 (2, 5, 10, 15, 25 USD)",
+      "source": "TreasureDrillConfigModel.SegmentedIAPModel"
+    },
+    {
+      "label": "Giá gói non-purchaser",
+      "value": "2 USD — sort.treasuredrill2",
+      "source": "SegmentedIAPModel['non-purchaser']"
+    },
+    {
+      "label": "Giá gói poor",
+      "value": "5 USD — sort.treasuredrill5",
+      "source": "SegmentedIAPModel['poor']"
+    },
+    {
+      "label": "Giá gói hamsi",
+      "value": "10 USD — sort.treasuredrill10",
+      "source": "SegmentedIAPModel['hamsi']"
+    },
+    {
+      "label": "Giá gói dolphin",
+      "value": "15 USD — sort.treasuredrill15",
+      "source": "SegmentedIAPModel['dolphin']"
+    },
+    {
+      "label": "Giá gói whale",
+      "value": "25 USD — sort.treasuredrill25",
+      "source": "SegmentedIAPModel['whale']"
+    },
+    {
+      "label": "ProductType của cả 5 gói",
+      "value": "0 (consumable)",
+      "source": "SegmentedIAPModel"
+    },
+    {
+      "label": "Loại nhiệm vụ",
+      "value": "None=0, LevelWin=1",
+      "source": "TreasureDrillTaskType"
+    },
+    {
+      "label": "Số trạng thái sự kiện",
+      "value": "8 (Disable=0 … Claimed=7)",
+      "source": "TreasureDrillState"
+    },
+    {
+      "label": "Nguồn kích hoạt gói",
+      "value": "Home=0, Stuck=1, None=2",
+      "source": "TreasureDrillActivationSource"
+    },
+    {
+      "label": "Nguồn mở popup",
+      "value": "None=0, LobbyIcon=1, TaskCompleted=2",
+      "source": "TreasureDrillPopupImpressionSource"
+    },
+    {
+      "label": "Kích thước bước khoan",
+      "value": "1.65",
+      "source": "TreasureDrillAnimationConfig.DrillStepSize"
+    },
+    {
+      "label": "Thời gian khoan qua một bậc",
+      "value": "1 giây",
+      "source": "TreasureDrillAnimationConfig.DrillAnimationStepPassDuration"
+    },
+    {
+      "label": "Giới hạn bậc chạy hoạt ảnh liên tiếp",
+      "value": "3",
+      "source": "TreasureDrillAnimationConfig.StepThresholdCap"
+    },
+    {
+      "label": "Góc mở ổ khoá",
+      "value": "-45 độ",
+      "source": "TreasureDrillAnimationConfig.LockOpenAngle"
+    },
+    {
+      "label": "Thời gian ổ khoá rơi",
+      "value": "0.9 giây",
+      "source": "TreasureDrillAnimationConfig.LockFallDuration"
+    },
+    {
+      "label": "Chiều rộng thanh tiến độ",
+      "value": "2.93",
+      "source": "TreasureDrillPopUpConfig._progressBarWidth"
+    },
+    {
+      "label": "Tỉ lệ đầy tối thiểu thanh tiến độ",
+      "value": "0.1",
+      "source": "TreasureDrillPopUpConfig.ProgressBarMinFillRatio"
+    },
+    {
+      "label": "Tên khối sync",
+      "value": "TreasureDrillSyncableDataModel",
+      "source": "TreasureDrillDataService.GetSyncName"
+    },
+    {
+      "label": "Endpoint lấy sự kiện",
+      "value": "/v1/get-treasure-drill-event",
+      "source": "treasureDrillGetUrl"
+    },
+    {
+      "label": "Số bậc và nội dung thưởng",
+      "value": "Do server gửi qua stages/stagesV2 (server)",
+      "source": "TreasureDrillInfoResponse"
+    }
   ],
   "config_highlights": [
-    {"key": "IsEnabled", "value": "false", "meaning": "Bật/tắt Treasure Drill (json default)"},
-    {"key": "EventType", "value": "1", "meaning": "eventType gửi backend"},
-    {"key": "FirstLevelToShow", "value": "110", "meaning": "Level tối thiểu, mở muộn để nhắm người chơi gắn bó"},
-    {"key": "SegmentedIAPModel['non-purchaser']", "value": "sort.treasuredrill2, ProductType 0, DollarEquivalent 2", "meaning": "Gói 2 USD cho người chưa từng mua"},
-    {"key": "SegmentedIAPModel['poor']", "value": "sort.treasuredrill5, ProductType 0, DollarEquivalent 5", "meaning": "Gói 5 USD"},
-    {"key": "SegmentedIAPModel['hamsi']", "value": "sort.treasuredrill10, ProductType 0, DollarEquivalent 10", "meaning": "Gói 10 USD"},
-    {"key": "SegmentedIAPModel['dolphin']", "value": "sort.treasuredrill15, ProductType 0, DollarEquivalent 15", "meaning": "Gói 15 USD"},
-    {"key": "SegmentedIAPModel['whale']", "value": "sort.treasuredrill25, ProductType 0, DollarEquivalent 25", "meaning": "Gói 25 USD cho người chi tiêu cao nhất"},
-    {"key": "TreasureDrillTaskType", "value": "None=0, LevelWin=1", "meaning": "Loại nhiệm vụ của bậc (build này chỉ có thắng level)"},
-    {"key": "TreasureDrillState", "value": "Disable=0, NoCache=1, NotIntroduced=2, InsufficientLevel=3, InProgress=4, TimeIsUp=5, ClaimedAndTimeIsUp=6, Claimed=7", "meaning": "Trạng thái sự kiện"},
-    {"key": "TreasureDrillActivationSource", "value": "Home=0, Stuck=1, None=2", "meaning": "Nơi gói được kích hoạt"},
-    {"key": "TreasureDrillPopupImpressionSource", "value": "None=0, LobbyIcon=1, TaskCompleted=2", "meaning": "Nguồn mở popup"},
-    {"key": "TreasureDrillInfoResponse", "value": "eventID, eventType, startTime, finishTime, segment, weeklyScoreBinary, stages, stagesV2", "meaning": "Toàn bộ cấu hình sự kiện từ server"},
-    {"key": "TreasureDrillRemoteStepModel", "value": "id, reward, rewardWithCollection, task", "meaning": "Một bậc: thưởng + nhiệm vụ"},
-    {"key": "TreasureDrillRemoteTaskModel", "value": "taskType, amount", "meaning": "Nhiệm vụ của bậc (số level cần thắng)"},
-    {"key": "TreasureDrillCacheModel", "value": "EventId, Segment, IsPurchased, Progress, LastSeenProgress, Steps, StepsV2, LastSeenStep, CurrentStep, StartTime, FinishTime, IsClaimed", "meaning": "Cache sự kiện, chứa cả cờ đã mua"},
-    {"key": "TreasureDrillDataModel", "value": "IsEventIntroducedEverInLifeTime, CacheModel", "meaning": "Dữ liệu lưu local"},
-    {"key": "TreasureDrillSyncableDataModel", "value": "-", "meaning": "Tên khối sync giữa client và server"},
-    {"key": "Log lỗi IAP", "value": "'[TreasureDrill]::GetUniqueIAPConfigModels - null!'", "meaning": "Khi bảng IAP theo phân khúc bị thiếu"},
-    {"key": "TreasureDrillAnimationConfig.DrillStepSize / StepPassDuration / StepThresholdCap / ProgressBarAnimationDuration", "value": "1.65 / 1 / 3 / 1", "meaning": "Hoạt ảnh mũi khoan đi xuống"},
-    {"key": "TreasureDrillAnimationConfig.LockOpenAngle / LockBounceHeight / LockBounceDuration / LockFallDistance / LockFallDuration / LockParentRotationAngle", "value": "-45 / 0.8 / 0.25 / 15 / 0.9 / -180", "meaning": "Hoạt ảnh ổ khoá bung ra khi mở bậc"},
-    {"key": "TreasureDrillAnimationConfig.TickSmallestScale / TickScaleTime / TickScaleUpDuration / TickParticleAnimationDelay", "value": "(0.1,0.1,0.1) / 0.75 / 0.5 / 0.3", "meaning": "Hoạt ảnh dấu tick hoàn thành nhiệm vụ"},
-    {"key": "TreasureDrillPopUpConfig._progressBarWidth / ProgressBarMinFillRatio / ProgressBarMinMaxFillValue", "value": "2.93 / 0.1 / (0.3, 2.93)", "meaning": "Kích thước thanh tiến độ nhiệm vụ"},
-    {"key": "TreasureDrillPopUpConfig._completedTextStartScale / _completedTextScaleDuration", "value": "1.35 / 0.4", "meaning": "Hoạt ảnh chữ 'Completed'"},
-    {"key": "TreasureDrillSpriteConfig / TreasureDrillStepFactory / các factory currency", "value": "ScriptableObject", "meaning": "Sprite, prefab bậc và hoạt ảnh bung thưởng"},
-    {"key": "treasureDrillGetUrl", "value": "{base}/v1/get-treasure-drill-event", "meaning": "Lấy cấu hình sự kiện, bậc, nhiệm vụ và phân khúc"},
-    {"key": "weeklyScoreBinary", "value": "có trong response nhưng không thấy dùng", "meaning": "Trường chưa xác định vai trò"},
-    {"key": "stages vs stagesV2", "value": "hai danh sách bậc song song", "meaning": "Khác biệt giữa hai phiên bản chưa xác định trong build này"}
+    {
+      "key": "IsEnabled",
+      "value": "false",
+      "meaning": "Bật/tắt Treasure Drill (json default)"
+    },
+    {
+      "key": "EventType",
+      "value": "1",
+      "meaning": "eventType gửi backend"
+    },
+    {
+      "key": "FirstLevelToShow",
+      "value": "110",
+      "meaning": "Level tối thiểu, mở muộn để nhắm người chơi gắn bó"
+    },
+    {
+      "key": "SegmentedIAPModel['non-purchaser']",
+      "value": "sort.treasuredrill2, ProductType 0, DollarEquivalent 2",
+      "meaning": "Gói 2 USD cho người chưa từng mua"
+    },
+    {
+      "key": "SegmentedIAPModel['poor']",
+      "value": "sort.treasuredrill5, ProductType 0, DollarEquivalent 5",
+      "meaning": "Gói 5 USD"
+    },
+    {
+      "key": "SegmentedIAPModel['hamsi']",
+      "value": "sort.treasuredrill10, ProductType 0, DollarEquivalent 10",
+      "meaning": "Gói 10 USD"
+    },
+    {
+      "key": "SegmentedIAPModel['dolphin']",
+      "value": "sort.treasuredrill15, ProductType 0, DollarEquivalent 15",
+      "meaning": "Gói 15 USD"
+    },
+    {
+      "key": "SegmentedIAPModel['whale']",
+      "value": "sort.treasuredrill25, ProductType 0, DollarEquivalent 25",
+      "meaning": "Gói 25 USD cho người chi tiêu cao nhất"
+    },
+    {
+      "key": "TreasureDrillTaskType",
+      "value": "None=0, LevelWin=1",
+      "meaning": "Loại nhiệm vụ của bậc (build này chỉ có thắng level)"
+    },
+    {
+      "key": "TreasureDrillState",
+      "value": "Disable=0, NoCache=1, NotIntroduced=2, InsufficientLevel=3, InProgress=4, TimeIsUp=5, ClaimedAndTimeIsUp=6, Claimed=7",
+      "meaning": "Trạng thái sự kiện"
+    },
+    {
+      "key": "TreasureDrillActivationSource",
+      "value": "Home=0, Stuck=1, None=2",
+      "meaning": "Nơi gói được kích hoạt"
+    },
+    {
+      "key": "TreasureDrillPopupImpressionSource",
+      "value": "None=0, LobbyIcon=1, TaskCompleted=2",
+      "meaning": "Nguồn mở popup"
+    },
+    {
+      "key": "TreasureDrillInfoResponse",
+      "value": "eventID, eventType, startTime, finishTime, segment, weeklyScoreBinary, stages, stagesV2",
+      "meaning": "Toàn bộ cấu hình sự kiện từ server"
+    },
+    {
+      "key": "TreasureDrillRemoteStepModel",
+      "value": "id, reward, rewardWithCollection, task",
+      "meaning": "Một bậc: thưởng + nhiệm vụ"
+    },
+    {
+      "key": "TreasureDrillRemoteTaskModel",
+      "value": "taskType, amount",
+      "meaning": "Nhiệm vụ của bậc (số level cần thắng)"
+    },
+    {
+      "key": "TreasureDrillCacheModel",
+      "value": "EventId, Segment, IsPurchased, Progress, LastSeenProgress, Steps, StepsV2, LastSeenStep, CurrentStep, StartTime, FinishTime, IsClaimed",
+      "meaning": "Cache sự kiện, chứa cả cờ đã mua"
+    },
+    {
+      "key": "TreasureDrillDataModel",
+      "value": "IsEventIntroducedEverInLifeTime, CacheModel",
+      "meaning": "Dữ liệu lưu local"
+    },
+    {
+      "key": "TreasureDrillSyncableDataModel",
+      "value": "-",
+      "meaning": "Tên khối sync giữa client và server"
+    },
+    {
+      "key": "Log lỗi IAP",
+      "value": "'[TreasureDrill]::GetUniqueIAPConfigModels - null!'",
+      "meaning": "Khi bảng IAP theo phân khúc bị thiếu"
+    },
+    {
+      "key": "TreasureDrillAnimationConfig.DrillStepSize / StepPassDuration / StepThresholdCap / ProgressBarAnimationDuration",
+      "value": "1.65 / 1 / 3 / 1",
+      "meaning": "Hoạt ảnh mũi khoan đi xuống"
+    },
+    {
+      "key": "TreasureDrillAnimationConfig.LockOpenAngle / LockBounceHeight / LockBounceDuration / LockFallDistance / LockFallDuration / LockParentRotationAngle",
+      "value": "-45 / 0.8 / 0.25 / 15 / 0.9 / -180",
+      "meaning": "Hoạt ảnh ổ khoá bung ra khi mở bậc"
+    },
+    {
+      "key": "TreasureDrillAnimationConfig.TickSmallestScale / TickScaleTime / TickScaleUpDuration / TickParticleAnimationDelay",
+      "value": "(0.1,0.1,0.1) / 0.75 / 0.5 / 0.3",
+      "meaning": "Hoạt ảnh dấu tick hoàn thành nhiệm vụ"
+    },
+    {
+      "key": "TreasureDrillPopUpConfig._progressBarWidth / ProgressBarMinFillRatio / ProgressBarMinMaxFillValue",
+      "value": "2.93 / 0.1 / (0.3, 2.93)",
+      "meaning": "Kích thước thanh tiến độ nhiệm vụ"
+    },
+    {
+      "key": "TreasureDrillPopUpConfig._completedTextStartScale / _completedTextScaleDuration",
+      "value": "1.35 / 0.4",
+      "meaning": "Hoạt ảnh chữ 'Completed'"
+    },
+    {
+      "key": "TreasureDrillSpriteConfig / TreasureDrillStepFactory / các factory currency",
+      "value": "ScriptableObject",
+      "meaning": "Sprite, prefab bậc và hoạt ảnh bung thưởng"
+    },
+    {
+      "key": "treasureDrillGetUrl",
+      "value": "{base}/v1/get-treasure-drill-event",
+      "meaning": "Lấy cấu hình sự kiện, bậc, nhiệm vụ và phân khúc"
+    },
+    {
+      "key": "weeklyScoreBinary",
+      "value": "có trong response nhưng không thấy dùng",
+      "meaning": "Trường chưa xác định vai trò"
+    },
+    {
+      "key": "stages vs stagesV2",
+      "value": "hai danh sách bậc song song",
+      "meaning": "Khác biệt giữa hai phiên bản chưa xác định trong build này"
+    }
   ],
   "tips": [
     "Đây là mô hình 'battle pass thu nhỏ': cho tích thưởng trước, tính tiền sau — nỗi tiếc mất mát đẩy tỉ lệ mua lên.",
@@ -153,5 +471,10 @@
     "Popup ép mở mỗi khi hoàn thành bậc biến tiến độ gameplay thành lời nhắc mua hàng lặp lại.",
     "Mở khoá ở level 110 đảm bảo chỉ chào gói cho người đã chứng minh mức độ gắn bó."
   ],
-  "categories": ["Offer/IAP", "Live-ops", "Sự kiện", "Kinh tế"]
+  "categories": [
+    "Offer/IAP",
+    "Live-ops",
+    "Sự kiện",
+    "Kinh tế"
+  ]
 }

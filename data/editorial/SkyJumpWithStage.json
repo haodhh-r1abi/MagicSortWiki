@@ -1,0 +1,126 @@
+{
+  "id": "SkyJumpWithStage",
+  "schema_version": 1,
+  "scope": "Diễn giải thiết kế từ nguồn đã đối chiếu; outcome là expected, không phải lượt playtest mới. Các giá trị default/native có build riêng, không tự coi đang hiệu lực production.",
+  "design_intent": "Chia trải nghiệm sinh tồn thành ba chặng có quỹ riêng, cần hiển thị rõ chặng và bậc để tránh người chơi hiểu 10 bậc là toàn bộ event.",
+  "player_loop": "Join → leo chặng → chốt thưởng → sang chặng kế → thua/hoàn tất → chờ giải mới.",
+  "flow": [
+    {
+      "title": "Leo trong chặng hiện tại",
+      "actor": "Người chơi và hệ thống",
+      "action": "Thắng level và xem số bậc của chặng.",
+      "rule": "Bảng native 0.0.3063 đã đọc từ ELF có 5/7/10 bậc cho index 0/1/2; đây chưa phải quan sát runtime 0.0.3129.",
+      "outcome": "Hiển thị tiến độ theo chặng tương ứng.",
+      "uc_ids": [
+        "UC-04"
+      ],
+      "source_refs": [
+        "gdd/SkyJumpWithStage.json#use_cases/3",
+        "facts/local_code_gap_results_20261115.json#MS-CODE-77"
+      ]
+    },
+    {
+      "title": "Thua trong giải",
+      "actor": "Người chơi và hệ thống",
+      "action": "Thua level khi đang trên thang.",
+      "rule": "Score = -1 theo luật loại trực tiếp; không áp luật checkpoint của Broom Streak.",
+      "outcome": "Hiển thị nhánh rơi khỏi giải.",
+      "uc_ids": [
+        "UC-06"
+      ],
+      "source_refs": [
+        "gdd/SkyJumpWithStage.json#use_cases/5"
+      ]
+    },
+    {
+      "title": "Nhận phần quỹ chặng",
+      "actor": "Người chơi và hệ thống",
+      "action": "Kết thúc một chặng thắng và đọc phần thưởng.",
+      "rule": "Quỹ mặc định 5.000/7.000/10.000 coin theo chặng được chia cho số người thắng.",
+      "outcome": "Trao phần riêng phù hợp chặng và số người cùng thắng.",
+      "uc_ids": [
+        "UC-10"
+      ],
+      "source_refs": [
+        "gdd/SkyJumpWithStage.json#use_cases/9"
+      ]
+    }
+  ],
+  "rules": [
+    {
+      "title": "Leo trong chặng hiện tại",
+      "text": "Bảng native 0.0.3063 đã đọc từ ELF có 5/7/10 bậc cho index 0/1/2; đây chưa phải quan sát runtime 0.0.3129.",
+      "source_refs": [
+        "gdd/SkyJumpWithStage.json#use_cases/3",
+        "facts/local_code_gap_results_20261115.json#MS-CODE-77"
+      ]
+    },
+    {
+      "title": "Thua trong giải",
+      "text": "Score = -1 theo luật loại trực tiếp; không áp luật checkpoint của Broom Streak.",
+      "source_refs": [
+        "gdd/SkyJumpWithStage.json#use_cases/5"
+      ]
+    },
+    {
+      "title": "Nhận phần quỹ chặng",
+      "text": "Quỹ mặc định 5.000/7.000/10.000 coin theo chặng được chia cho số người thắng.",
+      "source_refs": [
+        "gdd/SkyJumpWithStage.json#use_cases/9"
+      ]
+    }
+  ],
+  "decisions": [
+    {
+      "question": "Vì sao cần phân biệt chỉ số chặng và điểm trong chặng?",
+      "answer": "Index chặng 0..2 chọn luật và quỹ, còn score đo vị trí trên thang; gộp chúng làm sai cả đích lẫn phép tính phần thưởng.",
+      "basis": "Suy luận thiết kế từ cơ chế có nguồn, chưa đo hiệu quả.",
+      "source_refs": [
+        "gdd/SkyJumpWithStage.json#flow",
+        "gdd/SkyJumpWithStage.json#configs"
+      ]
+    }
+  ],
+  "segments_ab": {
+    "summary": "Chặng và quỹ chia: Đổi chiều dài chặng và phần thưởng mỗi người.",
+    "axes": [
+      {
+        "axis": "Chặng và quỹ chia",
+        "selection": "CurrentStage chọn số bậc và quỹ; response xác định những người thắng.",
+        "effect": "Đổi chiều dài chặng và phần thưởng mỗi người.",
+        "evidence_limit": "Bảng 5/7/10 được chứng minh ở ELF 0.0.3063, chưa xác nhận bằng runtime 0.0.3129; đây không phải bằng chứng A/B.",
+        "source_refs": [
+          "gdd/SkyJumpWithStage.json#segment_ab_review_20261115",
+          "gdd/SkyJumpWithStage.json#flow",
+          "gdd/SkyJumpWithStage.json#configs"
+        ]
+      }
+    ],
+    "unknowns": [
+      "Bảng 5/7/10 được chứng minh ở ELF 0.0.3063, chưa xác nhận bằng runtime 0.0.3129; đây không phải bằng chứng A/B."
+    ]
+  },
+  "recovery": [
+    {
+      "condition": "Gián đoạn hoặc kết thúc Sky Jump 3 chặng (Staged)",
+      "expected": "Chuyển chặng phải có trạng thái hoặc response phù hợp; không tăng chặng chỉ vì animation đã chạy.",
+      "verified_scope": "Theo source và UC trong dossier; các dependency backend/sync/RNG vẫn cần kiểm riêng.",
+      "uc_ids": [
+        "UC-13",
+        "UC-14"
+      ]
+    }
+  ],
+  "takeaways": [
+    {
+      "text": "Index chặng 0..2 chọn luật và quỹ, còn score đo vị trí trên thang; gộp chúng làm sai cả đích lẫn phép tính phần thưởng.",
+      "basis": "Phân tích thiết kế, không phải kết quả đo cohort."
+    }
+  ],
+  "reviewed_source_paths": [
+    "gdd/SkyJumpWithStage.json",
+    "site_meta/SkyJumpWithStage.json",
+    "facts/local_code_gap_results_20261115.json",
+    "facts/review_20261116/public_current_config_3129/defaults/SkyJumpWithStageConfigModel.json"
+  ]
+}

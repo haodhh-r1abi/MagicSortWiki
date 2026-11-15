@@ -1,0 +1,123 @@
+{
+  "id": "MagicStreak",
+  "schema_version": 1,
+  "scope": "Thiết kế đọc từ dossier và nguồn đã đối chiếu. Outcome là expected; câu ghi round2 là actual theo case, không phải full-feature pass.",
+  "design_intent": "Tăng giá trị của chuỗi thắng mà không xóa tiến độ tích lũy khi thất bại; người chơi mất tốc độ kiếm điểm chứ không mất cả đường mốc.",
+  "player_loop": "Thắng liên tiếp → tăng multiplier → kiếm điểm mốc → nhận quà → thua về multiplier đầu.",
+  "flow": [
+    {
+      "title": "Chọn bảng mốc",
+      "actor": "Người chơi và hệ thống",
+      "action": "Bắt đầu event theo segment được cung cấp.",
+      "rule": "RewardStepsW cho whale, DH cho dolphin/hamsi, NPP cho non-purchaser/poor; có bản Collection.",
+      "outcome": "Bảng hiển thị và reward phải cùng nhánh.",
+      "uc_ids": [
+        "UC-03"
+      ],
+      "source_refs": [
+        "gdd/MagicStreak.json#use_cases/2"
+      ]
+    },
+    {
+      "title": "Tăng tốc bằng chuỗi",
+      "actor": "Người chơi và hệ thống",
+      "action": "Thắng liên tiếp để tăng hệ số.",
+      "rule": "Chuỗi 1/5/10/25/100 chi phối điểm vào thanh tiến độ.",
+      "outcome": "Thắng dài tạo nhịp kiếm điểm nhanh hơn.",
+      "uc_ids": [
+        "UC-04"
+      ],
+      "source_refs": [
+        "gdd/MagicStreak.json#use_cases/3"
+      ]
+    },
+    {
+      "title": "Thua và tiếp tục",
+      "actor": "Người chơi và hệ thống",
+      "action": "Thua một level rồi xem thanh.",
+      "rule": "Multiplier về 1, điểm đã tích không mất.",
+      "outcome": "Người chơi còn quà mốc mục tiêu dù mất chuỗi.",
+      "uc_ids": [
+        "UC-05"
+      ],
+      "source_refs": [
+        "gdd/MagicStreak.json#use_cases/4"
+      ]
+    }
+  ],
+  "rules": [
+    {
+      "title": "Chọn bảng mốc",
+      "text": "RewardStepsW cho whale, DH cho dolphin/hamsi, NPP cho non-purchaser/poor; có bản Collection.",
+      "source_refs": [
+        "gdd/MagicStreak.json#use_cases/2"
+      ]
+    },
+    {
+      "title": "Tăng tốc bằng chuỗi",
+      "text": "Chuỗi 1/5/10/25/100 chi phối điểm vào thanh tiến độ.",
+      "source_refs": [
+        "gdd/MagicStreak.json#use_cases/3"
+      ]
+    },
+    {
+      "title": "Thua và tiếp tục",
+      "text": "Multiplier về 1, điểm đã tích không mất.",
+      "source_refs": [
+        "gdd/MagicStreak.json#use_cases/4"
+      ]
+    }
+  ],
+  "decisions": [
+    {
+      "question": "Vì sao cần ghi rõ mất multiplier hay mất điểm?",
+      "answer": "Hai hình phạt tạo mức mất mát khác nhau; mô tả mất toàn bộ tiến độ sẽ sai luật GAE.",
+      "basis": "Nhận định thiết kế dựa trên cơ chế, không phải kết quả A/B.",
+      "source_refs": [
+        "gdd/MagicStreak.json#flow",
+        "gdd/MagicStreak.json#configs"
+      ]
+    }
+  ],
+  "segments_ab": {
+    "summary": "Nhóm chi tiêu và Collection: Đổi chi phí điểm/giá trị mốc; không chỉ tên user.",
+    "axes": [
+      {
+        "axis": "Nhóm chi tiêu và Collection",
+        "selection": "SegmentService cùng trạng thái Collection chọn một trong các bảng reward.",
+        "effect": "Đổi chi phí điểm/giá trị mốc; không chỉ tên user.",
+        "evidence_limit": "Nhãn non-purchaser trong cache được ghi nhận nhưng thiếu quy tắc phân bổ backend và comparative runtime.",
+        "source_refs": [
+          "gdd/MagicStreak.json#segment_ab_review_20261115",
+          "gdd/MagicStreak.json#flow",
+          "gdd/MagicStreak.json#configs"
+        ]
+      }
+    ],
+    "unknowns": [
+      "Nhãn non-purchaser trong cache được ghi nhận nhưng thiếu quy tắc phân bổ backend và comparative runtime."
+    ]
+  },
+  "recovery": [
+    {
+      "condition": "Gián đoạn hoặc kết thúc Magic Streak (GAE - mũ phép)",
+      "expected": "Offline/reset cần giữ điểm và mốc đã nhận, chỉ reset multiplier theo nhánh đúng.",
+      "verified_scope": "Đọc source/UC; không thực hiện runtime mới trong lượt biên tập.",
+      "uc_ids": [
+        "UC-12",
+        "UC-14"
+      ]
+    }
+  ],
+  "takeaways": [
+    {
+      "text": "Hai hình phạt tạo mức mất mát khác nhau; mô tả mất toàn bộ tiến độ sẽ sai luật GAE.",
+      "basis": "Phân tích thiết kế, chưa đo retention/conversion."
+    }
+  ],
+  "reviewed_source_paths": [
+    "gdd/MagicStreak.json",
+    "site_meta/MagicStreak.json",
+    "facts/review_20261116/public_current_config_3129/defaults/MagicStreakGaeConfigModel.json"
+  ]
+}

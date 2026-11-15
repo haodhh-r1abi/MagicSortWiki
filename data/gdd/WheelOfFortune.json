@@ -313949,5 +313949,134 @@
     "round2_case_ids": [],
     "round2_branch_ucs": [],
     "full_uc_pass": false
+  },
+  "design_spec_20261116": {
+    "source": "editorial/WheelOfFortune.json",
+    "sha256": "d08d871e5a60d6beb1c141906bc8831b67c4edeb537b25fe2fd1f224c82f3362",
+    "scope": "Designer-facing interpretation; no new runtime verification. Original use_cases and evidence remain unchanged.",
+    "content": {
+      "id": "WheelOfFortune",
+      "schema_version": 1,
+      "scope": "Diễn giải thiết kế từ nguồn đã đối chiếu; outcome là expected, không phải lượt playtest mới. Các giá trị default/native có build riêng, không tự coi đang hiệu lực production.",
+      "design_intent": "Kết nối nhiệm vụ nhiều hệ thống với lựa chọn tiêu chip, đồng thời yêu cầu tiến độ level để mở vòng chặng mới.",
+      "player_loop": "Làm task → nhận chip → mở stage bằng level → tiêu chip quay → nhận quà → tiếp tục.",
+      "flow": [
+        {
+          "title": "Kiếm chip từ nhiệm vụ",
+          "actor": "Người chơi và hệ thống",
+          "action": "Hoàn thành mục tiêu đang hiển thị.",
+          "rule": "Tối đa 2 nhiệm vụ hoạt động; nhiệm vụ mới hoặc BackUpTask thay mục đã xong.",
+          "outcome": "Chip tăng riêng với tiến độ level.",
+          "uc_ids": [
+            "UC-05"
+          ],
+          "source_refs": [
+            "gdd/WheelOfFortune.json#use_cases/4"
+          ]
+        },
+        {
+          "title": "Quay chặng đã mở",
+          "actor": "Người chơi và hệ thống",
+          "action": "Chọn quay khi có đủ chip.",
+          "rule": "Chi phí lấy từ chặng; 100 là fallback, không phải giá cố định của mọi lượt. Kết quả được lưu trước khi trình diễn.",
+          "outcome": "Animation và trao thưởng dùng cùng kết quả đã chọn.",
+          "uc_ids": [
+            "UC-07"
+          ],
+          "source_refs": [
+            "gdd/WheelOfFortune.json#use_cases/6"
+          ]
+        },
+        {
+          "title": "Đọc xác suất hạng quà",
+          "actor": "Người chơi và hệ thống",
+          "action": "Mở popup Probability.",
+          "rule": "Poor/Basic/Premium/Elite/Epic là nhóm quà; chặng cuối mặc định chia 50/50 giữa Elite và Epic.",
+          "outcome": "Không đọc tên Poor hoặc Epic thành phân khúc chi tiêu của người chơi.",
+          "uc_ids": [
+            "UC-09"
+          ],
+          "source_refs": [
+            "gdd/WheelOfFortune.json#use_cases/8"
+          ]
+        }
+      ],
+      "rules": [
+        {
+          "title": "Kiếm chip từ nhiệm vụ",
+          "text": "Tối đa 2 nhiệm vụ hoạt động; nhiệm vụ mới hoặc BackUpTask thay mục đã xong.",
+          "source_refs": [
+            "gdd/WheelOfFortune.json#use_cases/4"
+          ]
+        },
+        {
+          "title": "Quay chặng đã mở",
+          "text": "Chi phí lấy từ chặng; 100 là fallback, không phải giá cố định của mọi lượt. Kết quả được lưu trước khi trình diễn.",
+          "source_refs": [
+            "gdd/WheelOfFortune.json#use_cases/6"
+          ]
+        },
+        {
+          "title": "Đọc xác suất hạng quà",
+          "text": "Poor/Basic/Premium/Elite/Epic là nhóm quà; chặng cuối mặc định chia 50/50 giữa Elite và Epic.",
+          "source_refs": [
+            "gdd/WheelOfFortune.json#use_cases/8"
+          ]
+        }
+      ],
+      "decisions": [
+        {
+          "question": "Vì sao chip và Progress là hai thước đo?",
+          "answer": "Chip trả cho lượt quay, còn Progress mở chặng. Có chip không đồng nghĩa đã được mở mọi vòng quay phía sau.",
+          "basis": "Suy luận thiết kế từ cơ chế có nguồn, chưa đo hiệu quả.",
+          "source_refs": [
+            "gdd/WheelOfFortune.json#flow",
+            "gdd/WheelOfFortune.json#configs"
+          ]
+        }
+      ],
+      "segments_ab": {
+        "summary": "Nhóm quà và Collection: Đổi phân phối quà và ô trúng cụ thể.",
+        "axes": [
+          {
+            "axis": "Nhóm quà và Collection",
+            "selection": "StageProbabilities chọn hạng quà; WithCollection chọn nhánh phần thưởng.",
+            "effect": "Đổi phân phối quà và ô trúng cụ thể.",
+            "evidence_limit": "Segment trong TryGetSpinResultAsSegment là đoạn hoặc ô của vòng quay, không phải nhóm thương mại; chưa kiểm RNG thống kê.",
+            "source_refs": [
+              "gdd/WheelOfFortune.json#segment_ab_review_20261115",
+              "gdd/WheelOfFortune.json#flow",
+              "gdd/WheelOfFortune.json#configs"
+            ]
+          }
+        ],
+        "unknowns": [
+          "Segment trong TryGetSpinResultAsSegment là đoạn hoặc ô của vòng quay, không phải nhóm thương mại; chưa kiểm RNG thống kê."
+        ]
+      },
+      "recovery": [
+        {
+          "condition": "Gián đoạn hoặc kết thúc Vòng quay may mắn (WOF)",
+          "expected": "Hết giờ hoặc auto-claim còn có gate liên quan quà Collection; animation đóng không chứng minh grant đã hoàn tất.",
+          "verified_scope": "Theo source và UC trong dossier; các dependency backend/sync/RNG vẫn cần kiểm riêng.",
+          "uc_ids": [
+            "UC-14",
+            "UC-16",
+            "UC-19"
+          ]
+        }
+      ],
+      "takeaways": [
+        {
+          "text": "Chip trả cho lượt quay, còn Progress mở chặng. Có chip không đồng nghĩa đã được mở mọi vòng quay phía sau.",
+          "basis": "Phân tích thiết kế, không phải kết quả đo cohort."
+        }
+      ],
+      "reviewed_source_paths": [
+        "gdd/WheelOfFortune.json",
+        "site_meta/WheelOfFortune.json",
+        "facts/review_20261116/public_current_config_3129/defaults/WheelOfFortuneConfigModelV2.json"
+      ]
+    }
   }
 }

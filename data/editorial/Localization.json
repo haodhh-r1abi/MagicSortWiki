@@ -1,0 +1,187 @@
+{
+  "id": "Localization",
+  "schema_version": 1,
+  "scope": "Diễn giải thiết kế từ client, default và bằng chứng ngày 15–16/11 đã ghi nguồn. Nội dung mã/default không được nâng thành runtime pass; giữ nguyên full data và UC của hồ sơ.",
+  "design_intent": "Giữ ý nghĩa luật, số lượng và giá đọc được khi ngôn ngữ hoặc vùng thay đổi. Bản dịch đúng chữ vẫn có thể sai trải nghiệm nếu placeholder hoặc culture không khớp.",
+  "player_loop": "Khởi động → chọn ngôn ngữ hỗ trợ → lấy term và tham số → hiển thị số/giá → giữ lựa chọn phiên sau.",
+  "flow": [
+    {
+      "title": "Chọn ngôn ngữ lúc khởi động",
+      "actor": "Client",
+      "action": "Ưu tiên ngôn ngữ lưu trong I2 Language nếu còn hỗ trợ.",
+      "rule": "Nếu không khớp thiết bị thì dùng ngôn ngữ đầu danh sách là English.",
+      "outcome": "Không để UI trống chỉ vì locale máy lạ.",
+      "uc_ids": [
+        "UC-01"
+      ],
+      "source_refs": [
+        "gdd/Localization.json#/use_cases/0",
+        "gdd/Localization.json",
+        "site_meta/Localization.json",
+        "facts/review_cases_20261116_round2.json",
+        "facts/review_20261116_round2/cross_feature_evidence_context.json"
+      ]
+    },
+    {
+      "title": "Đồng bộ enum Language và CultureInfo của dự án",
+      "actor": "Client",
+      "action": "Đổi mã ngôn ngữ sang Language và CultureInfo.",
+      "rule": "Wrapper có 11 mã; en dùng en-US, pt dùng pt-PT.",
+      "outcome": "Chuỗi và định dạng số có thể cùng cần thay.",
+      "uc_ids": [
+        "UC-04"
+      ],
+      "source_refs": [
+        "gdd/Localization.json#/use_cases/3",
+        "gdd/Localization.json",
+        "site_meta/Localization.json",
+        "facts/review_cases_20261116_round2.json",
+        "facts/review_20261116_round2/cross_feature_evidence_context.json"
+      ]
+    },
+    {
+      "title": "Chèn tham số động vào chuỗi",
+      "actor": "Client và người soạn nội dung",
+      "action": "Chèn tham số động vào term.",
+      "rule": "Có cả placeholder I2 và string.Format {0}/{1}; giữ đúng cấu trúc.",
+      "outcome": "Thông báo level/reward không bị mất con số.",
+      "uc_ids": [
+        "UC-06"
+      ],
+      "source_refs": [
+        "gdd/Localization.json#/use_cases/5",
+        "gdd/Localization.json",
+        "site_meta/Localization.json",
+        "facts/review_cases_20261116_round2.json",
+        "facts/review_20261116_round2/cross_feature_evidence_context.json"
+      ]
+    },
+    {
+      "title": "Thiếu bản dịch cho một term",
+      "actor": "Client",
+      "action": "Xử lý term thiếu bản dịch.",
+      "rule": "Asset dùng chế độ fallback, không phải mọi term thiếu đều để trống.",
+      "outcome": "Giữ thông tin tối thiểu để người chơi quyết định.",
+      "uc_ids": [
+        "UC-10"
+      ],
+      "source_refs": [
+        "gdd/Localization.json#/use_cases/9",
+        "gdd/Localization.json",
+        "site_meta/Localization.json",
+        "facts/review_cases_20261116_round2.json",
+        "facts/review_20261116_round2/cross_feature_evidence_context.json"
+      ]
+    }
+  ],
+  "rules": [
+    {
+      "title": "Độ phủ nguồn",
+      "text": "Catalog 15/11 giữ 1.471 term × 11 ngôn ngữ; số term không chứng minh mọi layout đã được kiểm.",
+      "source_refs": [
+        "gdd/Localization.json",
+        "site_meta/Localization.json",
+        "facts/review_cases_20261116_round2.json",
+        "facts/review_20261116_round2/cross_feature_evidence_context.json"
+      ]
+    },
+    {
+      "title": "Ngôn ngữ khác thị trường",
+      "text": "UI tiếng Anh và giá VND có thể cùng xuất hiện; không gọi đó là bản dịch tiếng Việt.",
+      "source_refs": [
+        "gdd/Localization.json",
+        "site_meta/Localization.json",
+        "facts/review_cases_20261116_round2.json",
+        "facts/review_20261116_round2/cross_feature_evidence_context.json"
+      ]
+    },
+    {
+      "title": "RTL có mã nhưng chưa có locale",
+      "text": "I2 có đường RTL; asset được đọc không khai báo ngôn ngữ RTL, nên không kết luận hỗ trợ Arabic thực tế.",
+      "source_refs": [
+        "gdd/Localization.json",
+        "site_meta/Localization.json",
+        "facts/review_cases_20261116_round2.json",
+        "facts/review_20261116_round2/cross_feature_evidence_context.json"
+      ]
+    }
+  ],
+  "decisions": [
+    {
+      "question": "Nên test chữ hay test ngữ cảnh?",
+      "answer": "Cả hai: term/placeholder là dữ liệu, còn timer/giá và chuỗi dài cần ảnh trong popup thật.",
+      "basis": "Độ dài và culture tác động layout.",
+      "source_refs": [
+        "gdd/Localization.json",
+        "site_meta/Localization.json",
+        "facts/review_cases_20261116_round2.json",
+        "facts/review_20261116_round2/cross_feature_evidence_context.json"
+      ]
+    },
+    {
+      "question": "Có được suy live-sync đang bật?",
+      "answer": "Không; còn cấu hình Google Sheets chỉ chứng minh khả năng tích hợp.",
+      "basis": "Chưa có request cập nhật bản dịch trong runtime.",
+      "source_refs": [
+        "gdd/Localization.json",
+        "site_meta/Localization.json",
+        "facts/review_cases_20261116_round2.json",
+        "facts/review_20261116_round2/cross_feature_evidence_context.json"
+      ]
+    }
+  ],
+  "segments_ab": {
+    "summary": "Các trục bên dưới mô tả điều kiện chọn hoặc trạng thái; chưa có assignment hay uplift để khẳng định A/B.",
+    "axes": [
+      {
+        "axis": "Locale và vùng",
+        "selection": "I2 code, system language và CultureInfo",
+        "effect": "Thay chuỗi, số/ngày và cách đọc.",
+        "evidence_limit": "Đây là điều kiện locale, không tự động là experiment.",
+        "source_refs": [
+          "gdd/Localization.json",
+          "site_meta/Localization.json",
+          "facts/review_cases_20261116_round2.json",
+          "facts/review_20261116_round2/cross_feature_evidence_context.json"
+        ]
+      }
+    ],
+    "unknowns": [
+      "Chưa có phân bổ ngẫu nhiên, cohort và kết quả nhân quả để đánh giá thử nghiệm."
+    ]
+  },
+  "recovery": [
+    {
+      "condition": "Locale không hỗ trợ",
+      "expected": "Chọn fallback English thay vì ngôn ngữ không tồn tại.",
+      "verified_scope": "Đường mã; chưa đổi locale thiết bị trong lượt mới.",
+      "uc_ids": [
+        "UC-01"
+      ]
+    },
+    {
+      "condition": "Term hoặc bản dịch thiếu",
+      "expected": "Áp dụng fallback nguồn và kiểm placeholder còn hợp lệ.",
+      "verified_scope": "Cần đối chiếu từng term/ảnh, không phủ bằng một screenshot.",
+      "uc_ids": [
+        "UC-10"
+      ]
+    }
+  ],
+  "takeaways": [
+    {
+      "text": "Review giá và số như một phần thiết kế nội dung.",
+      "basis": "Culture và ngôn ngữ là hai trục."
+    },
+    {
+      "text": "Giữ khóa term ở evidence, viết nghĩa dành cho người chơi ở phần chính.",
+      "basis": "Catalog kỹ thuật không thay lời giải thích."
+    }
+  ],
+  "reviewed_source_paths": [
+    "gdd/Localization.json",
+    "site_meta/Localization.json",
+    "facts/review_cases_20261116_round2.json",
+    "facts/review_20261116_round2/cross_feature_evidence_context.json"
+  ]
+}

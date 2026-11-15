@@ -2005,5 +2005,133 @@
     "round2_case_ids": [],
     "round2_branch_ucs": [],
     "full_uc_pass": false
+  },
+  "design_spec_20261116": {
+    "source": "editorial/TowerWinStreak.json",
+    "sha256": "9197e183342bd4caff4661d5dc4a0f795ad5360a5b22c9fd7fa8c3e5cd190c7e",
+    "scope": "Designer-facing interpretation; no new runtime verification. Original use_cases and evidence remain unchanged.",
+    "content": {
+      "id": "TowerWinStreak",
+      "schema_version": 1,
+      "scope": "Diễn giải thiết kế từ nguồn đã đối chiếu; outcome là expected, không phải lượt playtest mới. Các giá trị default/native có build riêng, không tự coi đang hiệu lực production.",
+      "design_intent": "Dùng mất toàn bộ chuỗi làm sức ép giữ chiến thắng; mục tiêu rương dài đòi hỏi quyết định tiếp tục hay chấp nhận bắt đầu lại.",
+      "player_loop": "Thắng liên tiếp → leo tháp → nhận rương → thua về 0 → thử lại.",
+      "flow": [
+        {
+          "title": "Leo một bậc",
+          "actor": "Người chơi và hệ thống",
+          "action": "Thắng level và quay về Home.",
+          "rule": "Chuỗi thắng tăng; các mốc chính trong nguồn là 3/6/11/16/22/30/40.",
+          "outcome": "Tiến gần rương kế tiếp.",
+          "uc_ids": [
+            "UC-03"
+          ],
+          "source_refs": [
+            "gdd/TowerWinStreak.json#use_cases/2"
+          ]
+        },
+        {
+          "title": "Mất chuỗi",
+          "actor": "Người chơi và hệ thống",
+          "action": "Thua hoặc bỏ level.",
+          "rule": "Tower bản v1 đưa chuỗi về 0; không có luật rơi về checkpoint như Broom bản v2.",
+          "outcome": "Mèo hoặc chổi rơi và chuỗi bắt đầu lại.",
+          "uc_ids": [
+            "UC-04"
+          ],
+          "source_refs": [
+            "gdd/TowerWinStreak.json#use_cases/3"
+          ]
+        },
+        {
+          "title": "Nhận rương đã vượt",
+          "actor": "Người chơi và hệ thống",
+          "action": "Vượt mốc thưởng và xem quà.",
+          "rule": "Rương có coin, booster và mạng theo thời gian; kỷ lục trong event khác kỷ lục mọi thời.",
+          "outcome": "Quà và kỷ lục được cập nhật theo đúng trường trạng thái.",
+          "uc_ids": [
+            "UC-07"
+          ],
+          "source_refs": [
+            "gdd/TowerWinStreak.json#use_cases/6"
+          ]
+        }
+      ],
+      "rules": [
+        {
+          "title": "Leo một bậc",
+          "text": "Chuỗi thắng tăng; các mốc chính trong nguồn là 3/6/11/16/22/30/40.",
+          "source_refs": [
+            "gdd/TowerWinStreak.json#use_cases/2"
+          ]
+        },
+        {
+          "title": "Mất chuỗi",
+          "text": "Tower bản v1 đưa chuỗi về 0; không có luật rơi về checkpoint như Broom bản v2.",
+          "source_refs": [
+            "gdd/TowerWinStreak.json#use_cases/3"
+          ]
+        },
+        {
+          "title": "Nhận rương đã vượt",
+          "text": "Rương có coin, booster và mạng theo thời gian; kỷ lục trong event khác kỷ lục mọi thời.",
+          "source_refs": [
+            "gdd/TowerWinStreak.json#use_cases/6"
+          ]
+        }
+      ],
+      "decisions": [
+        {
+          "question": "Điểm khác với Broom Streak cần hiện ở đâu?",
+          "answer": "Ngay luật thua và cảnh báo thoát: reset về 0 là mức mất mát khác checkpoint, không chỉ là thay hình ảnh.",
+          "basis": "Suy luận thiết kế từ cơ chế có nguồn, chưa đo hiệu quả.",
+          "source_refs": [
+            "gdd/TowerWinStreak.json#flow",
+            "gdd/TowerWinStreak.json#configs"
+          ]
+        }
+      ],
+      "segments_ab": {
+        "summary": "Bảng mốc và trạng thái sự kiện: Đổi mục tiêu và quà; reset chuỗi không đồng nghĩa xóa kỷ lục.",
+        "axes": [
+          {
+            "axis": "Bảng mốc và trạng thái sự kiện",
+            "selection": "Thời gian server và Steps chọn nội dung; chuỗi hiện tại xác định mốc.",
+            "effect": "Đổi mục tiêu và quà; reset chuỗi không đồng nghĩa xóa kỷ lục.",
+            "evidence_limit": "Không có A/B so sánh reset về 0 với checkpoint; tồn tại hai feature không tự chứng minh một experiment.",
+            "source_refs": [
+              "gdd/TowerWinStreak.json#segment_ab_review_20261115",
+              "gdd/TowerWinStreak.json#flow",
+              "gdd/TowerWinStreak.json#configs"
+            ]
+          }
+        ],
+        "unknowns": [
+          "Không có A/B so sánh reset về 0 với checkpoint; tồn tại hai feature không tự chứng minh một experiment."
+        ]
+      },
+      "recovery": [
+        {
+          "condition": "Gián đoạn hoặc kết thúc Tháp chuỗi thắng (Tower)",
+          "expected": "Offline hoặc kết thúc event cần tách mốc đã nhận, chuỗi hiện tại và kỷ lục; không reset mọi trường cùng lúc.",
+          "verified_scope": "Theo source và UC trong dossier; các dependency backend/sync/RNG vẫn cần kiểm riêng.",
+          "uc_ids": [
+            "UC-13",
+            "UC-14"
+          ]
+        }
+      ],
+      "takeaways": [
+        {
+          "text": "Ngay luật thua và cảnh báo thoát: reset về 0 là mức mất mát khác checkpoint, không chỉ là thay hình ảnh.",
+          "basis": "Phân tích thiết kế, không phải kết quả đo cohort."
+        }
+      ],
+      "reviewed_source_paths": [
+        "gdd/TowerWinStreak.json",
+        "site_meta/TowerWinStreak.json",
+        "facts/review_20261116/public_current_config_3129/defaults/TowerWinStreakConfigModel.json"
+      ]
+    }
   }
 }

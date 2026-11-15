@@ -1,0 +1,131 @@
+{
+  "id": "TeamQuest",
+  "schema_version": 1,
+  "scope": "Diễn giải thiết kế từ hồ sơ đã đối chiếu; flow/outcome là hành vi mong đợi theo nguồn. Chỉ câu ghi rõ round2 là quan sát 16/11/2026 trên fixture 0.0.3129, không phải full UC pass.",
+  "design_intent": "Cho cả đội một mục tiêu chung nhưng yêu cầu từng thành viên góp công để nhận rương. Thiết kế kết hợp hợp tác tổng điểm với bảng đóng góp cá nhân, tránh đồng nhất đứng trong đội với quyền nhận mọi quà.",
+  "player_loop": "Vào đội → Join trong cửa sổ → thắng level để đóng góp → theo dõi tổng điểm → mở rương đủ điều kiện → tiếp tục tới khi event kết thúc.",
+  "flow": [
+    {
+      "title": "Gia nhập hành trình của đội",
+      "actor": "Người chơi",
+      "action": "Mở lời mời hoặc thẻ trong chat đội rồi chọn Join.",
+      "rule": "Cần đội hợp lệ, asset và event; join window đóng thì không mặc nhiên được tham gia. Default client tắt và mốc level 45 chỉ là nguồn mặc định.",
+      "outcome": "Join thành công ghi nhận người tham gia và mở bản đồ event.",
+      "uc_ids": [
+        "UC-04"
+      ],
+      "source_refs": [
+        "gdd/TeamQuest.json#use_cases/3"
+      ]
+    },
+    {
+      "title": "Đóng góp bằng level chính",
+      "actor": "Người chơi",
+      "action": "Thắng level để thêm điểm cá nhân và điểm đội.",
+      "rule": "Default Normal/Hard/SuperHard cho 1/3/5 điểm; request tiếp theo mang score để đồng bộ.",
+      "outcome": "Tiến độ cá nhân tạo điều kiện nhận quà và vị trí trên bảng đóng góp.",
+      "uc_ids": [
+        "UC-05"
+      ],
+      "source_refs": [
+        "gdd/TeamQuest.json#use_cases/4"
+      ]
+    },
+    {
+      "title": "Mở rương theo tổng điểm",
+      "actor": "Người chơi",
+      "action": "Chọn mốc đã đủ RequiredTeamScore.",
+      "rule": "Không đóng góp bị trạng thái NotContributed; mỗi mốc ghi teamId đã claim để xử lý đổi đội.",
+      "outcome": "Thành viên có đóng góp nhận quà đúng mốc, không suy nhận lại khi đổi đội.",
+      "uc_ids": [
+        "UC-07"
+      ],
+      "source_refs": [
+        "gdd/TeamQuest.json#use_cases/6"
+      ]
+    },
+    {
+      "title": "Nhận nhiều mốc đã vượt",
+      "actor": "Người chơi",
+      "action": "Quay lại event khi đội đã đi qua nhiều rương.",
+      "rule": "Có hàng đợi bulk để gom reward; reward có nhánh kèm Collection khi tính năng đó hoạt động.",
+      "outcome": "Các mốc đủ điều kiện có thể được trình diễn thành một lượt nhận dồn.",
+      "uc_ids": [
+        "UC-08"
+      ],
+      "source_refs": [
+        "gdd/TeamQuest.json#use_cases/7"
+      ]
+    }
+  ],
+  "rules": [
+    {
+      "title": "Join khác tham gia đội",
+      "text": "Có membership của Teams chưa đủ: event còn kiểm IsJoined và cửa sổ Join riêng.",
+      "source_refs": [
+        "gdd/TeamQuest.json#summary",
+        "gdd/TeamQuest.json#flow"
+      ]
+    },
+    {
+      "title": "Điểm đồng đội là dữ liệu chia sẻ",
+      "text": "Client có bộ đệm điểm nhưng tổng đội và bảng đóng góp đến từ response; cần hai tài khoản/server để kiểm tiến độ liên thành viên.",
+      "source_refs": [
+        "gdd/TeamQuest.json#summary",
+        "gdd/TeamQuest.json#flow"
+      ]
+    }
+  ],
+  "decisions": [
+    {
+      "question": "Vì sao rương đội vẫn kiểm đóng góp cá nhân?",
+      "answer": "Ngưỡng chung thúc đẩy hợp tác, còn NotContributed đặt điều kiện tham gia tối thiểu. Khi thiết kế UI cần giải thích cả hai lý do khóa: đội chưa đủ điểm hoặc bản thân chưa góp.",
+      "basis": "Nhận định thiết kế dựa trên cơ chế trong hồ sơ, không phải kết quả đo chuyển đổi.",
+      "source_refs": [
+        "gdd/TeamQuest.json#flow"
+      ]
+    }
+  ],
+  "segments_ab": {
+    "summary": "Đội, event và nhánh Collection: Đổi bản đồ mốc và loại thưởng; quyền claim vẫn gắn đóng góp và lịch sử của đội.",
+    "axes": [
+      {
+        "axis": "Đội, event và nhánh Collection",
+        "selection": "Response xác định tournament/team cùng steps; Collection đang chạy quyết định reward có pack.",
+        "effect": "Đổi bản đồ mốc và loại thưởng; quyền claim vẫn gắn đóng góp và lịch sử của đội.",
+        "evidence_limit": "Không có runtime Join/claim hay phép thử hai tài khoản; Elo trong response chưa cho biết thuật toán ghép đội.",
+        "source_refs": [
+          "gdd/TeamQuest.json#segment_ab_review_20261115",
+          "gdd/TeamQuest.json#flow"
+        ]
+      }
+    ],
+    "unknowns": [
+      "Không có runtime Join/claim hay phép thử hai tài khoản; Elo trong response chưa cho biết thuật toán ghép đội."
+    ]
+  },
+  "recovery": [
+    {
+      "condition": "Mất mạng, đổi đội hoặc event hết cửa sổ",
+      "expected": "Không lấy cache tổng đội làm xác nhận claim mới; kiểm event/teamId và các mốc đã nhận trước khi trao.",
+      "verified_scope": "Đọc source và hồ sơ runtime có sẵn; chỉ xác minh nhánh được nêu rõ, không phát sinh playtest mới.",
+      "uc_ids": [
+        "UC-10",
+        "UC-12",
+        "UC-13",
+        "UC-16"
+      ]
+    }
+  ],
+  "takeaways": [
+    {
+      "text": "Ngưỡng chung thúc đẩy hợp tác, còn NotContributed đặt điều kiện tham gia tối thiểu. Khi thiết kế UI cần giải thích cả hai lý do khóa: đội chưa đủ điểm hoặc bản thân chưa góp.",
+      "basis": "Suy luận thiết kế; đọc cùng quyết định và source_refs, không phải uplift đã đo."
+    }
+  ],
+  "reviewed_source_paths": [
+    "gdd/TeamQuest.json",
+    "site_meta/TeamQuest.json",
+    "facts/review_20261116/public_current_config_3129/defaults/TeamQuestConfigModel.json"
+  ]
+}

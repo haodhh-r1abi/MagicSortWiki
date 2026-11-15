@@ -29,16 +29,16 @@
     ]
   ],
   "description": [
-    "Magic Sort dùng thông báo cục bộ (local notification), không có push từ server trong bản dựng này.",
+    "Nguồn đã đối chiếu mô tả thông báo cục bộ do NotificationService lên lịch. Phạm vi kiểm tra này chưa đủ để kết luận mọi đường remote push hoặc mọi build đều không tồn tại.",
     "NotificationService nhận 10 ScriptableObject LocalNotificationSo qua constructor, mỗi cái mang Id, Title và Message viết sẵn bằng tiếng Anh kèm emoji.",
     "Mọi thông báo đều hẹn giờ bằng DateTime.Now cộng delayAsSeconds và đăng ký qua GameNotificationsPlatform, lớp bọc Unity Mobile Notifications.",
     "Mỗi loại thông báo có một cặp Send…/Cancel… nên khi điều kiện thay đổi, client huỷ đúng Id thay vì huỷ tất cả.",
-    "Trước khi tạo mới, SendNotification luôn gọi Cancel(id) nên không bao giờ có hai thông báo trùng loại.",
+    "Trong đường gửi đã qua các gate khởi tạo, SendNotification gọi Cancel(id) trước khi đặt lịch mới. Đây là cơ chế thay lịch theo ID của client, chưa phải bảo đảm delivery hoặc trạng thái của mọi scheduler.",
     "Người chơi bật/tắt toàn bộ bằng một toggle trong Settings; trạng thái lưu trong NotificationModel.IsNotificationOn.",
-    "Khi tắt, mọi lời gọi Send… đều bị bỏ qua ngay trong SendNotification — kiểm tra ở một chỗ duy nhất nên không có đường vòng.",
+    "Khi service đã khởi tạo, SendNotification hủy lịch cùng ID trước khi kiểm NotificationModel.IsNotificationOn. Nếu preference OFF thì không tạo lịch mới; trước đó còn có các gate khởi tạo có thể chặn toàn bộ đường gửi.",
     "Chuỗi 'NEWLINE' trong Message được thay bằng Environment.NewLine khi dựng Body của thông báo.",
     "Nội dung thông báo nằm thẳng trong asset bằng tiếng Anh, không đi qua bảng localization nên không đa ngôn ngữ.",
-    "Sky Jump có hai Id tách biệt cho trường hợp thắng và thua, cho phép đo tỉ lệ mở riêng cho từng nhóm."
+    "Sky Jump dùng hai ID riêng cho ngữ cảnh thắng và thua. Hai ID giúp phân loại lịch; muốn tính tỉ lệ mở còn cần bằng chứng delivery và telemetry open, chưa được xác minh trong lượt này."
   ],
   "notes": [
     "Lưu ý: giá trị delayAsSeconds của phần lớn thông báo do dịch vụ gọi truyền vào (thời gian còn lại của sự kiện), không phải hằng số trong NotificationService.",
@@ -458,7 +458,7 @@
     }
   ],
   "tips": [
-    "Kiểm tra IsNotificationOn tại một điểm duy nhất trong SendNotification là cách chắc chắn để mọi loại thông báo đều tôn trọng lựa chọn của người chơi.",
+    "Kiểm preference trong SendNotification tập trung nhánh tạo lịch mới. Native 0.0.3129 còn có gate khởi tạo và hủy cùng ID trước khi kiểm preference; điều này không bảo đảm delivery hoặc quyền hệ điều hành.",
     "Huỷ theo Id trước khi tạo mới tránh được lỗi kinh điển của local notification: chồng nhiều thông báo cùng loại.",
     "Tách Id cho Sky Jump thắng và thua cho phép đo hiệu quả nhắc nhở theo cảm xúc của người chơi.",
     "Đặt thông báo daily vào 10 giờ sáng là mốc phổ biến để bắt nhịp thói quen buổi sáng.",

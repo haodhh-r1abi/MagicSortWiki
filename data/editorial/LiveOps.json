@@ -1,0 +1,214 @@
+{
+  "id": "LiveOps",
+  "schema_version": 1,
+  "scope": "Diễn giải thiết kế từ nguồn ghi rõ build/ngày; mô tả mã và default không thay thế kiểm chứng runtime. Phần full data, reward và UC gốc được giữ ở hồ sơ nguồn.",
+  "design_intent": "Giữ game khởi động và tiếp tục được khi config, mạng hoặc asset không sẵn sàng; đồng thời cho vận hành thay nội dung có kiểm định. Người ra quyết định ở đây là client và server, không phải một màn hình LiveOps giả định.",
+  "player_loop": "Mở app → chọn nguồn config hợp lệ → dựng dịch vụ → lấy trạng thái nội dung → lưu cache để phiên sau có điểm dựa.",
+  "flow": [
+    {
+      "title": "Khởi tạo có giới hạn chờ",
+      "actor": "Client",
+      "action": "Khởi tạo Firebase rồi fetch và activate config.",
+      "rule": "Flow lịch sử ghi timeout 2,5 giây; đây không phải cam kết tổng loading 2,5 giây.",
+      "outcome": "Có thể tiếp tục bằng nguồn dự phòng thay vì chờ vô hạn.",
+      "uc_ids": [
+        "UC-01",
+        "UC-02"
+      ],
+      "source_refs": [
+        "gdd/LiveOps.json#/use_cases/0",
+        "gdd/LiveOps.json",
+        "site_meta/LiveOps.json",
+        "facts/review_20261116_round2/data_findings.json",
+        "facts/review_20261116/public_current_config_3129/summary.json"
+      ]
+    },
+    {
+      "title": "Kiểm định từng model",
+      "actor": "Client",
+      "action": "Đọc model rồi kiểm IsValid trước khi cấp cho dịch vụ.",
+      "rule": "Model không hợp lệ được thay bằng cache/default và báo invalid_config_fetched.",
+      "outcome": "Một lỗi cấu hình không mặc nhiên làm hỏng toàn bộ danh mục.",
+      "uc_ids": [
+        "UC-03"
+      ],
+      "source_refs": [
+        "gdd/LiveOps.json#/use_cases/2",
+        "gdd/LiveOps.json",
+        "site_meta/LiveOps.json",
+        "facts/review_20261116_round2/data_findings.json",
+        "facts/review_20261116/public_current_config_3129/summary.json"
+      ]
+    },
+    {
+      "title": "Chọn kinh tế Grand hay Firebase",
+      "actor": "Client và server",
+      "action": "Request gửi loại config và hierarchy đã thấy; client chọn model sau response.",
+      "rule": "Grand chỉ được chọn khi model có và IsEnabled=true; không chọn bằng phép so hierarchy lớn hơn. Cache Grand phải khớp phiên bản app.",
+      "outcome": "Consumer dùng một model có nguồn xác định; default chưa chứng minh effective config.",
+      "uc_ids": [
+        "UC-09",
+        "UC-10"
+      ],
+      "source_refs": [
+        "gdd/LiveOps.json#/use_cases/8",
+        "gdd/LiveOps.json",
+        "site_meta/LiveOps.json",
+        "facts/review_20261116_round2/data_findings.json",
+        "facts/review_20261116/public_current_config_3129/summary.json"
+      ]
+    },
+    {
+      "title": "Nạp asset theo phiên bản",
+      "actor": "Client",
+      "action": "Lấy bundle theo catalog phiên bản và cache cục bộ.",
+      "rule": "Nguồn mô tả tối đa 3 bundle song song; bản cũ có thể bị dọn khi version đổi.",
+      "outcome": "Nội dung mới cần cả dữ liệu lẫn tài nguyên dựng giao diện.",
+      "uc_ids": [
+        "UC-12",
+        "UC-13"
+      ],
+      "source_refs": [
+        "gdd/LiveOps.json#/use_cases/11",
+        "gdd/LiveOps.json",
+        "site_meta/LiveOps.json",
+        "facts/review_20261116_round2/data_findings.json",
+        "facts/review_20261116/public_current_config_3129/summary.json"
+      ]
+    }
+  ],
+  "rules": [
+    {
+      "title": "Kiểm kê khác thực thi",
+      "text": "APK 3129 có 63 default model; panel LiveOps hiện giữ 57 model liên hệ trực tiếp, không có nghĩa cả 57 đã được load trong phiên.",
+      "source_refs": [
+        "gdd/LiveOps.json",
+        "site_meta/LiveOps.json",
+        "facts/review_20261116_round2/data_findings.json",
+        "facts/review_20261116/public_current_config_3129/summary.json"
+      ]
+    },
+    {
+      "title": "Hierarchy là dấu vết",
+      "text": "Giá trị hierarchy đi trong request/response và model; không phải thuật toán tự ưu tiên số lớn hơn.",
+      "source_refs": [
+        "gdd/LiveOps.json",
+        "site_meta/LiveOps.json",
+        "facts/review_20261116_round2/data_findings.json",
+        "facts/review_20261116/public_current_config_3129/summary.json"
+      ]
+    },
+    {
+      "title": "Tách build",
+      "text": "Mã ARMv7 3063 và native ARM64 3129 có phạm vi khác nhau; kết luận mới về economy dựa consumer 3129.",
+      "source_refs": [
+        "gdd/LiveOps.json",
+        "site_meta/LiveOps.json",
+        "facts/review_20261116_round2/data_findings.json",
+        "facts/review_20261116/public_current_config_3129/summary.json"
+      ]
+    }
+  ],
+  "decisions": [
+    {
+      "question": "Vì sao giữ cache và default?",
+      "answer": "Để có đường phục hồi khi fetch lỗi hoặc model không qua validation.",
+      "basis": "Flow persistence và fallback.",
+      "source_refs": [
+        "gdd/LiveOps.json",
+        "site_meta/LiveOps.json",
+        "facts/review_20261116_round2/data_findings.json",
+        "facts/review_20261116/public_current_config_3129/summary.json"
+      ]
+    },
+    {
+      "question": "Có được dùng default để khẳng định sale đang bật?",
+      "answer": "Không; cần response, cache hiệu lực và consumer ở phiên cụ thể.",
+      "basis": "Default là dữ liệu đóng gói, không phải assignment.",
+      "source_refs": [
+        "gdd/LiveOps.json",
+        "site_meta/LiveOps.json",
+        "facts/review_20261116_round2/data_findings.json",
+        "facts/review_20261116/public_current_config_3129/summary.json"
+      ]
+    },
+    {
+      "question": "Đổi config có cần đổi asset không?",
+      "answer": "Có thể cần; dữ liệu hợp lệ vẫn chưa bảo đảm prefab hoặc sprite đã tải xong.",
+      "basis": "AssetManager và popup event dùng nguồn riêng.",
+      "source_refs": [
+        "gdd/LiveOps.json",
+        "site_meta/LiveOps.json",
+        "facts/review_20261116_round2/data_findings.json",
+        "facts/review_20261116/public_current_config_3129/summary.json"
+      ]
+    }
+  ],
+  "segments_ab": {
+    "summary": "Tách trục chọn cấu hình, trạng thái người chơi và thí nghiệm. Chưa có bằng chứng assignment hoặc uplift của lượt này.",
+    "axes": [
+      {
+        "axis": "Nguồn economy",
+        "selection": "Grand model + backend gate, nếu không thì Firebase",
+        "effect": "Thay model mà các consumer đọc.",
+        "evidence_limit": "Đã đọc selector native; chưa quan sát response backend trong phiên offline.",
+        "source_refs": [
+          "gdd/LiveOps.json",
+          "site_meta/LiveOps.json",
+          "facts/review_20261116_round2/data_findings.json",
+          "facts/review_20261116/public_current_config_3129/summary.json"
+        ]
+      },
+      {
+        "axis": "Backend environment",
+        "selection": "Cấu hình stage/production",
+        "effect": "Thay đích request.",
+        "evidence_limit": "Không suy ra người chơi production được chia nhóm thử nghiệm.",
+        "source_refs": [
+          "gdd/LiveOps.json",
+          "site_meta/LiveOps.json",
+          "facts/review_20261116_round2/data_findings.json",
+          "facts/review_20261116/public_current_config_3129/summary.json"
+        ]
+      }
+    ],
+    "unknowns": [
+      "Không có phân bổ ngẫu nhiên, kích thước mẫu hoặc kết quả A/B để kết luận tác động nhân quả."
+    ]
+  },
+  "recovery": [
+    {
+      "condition": "Fetch lỗi",
+      "expected": "Dùng nguồn dự phòng hợp lệ và lưu rõ nguồn.",
+      "verified_scope": "Luật mã; fixture offline không kiểm mọi loại timeout.",
+      "uc_ids": [
+        "UC-02",
+        "UC-11"
+      ]
+    },
+    {
+      "condition": "Cache economy khác app version",
+      "expected": "Không coi cache cũ là Grand model hợp lệ cho phiên bản mới.",
+      "verified_scope": "Native 3129; chưa thực nghiệm nâng/hạ build.",
+      "uc_ids": [
+        "UC-03"
+      ]
+    }
+  ],
+  "takeaways": [
+    {
+      "text": "Thiết kế vận hành cần ghi nguồn hiệu lực, không chỉ bảng default.",
+      "basis": "Selector và validation có thể đổi kết quả."
+    },
+    {
+      "text": "Tách lỗi config, lỗi request và lỗi asset để chẩn đoán.",
+      "basis": "Ba đường phục hồi độc lập."
+    }
+  ],
+  "reviewed_source_paths": [
+    "gdd/LiveOps.json",
+    "site_meta/LiveOps.json",
+    "facts/review_20261116_round2/data_findings.json",
+    "facts/review_20261116/public_current_config_3129/summary.json"
+  ]
+}

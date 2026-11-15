@@ -1257,5 +1257,197 @@
     "round2_case_ids": [],
     "round2_branch_ucs": [],
     "full_uc_pass": false
+  },
+  "design_spec_20261116": {
+    "source": "editorial/Account.json",
+    "sha256": "6eeaf4c0c3363bd613800d5d4eefc5b1bf7daf9b70eaa1f47af373707e66ce4a",
+    "scope": "Designer-facing interpretation; no new runtime verification. Original use_cases and evidence remain unchanged.",
+    "content": {
+      "id": "Account",
+      "schema_version": 1,
+      "scope": "Diễn giải thiết kế từ client, default và bằng chứng ngày 15–16/11 đã ghi nguồn. Nội dung mã/default không được nâng thành runtime pass; giữ nguyên full data và UC của hồ sơ.",
+      "design_intent": "Bảo toàn danh tính và tiến độ qua phiên, cài lại và liên kết tài khoản. Điểm căng thẳng thiết kế là chọn dữ liệu có thẩm quyền khi máy và server không đồng nhất.",
+      "player_loop": "Mở game → nhận danh tính/token → đối chiếu tiến độ → chơi và đồng bộ → phục hồi đúng tài khoản khi quay lại.",
+      "flow": [
+        {
+          "title": "Tạo tài khoản ẩn danh lần đầu",
+          "actor": "Client",
+          "action": "Đọc GrandUserId; tạo danh tính ẩn danh nếu chưa có.",
+          "rule": "Không cần ép liên kết mạng xã hội để hình thành danh tính cục bộ.",
+          "outcome": "Có khóa nhận diện cho luồng login.",
+          "uc_ids": [
+            "UC-01"
+          ],
+          "source_refs": [
+            "gdd/Account.json#/use_cases/0",
+            "gdd/Account.json",
+            "site_meta/Account.json",
+            "facts/review_cases_20261116_round2.json",
+            "facts/review_20261116_round2/cross_feature_evidence_context.json"
+          ]
+        },
+        {
+          "title": "Đăng nhập và lấy token phiên",
+          "actor": "Client và server",
+          "action": "Gửi login, nhận token và dữ liệu tiến độ.",
+          "rule": "Timeout nguồn là 3 giây; lỗi đi qua retry có cooldown.",
+          "outcome": "Chỉ response thành công mới cấp dữ liệu xác thực.",
+          "uc_ids": [
+            "UC-02"
+          ],
+          "source_refs": [
+            "gdd/Account.json#/use_cases/1",
+            "gdd/Account.json",
+            "site_meta/Account.json",
+            "facts/review_cases_20261116_round2.json",
+            "facts/review_20261116_round2/cross_feature_evidence_context.json"
+          ]
+        },
+        {
+          "title": "Server ép tải lại dữ liệu (ForceFetch)",
+          "actor": "Client và server",
+          "action": "Đối chiếu Progress và ForceFetch rồi tải dữ liệu nếu cần.",
+          "rule": "Overwrite chạy qua từng ISyncable, ack force-fetch rồi restart.",
+          "outcome": "Phục hồi có thể thay dữ liệu nhiều dịch vụ, không chỉ level.",
+          "uc_ids": [
+            "UC-04"
+          ],
+          "source_refs": [
+            "gdd/Account.json#/use_cases/3",
+            "gdd/Account.json",
+            "site_meta/Account.json",
+            "facts/review_cases_20261116_round2.json",
+            "facts/review_20261116_round2/cross_feature_evidence_context.json"
+          ]
+        },
+        {
+          "title": "Yêu cầu xoá tài khoản",
+          "actor": "Người chơi và server",
+          "action": "Tạo yêu cầu xóa tài khoản.",
+          "rule": "InProgress khác Deleted; có nhánh hủy trong thời gian chờ.",
+          "outcome": "Thao tác cần ranh giới xác nhận rõ và không được thử như một nút điều hướng.",
+          "uc_ids": [
+            "UC-12"
+          ],
+          "source_refs": [
+            "gdd/Account.json#/use_cases/11",
+            "gdd/Account.json",
+            "site_meta/Account.json",
+            "facts/review_cases_20261116_round2.json",
+            "facts/review_20261116_round2/cross_feature_evidence_context.json"
+          ]
+        }
+      ],
+      "rules": [
+        {
+          "title": "Không trộn trạng thái đăng nhập",
+          "text": "Có ID cục bộ không chứng minh đã login hoặc token còn hạn.",
+          "source_refs": [
+            "gdd/Account.json",
+            "site_meta/Account.json",
+            "facts/review_cases_20261116_round2.json",
+            "facts/review_20261116_round2/cross_feature_evidence_context.json"
+          ]
+        },
+        {
+          "title": "Xung đột là quyết định dữ liệu",
+          "text": "ForceFetch và tiến độ response tác động lựa chọn overwrite; không tự thiết kế quy tắc merge ngoài mã.",
+          "source_refs": [
+            "gdd/Account.json",
+            "site_meta/Account.json",
+            "facts/review_cases_20261116_round2.json",
+            "facts/review_20261116_round2/cross_feature_evidence_context.json"
+          ]
+        },
+        {
+          "title": "Phạm vi nền tảng",
+          "text": "Apple và Game Center là nhánh iOS; lượt Android không thể phủ chúng.",
+          "source_refs": [
+            "gdd/Account.json",
+            "site_meta/Account.json",
+            "facts/review_cases_20261116_round2.json",
+            "facts/review_20261116_round2/cross_feature_evidence_context.json"
+          ]
+        }
+      ],
+      "decisions": [
+        {
+          "question": "Có nên buộc Facebook để giữ tiến độ?",
+          "answer": "Nguồn có tài khoản ẩn danh và liên kết riêng; không nên mô tả hai bước như một.",
+          "basis": "ID local và UC liên kết độc lập.",
+          "source_refs": [
+            "gdd/Account.json",
+            "site_meta/Account.json",
+            "facts/review_cases_20261116_round2.json",
+            "facts/review_20261116_round2/cross_feature_evidence_context.json"
+          ]
+        },
+        {
+          "question": "Offline có chứng minh sync bền vững?",
+          "answer": "Không; UI và kho cục bộ chỉ cho biết trạng thái máy ở fixture.",
+          "basis": "Không có response sync mới trong lượt offline.",
+          "source_refs": [
+            "gdd/Account.json",
+            "site_meta/Account.json",
+            "facts/review_cases_20261116_round2.json",
+            "facts/review_20261116_round2/cross_feature_evidence_context.json"
+          ]
+        }
+      ],
+      "segments_ab": {
+        "summary": "Các trục bên dưới mô tả điều kiện chọn hoặc trạng thái; chưa có assignment hay uplift để khẳng định A/B.",
+        "axes": [
+          {
+            "axis": "Tính năng tài khoản",
+            "selection": "Cờ xóa, Apple, Game Center và xác thực",
+            "effect": "Thay nhánh được phép dùng.",
+            "evidence_limit": "Cờ tồn tại không chứng minh UI đang mở hay A/B.",
+            "source_refs": [
+              "gdd/Account.json",
+              "site_meta/Account.json",
+              "facts/review_cases_20261116_round2.json",
+              "facts/review_20261116_round2/cross_feature_evidence_context.json"
+            ]
+          }
+        ],
+        "unknowns": [
+          "Chưa có phân bổ ngẫu nhiên, cohort và kết quả nhân quả để đánh giá thử nghiệm."
+        ]
+      },
+      "recovery": [
+        {
+          "condition": "Login không thành công",
+          "expected": "Retry có cooldown, không nhận response giả thành thành công.",
+          "verified_scope": "Luật nguồn, chưa đo đầy đủ retry.",
+          "uc_ids": [
+            "UC-03"
+          ]
+        },
+        {
+          "condition": "Yêu cầu xóa đang chờ",
+          "expected": "Có đường hủy trước khi server báo Deleted.",
+          "verified_scope": "Không thực hiện xóa/hủy thật trong playtest.",
+          "uc_ids": [
+            "UC-13"
+          ]
+        }
+      ],
+      "takeaways": [
+        {
+          "text": "Tách ID, token, tài khoản liên kết và bản save thành các trạng thái riêng.",
+          "basis": "Mỗi phần có vòng đời khác nhau."
+        },
+        {
+          "text": "Review overwrite phải ở cấp toàn bộ ISyncable.",
+          "basis": "Xung đột không chỉ là chọn level cao hơn."
+        }
+      ],
+      "reviewed_source_paths": [
+        "gdd/Account.json",
+        "site_meta/Account.json",
+        "facts/review_cases_20261116_round2.json",
+        "facts/review_20261116_round2/cross_feature_evidence_context.json"
+      ]
+    }
   }
 }

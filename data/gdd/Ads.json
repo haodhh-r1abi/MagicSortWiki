@@ -10295,5 +10295,134 @@
     "round2_case_ids": [],
     "round2_branch_ucs": [],
     "full_uc_pass": false
+  },
+  "design_spec_20261116": {
+    "source": "editorial/Ads.json",
+    "sha256": "075761e96cf9e7deb943be682bff5e59daf5ae6e1c3a84c79f2ef01072e2b7ad",
+    "scope": "Designer-facing interpretation; no new runtime verification. Original use_cases and evidence remain unchanged.",
+    "content": {
+      "id": "Ads",
+      "schema_version": 1,
+      "scope": "Lớp diễn giải thiết kế từ source và dossier hiện có; outcome là expected. Quan sát round2 được gọi rõ; chưa phát sinh playtest hoặc xác nhận backend mới.",
+      "design_intent": "Cho người chơi chọn trao đổi thời gian xem quảng cáo lấy một lợi ích rõ ràng; quảng cáo bắt buộc có điều tiết riêng để không lẫn với rewarded.",
+      "player_loop": "Gặp placement → xem lợi ích → chọn xem nếu rewarded → hoàn tất → nhận đúng lợi ích của placement.",
+      "flow": [
+        {
+          "title": "Quảng cáo xen kẽ",
+          "actor": "Người chơi",
+          "action": "Quay lại từ level và tiếp tục phiên chơi.",
+          "rule": "Interstitial kiểm eligibility và tần suất theo cấu hình quảng cáo; không phải mỗi lần chuyển màn đều được show.",
+          "outcome": "Chỉ hiện khi placement và SDK sẵn sàng.",
+          "uc_ids": [
+            "UC-04"
+          ],
+          "source_refs": [
+            "gdd/Ads.json#use_cases/3"
+          ]
+        },
+        {
+          "title": "Đổi lượt xem lấy coin",
+          "actor": "Người chơi",
+          "action": "Chọn nhân đôi coin sau chiến thắng.",
+          "rule": "Nguồn rewarded2XCoin khác nguồn một mạng hay Play On; grant phải gắn kết quả hoàn tất.",
+          "outcome": "Phần thưởng được xử lý theo placement, không theo việc chỉ bấm nút.",
+          "uc_ids": [
+            "UC-05"
+          ],
+          "source_refs": [
+            "gdd/Ads.json#use_cases/4"
+          ]
+        },
+        {
+          "title": "Quảng cáo chưa sẵn sàng",
+          "actor": "Người chơi",
+          "action": "Thử xem khi mạng hoặc SDK không có ad.",
+          "rule": "Load fail/show fail cần tách với video hoàn tất; không lấy retry làm lượt xem.",
+          "outcome": "Giữ nhánh thất bại riêng, không ghi nhận một rewarded thành công.",
+          "uc_ids": [
+            "UC-12"
+          ],
+          "source_refs": [
+            "gdd/Ads.json#use_cases/11"
+          ]
+        }
+      ],
+      "rules": [
+        {
+          "title": "Quảng cáo xen kẽ",
+          "text": "Interstitial kiểm eligibility và tần suất theo cấu hình quảng cáo; không phải mỗi lần chuyển màn đều được show.",
+          "source_refs": [
+            "gdd/Ads.json#use_cases/3"
+          ]
+        },
+        {
+          "title": "Đổi lượt xem lấy coin",
+          "text": "Nguồn rewarded2XCoin khác nguồn một mạng hay Play On; grant phải gắn kết quả hoàn tất.",
+          "source_refs": [
+            "gdd/Ads.json#use_cases/4"
+          ]
+        },
+        {
+          "title": "Quảng cáo chưa sẵn sàng",
+          "text": "Load fail/show fail cần tách với video hoàn tất; không lấy retry làm lượt xem.",
+          "source_refs": [
+            "gdd/Ads.json#use_cases/11"
+          ]
+        }
+      ],
+      "decisions": [
+        {
+          "question": "Vì sao cần theo placement thay vì một nút xem chung?",
+          "answer": "Mỗi lợi ích có điều kiện grant khác nhau; một mạng, gấp đôi coin và thêm chai không thể dùng chung dấu hiệu thành công.",
+          "basis": "Nhận định thiết kế từ cơ chế có nguồn; không phải hiệu quả đã đo.",
+          "source_refs": [
+            "gdd/Ads.json#flow",
+            "gdd/Ads.json#configs"
+          ]
+        }
+      ],
+      "segments_ab": {
+        "summary": "Provider và biến thể Play On: Thay đường tải ad hoặc lợi ích tiếp tục chơi.",
+        "axes": [
+          {
+            "axis": "Provider và biến thể Play On",
+            "selection": "Default/Nefta/Metica là lớp provider; Play On có 10 variant được khai báo.",
+            "effect": "Thay đường tải ad hoặc lợi ích tiếp tục chơi.",
+            "evidence_limit": "Provider/variant tồn tại không chứng minh user đã được gán experiment; chưa có completed ad trong fixture.",
+            "source_refs": [
+              "gdd/Ads.json#flow",
+              "gdd/Ads.json#segment_ab_review_20261115"
+            ]
+          }
+        ],
+        "unknowns": [
+          "Provider/variant tồn tại không chứng minh user đã được gán experiment; chưa có completed ad trong fixture."
+        ]
+      },
+      "recovery": [
+        {
+          "condition": "Nhánh lỗi, gián đoạn hoặc chuyển trạng thái của Ads (quảng cáo)",
+          "expected": "Load hoặc show lỗi không cộng tiến độ rewarded; retry phải giữ nguồn placement.",
+          "verified_scope": "Theo UC/source trong hồ sơ; runtime chỉ có giá trị ở đúng case và snapshot đã liên kết.",
+          "uc_ids": [
+            "UC-12"
+          ]
+        }
+      ],
+      "takeaways": [
+        {
+          "text": "Mỗi lợi ích có điều kiện grant khác nhau; một mạng, gấp đôi coin và thêm chai không thể dùng chung dấu hiệu thành công.",
+          "basis": "Suy luận thiết kế; không thay bảng cấu hình hoặc giới hạn thực nghiệm."
+        }
+      ],
+      "reviewed_source_paths": [
+        "gdd/Ads.json",
+        "site_meta/Ads.json",
+        "facts/review_20261116/public_current_config_3129/defaults/AdConfigModel.json",
+        "facts/review_20261116/public_current_config_3129/defaults/AdConfigModelFromBackend.json",
+        "facts/review_20261116/public_current_config_3129/defaults/AddProviderConfigModel.json",
+        "facts/review_20261116/public_current_config_3129/defaults/PlayOnRewardedConfigModel.json"
+      ]
+    }
   }
 }

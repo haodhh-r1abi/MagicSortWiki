@@ -3,16 +3,46 @@
   "title": "Vòng quay may mắn (Wheel of Fortune)",
   "tagline": "Tích chip từ nhiệm vụ để quay vòng quay 5 chặng, chặng cuối chỉ ra thưởng Elite và Epic.",
   "infobox": [
-    ["Loại", "Sự kiện solo"],
-    ["Mở khóa", "Level 130 (FirstLevelToShow, client default)"],
-    ["Thời lượng", "Theo StartTime/FinishTime do server gửi (server)"],
-    ["Chu kỳ / lịch", "Live-ops, bật/tắt bằng IsEnabled (mặc định false)"],
-    ["Tham gia", "Cá nhân"],
-    ["Vật phẩm thu thập", "Chip (CurrencyType.WheelOfFortuneCurrency = 20)"],
-    ["Tiền tệ", "Chip WOF; thưởng gồm coin, booster, life, chest, Collection pack"],
-    ["Thưởng chính", "Ô vòng quay 5 hạng: Poor, Basic, Premium, Elite, Epic"],
-    ["Điều kiện / phụ thuộc", "Asset bundle 'wof_bundle'; nhiệm vụ trỏ sang nhiều event khác"],
-    ["Manager", "WheelOfFortuneService"]
+    [
+      "Loại",
+      "Sự kiện solo"
+    ],
+    [
+      "Mở khóa",
+      "Level 130 (FirstLevelToShow, client default)"
+    ],
+    [
+      "Thời lượng",
+      "Theo StartTime/FinishTime do server gửi (server)"
+    ],
+    [
+      "Chu kỳ / lịch",
+      "Live-ops, bật/tắt bằng IsEnabled (mặc định false)"
+    ],
+    [
+      "Tham gia",
+      "Cá nhân"
+    ],
+    [
+      "Vật phẩm thu thập",
+      "Chip (CurrencyType.WheelOfFortuneCurrency = 20)"
+    ],
+    [
+      "Tiền tệ",
+      "Chip WOF; thưởng gồm coin, booster, life, chest, Collection pack"
+    ],
+    [
+      "Thưởng chính",
+      "Ô vòng quay 5 hạng: Poor, Basic, Premium, Elite, Epic"
+    ],
+    [
+      "Điều kiện / phụ thuộc",
+      "Asset bundle 'wof_bundle'; nhiệm vụ trỏ sang nhiều event khác"
+    ],
+    [
+      "Manager",
+      "WheelOfFortuneService"
+    ]
   ],
   "description": [
     "Wheel of Fortune là sự kiện meta nhiều chặng chạy theo lịch server, mặc định có 5 chặng.",
@@ -23,7 +53,7 @@
     "Tối đa 2 nhiệm vụ chạy cùng lúc; nhiệm vụ hoàn thành được thay ngay bằng nhiệm vụ dự phòng.",
     "Có 14 loại nhiệm vụ trỏ thẳng sang Jetpack Race, Magic Streak, Broom Streak, Duck Festival, Boat Rush, Mini Game, Merge và Collection.",
     "Nhờ đó WOF vừa là phần thưởng vừa là trục gom mọi sự kiện khác, đẩy người chơi vào các event xung quanh.",
-    "Kết quả quay được client tự quyết định theo bảng xác suất trước khi chạy animation, nên chơi được cả khi mất mạng.",
+    "Kết quả quay được chọn và lưu trước animation theo đường mã đã đọc. Để vào bàn còn cần cache, trạng thái và asset hợp lệ; lượt offline đã thấy No Internet Connection nên chưa xác minh quay thành công khi mất mạng.",
     "Người chơi có thể xem bảng tỉ lệ hạng thưởng của từng chặng trong popup riêng."
   ],
   "notes": [
@@ -57,127 +87,500 @@
   "reward_tables": [
     {
       "title": "TỈ LỆ HẠNG THƯỞNG THEO CHẶNG (WheelOfFortuneConfigModelV2.json)",
-      "columns": ["Chặng", "Không có Collection", "Có Collection"],
+      "columns": [
+        "Chặng",
+        "Không có Collection",
+        "Có Collection"
+      ],
       "rows": [
-        ["Chặng 0", "Poor 50%, Basic 25%, Premium 25%", "Poor 50%, Basic 25%, Premium 25%"],
-        ["Chặng 1", "Poor 50%, Basic 25%, Premium 25%", "Poor 50%, Basic 25%, Premium 25%"],
-        ["Chặng 2", "Poor 50%, Basic 25%, Premium 25%", "Poor 50%, Basic 25%, Premium 25%"],
-        ["Chặng 3", "Poor 50%, Basic 25%, Premium 25%", "Poor 50%, Basic 25%, Premium 25%"],
-        ["Chặng 4 (cuối)", "Epic 50%, Elite 50%", "Epic 50%, Elite 50%"]
+        [
+          "Chặng 0",
+          "Poor 50%, Basic 25%, Premium 25%",
+          "Poor 50%, Basic 25%, Premium 25%"
+        ],
+        [
+          "Chặng 1",
+          "Poor 50%, Basic 25%, Premium 25%",
+          "Poor 50%, Basic 25%, Premium 25%"
+        ],
+        [
+          "Chặng 2",
+          "Poor 50%, Basic 25%, Premium 25%",
+          "Poor 50%, Basic 25%, Premium 25%"
+        ],
+        [
+          "Chặng 3",
+          "Poor 50%, Basic 25%, Premium 25%",
+          "Poor 50%, Basic 25%, Premium 25%"
+        ],
+        [
+          "Chặng 4 (cuối)",
+          "Epic 50%, Elite 50%",
+          "Epic 50%, Elite 50%"
+        ]
       ]
     },
     {
       "title": "NGUỒN CHIP VÀ PHẦN THƯỞNG",
-      "columns": ["Nguồn", "Điều kiện", "Phần thưởng"],
+      "columns": [
+        "Nguồn",
+        "Điều kiện",
+        "Phần thưởng"
+      ],
       "rows": [
-        ["Bắt đầu sự kiện", "Sự kiện mới khởi tạo", "5 chip (InitialChipCount, client default)"],
-        ["Hoàn thành nhiệm vụ", "CurrentAmount đạt RequiredAmount", "WheelOfFortuneCurrencyReward chip (server)"],
-        ["Quay vòng quay chặng 0–3", "Chip ≥ SpinCost của chặng", "1 phần thưởng hạng Poor / Basic / Premium (nội dung do server)"],
-        ["Quay vòng quay chặng 4", "Chip ≥ SpinCost của chặng cuối", "1 phần thưởng hạng Elite hoặc Epic (nội dung do server)"],
-        ["Biến thể Collection", "CollectionService đang bật", "Dùng WheelOfFortuneRewardsWithCollection, có thể chứa Collection Pack (CurrencyType 14)"]
+        [
+          "Bắt đầu sự kiện",
+          "Sự kiện mới khởi tạo",
+          "5 chip (InitialChipCount, client default)"
+        ],
+        [
+          "Hoàn thành nhiệm vụ",
+          "CurrentAmount đạt RequiredAmount",
+          "WheelOfFortuneCurrencyReward chip (server)"
+        ],
+        [
+          "Quay vòng quay chặng 0–3",
+          "Chip ≥ SpinCost của chặng",
+          "1 phần thưởng hạng Poor / Basic / Premium (nội dung do server)"
+        ],
+        [
+          "Quay vòng quay chặng 4",
+          "Chip ≥ SpinCost của chặng cuối",
+          "1 phần thưởng hạng Elite hoặc Epic (nội dung do server)"
+        ],
+        [
+          "Biến thể Collection",
+          "CollectionService đang bật",
+          "Dùng WheelOfFortuneRewardsWithCollection, có thể chứa Collection Pack (CurrencyType 14)"
+        ]
       ]
     },
     {
       "title": "14 LOẠI NHIỆM VỤ (WheelOfFortuneTaskType)",
-      "columns": ["Mã", "Loại nhiệm vụ", "Liên kết"],
+      "columns": [
+        "Mã",
+        "Loại nhiệm vụ",
+        "Liên kết"
+      ],
       "rows": [
-        ["1", "SuperHardLevelWin", "Thắng level Super Hard"],
-        ["2", "JetpackRaceWin", "Jetpack Race"],
-        ["3", "MagicStreakStepReach", "Magic Streak"],
-        ["4", "BroomStreakStepReach", "Broom Streak"],
-        ["5", "DuckFestivalWin", "Duck Festival"],
-        ["6", "MiniGameStageComplete", "Mini Game"],
-        ["7", "CollectCards", "Collection"],
-        ["8", "EarnCoin", "Kinh tế"],
-        ["9", "FirstTryWin", "Level thường"],
-        ["10", "RegularLevelWin", "Level thường"],
-        ["11", "HardLevelWin", "Level Hard"],
-        ["12", "BoatRushStageWin", "Boat Rush"],
-        ["13", "MergeStageReach", "Merge Mini Game"],
-        ["14", "WinStreak", "Chuỗi thắng"]
+        [
+          "1",
+          "SuperHardLevelWin",
+          "Thắng level Super Hard"
+        ],
+        [
+          "2",
+          "JetpackRaceWin",
+          "Jetpack Race"
+        ],
+        [
+          "3",
+          "MagicStreakStepReach",
+          "Magic Streak"
+        ],
+        [
+          "4",
+          "BroomStreakStepReach",
+          "Broom Streak"
+        ],
+        [
+          "5",
+          "DuckFestivalWin",
+          "Duck Festival"
+        ],
+        [
+          "6",
+          "MiniGameStageComplete",
+          "Mini Game"
+        ],
+        [
+          "7",
+          "CollectCards",
+          "Collection"
+        ],
+        [
+          "8",
+          "EarnCoin",
+          "Kinh tế"
+        ],
+        [
+          "9",
+          "FirstTryWin",
+          "Level thường"
+        ],
+        [
+          "10",
+          "RegularLevelWin",
+          "Level thường"
+        ],
+        [
+          "11",
+          "HardLevelWin",
+          "Level Hard"
+        ],
+        [
+          "12",
+          "BoatRushStageWin",
+          "Boat Rush"
+        ],
+        [
+          "13",
+          "MergeStageReach",
+          "Merge Mini Game"
+        ],
+        [
+          "14",
+          "WinStreak",
+          "Chuỗi thắng"
+        ]
       ]
     },
     {
       "title": "TRẠNG THÁI SỰ KIỆN (WheelOfFortuneState)",
-      "columns": ["Mã", "Trạng thái", "Ý nghĩa"],
+      "columns": [
+        "Mã",
+        "Trạng thái",
+        "Ý nghĩa"
+      ],
       "rows": [
-        ["0", "Disable", "IsEnabled = false"],
-        ["1", "NoCache", "Chưa fetch được sự kiện"],
-        ["2", "NotIntroduced", "Chưa giới thiệu cho người chơi"],
-        ["3", "InsufficientLevel", "Level dưới FirstLevelToShow"],
-        ["4", "InProgress", "Đang chạy"],
-        ["5", "TimeIsUp", "Hết giờ"],
-        ["6", "ClaimedAndTimeIsUp", "Đã nhận và hết giờ"],
-        ["7", "Claimed", "Đã nhận"],
-        ["8", "AssetsNotReady", "Bundle 'wof_bundle' chưa tải xong"]
+        [
+          "0",
+          "Disable",
+          "IsEnabled = false"
+        ],
+        [
+          "1",
+          "NoCache",
+          "Chưa fetch được sự kiện"
+        ],
+        [
+          "2",
+          "NotIntroduced",
+          "Chưa giới thiệu cho người chơi"
+        ],
+        [
+          "3",
+          "InsufficientLevel",
+          "Level dưới FirstLevelToShow"
+        ],
+        [
+          "4",
+          "InProgress",
+          "Đang chạy"
+        ],
+        [
+          "5",
+          "TimeIsUp",
+          "Hết giờ"
+        ],
+        [
+          "6",
+          "ClaimedAndTimeIsUp",
+          "Đã nhận và hết giờ"
+        ],
+        [
+          "7",
+          "Claimed",
+          "Đã nhận"
+        ],
+        [
+          "8",
+          "AssetsNotReady",
+          "Bundle 'wof_bundle' chưa tải xong"
+        ]
       ]
     }
   ],
   "key_numbers": [
-    {"label": "Level mở khoá", "value": "130", "source": "WheelOfFortuneConfigModelV2.FirstLevelToShow"},
-    {"label": "Trạng thái bật/tắt mặc định", "value": "false", "source": "WheelOfFortuneConfigModelV2.IsEnabled"},
-    {"label": "EventType gửi backend", "value": "10", "source": "WheelOfFortuneConfigModelV2.EventType"},
-    {"label": "Chip tặng khi bắt đầu", "value": "5", "source": "WheelOfFortuneConfigModelV2.InitialChipCount"},
-    {"label": "Số chặng theo cấu hình mặc định", "value": "5 (StageId 0–4)", "source": "WheelOfFortuneConfigModelV2.StageProbabilities"},
-    {"label": "Tỉ lệ chặng 0–3", "value": "Poor 0.50, Basic 0.25, Premium 0.25", "source": "StageProbabilities[0..3]"},
-    {"label": "Tỉ lệ chặng 4", "value": "Epic 0.50, Elite 0.50", "source": "StageProbabilities[4]"},
-    {"label": "Số nhiệm vụ chạy đồng thời", "value": "2", "source": "WheelOfFortuneDataService.MaxActiveTaskCount"},
-    {"label": "Ngưỡng ép đổi chiến lược quay", "value": "2 lần liên tiếp", "source": "WheelOfFortuneDataService.ConsecutiveStrategyCheckCount"},
-    {"label": "Chi phí quay dự phòng", "value": "100 chip", "source": "WheelOfFortuneService.GetStageSpinCost"},
-    {"label": "Số loại nhiệm vụ", "value": "14 (SuperHardLevelWin=1 … WinStreak=14)", "source": "WheelOfFortuneTaskType"},
-    {"label": "Số hạng phần thưởng", "value": "5 (Basic=1, Poor=2, Premium=3, Elite=4, Epic=5)", "source": "WheelOfFortuneRewardSegment"},
-    {"label": "Số trạng thái sự kiện", "value": "9 (Disable=0 … AssetsNotReady=8)", "source": "WheelOfFortuneState"},
-    {"label": "Chiến lược quay", "value": "NotDecidedYet=-1, Fallback=0, Overshoot=1", "source": "WheelOfFortuneSpinStrategy"},
-    {"label": "Loại tiền tệ chip", "value": "CurrencyType.WheelOfFortuneCurrency = 20", "source": "CurrencyType"},
-    {"label": "EarnReason khi cấp thưởng ô", "value": "45 (0x2d)", "source": "WheelOfFortuneService.GiveStageReward"},
-    {"label": "Asset bundle", "value": "wof_bundle", "source": "WheelOfFortuneService.Initialize"},
-    {"label": "Id local notification", "value": "178178", "source": "WheelOfFortuneSpinNotificationSo.Id"},
-    {"label": "Tiêu đề notification", "value": "\"Wheel of Fortune Started!\"", "source": "WheelOfFortuneSpinNotificationSo.Title"},
-    {"label": "Nội dung notification mặc định", "value": "\"Beat 10 more levels to spin the wheel!\"", "source": "WheelOfFortuneSpinNotificationSo.Message"},
-    {"label": "Bật notification mặc định", "value": "false", "source": "WheelOfFortuneConfigModelV2.IsNotificationEnabled"},
-    {"label": "Thời gian chạy thanh tiến độ nhiệm vụ", "value": "0.6 giây", "source": "WheelOfFortuneAnimationConfig.TaskProgressBarFillDuration"},
-    {"label": "Chiều rộng thanh tiến độ nhiệm vụ", "value": "3.62", "source": "WheelOfFortuneAnimationConfig.TaskProgressBarWidth"},
-    {"label": "Tên khối sync", "value": "WheelOfFortuneV2SyncableDataModel", "source": "WheelOfFortuneDataService.GetSyncName"},
-    {"label": "Định dạng id sự kiện cho analytics", "value": "wof_{0}_{1:yyyyMMdd} (fallback 'wof_unknown_data')", "source": "WheelOfFortuneService.GetReadableEventId"}
+    {
+      "label": "Level mở khoá",
+      "value": "130",
+      "source": "WheelOfFortuneConfigModelV2.FirstLevelToShow"
+    },
+    {
+      "label": "Trạng thái bật/tắt mặc định",
+      "value": "false",
+      "source": "WheelOfFortuneConfigModelV2.IsEnabled"
+    },
+    {
+      "label": "EventType gửi backend",
+      "value": "10",
+      "source": "WheelOfFortuneConfigModelV2.EventType"
+    },
+    {
+      "label": "Chip tặng khi bắt đầu",
+      "value": "5",
+      "source": "WheelOfFortuneConfigModelV2.InitialChipCount"
+    },
+    {
+      "label": "Số chặng theo cấu hình mặc định",
+      "value": "5 (StageId 0–4)",
+      "source": "WheelOfFortuneConfigModelV2.StageProbabilities"
+    },
+    {
+      "label": "Tỉ lệ chặng 0–3",
+      "value": "Poor 0.50, Basic 0.25, Premium 0.25",
+      "source": "StageProbabilities[0..3]"
+    },
+    {
+      "label": "Tỉ lệ chặng 4",
+      "value": "Epic 0.50, Elite 0.50",
+      "source": "StageProbabilities[4]"
+    },
+    {
+      "label": "Số nhiệm vụ chạy đồng thời",
+      "value": "2",
+      "source": "WheelOfFortuneDataService.MaxActiveTaskCount"
+    },
+    {
+      "label": "Ngưỡng ép đổi chiến lược quay",
+      "value": "2 lần liên tiếp",
+      "source": "WheelOfFortuneDataService.ConsecutiveStrategyCheckCount"
+    },
+    {
+      "label": "Chi phí quay dự phòng",
+      "value": "100 chip",
+      "source": "WheelOfFortuneService.GetStageSpinCost"
+    },
+    {
+      "label": "Số loại nhiệm vụ",
+      "value": "14 (SuperHardLevelWin=1 … WinStreak=14)",
+      "source": "WheelOfFortuneTaskType"
+    },
+    {
+      "label": "Số hạng phần thưởng",
+      "value": "5 (Basic=1, Poor=2, Premium=3, Elite=4, Epic=5)",
+      "source": "WheelOfFortuneRewardSegment"
+    },
+    {
+      "label": "Số trạng thái sự kiện",
+      "value": "9 (Disable=0 … AssetsNotReady=8)",
+      "source": "WheelOfFortuneState"
+    },
+    {
+      "label": "Chiến lược quay",
+      "value": "NotDecidedYet=-1, Fallback=0, Overshoot=1",
+      "source": "WheelOfFortuneSpinStrategy"
+    },
+    {
+      "label": "Loại tiền tệ chip",
+      "value": "CurrencyType.WheelOfFortuneCurrency = 20",
+      "source": "CurrencyType"
+    },
+    {
+      "label": "EarnReason khi cấp thưởng ô",
+      "value": "45 (0x2d)",
+      "source": "WheelOfFortuneService.GiveStageReward"
+    },
+    {
+      "label": "Asset bundle",
+      "value": "wof_bundle",
+      "source": "WheelOfFortuneService.Initialize"
+    },
+    {
+      "label": "Id local notification",
+      "value": "178178",
+      "source": "WheelOfFortuneSpinNotificationSo.Id"
+    },
+    {
+      "label": "Tiêu đề notification",
+      "value": "\"Wheel of Fortune Started!\"",
+      "source": "WheelOfFortuneSpinNotificationSo.Title"
+    },
+    {
+      "label": "Nội dung notification mặc định",
+      "value": "\"Beat 10 more levels to spin the wheel!\"",
+      "source": "WheelOfFortuneSpinNotificationSo.Message"
+    },
+    {
+      "label": "Bật notification mặc định",
+      "value": "false",
+      "source": "WheelOfFortuneConfigModelV2.IsNotificationEnabled"
+    },
+    {
+      "label": "Thời gian chạy thanh tiến độ nhiệm vụ",
+      "value": "0.6 giây",
+      "source": "WheelOfFortuneAnimationConfig.TaskProgressBarFillDuration"
+    },
+    {
+      "label": "Chiều rộng thanh tiến độ nhiệm vụ",
+      "value": "3.62",
+      "source": "WheelOfFortuneAnimationConfig.TaskProgressBarWidth"
+    },
+    {
+      "label": "Tên khối sync",
+      "value": "WheelOfFortuneV2SyncableDataModel",
+      "source": "WheelOfFortuneDataService.GetSyncName"
+    },
+    {
+      "label": "Định dạng id sự kiện cho analytics",
+      "value": "wof_{0}_{1:yyyyMMdd} (fallback 'wof_unknown_data')",
+      "source": "WheelOfFortuneService.GetReadableEventId"
+    }
   ],
   "config_highlights": [
-    {"key": "IsEnabled", "value": "false", "meaning": "Bật/tắt toàn bộ WOF (server ghi đè)"},
-    {"key": "EventType", "value": "10", "meaning": "Mã loại sự kiện gửi lên backend (event_type)"},
-    {"key": "InitialChipCount", "value": "5", "meaning": "Số chip tặng khi bắt đầu sự kiện"},
-    {"key": "FirstLevelToShow", "value": "130", "meaning": "Level tối thiểu để thấy sự kiện"},
-    {"key": "IsNotificationEnabled", "value": "false", "meaning": "Bật local notification nhắc quay"},
-    {"key": "StageProbabilities[0..3].WithoutCollection", "value": "Premium 0.25, Basic 0.25, Poor 0.50", "meaning": "Tỉ lệ hạng thưởng chặng 0–3 (không Collection)"},
-    {"key": "StageProbabilities[0..3].WithCollection", "value": "Premium 0.25, Basic 0.25, Poor 0.50", "meaning": "Tỉ lệ hạng thưởng chặng 0–3 (có Collection)"},
-    {"key": "StageProbabilities[4].WithoutCollection", "value": "Epic 0.50, Elite 0.50", "meaning": "Chặng cuối chỉ ra thưởng cao cấp"},
-    {"key": "StageProbabilities[4].WithCollection", "value": "Epic 0.50, Elite 0.50", "meaning": "Chặng cuối bản Collection"},
-    {"key": "WheelOfFortuneDataService.MaxActiveTaskCount", "value": "2", "meaning": "Số nhiệm vụ hoạt động đồng thời"},
-    {"key": "WheelOfFortuneDataService.ConsecutiveStrategyCheckCount", "value": "2", "meaning": "Số lần quay liên tiếp cùng chiến lược thì ép đổi"},
-    {"key": "GetStageSpinCost fallback", "value": "100", "meaning": "Chi phí quay mặc định khi không đọc được SpinCost của chặng"},
-    {"key": "_wofBundleId", "value": "wof_bundle", "meaning": "Asset bundle chứa art của sự kiện"},
-    {"key": "readable event id format", "value": "wof_{0}_{1:yyyyMMdd}", "meaning": "Id dễ đọc dùng cho analytics"},
-    {"key": "WheelOfFortuneRewardSegment", "value": "None=0, Basic=1, Poor=2, Premium=3, Elite=4, Epic=5", "meaning": "Hạng phần thưởng của ô vòng quay"},
-    {"key": "WheelOfFortuneState", "value": "Disable=0, NoCache=1, NotIntroduced=2, InsufficientLevel=3, InProgress=4, TimeIsUp=5, ClaimedAndTimeIsUp=6, Claimed=7, AssetsNotReady=8", "meaning": "Trạng thái sự kiện"},
-    {"key": "WheelOfFortuneTaskType", "value": "None=0, SuperHardLevelWin=1, JetpackRaceWin=2, MagicStreakStepReach=3, BroomStreakStepReach=4, DuckFestivalWin=5, MiniGameStageComplete=6, CollectCards=7, EarnCoin=8, FirstTryWin=9, RegularLevelWin=10, HardLevelWin=11, BoatRushStageWin=12, MergeStageReach=13, WinStreak=14", "meaning": "Loại nhiệm vụ cấp chip"},
-    {"key": "WheelOfFortuneSpinStrategy", "value": "NotDecidedYet=-1, Fallback=0, Overshoot=1", "meaning": "Kiểu dừng của vòng quay (thiếu/thừa)"},
-    {"key": "WheelOfFortunePopUpImpressionSource", "value": "Force=0, LobbyButton=1", "meaning": "Nguồn mở popup chính"},
-    {"key": "WheelOfFortuneInfoPopUpImpressionSource", "value": "InfoButton=0, Force=1", "meaning": "Nguồn mở popup thông tin"},
-    {"key": "CurrencyType.WheelOfFortuneCurrency", "value": "20", "meaning": "Đồng tiền 'chip' riêng của WOF"},
-    {"key": "EarnReason", "value": "45 (0x2d)", "meaning": "Lý do nhận thưởng ghi kèm mọi lệnh cộng của GiveStageReward"},
-    {"key": "WheelOfFortuneInfoResponse", "value": "EventId, TournamentType, StartTime, FinishTime, Segment, EventData{Stages, TaskModels}", "meaning": "Cấu hình sự kiện từ server"},
-    {"key": "WheelOfFortuneRemoteStageModel", "value": "SpinAmount, SpinCost (server)", "meaning": "Số lần quay và chi phí quay của chặng"},
-    {"key": "WheelOfFortuneRemoteRewardModel", "value": "Id, Segment, RewardModel (server)", "meaning": "Từng ô của vòng quay: hạng và phần thưởng thật"},
-    {"key": "WheelOfFortuneRemoteTaskModel", "value": "Id, WheelOfFortuneTaskType, RequiredAmount, WheelOfFortuneCurrencyReward, BackupTask (server)", "meaning": "Định nghĩa nhiệm vụ và số chip thưởng"},
-    {"key": "WheelOfFortuneCacheModel", "value": "Progress, LastSeenProgress, LastSeenLobbyButtonProgress, WheelOfFortuneCurrencyCount, SpinResults, SpinStrategies, IsClaimed, IsClosedByCollectionReward, SpinAlertSeenOnLobbyButton, CanAutoOpen", "meaning": "Toàn bộ trạng thái cục bộ của sự kiện"},
-    {"key": "WheelOfFortunePopUpConfig._wheelOfFortuneConfigsByType", "value": "14 mục, mỗi mục gồm icon và các key mô tả dạng MagicLab*TaskDescription", "meaning": "Icon và text mô tả cho từng loại nhiệm vụ"},
-    {"key": "WheelOfFortuneAnimationConfig", "value": "TaskProgressBarFillDuration 0.6, Width 3.62, MinFillRatio 0.1, MinMaxFillValue (0.2, 3.62)", "meaning": "Thanh tiến độ nhiệm vụ"},
-    {"key": "WheelOfFortuneInertialMovementConfig", "value": "_decreaseRatio 0.94, _stopThreshold 0.01, _rubberBack 0, _maxScrollSpeed 3", "meaning": "Vật lý cuộn danh sách chặng trong popup"}
+    {
+      "key": "IsEnabled",
+      "value": "false",
+      "meaning": "Bật/tắt toàn bộ WOF (server ghi đè)"
+    },
+    {
+      "key": "EventType",
+      "value": "10",
+      "meaning": "Mã loại sự kiện gửi lên backend (event_type)"
+    },
+    {
+      "key": "InitialChipCount",
+      "value": "5",
+      "meaning": "Số chip tặng khi bắt đầu sự kiện"
+    },
+    {
+      "key": "FirstLevelToShow",
+      "value": "130",
+      "meaning": "Level tối thiểu để thấy sự kiện"
+    },
+    {
+      "key": "IsNotificationEnabled",
+      "value": "false",
+      "meaning": "Bật local notification nhắc quay"
+    },
+    {
+      "key": "StageProbabilities[0..3].WithoutCollection",
+      "value": "Premium 0.25, Basic 0.25, Poor 0.50",
+      "meaning": "Tỉ lệ hạng thưởng chặng 0–3 (không Collection)"
+    },
+    {
+      "key": "StageProbabilities[0..3].WithCollection",
+      "value": "Premium 0.25, Basic 0.25, Poor 0.50",
+      "meaning": "Tỉ lệ hạng thưởng chặng 0–3 (có Collection)"
+    },
+    {
+      "key": "StageProbabilities[4].WithoutCollection",
+      "value": "Epic 0.50, Elite 0.50",
+      "meaning": "Chặng cuối chỉ ra thưởng cao cấp"
+    },
+    {
+      "key": "StageProbabilities[4].WithCollection",
+      "value": "Epic 0.50, Elite 0.50",
+      "meaning": "Chặng cuối bản Collection"
+    },
+    {
+      "key": "WheelOfFortuneDataService.MaxActiveTaskCount",
+      "value": "2",
+      "meaning": "Số nhiệm vụ hoạt động đồng thời"
+    },
+    {
+      "key": "WheelOfFortuneDataService.ConsecutiveStrategyCheckCount",
+      "value": "2",
+      "meaning": "Số lần quay liên tiếp cùng chiến lược thì ép đổi"
+    },
+    {
+      "key": "GetStageSpinCost fallback",
+      "value": "100",
+      "meaning": "Chi phí quay mặc định khi không đọc được SpinCost của chặng"
+    },
+    {
+      "key": "_wofBundleId",
+      "value": "wof_bundle",
+      "meaning": "Asset bundle chứa art của sự kiện"
+    },
+    {
+      "key": "readable event id format",
+      "value": "wof_{0}_{1:yyyyMMdd}",
+      "meaning": "Id dễ đọc dùng cho analytics"
+    },
+    {
+      "key": "WheelOfFortuneRewardSegment",
+      "value": "None=0, Basic=1, Poor=2, Premium=3, Elite=4, Epic=5",
+      "meaning": "Hạng phần thưởng của ô vòng quay"
+    },
+    {
+      "key": "WheelOfFortuneState",
+      "value": "Disable=0, NoCache=1, NotIntroduced=2, InsufficientLevel=3, InProgress=4, TimeIsUp=5, ClaimedAndTimeIsUp=6, Claimed=7, AssetsNotReady=8",
+      "meaning": "Trạng thái sự kiện"
+    },
+    {
+      "key": "WheelOfFortuneTaskType",
+      "value": "None=0, SuperHardLevelWin=1, JetpackRaceWin=2, MagicStreakStepReach=3, BroomStreakStepReach=4, DuckFestivalWin=5, MiniGameStageComplete=6, CollectCards=7, EarnCoin=8, FirstTryWin=9, RegularLevelWin=10, HardLevelWin=11, BoatRushStageWin=12, MergeStageReach=13, WinStreak=14",
+      "meaning": "Loại nhiệm vụ cấp chip"
+    },
+    {
+      "key": "WheelOfFortuneSpinStrategy",
+      "value": "NotDecidedYet=-1, Fallback=0, Overshoot=1",
+      "meaning": "Kiểu dừng của vòng quay (thiếu/thừa)"
+    },
+    {
+      "key": "WheelOfFortunePopUpImpressionSource",
+      "value": "Force=0, LobbyButton=1",
+      "meaning": "Nguồn mở popup chính"
+    },
+    {
+      "key": "WheelOfFortuneInfoPopUpImpressionSource",
+      "value": "InfoButton=0, Force=1",
+      "meaning": "Nguồn mở popup thông tin"
+    },
+    {
+      "key": "CurrencyType.WheelOfFortuneCurrency",
+      "value": "20",
+      "meaning": "Đồng tiền 'chip' riêng của WOF"
+    },
+    {
+      "key": "EarnReason",
+      "value": "45 (0x2d)",
+      "meaning": "Lý do nhận thưởng ghi kèm mọi lệnh cộng của GiveStageReward"
+    },
+    {
+      "key": "WheelOfFortuneInfoResponse",
+      "value": "EventId, TournamentType, StartTime, FinishTime, Segment, EventData{Stages, TaskModels}",
+      "meaning": "Cấu hình sự kiện từ server"
+    },
+    {
+      "key": "WheelOfFortuneRemoteStageModel",
+      "value": "SpinAmount, SpinCost (server)",
+      "meaning": "Số lần quay và chi phí quay của chặng"
+    },
+    {
+      "key": "WheelOfFortuneRemoteRewardModel",
+      "value": "Id, Segment, RewardModel (server)",
+      "meaning": "Từng ô của vòng quay: hạng và phần thưởng thật"
+    },
+    {
+      "key": "WheelOfFortuneRemoteTaskModel",
+      "value": "Id, WheelOfFortuneTaskType, RequiredAmount, WheelOfFortuneCurrencyReward, BackupTask (server)",
+      "meaning": "Định nghĩa nhiệm vụ và số chip thưởng"
+    },
+    {
+      "key": "WheelOfFortuneCacheModel",
+      "value": "Progress, LastSeenProgress, LastSeenLobbyButtonProgress, WheelOfFortuneCurrencyCount, SpinResults, SpinStrategies, IsClaimed, IsClosedByCollectionReward, SpinAlertSeenOnLobbyButton, CanAutoOpen",
+      "meaning": "Toàn bộ trạng thái cục bộ của sự kiện"
+    },
+    {
+      "key": "WheelOfFortunePopUpConfig._wheelOfFortuneConfigsByType",
+      "value": "14 mục, mỗi mục gồm icon và các key mô tả dạng MagicLab*TaskDescription",
+      "meaning": "Icon và text mô tả cho từng loại nhiệm vụ"
+    },
+    {
+      "key": "WheelOfFortuneAnimationConfig",
+      "value": "TaskProgressBarFillDuration 0.6, Width 3.62, MinFillRatio 0.1, MinMaxFillValue (0.2, 3.62)",
+      "meaning": "Thanh tiến độ nhiệm vụ"
+    },
+    {
+      "key": "WheelOfFortuneInertialMovementConfig",
+      "value": "_decreaseRatio 0.94, _stopThreshold 0.01, _rubberBack 0, _maxScrollSpeed 3",
+      "meaning": "Vật lý cuộn danh sách chặng trong popup"
+    }
   ],
   "tips": [
     "WOF là trục gom event: 14 loại nhiệm vụ biến mọi sự kiện khác thành nguồn chip, tăng độ phủ của cả hệ live-ops.",
     "Đặt Poor ở mức 50% suốt bốn chặng đầu rồi dồn Elite/Epic vào chặng cuối tạo đường cong kỳ vọng rất mạnh về cuối sự kiện.",
     "Ép đảo chiến lược dừng sau 2 lần giống nhau là thủ thuật cảm giác — vòng quay trông ngẫu nhiên hơn thực tế.",
-    "Nhiệm vụ dự phòng đảm bảo popup luôn có việc để làm, không bao giờ rơi vào trạng thái trống.",
+    "Nhiệm vụ dự phòng cung cấp nội dung thay thế khi consumer chọn nhánh fallback. Khả năng mở popup còn phụ thuộc gate và trạng thái event; chưa chứng minh mọi tình huống đều có nhiệm vụ.",
     "Mở khoá ở level 130 cùng nội dung hoàn toàn từ server cho thấy WOF nhắm vào nhóm người chơi lõi và cần tune liên tục."
   ],
-  "categories": ["Sự kiện", "Live-ops", "Meta", "Kinh tế"]
+  "categories": [
+    "Sự kiện",
+    "Live-ops",
+    "Meta",
+    "Kinh tế"
+  ]
 }

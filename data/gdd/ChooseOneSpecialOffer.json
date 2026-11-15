@@ -1753,5 +1753,132 @@
     "round2_case_ids": [],
     "round2_branch_ucs": [],
     "full_uc_pass": false
+  },
+  "design_spec_20261116": {
+    "source": "editorial/ChooseOneSpecialOffer.json",
+    "sha256": "e95989d6fb674bfebd56172190c5149eefcace40ed7a01a2197d60f762031888",
+    "scope": "Designer-facing interpretation; no new runtime verification. Original use_cases and evidence remain unchanged.",
+    "content": {
+      "id": "ChooseOneSpecialOffer",
+      "schema_version": 1,
+      "scope": "Lớp diễn giải thiết kế từ source và dossier hiện có; outcome là expected. Quan sát round2 được gọi rõ; chưa phát sinh playtest hoặc xác nhận backend mới.",
+      "design_intent": "Tạo quyết định so sánh ba gói và combo trong một cửa sổ thời gian, thay cho chỉ một nút mua. Hiệu quả thương mại là giả thuyết thiết kế, chưa có uplift đo được.",
+      "player_loop": "Mở offer → so ba gói và Buy All → chọn một phương án → thanh toán → kết thúc đợt mua.",
+      "flow": [
+        {
+          "title": "So sánh các phương án",
+          "actor": "Người chơi",
+          "action": "Đọc ba gói cạnh nhau cùng lựa chọn Buy All.",
+          "rule": "Ba package và combined package đến từ response theo segment; phần trăm giảm là nhãn của gói combo.",
+          "outcome": "Người chơi biết mình chọn một gói hay cả bộ.",
+          "uc_ids": [
+            "UC-03"
+          ],
+          "source_refs": [
+            "gdd/ChooseOneSpecialOffer.json#use_cases/2"
+          ]
+        },
+        {
+          "title": "Mua một gói",
+          "actor": "Người chơi",
+          "action": "Chọn package phù hợp và xác nhận giá.",
+          "rule": "Offer là một lần mua theo event; không tự cộng đủ ba package khi chọn lẻ.",
+          "outcome": "Giao dịch trả về đúng product và reward đã chọn.",
+          "uc_ids": [
+            "UC-04"
+          ],
+          "source_refs": [
+            "gdd/ChooseOneSpecialOffer.json#use_cases/3"
+          ]
+        },
+        {
+          "title": "Kết thúc cửa sổ",
+          "actor": "Người chơi",
+          "action": "Đóng popup hoặc quay lại sau giờ kết thúc.",
+          "rule": "Giờ local và trạng thái remote có thể kết thúc offer; ShowFrequency/MaxShowCount chỉ điều tiết tự mở.",
+          "outcome": "Không giữ nút mua như thể offer còn hiệu lực.",
+          "uc_ids": [
+            "UC-10"
+          ],
+          "source_refs": [
+            "gdd/ChooseOneSpecialOffer.json#use_cases/9"
+          ]
+        }
+      ],
+      "rules": [
+        {
+          "title": "So sánh các phương án",
+          "text": "Ba package và combined package đến từ response theo segment; phần trăm giảm là nhãn của gói combo.",
+          "source_refs": [
+            "gdd/ChooseOneSpecialOffer.json#use_cases/2"
+          ]
+        },
+        {
+          "title": "Mua một gói",
+          "text": "Offer là một lần mua theo event; không tự cộng đủ ba package khi chọn lẻ.",
+          "source_refs": [
+            "gdd/ChooseOneSpecialOffer.json#use_cases/3"
+          ]
+        },
+        {
+          "title": "Kết thúc cửa sổ",
+          "text": "Giờ local và trạng thái remote có thể kết thúc offer; ShowFrequency/MaxShowCount chỉ điều tiết tự mở.",
+          "source_refs": [
+            "gdd/ChooseOneSpecialOffer.json#use_cases/9"
+          ]
+        }
+      ],
+      "decisions": [
+        {
+          "question": "Có nên gọi Buy All là luôn tiết kiệm nhất?",
+          "answer": "Chỉ so khi biết giá hiện hành và hàng của từng phương án; nhãn giảm giá không thay phép đối chiếu ba gói thực tế.",
+          "basis": "Nhận định thiết kế từ cơ chế có nguồn; không phải hiệu quả đã đo.",
+          "source_refs": [
+            "gdd/ChooseOneSpecialOffer.json#flow",
+            "gdd/ChooseOneSpecialOffer.json#configs"
+          ]
+        }
+      ],
+      "segments_ab": {
+        "summary": "Segment gói và combo: Đổi product, reward và đề xuất combo.",
+        "axes": [
+          {
+            "axis": "Segment gói và combo",
+            "selection": "SegmentedChooseOneOfferPackages và SegmentedChooseOneCombinedPackage trong response.",
+            "effect": "Đổi product, reward và đề xuất combo.",
+            "evidence_limit": "Chưa có selector backend hay assignment thực; không suy tất cả user thấy cùng giá.",
+            "source_refs": [
+              "gdd/ChooseOneSpecialOffer.json#flow",
+              "gdd/ChooseOneSpecialOffer.json#segment_ab_review_20261115"
+            ]
+          }
+        ],
+        "unknowns": [
+          "Chưa có selector backend hay assignment thực; không suy tất cả user thấy cùng giá."
+        ]
+      },
+      "recovery": [
+        {
+          "condition": "Nhánh lỗi, gián đoạn hoặc chuyển trạng thái của Choose One Offer",
+          "expected": "Dữ liệu gói lỗi hoặc mua thất bại phải giữ nhánh lỗi, không đánh dấu đã mua.",
+          "verified_scope": "Theo UC/source trong hồ sơ; runtime chỉ có giá trị ở đúng case và snapshot đã liên kết.",
+          "uc_ids": [
+            "UC-07",
+            "UC-12"
+          ]
+        }
+      ],
+      "takeaways": [
+        {
+          "text": "Chỉ so khi biết giá hiện hành và hàng của từng phương án; nhãn giảm giá không thay phép đối chiếu ba gói thực tế.",
+          "basis": "Suy luận thiết kế; không thay bảng cấu hình hoặc giới hạn thực nghiệm."
+        }
+      ],
+      "reviewed_source_paths": [
+        "gdd/ChooseOneSpecialOffer.json",
+        "site_meta/ChooseOneSpecialOffer.json",
+        "facts/review_20261116/public_current_config_3129/defaults/ChooseOneSpecialOfferConfigModel.json"
+      ]
+    }
   }
 }

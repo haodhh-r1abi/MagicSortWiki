@@ -21,7 +21,7 @@
     ],
     [
       "Điều kiện / phụ thuộc",
-      "Firebase Remote Config (82 khoá) + backend Grand Games (get-level-config-v2, get-daily-level-config)"
+      "Firebase Remote Config (danh sách 82 key theo code lịch sử 0.0.3063) và backend Grand; inventory default 0.0.3129 là nguồn khác."
     ],
     [
       "Manager",
@@ -29,11 +29,11 @@
     ]
   ],
   "description": [
-    "Hai nguồn config chạy song song: Firebase Remote Config (khoảng 82 khoá, mỗi khoá là chuỗi JSON thành một *ConfigModel) và backend riêng của Grand Games cho cấu hình level.",
-    "Cả hai đều có ba tầng dự phòng: giá trị từ mạng → bản cache trên đĩa → bản mặc định đóng gói trong Resources/DefaultConfigs (56 file JSON).",
+    "Firebase Remote Config và backend Grand là các nguồn khác nhau. Danh sách khoảng 82 key trong code lịch sử 0.0.3063 không phải kiểm kê key remote đang có hiệu lực hiện tại.",
+    "ResourceManager của APK 0.0.3129 xác định 63 model default đóng gói; trang LiveOps liên kết 57 model bằng nguồn/consumer. Inventory, phạm vi feature và số model runtime thực chọn là ba khái niệm khác nhau.",
     "Config nào không hợp lệ (IsValid() = false) bị thay bằng cache/mặc định và bắn analytics invalid_config_fetched, tránh config rác làm crash game.",
     "LiveOps còn quản lý ép cập nhật app: Force Update chặn cứng, Soft Update chỉ nhắc theo giới hạn số lần mỗi phiên.",
-    "Lớp HTTP dùng chung (HttpProxy + BestHTTP + policy Polly) gắn header xác thực Bearer và bảy header thông tin thiết bị cho mọi request.",
+    "Lớp HTTP dùng chung (HttpProxy + BestHTTP + policy Polly) dựng header theo đường xác thực và tùy chọn request. Bảy header thiết bị chỉ được gộp khi addDeviceInfoHeaders bật; tham số này mặc định false trong chữ ký HttpProxy đã đọc. Không suy mọi request đều gửi thông tin thiết bị.",
     "WebSocket giữ kênh realtime cho tính năng team/chat, tự ping mỗi 10 giây và tự kết nối lại với delay tăng dần.",
     "AssetManager tải asset bundle từ xa theo version trong AssetBundleVersions.asset, cho phép đẩy nội dung sự kiện mới xuống mà không cần update store.",
     "BackendEnvironmentConfig.asset chứa khoảng 150 URL cho hai môi trường stage và production, đổi toàn bộ backend chỉ bằng một asset.",
@@ -41,13 +41,14 @@
     "AppStartCounterService đếm số lần mở app trong PlayerPrefs khoá \"AppStartCount\", dùng làm điều kiện hiện offer/popup."
   ],
   "notes": [
-    "Lưu ý: RootLevelConfigModel.json rỗng, nên toàn bộ cờ A/B mức toàn game chỉ có giá trị đến từ server (server).",
+    "Nguồn lịch sử thiếu default RootLevelConfigModel đầy đủ; không suy mọi cờ toàn game đều chỉ do server. Effective flag cần resolver/constructor/cache/assignment đúng build.",
     "Lưu ý: giá trị thật của các khoá Firebase trên production không nằm trong client — bản mặc định trong Resources/defaultconfigs đa số có IsEnabled = false.",
     "Lưu ý: fetch Firebase Remote Config có timeout 2,5 giây; quá hạn thì cờ _cancelFetch bật và client dùng bản cũ.",
     "Lưu ý: bộ đếm _softUpdateShownCount reset mỗi phiên vì UpdateService sống theo vòng đời app.",
     "Lưu ý: giá trị header thiết bị bị cắt còn tối đa 90 ký tự; thiếu thì ghi \"unknown\".",
     "Lưu ý: mọi ngoại lệ mạng được quy về ClientStatusCode 900–904 trong ApiResponse thay vì ném exception ra caller.",
-    "Native0.0.3129ARM64: HttpProxyFactoryParams defaults RetryCount3/TimeOut50/GlobalTimeOut50; ProxyFactoryParams defaults Retry3/TimeOut5.0s. Policy delay=0.75*n giây và outertimeout50s. Caller overrides và selectedrequest effective còn partial; không đồng nhất các lớp timeout."
+    "Native0.0.3129ARM64: HttpProxyFactoryParams defaults RetryCount3/TimeOut50/GlobalTimeOut50; ProxyFactoryParams defaults Retry3/TimeOut5.0s. Policy delay=0.75*n giây và outertimeout50s. Caller overrides và selectedrequest effective còn partial; không đồng nhất các lớp timeout.",
+    "Nguồn hiện hành: 63 default model được kiểm kê/hash; 57 thuộc phạm vi trang LiveOps. Snapshot lịch sử và runtime case giữ riêng, không gọi default là production hiện tại."
   ],
   "how_it_works": [
     "Mở app: FirebaseInitializer.InitializeFirebase kiểm tra dependency Firebase với timeout 2,5 giây và App Check thử lại tối đa 3 lần.",
@@ -56,7 +57,7 @@
     "FirebaseRemoteConfigResolver.ResolveAndGetConfigService đọc lần lượt 82 khoá qua FirebaseConfigValueParser.Deserialize<T>.",
     "ValidateAndFallbackConfigs duyệt các model IRemoteConfigValidatable, gọi IsValid(); model hỏng bị thay và bắn invalid_config_fetched kèm config_name.",
     "FirebaseConfigPersistenceService.CacheConfigs ghi bản vừa lấy vào file Configs/CachedRemoteConfigs cho lần mở app sau.",
-    "Không có mạng: IsCached → GetRemoteConfigs; không có cache → LoadDefaultConfigs đọc 56 file JSON trong Resources/DefaultConfigs, kèm event SendFirebaseConfigFaultedEvent.",
+    "Không có mạng: IsCached → GetRemoteConfigs; không có cache → LoadDefaultConfigs dùng default assets; inventory APK 0.0.3129 có 63 model qua ResourceManager, không khẳng định runtime đã load/chọn cả 63, kèm event SendFirebaseConfigFaultedEvent.",
     "Sau login, GrandRemoteRegularLevelsConfigResolver.FetchAndResolveConfig(progress) gọi POST get-level-config-v2 với ConfigName, ConfigType, Progress; timeout 2500 ms, retry tối đa 10 lần.",
     "Kết quả (LevelsConfig, LoopLevelsConfig, BlockerIntroConfigModel) được cache vào GrandConfigs/GrandCachedRemoteConfigs; hỏng hết thì dùng LevelsConfigv2.json và bắn default_backend_config.",
     "Cấu hình Daily đi đường tương tự qua POST get-daily-level-config, fallback bắn default_backend_daily_config.",
@@ -64,7 +65,9 @@
     "Mọi request đi qua HttpProxy: gắn Authorization Bearer, Content-Type application/json, và khi cần bảy header X-Client-ID, X-Device-Model, X-Device-Name, X-Device-OS, X-Device-Platform, X-Device-Type, X-Game-Build.",
     "BestHttpRequestService thêm X-Request-ViewId, chọn JSON hoặc protobuf theo cờ IsFlatBuffer, nén gzip khi cần, và bọc bằng policy Polly do HttpRequestPolicyFactory.Get tạo.",
     "AssetManager phân loại asset (IsRemoteBundle / IsExistInResources), tải tối đa 3 bundle cùng lúc, lưu thành \"{bundleName}_v{version}\" và xoá bản version cũ.",
-    "WebSocketManager.Start(uri) mở kênh teamsChat (wss), WebSocketHearthBeat ping mỗi 10 giây; mất kết nối thì TryReconnect với delay từ 5 giây tới tối đa 120 giây."
+    "WebSocketManager.Start(uri) mở kênh teamsChat (wss), WebSocketHearthBeat ping mỗi 10 giây; mất kết nối thì TryReconnect với delay từ 5 giây tới tối đa 120 giây.",
+    "Native 0.0.3129: GameEconomyConfigService chỉ chọn Grand khi Grand model và backend config đều tồn tại, IsEnabled=true; còn lại dùng Firebase model. GetActiveConfigHierarchy đọc Hierarchy của model đã chọn, không chọn số lớn nhất.",
+    "Grand cache yêu cầu ApplicationVersion khớp Application.version. Default payload và 57 model trên trang là nguồn tĩnh, không phải response hoặc assignment mới."
   ],
   "reward_tables": [
     {
@@ -333,17 +336,17 @@
         [
           "HttpProxy timeoutInSeconds",
           "5 giây",
-          "Mặc định mọi request"
+          "Mặc định tham số HttpProxy đã nêu; caller hoặc factory có thể ghi đè"
         ],
         [
           "HttpProxy connectionTimeOutInSeconds",
           "2 giây",
-          "Mặc định mọi request"
+          "Mặc định tham số HttpProxy đã nêu; không suy cho mọi request"
         ],
         [
           "HttpProxy retryCount",
           "0",
-          "Mặc định mọi request"
+          "Mặc định tham số HttpProxy; khác RetryCount của factory/policy và có thể được caller ghi đè"
         ],
         [
           "WebSocketManager.ReconnectAttemptDelay",
@@ -376,13 +379,13 @@
   "key_numbers": [
     {
       "label": "Số khoá Firebase Remote Config",
-      "value": "82 khoá",
+      "value": "82 trong danh sách code lịch sử 0.0.3063; không phải count remote effective hiện tại",
       "source": "FirebaseRemoteConfigResolver.AddRootLevelConfigService"
     },
     {
-      "label": "Số file config mặc định đóng gói",
-      "value": "56 file JSON",
-      "source": "FirebaseConfigPersistenceService.LoadDefaultConfigs"
+      "label": "Inventory model default đóng gói",
+      "value": "63 model (APK 0.0.3129)",
+      "source": "ResourceManager; public_current_config_3129/default_manifest.json"
     },
     {
       "label": "Timeout fetch remote config",
@@ -488,18 +491,23 @@
       "label": "Khoá đếm số lần mở app",
       "value": "\"AppStartCount\" (PlayerPrefs)",
       "source": "AppStartCounterService.CacheAppStartCount"
+    },
+    {
+      "label": "Model có liên kết trên trang LiveOps",
+      "value": "57; không đồng nghĩa 57 model đang active",
+      "source": "gdd/LiveOps.json#/current_data_review_20261116_round2"
     }
   ],
   "config_highlights": [
     {
       "key": "Danh sách khoá Firebase Remote Config",
-      "value": "82 khoá (AdConfigModel, AppUpdateConfigModel, BELevelConfig, GameEconomyModel, MagicPassConfigModel, StoreConfigModelV2, …)",
+      "value": "Khoảng 82 key trong danh sách mã lịch sử 0.0.3063 (AdConfigModel, AppUpdateConfigModel, BELevelConfig, GameEconomyModel…); không phải count remote effective hiện tại",
       "meaning": "Toàn bộ mặt bằng điều khiển từ xa của game"
     },
     {
-      "key": "Danh sách file mặc định (LoadDefaultConfigs)",
-      "value": "56 file trong Resources/defaultconfigs",
-      "meaning": "Bản mặc định đóng gói khi không lấy được từ server"
+      "key": "Inventory default model APK 0.0.3129",
+      "value": "63 model trong Resources/defaultconfigs",
+      "meaning": "ResourceManager inventory; không phải số runtime load/chọn. Trang LiveOps liên kết 57 model."
     },
     {
       "key": "AppUpdateConfigModel",
@@ -529,7 +537,7 @@
     {
       "key": "RootLevelConfigModel (cờ root-level)",
       "value": "IsVibrationOn, IsOgPlayStyle, ColorVariant, LevelEndPopupsAbGroup, IsFlatBuffer, InGameBoosterVariant, MegaShuffleRetryCount, … (server)",
-      "meaning": "Cờ A/B và bật/tắt hệ thống ở mức toàn game; file mặc định rỗng"
+      "meaning": "Các cờ chọn nhánh và bật/tắt ở mức toàn game. Nguồn lịch sử chưa có default RootLevelConfigModel đầy đủ; phải tra resolver, constructor và cache đúng build. Cờ tồn tại không tự chứng minh A/B đã phân bổ."
     },
     {
       "key": "FirebaseRemoteConfigFetcher._timeOut",
@@ -564,7 +572,7 @@
     {
       "key": "HttpProxy.Post/Get tham số mặc định",
       "value": "timeoutInSeconds=5, connectionTimeOutInSeconds=2, retryCount=0, preventRequestIfNotAuthorized=true, addDeviceInfoHeaders=false",
-      "meaning": "Mặc định cho mọi lời gọi backend"
+      "meaning": "Giá trị mặc định tại chữ ký/lớp được nêu; factory, policy và caller có thể dùng giá trị khác. Không coi đây là timeout/retry effective của mọi request."
     },
     {
       "key": "HttpProxy.LimitLength maxLength",

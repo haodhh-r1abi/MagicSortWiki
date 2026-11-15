@@ -14618,5 +14618,134 @@
     "round2_case_ids": [],
     "round2_branch_ucs": [],
     "full_uc_pass": false
+  },
+  "design_spec_20261116": {
+    "source": "editorial/TreasureDrill.json",
+    "sha256": "a01e13316dd8477d5fdbfeb685a92164ca5898c079a77ca64200d35b30dfc700",
+    "scope": "Designer-facing interpretation; no new runtime verification. Original use_cases and evidence remain unchanged.",
+    "content": {
+      "id": "TreasureDrill",
+      "schema_version": 1,
+      "scope": "Diễn giải thiết kế từ nguồn đã đối chiếu; outcome là expected, không phải lượt playtest mới. Các giá trị default/native có build riêng, không tự coi đang hiệu lực production.",
+      "design_intent": "Cho người chơi tích nhiệm vụ trước và trả tiền mở quyền nhận sau, làm giá trị đã tích trở thành một phần quyết định mua.",
+      "player_loop": "Thắng nhiệm vụ → mở bậc → mua quyền nếu muốn → nhận các mốc đủ → Grand Prize.",
+      "flow": [
+        {
+          "title": "Hoàn tất nhiệm vụ bậc",
+          "actor": "Người chơi và hệ thống",
+          "action": "Thắng số level mà nhiệm vụ yêu cầu.",
+          "rule": "Thắng level tăng tiến độ, nhưng hoàn thành chưa tự cho quyền nhận quà nếu chưa mua.",
+          "outcome": "Mũi khoan tiến và quà thể hiện trạng thái đủ tiến độ.",
+          "uc_ids": [
+            "UC-03"
+          ],
+          "source_refs": [
+            "gdd/TreasureDrill.json#use_cases/2"
+          ]
+        },
+        {
+          "title": "Mở khóa bằng giao dịch",
+          "actor": "Người chơi và hệ thống",
+          "action": "Chọn gói theo giá đang hiển thị.",
+          "rule": "Bảng mặc định khai báo DollarEquivalent 2/5/10/15/25 theo nhóm; đó chưa phải giá VND production đã kiểm.",
+          "outcome": "Quyền mua được ghi sau kết quả hợp lệ, không chỉ sau bấm nút.",
+          "uc_ids": [
+            "UC-04"
+          ],
+          "source_refs": [
+            "gdd/TreasureDrill.json#use_cases/3"
+          ]
+        },
+        {
+          "title": "Nhận mốc đã tích",
+          "actor": "Người chơi và hệ thống",
+          "action": "Sau kích hoạt, nhận các bậc đã hoàn thành.",
+          "rule": "Claim cần cả tiến độ nhiệm vụ lẫn quyền đã mua; có nhánh nhận dồn nhiều mốc.",
+          "outcome": "Nhận đúng những mốc đủ cả hai điều kiện.",
+          "uc_ids": [
+            "UC-06"
+          ],
+          "source_refs": [
+            "gdd/TreasureDrill.json#use_cases/5"
+          ]
+        }
+      ],
+      "rules": [
+        {
+          "title": "Hoàn tất nhiệm vụ bậc",
+          "text": "Thắng level tăng tiến độ, nhưng hoàn thành chưa tự cho quyền nhận quà nếu chưa mua.",
+          "source_refs": [
+            "gdd/TreasureDrill.json#use_cases/2"
+          ]
+        },
+        {
+          "title": "Mở khóa bằng giao dịch",
+          "text": "Bảng mặc định khai báo DollarEquivalent 2/5/10/15/25 theo nhóm; đó chưa phải giá VND production đã kiểm.",
+          "source_refs": [
+            "gdd/TreasureDrill.json#use_cases/3"
+          ]
+        },
+        {
+          "title": "Nhận mốc đã tích",
+          "text": "Claim cần cả tiến độ nhiệm vụ lẫn quyền đã mua; có nhánh nhận dồn nhiều mốc.",
+          "source_refs": [
+            "gdd/TreasureDrill.json#use_cases/5"
+          ]
+        }
+      ],
+      "decisions": [
+        {
+          "question": "Vì sao tiến độ không đủ để claim?",
+          "answer": "Sự kiện tách việc hoàn thành nhiệm vụ và mua quyền mở quà. UI cần giải thích cả hai để không khiến người chơi hiểu rằng hoàn thành đã đồng nghĩa nhận thưởng.",
+          "basis": "Suy luận thiết kế từ cơ chế có nguồn, chưa đo hiệu quả.",
+          "source_refs": [
+            "gdd/TreasureDrill.json#flow",
+            "gdd/TreasureDrill.json#configs"
+          ]
+        }
+      ],
+      "segments_ab": {
+        "summary": "Nhóm chi tiêu và sản phẩm: Đổi sản phẩm và DollarEquivalent được khai báo.",
+        "axes": [
+          {
+            "axis": "Nhóm chi tiêu và sản phẩm",
+            "selection": "SegmentedIAPModel chứa non-purchaser, poor, hamsi, dolphin và whale.",
+            "effect": "Đổi sản phẩm và DollarEquivalent được khai báo.",
+            "evidence_limit": "Đây là bảng phân nhóm thương mại; thiếu assignment backend và giao dịch runtime nên chưa thể kết luận tác động chuyển đổi.",
+            "source_refs": [
+              "gdd/TreasureDrill.json#segment_ab_review_20261115",
+              "gdd/TreasureDrill.json#flow",
+              "gdd/TreasureDrill.json#configs"
+            ]
+          }
+        ],
+        "unknowns": [
+          "Đây là bảng phân nhóm thương mại; thiếu assignment backend và giao dịch runtime nên chưa thể kết luận tác động chuyển đổi."
+        ]
+      },
+      "recovery": [
+        {
+          "condition": "Gián đoạn hoặc kết thúc Treasure Drill (khoan kho báu)",
+          "expected": "Offline hoặc hết hạn không tự bật quyền đã mua; giao dịch tới trễ phải đối chiếu đúng event.",
+          "verified_scope": "Theo source và UC trong dossier; các dependency backend/sync/RNG vẫn cần kiểm riêng.",
+          "uc_ids": [
+            "UC-11",
+            "UC-13",
+            "UC-14"
+          ]
+        }
+      ],
+      "takeaways": [
+        {
+          "text": "Sự kiện tách việc hoàn thành nhiệm vụ và mua quyền mở quà. UI cần giải thích cả hai để không khiến người chơi hiểu rằng hoàn thành đã đồng nghĩa nhận thưởng.",
+          "basis": "Phân tích thiết kế, không phải kết quả đo cohort."
+        }
+      ],
+      "reviewed_source_paths": [
+        "gdd/TreasureDrill.json",
+        "site_meta/TreasureDrill.json",
+        "facts/review_20261116/public_current_config_3129/defaults/TreasureDrillConfigModel.json"
+      ]
+    }
   }
 }

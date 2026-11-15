@@ -1,13 +1,6 @@
-# Magic Sort GDD Wiki (static)
+# Magic Sort GDD Wiki (local)
 
-Site tĩnh sinh bởi `GameDesign/tools/gd_site.py`. Mở `index.html` hoặc publish lên GitHub Pages:
-
-```bash
-cd site
-git init && git add -A && git commit -m "GDD wiki"
-git branch -M gh-pages
-git remote add origin <repo-url>
-git push -u origin gh-pages
-```
-
-Trong Settings → Pages của repo chọn nhánh `gh-pages`, thư mục `/`. Không cần build; file `.nojekyll` đã có.
+Generated from GameDesign/gdd, site_meta, editorial and reviewed evidence.
+Open index.html, or serve this directory locally for review.
+Source: GameDesign/tools/gd_site.py; reader: tools/ms_reader.py.
+Commit local changes on main. No push, publish or deployment is part of this build.

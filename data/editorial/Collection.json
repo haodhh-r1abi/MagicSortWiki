@@ -1,0 +1,157 @@
+{
+  "id": "Collection",
+  "schema_version": 1,
+  "scope": "Diễn giải thiết kế từ hồ sơ đã đối chiếu; flow/outcome là hành vi mong đợi theo nguồn. Chỉ câu ghi rõ round2 là quan sát 16/11/2026 trên fixture 0.0.3129, không phải full UC pass.",
+  "design_intent": "Biến phần thưởng từ nhiều sự kiện thành mục tiêu sưu tập dài hạn: thẻ mới tiến tới đủ bộ, thẻ trùng vẫn có ích qua sao dư và giao tiếp đội. Nhịp album dài hơn một phiên chơi nên trạng thái đã xem, phase và hạn mùa phải dễ hiểu.",
+  "player_loop": "Nhận gói → mở thẻ → xem thẻ mới và bộ còn thiếu → hoàn thành theme hoặc dùng sao dư → nhận quà → tiếp tục album theo phase.",
+  "flow": [
+    {
+      "title": "Mở album đang hoạt động",
+      "actor": "Người chơi",
+      "action": "Chạm Collection ở Home và xem các bộ thẻ.",
+      "rule": "Cần đủ level, event và asset của CollectionId; hai bộ collection_4/5 hiện có đều 15 theme × 9 thẻ.",
+      "outcome": "Album hiển thị tiến độ theo dữ liệu mùa, không mặc định mọi CollectionId đều 135 thẻ.",
+      "uc_ids": [
+        "UC-01"
+      ],
+      "source_refs": [
+        "gdd/Collection.json#use_cases/0"
+      ]
+    },
+    {
+      "title": "Mở gói và phân biệt thẻ mới/trùng",
+      "actor": "Người chơi",
+      "action": "Nhận gói từ một nguồn thưởng rồi xem kết quả mở.",
+      "rule": "5 loại pack có 2/3/4/5/6 thẻ; nhánh pack cơ bản, trung và cao cấp có cơ chế lựa chọn riêng.",
+      "outcome": "Thẻ được ghi vào inventory; bản sao dư đóng góp sao thay vì chỉ là kết quả hụt.",
+      "uc_ids": [
+        "UC-02"
+      ],
+      "source_refs": [
+        "gdd/Collection.json#use_cases/1"
+      ]
+    },
+    {
+      "title": "Đổi sao dư lấy rương",
+      "actor": "Người chơi",
+      "action": "Mở Bonus Chest, xem preview rồi chọn rương khi đủ sao.",
+      "rule": "Sao dư là tổng (số lượng thẻ − 1) × số sao trên từng thẻ có bản dư; ngưỡng đổi rương lấy từ cấu hình của rương.",
+      "outcome": "Thiếu sao không được suy thành một lượt mở hay grant; preview chỉ cho biết hàng có thể nhận.",
+      "uc_ids": [
+        "UC-06"
+      ],
+      "source_refs": [
+        "gdd/Collection.json#use_cases/5"
+      ]
+    },
+    {
+      "title": "Chuyển vòng sau khi đủ bộ",
+      "actor": "Người chơi",
+      "action": "Hoàn thành album và nhận thưởng của phase hiện tại.",
+      "rule": "Native 0.0.3129 chọn Repeat trước Gold rồi Normal; reward Repeat null có nhánh fallback Gold.",
+      "outcome": "Tiến độ và quà phải gắn phase, không mô tả chỉ hai vòng Normal/Gold.",
+      "uc_ids": [
+        "UC-07"
+      ],
+      "source_refs": [
+        "gdd/Collection.json#use_cases/6"
+      ]
+    },
+    {
+      "title": "Xem thẻ và xóa dấu mới",
+      "actor": "Người chơi",
+      "action": "Mở bộ có badge, xem thẻ rồi đóng và mở lại album.",
+      "rule": "Round2 quan sát badge/New của Wonderland mất qua mở lại và cold restart, tổng 8/135 không đổi.",
+      "outcome": "Xem thẻ thay đổi trạng thái thông báo, không làm tăng số thẻ sở hữu.",
+      "uc_ids": [
+        "UC-12"
+      ],
+      "source_refs": [
+        "gdd/Collection.json#use_cases/11",
+        "facts/review_cases_20261116_round2.json"
+      ]
+    }
+  ],
+  "rules": [
+    {
+      "title": "Tách xác suất công bố và thuật toán",
+      "text": "Trang hỗ trợ chính thức công bố luật pack; không lấy bảng web làm effective config hay kết quả RNG của fixture. Phải giữ đối chiếu riêng khi số liệu đóng gói và website khác nhau.",
+      "source_refs": [
+        "gdd/Collection.json#summary",
+        "gdd/Collection.json#flow",
+        "facts/review_20261116_round2/collection_support_page_20261116.json"
+      ]
+    },
+    {
+      "title": "Tách có thẻ, đủ bộ và trang bị token",
+      "text": "Sở hữu một thẻ không tự mở token; preview token khóa và bấm Equip không thành công đã được quan sát qua Profile. Thưởng theme/album vẫn phụ thuộc đủ bộ và phase.",
+      "source_refs": [
+        "gdd/Collection.json#summary",
+        "gdd/Collection.json#flow",
+        "gdd/Profile.json#runtime_review_20261116_round2"
+      ]
+    },
+    {
+      "title": "Thứ tự chọn phase khác hướng chuyển vòng",
+      "text": "GetActivePhase ưu tiên đọc trạng thái Repeat rồi Gold rồi Normal. Hướng tiến triển lại là Normal → Gold → Repeat, và chỉ có Repeat khi AdditionalCompleteCollectionCount khác 0; giá trị mặc định hiện có là 0. Repeat có giới hạn số vòng và không trao token. Fallback reward chỉ áp dụng khi null, không được hiểu mảng rỗng cũng fallback.",
+      "source_refs": [
+        "gdd/Collection.json#flow",
+        "facts/review_20261116_round2/collection_repeat_contract.json"
+      ]
+    }
+  ],
+  "decisions": [
+    {
+      "question": "Vì sao thẻ trùng vẫn có giá trị?",
+      "answer": "Sao dư tạo một đường tích lũy khác bên cạnh tìm thẻ thiếu; người chơi có quyết định đổi rương thay vì chỉ chờ RNG. Giá trị kinh tế phải đọc cả ngưỡng sao và reward rương.",
+      "basis": "Nhận định thiết kế dựa trên cơ chế trong hồ sơ, không phải kết quả đo chuyển đổi.",
+      "source_refs": [
+        "gdd/Collection.json#flow"
+      ]
+    }
+  ],
+  "segments_ab": {
+    "summary": "Mùa, phase và trạng thái Collection: Đổi bộ thẻ, reward và nhánh mở gói; Collection có hoạt động còn ảnh hưởng reward của sự kiện nguồn.",
+    "axes": [
+      {
+        "axis": "Mùa, phase và trạng thái Collection",
+        "selection": "Response mang Segment và CollectionId; nội dung phase chọn Normal/Gold/Repeat theo trạng thái album.",
+        "effect": "Đổi bộ thẻ, reward và nhánh mở gói; Collection có hoạt động còn ảnh hưởng reward của sự kiện nguồn.",
+        "evidence_limit": "Chưa có bằng chứng phân bổ A/B; probability công bố không chứng minh kết quả thực nghiệm hoặc assignment.",
+        "source_refs": [
+          "gdd/Collection.json#segment_ab_review_20261115",
+          "gdd/Collection.json#flow"
+        ]
+      }
+    ],
+    "unknowns": [
+      "Chưa có bằng chứng phân bổ A/B; probability công bố không chứng minh kết quả thực nghiệm hoặc assignment."
+    ]
+  },
+  "recovery": [
+    {
+      "condition": "Đóng album hoặc khởi động lại sau khi xem thẻ mới",
+      "expected": "Giữ trạng thái đã xem riêng với số lượng thẻ; round2 xác minh badge Wonderland không trở lại sau restart, các badge chưa xem còn nguyên.",
+      "verified_scope": "Đọc source và hồ sơ runtime có sẵn; chỉ xác minh nhánh được nêu rõ, không phát sinh playtest mới.",
+      "uc_ids": [
+        "UC-12",
+        "UC-16"
+      ]
+    }
+  ],
+  "takeaways": [
+    {
+      "text": "Sao dư tạo một đường tích lũy khác bên cạnh tìm thẻ thiếu; người chơi có quyết định đổi rương thay vì chỉ chờ RNG. Giá trị kinh tế phải đọc cả ngưỡng sao và reward rương.",
+      "basis": "Suy luận thiết kế; đọc cùng quyết định và source_refs, không phải uplift đã đo."
+    }
+  ],
+  "reviewed_source_paths": [
+    "gdd/Collection.json",
+    "site_meta/Collection.json",
+    "facts/review_cases_20261116_round2.json",
+    "facts/review_20261116_round2/collection_support_page_20261116.json",
+    "facts/review_20261116/public_current_config_3129/defaults/CollectionConfigModel.json",
+    "gdd/Profile.json",
+    "facts/review_20261116_round2/collection_repeat_contract.json"
+  ]
+}

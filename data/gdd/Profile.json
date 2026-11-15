@@ -1162,5 +1162,209 @@
       "UC-05"
     ],
     "full_uc_pass": false
+  },
+  "design_spec_20261116": {
+    "source": "editorial/Profile.json",
+    "sha256": "6bd9829aa9197f6ab218bdb7edfccd5ab50b69a2ffa8ef016dae53dee00a0856",
+    "scope": "Designer-facing interpretation; no new runtime verification. Original use_cases and evidence remain unchanged.",
+    "content": {
+      "id": "Profile",
+      "schema_version": 1,
+      "scope": "Diễn giải thiết kế từ client, default và bằng chứng ngày 15–16/11 đã ghi nguồn. Nội dung mã/default không được nâng thành runtime pass; giữ nguyên full data và UC của hồ sơ.",
+      "design_intent": "Cho người chơi biểu đạt danh tính bằng tên và vật phẩm trang trí, trong khi validation, quyền sở hữu và lưu server bảo vệ trạng thái hợp lệ.",
+      "player_loop": "Xem hồ sơ → chọn thay đổi → kiểm hợp lệ/quyền sở hữu → lưu hoặc hủy → kiểm hồ sơ cuối.",
+      "flow": [
+        {
+          "title": "Xem thống kê thành tích của mình",
+          "actor": "Người chơi",
+          "action": "Xem thống kê của mình.",
+          "rule": "Lượt 15/11 ghi level 352, FirstTryWins5 và BroomMax4; không suy đó là dữ liệu production chuẩn.",
+          "outcome": "Thành tích tạo ngữ cảnh cho avatar và huy hiệu.",
+          "uc_ids": [
+            "UC-09"
+          ],
+          "source_refs": [
+            "gdd/Profile.json#/use_cases/8",
+            "gdd/Profile.json",
+            "site_meta/Profile.json",
+            "facts/review_cases_20261116_round2.json",
+            "facts/review_20261116_round2/cross_feature_evidence_context.json"
+          ]
+        },
+        {
+          "title": "Đổi tên hiển thị",
+          "actor": "Người chơi và client",
+          "action": "Nhập tên trống, ab rồi abc.",
+          "rule": "Lượt 16/11:0 hoặc 2 ký tự chưa hợp lệ,3 ký tự ASCII làm Continue xanh; không bấm Continue.",
+          "outcome": "Chứng minh nhánh validation và cancel, không chứng minh đổi tên thành công.",
+          "uc_ids": [
+            "UC-02"
+          ],
+          "source_refs": [
+            "gdd/Profile.json#/use_cases/1",
+            "gdd/Profile.json",
+            "site_meta/Profile.json",
+            "facts/review_cases_20261116_round2.json",
+            "facts/review_20261116_round2/cross_feature_evidence_context.json"
+          ]
+        },
+        {
+          "title": "Chọn ảnh đại diện dựng sẵn",
+          "actor": "Người chơi",
+          "action": "Chọn avatar rồi đóng.",
+          "rule": "Checkmark chọn khác preview header; sau cancel avatar gốc vẫn giữ.",
+          "outcome": "Preview và commit là hai bước riêng.",
+          "uc_ids": [
+            "UC-03"
+          ],
+          "source_refs": [
+            "gdd/Profile.json#/use_cases/2",
+            "gdd/Profile.json",
+            "site_meta/Profile.json",
+            "facts/review_cases_20261116_round2.json",
+            "facts/review_20261116_round2/cross_feature_evidence_context.json"
+          ]
+        },
+        {
+          "title": "Gắn token bộ sưu tập lên hồ sơ",
+          "actor": "Người chơi và client",
+          "action": "Xem token khóa WonderlandBadge.",
+          "rule": "Equip xám; chạm hiện Token is not equippable.",
+          "outcome": "Quyền sở hữu chặn equip, không có nhận token hoặc Save thành công.",
+          "uc_ids": [
+            "UC-05"
+          ],
+          "source_refs": [
+            "gdd/Profile.json#/use_cases/4",
+            "gdd/Profile.json",
+            "site_meta/Profile.json",
+            "facts/review_cases_20261116_round2.json",
+            "facts/review_20261116_round2/cross_feature_evidence_context.json"
+          ]
+        }
+      ],
+      "rules": [
+        {
+          "title": "Không gọi chọn là lưu",
+          "text": "Avatar chọn tạm và tên abc chưa được gửi lên server.",
+          "source_refs": [
+            "gdd/Profile.json",
+            "site_meta/Profile.json",
+            "facts/review_cases_20261116_round2.json",
+            "facts/review_20261116_round2/cross_feature_evidence_context.json"
+          ]
+        },
+        {
+          "title": "Bốn nhóm trang trí",
+          "text": "Avatar, Token, Frame và Name là các catalog khác nhau; một token khóa không phủ frame/name style.",
+          "source_refs": [
+            "gdd/Profile.json",
+            "site_meta/Profile.json",
+            "facts/review_cases_20261116_round2.json",
+            "facts/review_20261116_round2/cross_feature_evidence_context.json"
+          ]
+        },
+        {
+          "title": "Cache ảnh có vòng đời",
+          "text": "Nguồn có expiration5 phiên cho profile sprite cache; không áp vào mọi dữ liệu hồ sơ.",
+          "source_refs": [
+            "gdd/Profile.json",
+            "site_meta/Profile.json",
+            "facts/review_cases_20261116_round2.json",
+            "facts/review_20261116_round2/cross_feature_evidence_context.json"
+          ]
+        }
+      ],
+      "decisions": [
+        {
+          "question": "Nút Continue xanh chứng minh gì?",
+          "answer": "Chỉ validation cục bộ ở input đó; backend, profanity và Unicode chưa được kiểm.",
+          "basis": "Case0/2/3 ký tự ASCII và cancel.",
+          "source_refs": [
+            "gdd/Profile.json",
+            "site_meta/Profile.json",
+            "facts/review_cases_20261116_round2.json",
+            "facts/review_20261116_round2/cross_feature_evidence_context.json"
+          ]
+        },
+        {
+          "question": "Vì sao token có preview nhưng không equip?",
+          "answer": "Cho xem đích sưu tầm trong khi quyền sử dụng vẫn khóa.",
+          "basis": "WonderlandBadge preview và lỗi equip mới.",
+          "source_refs": [
+            "gdd/Profile.json",
+            "site_meta/Profile.json",
+            "facts/review_cases_20261116_round2.json",
+            "facts/review_20261116_round2/cross_feature_evidence_context.json"
+          ]
+        }
+      ],
+      "segments_ab": {
+        "summary": "Các trục bên dưới mô tả điều kiện chọn hoặc trạng thái; chưa có assignment hay uplift để khẳng định A/B.",
+        "axes": [
+          {
+            "axis": "Sở hữu trang trí",
+            "selection": "Token/frame/name style được mở khóa",
+            "effect": "Thay khả năng equip.",
+            "evidence_limit": "Không phải segment A/B nếu chỉ là entitlement.",
+            "source_refs": [
+              "gdd/Profile.json",
+              "site_meta/Profile.json",
+              "facts/review_cases_20261116_round2.json",
+              "facts/review_20261116_round2/cross_feature_evidence_context.json"
+            ]
+          },
+          {
+            "axis": "Nguồn avatar",
+            "selection": "Built-in, Facebook hoặc remote cache",
+            "effect": "Thay provider ảnh và đường phục hồi.",
+            "evidence_limit": "Chưa kiểm Facebook hoặc mọi provider ở lượt mới.",
+            "source_refs": [
+              "gdd/Profile.json",
+              "site_meta/Profile.json",
+              "facts/review_cases_20261116_round2.json",
+              "facts/review_20261116_round2/cross_feature_evidence_context.json"
+            ]
+          }
+        ],
+        "unknowns": [
+          "Chưa có phân bổ ngẫu nhiên, cohort và kết quả nhân quả để đánh giá thử nghiệm."
+        ]
+      },
+      "recovery": [
+        {
+          "condition": "Offline khi chỉnh",
+          "expected": "Không báo Save thành công khi không có điều kiện mạng.",
+          "verified_scope": "15/11 Save avatar hiện No Internet;16/11 chỉ cancel.",
+          "uc_ids": [
+            "UC-15"
+          ]
+        },
+        {
+          "condition": "Tải avatar remote lỗi",
+          "expected": "Provider có cooldown/retry và cache riêng.",
+          "verified_scope": "Source, chưa có response remote mới.",
+          "uc_ids": [
+            "UC-11"
+          ]
+        }
+      ],
+      "takeaways": [
+        {
+          "text": "Phân biệt preview, validation, entitlement và commit trong mỗi case.",
+          "basis": "Bốn điều kiện có thể cho kết quả khác nhau."
+        },
+        {
+          "text": "Đừng để khoe thành tích vượt qua tính toàn vẹn save.",
+          "basis": "Offline/cancel phải giữ hồ sơ gốc."
+        }
+      ],
+      "reviewed_source_paths": [
+        "gdd/Profile.json",
+        "site_meta/Profile.json",
+        "facts/review_cases_20261116_round2.json",
+        "facts/review_20261116_round2/cross_feature_evidence_context.json"
+      ]
+    }
   }
 }

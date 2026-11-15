@@ -855,5 +855,134 @@
     "round2_case_ids": [],
     "round2_branch_ucs": [],
     "full_uc_pass": false
+  },
+  "design_spec_20261116": {
+    "source": "editorial/SkyJump.json",
+    "sha256": "f5e9d93b8c1e9b805de83925e0dd441f9cd7305a89c76b6927a1458636a23bb1",
+    "scope": "Designer-facing interpretation; no new runtime verification. Original use_cases and evidence remain unchanged.",
+    "content": {
+      "id": "SkyJump",
+      "schema_version": 1,
+      "scope": "Diễn giải thiết kế từ nguồn đã đối chiếu; outcome là expected, không phải lượt playtest mới. Các giá trị default/native có build riêng, không tự coi đang hiệu lực production.",
+      "design_intent": "Một cuộc đua loại trực tiếp: giá trị nằm ở sống sót tới đích và chia quỹ thưởng với những người cùng thắng.",
+      "player_loop": "Join → thắng leo bậc → thua rơi khỏi giải → kết quả → chia quỹ → chờ lượt mới.",
+      "flow": [
+        {
+          "title": "Join thang đua",
+          "actor": "Người chơi và hệ thống",
+          "action": "Tham gia giải đang mở.",
+          "rule": "Danh tính và cửa sổ thời gian của giải đến từ response.",
+          "outcome": "Người chơi xuất hiện trên thang của đúng giải.",
+          "uc_ids": [
+            "UC-03"
+          ],
+          "source_refs": [
+            "gdd/SkyJump.json#use_cases/2"
+          ]
+        },
+        {
+          "title": "Rơi khỏi giải",
+          "actor": "Người chơi và hệ thống",
+          "action": "Thua một level khi đang tham gia.",
+          "rule": "Score = -1 là trạng thái bị loại trong giải đó, không phải về 0 để leo lại ngay trong cùng lượt.",
+          "outcome": "Lượt giải đi theo nhánh thua.",
+          "uc_ids": [
+            "UC-05"
+          ],
+          "source_refs": [
+            "gdd/SkyJump.json#use_cases/4"
+          ]
+        },
+        {
+          "title": "Chia quỹ cho người thắng",
+          "actor": "Người chơi và hệ thống",
+          "action": "Đạt bậc 10 và xem kết quả khi giải chốt.",
+          "rule": "Quỹ mặc định 10.000 coin chia cho số người thắng, mẫu số tối thiểu là 1.",
+          "outcome": "Phần riêng thay đổi theo số người cùng thắng, không phải ai cũng nhận 10.000 coin.",
+          "uc_ids": [
+            "UC-09"
+          ],
+          "source_refs": [
+            "gdd/SkyJump.json#use_cases/8"
+          ]
+        }
+      ],
+      "rules": [
+        {
+          "title": "Join thang đua",
+          "text": "Danh tính và cửa sổ thời gian của giải đến từ response.",
+          "source_refs": [
+            "gdd/SkyJump.json#use_cases/2"
+          ]
+        },
+        {
+          "title": "Rơi khỏi giải",
+          "text": "Score = -1 là trạng thái bị loại trong giải đó, không phải về 0 để leo lại ngay trong cùng lượt.",
+          "source_refs": [
+            "gdd/SkyJump.json#use_cases/4"
+          ]
+        },
+        {
+          "title": "Chia quỹ cho người thắng",
+          "text": "Quỹ mặc định 10.000 coin chia cho số người thắng, mẫu số tối thiểu là 1.",
+          "source_refs": [
+            "gdd/SkyJump.json#use_cases/8"
+          ]
+        }
+      ],
+      "decisions": [
+        {
+          "question": "Vì sao phải diễn đạt là quỹ thưởng thay vì quà cố định?",
+          "answer": "Phép chia làm đổi giá trị của từng chiến thắng; nhãn quỹ 10.000 coin không phải lời hứa mỗi người thắng đều nhận đủ số đó.",
+          "basis": "Suy luận thiết kế từ cơ chế có nguồn, chưa đo hiệu quả.",
+          "source_refs": [
+            "gdd/SkyJump.json#flow",
+            "gdd/SkyJump.json#configs"
+          ]
+        }
+      ],
+      "segments_ab": {
+        "summary": "Giải và số người thắng: Cùng một quỹ nhưng quà cá nhân có thể khác giữa các lượt.",
+        "axes": [
+          {
+            "axis": "Giải và số người thắng",
+            "selection": "Response xác định người ở từng bậc; số người thắng quyết định phần chia.",
+            "effect": "Cùng một quỹ nhưng quà cá nhân có thể khác giữa các lượt.",
+            "evidence_limit": "Số người thắng không phải nhóm chi tiêu; chưa biết thuật toán ghép người chơi ở backend.",
+            "source_refs": [
+              "gdd/SkyJump.json#segment_ab_review_20261115",
+              "gdd/SkyJump.json#flow",
+              "gdd/SkyJump.json#configs"
+            ]
+          }
+        ],
+        "unknowns": [
+          "Số người thắng không phải nhóm chi tiêu; chưa biết thuật toán ghép người chơi ở backend."
+        ]
+      },
+      "recovery": [
+        {
+          "condition": "Gián đoạn hoặc kết thúc Sky Jump (đua leo thang)",
+          "expected": "Offline hoặc retry không tự đưa người đã bị loại trở lại cùng giải; cần trạng thái hợp lệ của giải kế tiếp.",
+          "verified_scope": "Theo source và UC trong dossier; các dependency backend/sync/RNG vẫn cần kiểm riêng.",
+          "uc_ids": [
+            "UC-12",
+            "UC-14",
+            "UC-15"
+          ]
+        }
+      ],
+      "takeaways": [
+        {
+          "text": "Phép chia làm đổi giá trị của từng chiến thắng; nhãn quỹ 10.000 coin không phải lời hứa mỗi người thắng đều nhận đủ số đó.",
+          "basis": "Phân tích thiết kế, không phải kết quả đo cohort."
+        }
+      ],
+      "reviewed_source_paths": [
+        "gdd/SkyJump.json",
+        "site_meta/SkyJump.json",
+        "facts/review_20261116/public_current_config_3129/defaults/SkyJumpConfigModel.json"
+      ]
+    }
   }
 }

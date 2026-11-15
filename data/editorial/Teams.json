@@ -1,0 +1,211 @@
+{
+  "id": "Teams",
+  "schema_version": 1,
+  "scope": "Diễn giải thiết kế từ client, default và bằng chứng ngày 15–16/11 đã ghi nguồn. Nội dung mã/default không được nâng thành runtime pass; giữ nguyên full data và UC của hồ sơ.",
+  "design_intent": "Tạo quan hệ lặp lại giữa người chơi bằng đội, chat và tương trợ tài nguyên; quyền thành viên và giao dịch server phải rõ trước khi cho phép hành động.",
+  "player_loop": "Đủ điều kiện → tìm/tạo đội → gia nhập hoặc chờ duyệt → chat/xin/giúp → nhận hỗ trợ → tiếp tục đóng góp.",
+  "flow": [
+    {
+      "title": "Nạp trạng thái đội sau đăng nhập",
+      "actor": "Client và server",
+      "action": "Lấy trạng thái đội sau login.",
+      "rule": "Initializing khác Initialized; chưa có đội dẫn sang gợi ý khi entry được phép.",
+      "outcome": "Không hiển thị hành động thành viên từ trạng thái chưa biết.",
+      "uc_ids": [
+        "UC-01"
+      ],
+      "source_refs": [
+        "gdd/Teams.json#/use_cases/0",
+        "gdd/Teams.json",
+        "site_meta/Teams.json",
+        "facts/review_cases_20261116_round2.json",
+        "facts/review_20261116_round2/cross_feature_evidence_context.json",
+        "facts/review_20261116/public_current_config_3129/defaults/TeamsConfigModel.json"
+      ]
+    },
+    {
+      "title": "Tạo đội mới",
+      "actor": "Người chơi và server",
+      "action": "Tạo đội với chi phí coin.",
+      "rule": "Default CreateCost 100, capacity 50 và unlock level 40; IsEnable=false trong packageddefault.",
+      "outcome": "Chi phí và eligibility cần source hiệu lực, không ép tạo để test.",
+      "uc_ids": [
+        "UC-04"
+      ],
+      "source_refs": [
+        "gdd/Teams.json#/use_cases/3",
+        "gdd/Teams.json",
+        "site_meta/Teams.json",
+        "facts/review_cases_20261116_round2.json",
+        "facts/review_20261116_round2/cross_feature_evidence_context.json",
+        "facts/review_20261116/public_current_config_3129/defaults/TeamsConfigModel.json"
+      ]
+    },
+    {
+      "title": "Xin vào đội Đóng và chờ duyệt",
+      "actor": "Người chơi và quản trị đội",
+      "action": "Gửi đơn vào đội đóng và duyệt/từ chối.",
+      "rule": "Đội mở join trực tiếp; đội đóng chờ quyền Leader/Co-Leader.",
+      "outcome": "Tránh coi request đang chờ là đã thành viên.",
+      "uc_ids": [
+        "UC-06"
+      ],
+      "source_refs": [
+        "gdd/Teams.json#/use_cases/5",
+        "gdd/Teams.json",
+        "site_meta/Teams.json",
+        "facts/review_cases_20261116_round2.json",
+        "facts/review_20261116_round2/cross_feature_evidence_context.json",
+        "facts/review_20261116/public_current_config_3129/defaults/TeamsConfigModel.json"
+      ]
+    },
+    {
+      "title": "Xin mạng trong chat và cooldown",
+      "actor": "Thành viên và server",
+      "action": "Xin mạng rồi đồng đội giúp.",
+      "rule": "Default cooldown 14.400 giây = 4 giờ, MaxHelpCount 5, HelpSupportReward 5.",
+      "outcome": "Vòng tương trợ có giới hạn và reward cho người giúp.",
+      "uc_ids": [
+        "UC-14"
+      ],
+      "source_refs": [
+        "gdd/Teams.json#/use_cases/13",
+        "gdd/Teams.json",
+        "site_meta/Teams.json",
+        "facts/review_cases_20261116_round2.json",
+        "facts/review_20261116_round2/cross_feature_evidence_context.json",
+        "facts/review_20261116/public_current_config_3129/defaults/TeamsConfigModel.json"
+      ]
+    }
+  ],
+  "rules": [
+    {
+      "title": "Gate thực tế",
+      "text": "Lượt 16/11 màn Teams riêng hiện Coming Soon!, không có list/join. Case chỉ gate, uc rỗng.",
+      "source_refs": [
+        "gdd/Teams.json",
+        "site_meta/Teams.json",
+        "facts/review_cases_20261116_round2.json",
+        "facts/review_20261116_round2/cross_feature_evidence_context.json",
+        "facts/review_20261116/public_current_config_3129/defaults/TeamsConfigModel.json"
+      ]
+    },
+    {
+      "title": "Không đoán reward",
+      "text": "Giá trị5 trong HelpSupportReward cần consumer/currency nguồn, không tự gọi5coin nếu field không ghi loại.",
+      "source_refs": [
+        "gdd/Teams.json",
+        "site_meta/Teams.json",
+        "facts/review_cases_20261116_round2.json",
+        "facts/review_20261116_round2/cross_feature_evidence_context.json",
+        "facts/review_20261116/public_current_config_3129/defaults/TeamsConfigModel.json"
+      ]
+    },
+    {
+      "title": "Chat và mạng có protocol riêng",
+      "text": "WebSocket reconnect nguồn 5 giây với trần 120 giây; nhận free life còn cần claim/sync helps.",
+      "source_refs": [
+        "gdd/Teams.json",
+        "site_meta/Teams.json",
+        "facts/review_cases_20261116_round2.json",
+        "facts/review_20261116_round2/cross_feature_evidence_context.json",
+        "facts/review_20261116/public_current_config_3129/defaults/TeamsConfigModel.json"
+      ]
+    }
+  ],
+  "decisions": [
+    {
+      "question": "Vì sao đội đóng cần bước chờ?",
+      "answer": "Cho quyền kiểm soát cộng đồng; membership chỉ đổi sau quyết định phù hợp.",
+      "basis": "SendJoinTeamRequest và ReplyJoinRequest.",
+      "source_refs": [
+        "gdd/Teams.json",
+        "site_meta/Teams.json",
+        "facts/review_cases_20261116_round2.json",
+        "facts/review_20261116_round2/cross_feature_evidence_context.json",
+        "facts/review_20261116/public_current_config_3129/defaults/TeamsConfigModel.json"
+      ]
+    },
+    {
+      "question": "Level352 sao không mở Teams?",
+      "answer": "Level chỉ là một điều kiện; feature flag, release gate và server state cũng tác động.",
+      "basis": "Fixture352 vẫn Coming Soon!, defaultflag không phải productionproof.",
+      "source_refs": [
+        "gdd/Teams.json",
+        "site_meta/Teams.json",
+        "facts/review_cases_20261116_round2.json",
+        "facts/review_20261116_round2/cross_feature_evidence_context.json",
+        "facts/review_20261116/public_current_config_3129/defaults/TeamsConfigModel.json"
+      ]
+    }
+  ],
+  "segments_ab": {
+    "summary": "Các trục bên dưới mô tả điều kiện chọn hoặc trạng thái; chưa có assignment hay uplift để khẳng định A/B.",
+    "axes": [
+      {
+        "axis": "Quyền và loại đội",
+        "selection": "Mở/đóng; Member/Leader/Co-Leader",
+        "effect": "Thay hành động có thể làm.",
+        "evidence_limit": "Role/permission không mặc nhiên là experiment.",
+        "source_refs": [
+          "gdd/Teams.json",
+          "site_meta/Teams.json",
+          "facts/review_cases_20261116_round2.json",
+          "facts/review_20261116_round2/cross_feature_evidence_context.json",
+          "facts/review_20261116/public_current_config_3129/defaults/TeamsConfigModel.json"
+        ]
+      },
+      {
+        "axis": "Enable và eligibility",
+        "selection": "Cờ, level và membership",
+        "effect": "Thay entry và vòng hỗ trợ.",
+        "evidence_limit": "Chưa có assignment/server response mới.",
+        "source_refs": [
+          "gdd/Teams.json",
+          "site_meta/Teams.json",
+          "facts/review_cases_20261116_round2.json",
+          "facts/review_20261116_round2/cross_feature_evidence_context.json",
+          "facts/review_20261116/public_current_config_3129/defaults/TeamsConfigModel.json"
+        ]
+      }
+    ],
+    "unknowns": [
+      "Chưa có phân bổ ngẫu nhiên, cohort và kết quả nhân quả để đánh giá thử nghiệm."
+    ]
+  },
+  "recovery": [
+    {
+      "condition": "Socket mất kết nối",
+      "expected": "Thử lại có delay và nạp lại lịch sử/state.",
+      "verified_scope": "Luật nguồn, chưa vào chat thực tế.",
+      "uc_ids": [
+        "UC-20"
+      ]
+    },
+    {
+      "condition": "Join/create lỗi server",
+      "expected": "Không trừ/ghi membership giả thành công; cần đối chiếu response/kho.",
+      "verified_scope": "Chưa thực hiện join/create hoặc chi coin.",
+      "uc_ids": [
+        "UC-27"
+      ]
+    }
+  ],
+  "takeaways": [
+    {
+      "text": "Đội là chuỗi quyền hạn và giao dịch, không chỉ chat UI.",
+      "basis": "Join, role, giúp và claim có state riêng."
+    },
+    {
+      "text": "Giữ Coming Soon như gate có bằng chứng, không suy toàn production.",
+      "basis": "Một fixture không quyết định rollout."
+    }
+  ],
+  "reviewed_source_paths": [
+    "gdd/Teams.json",
+    "site_meta/Teams.json",
+    "facts/review_cases_20261116_round2.json",
+    "facts/review_20261116_round2/cross_feature_evidence_context.json",
+    "facts/review_20261116/public_current_config_3129/defaults/TeamsConfigModel.json"
+  ]
+}

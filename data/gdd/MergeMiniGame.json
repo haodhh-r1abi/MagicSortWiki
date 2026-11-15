@@ -10210,5 +10210,152 @@
     "round2_case_ids": [],
     "round2_branch_ucs": [],
     "full_uc_pass": false
+  },
+  "design_spec_20261116": {
+    "source": "editorial/MergeMiniGame.json",
+    "sha256": "79629ffe5a208108dc1797695da496c5cfac78649906ddcd913696fcc3317ddc",
+    "scope": "Designer-facing interpretation; no new runtime verification. Original use_cases and evidence remain unchanged.",
+    "content": {
+      "id": "MergeMiniGame",
+      "schema_version": 1,
+      "scope": "Diễn giải thiết kế từ nguồn đã đối chiếu; outcome là expected, không phải lượt playtest mới. Các giá trị default/native có build riêng, không tự coi đang hiệu lực production.",
+      "design_intent": "Đổi năng lượng từ level chính thành các quyết định quản lý không gian và chuỗi nâng cấp; vật phẩm cao cấp và quà collectible tạo mục tiêu khác nhau.",
+      "player_loop": "Kiếm Energy → phát vật → merge cặp → giải phóng ô → thu quà/chặng → mở multiplier.",
+      "flow": [
+        {
+          "title": "Phát vật khi còn chỗ",
+          "actor": "Người chơi và hệ thống",
+          "action": "Bấm máy phát trên bàn 7 × 7.",
+          "rule": "Cần cả Energy và ô trống; No Energy và No Space là hai lý do chặn khác nhau.",
+          "outcome": "Vật cấp thấp được đưa vào một vị trí hợp lệ.",
+          "uc_ids": [
+            "UC-05"
+          ],
+          "source_refs": [
+            "gdd/MergeMiniGame.json#use_cases/4"
+          ]
+        },
+        {
+          "title": "Nâng cấp bằng cặp",
+          "actor": "Người chơi và hệ thống",
+          "action": "Kéo hai vật cùng loại và cùng cấp vào nhau.",
+          "rule": "Định nghĩa set và level đến từ dữ liệu event; không phải mọi cặp chồng lên nhau đều merge.",
+          "outcome": "Sinh vật cấp tiếp theo và cập nhật tiến độ của set.",
+          "uc_ids": [
+            "UC-06"
+          ],
+          "source_refs": [
+            "gdd/MergeMiniGame.json#use_cases/5"
+          ]
+        },
+        {
+          "title": "Nhận vật dư từ hàng chờ",
+          "actor": "Người chơi và hệ thống",
+          "action": "Tạo ô trống sau một lần merge.",
+          "rule": "Scatter Queue giữ sản phẩm phụ khi bàn chưa có chỗ; trạng thái ô đang xử lý được lưu riêng.",
+          "outcome": "Vật được thả xuống khi đủ điều kiện, không tự mất vì bàn đầy.",
+          "uc_ids": [
+            "UC-07"
+          ],
+          "source_refs": [
+            "gdd/MergeMiniGame.json#use_cases/6"
+          ]
+        },
+        {
+          "title": "Thu thưởng thật",
+          "actor": "Người chơi và hệ thống",
+          "action": "Chạm hai lần vào CollectibleItem.",
+          "rule": "Quà collectible khác vật nguyên liệu và quà hoàn thành chặng.",
+          "outcome": "Trao tài nguyên của đúng vật đã thu.",
+          "uc_ids": [
+            "UC-09"
+          ],
+          "source_refs": [
+            "gdd/MergeMiniGame.json#use_cases/8"
+          ]
+        }
+      ],
+      "rules": [
+        {
+          "title": "Phát vật khi còn chỗ",
+          "text": "Cần cả Energy và ô trống; No Energy và No Space là hai lý do chặn khác nhau.",
+          "source_refs": [
+            "gdd/MergeMiniGame.json#use_cases/4"
+          ]
+        },
+        {
+          "title": "Nâng cấp bằng cặp",
+          "text": "Định nghĩa set và level đến từ dữ liệu event; không phải mọi cặp chồng lên nhau đều merge.",
+          "source_refs": [
+            "gdd/MergeMiniGame.json#use_cases/5"
+          ]
+        },
+        {
+          "title": "Nhận vật dư từ hàng chờ",
+          "text": "Scatter Queue giữ sản phẩm phụ khi bàn chưa có chỗ; trạng thái ô đang xử lý được lưu riêng.",
+          "source_refs": [
+            "gdd/MergeMiniGame.json#use_cases/6"
+          ]
+        },
+        {
+          "title": "Thu thưởng thật",
+          "text": "Quà collectible khác vật nguyên liệu và quà hoàn thành chặng.",
+          "source_refs": [
+            "gdd/MergeMiniGame.json#use_cases/8"
+          ]
+        }
+      ],
+      "decisions": [
+        {
+          "question": "Vì sao No Space không nên chỉ báo No Energy?",
+          "answer": "Một lỗi thuộc tài nguyên, lỗi kia thuộc không gian bàn; người chơi cần hành động khác nhau để tiếp tục.",
+          "basis": "Suy luận thiết kế từ cơ chế có nguồn, chưa đo hiệu quả.",
+          "source_refs": [
+            "gdd/MergeMiniGame.json#flow",
+            "gdd/MergeMiniGame.json#configs"
+          ]
+        }
+      ],
+      "segments_ab": {
+        "summary": "Định nghĩa event và hệ số nhân: Đổi chuỗi vật, bàn khởi đầu và mức tiêu Energy.",
+        "axes": [
+          {
+            "axis": "Định nghĩa event và hệ số nhân",
+            "selection": "Response định nghĩa board, item và scatter; tiến độ chặng mở hệ số 2x hoặc 4x.",
+            "effect": "Đổi chuỗi vật, bàn khởi đầu và mức tiêu Energy.",
+            "evidence_limit": "Hệ số nhân là lựa chọn tiêu năng lượng; chưa có bằng chứng phân bổ A/B giữa người chơi.",
+            "source_refs": [
+              "gdd/MergeMiniGame.json#segment_ab_review_20261115",
+              "gdd/MergeMiniGame.json#flow",
+              "gdd/MergeMiniGame.json#configs"
+            ]
+          }
+        ],
+        "unknowns": [
+          "Hệ số nhân là lựa chọn tiêu năng lượng; chưa có bằng chứng phân bổ A/B giữa người chơi."
+        ]
+      },
+      "recovery": [
+        {
+          "condition": "Gián đoạn hoặc kết thúc Merge Bakery",
+          "expected": "Khi khôi phục cần giữ cả bàn, hàng đợi và ô đang xử lý; chỉ lưu các vật đang nhìn thấy chưa đủ.",
+          "verified_scope": "Theo source và UC trong dossier; các dependency backend/sync/RNG vẫn cần kiểm riêng.",
+          "uc_ids": [
+            "UC-17"
+          ]
+        }
+      ],
+      "takeaways": [
+        {
+          "text": "Một lỗi thuộc tài nguyên, lỗi kia thuộc không gian bàn; người chơi cần hành động khác nhau để tiếp tục.",
+          "basis": "Phân tích thiết kế, không phải kết quả đo cohort."
+        }
+      ],
+      "reviewed_source_paths": [
+        "gdd/MergeMiniGame.json",
+        "site_meta/MergeMiniGame.json",
+        "facts/review_20261116/public_current_config_3129/defaults/MergeMiniGameConfigModel.json"
+      ]
+    }
   }
 }

@@ -36,8 +36,8 @@
     "InventoryService là sổ cái duy nhất cho mọi thứ người chơi sở hữu, từ coin và mạng tới booster, rương, gói thẻ và quyền bỏ quảng cáo.",
     "Một loại tài nguyên có thể tồn tại ở ba dạng: theo số lượng, theo thời hạn có giới hạn và theo thời hạn không giới hạn dùng như mạng vô hạn.",
     "Điểm thiết kế quan trọng là hệ thưởng chờ: phần thưởng được ghi nhận trước ở dạng pending rồi mới chốt khi animation chạy xong.",
-    "Nhờ hệ pending, UI luôn khớp với số dư thật và người chơi không mất thưởng nếu thoát giữa chừng.",
-    "Mạng hồi theo thời gian bằng một mốc LifeFillDate tính theo UTC, nên chỉnh giờ máy không sinh thêm mạng.",
+    "Hệ pending tách phần thưởng chờ với số dư đã apply để phối hợp animation và kho. Cần kiểm từng điểm gián đoạn và lưu/khôi phục trước khi kết luận không mất hoặc không lặp thưởng.",
+    "Mạng hồi dựa trên LifeFillDate và DateTime.UtcNow. Dùng UTC không tự chứng minh chống chỉnh giờ máy; chưa có thử nghiệm đổi đồng hồ hoặc đối chiếu giờ server cho nhánh hồi mạng.",
     "Việc trao thưởng có ba kiểu trình diễn: trao thẳng, bay tuần tự từng món về ô tiền tệ, và popup phần thưởng lớn có reveal rồi gather.",
     "Toàn bộ đầu ra của tiền tệ chỉ gồm 5 lý do tiêu: booster, refill mạng, play on, tạo đội và mini game merge.",
     "Ngược lại có tới 61 lý do nhận thưởng, tạo thành bản đồ đầy đủ mọi tính năng phát thưởng trong game.",
@@ -857,12 +857,12 @@
     {
       "key": "InventoryParametersProvider",
       "value": "coin_inventory, life_inventory, limitless_life_duration_inventory, undo_inventory, shuffle_inventory, extra_bottle_inventory, additional_life_inventory, trident_inventory, vault_inventory, map_inventory",
-      "meaning": "Số dư gắn kèm mọi sự kiện analytics"
+      "meaning": "Các tên tham số kho trong nguồn; việc được gắn vào một event còn tùy đường gửi, không áp dụng cho mọi sự kiện analytics."
     }
   ],
   "tips": [
-    "Hệ pending là mấu chốt: nó cho phép animation dài mà vẫn đảm bảo người chơi không mất thưởng khi thoát giữa chừng.",
-    "Mốc LifeFillDate thay cho bộ đếm giúp mạng hồi đúng cả khi app bị đóng, và dùng UTC nên chống chỉnh giờ.",
+    "Hệ pending phối hợp phần thưởng chờ với animation và kho. Độ bền khi thoát giữa chừng còn cần kiểm từng điểm lưu, apply và khôi phục.",
+    "LifeFillDate cho phép tính thời gian hồi mạng sau khi mở lại app. UTC là quy ước thời gian, chưa chứng minh chống chỉnh đồng hồ máy.",
     "Chỉ 5 lý do tiêu coin so với 61 lý do nhận cho thấy kinh tế game rất rộng đầu vào và rất hẹp đầu ra.",
     "Giá Play On tăng theo bậc 900, 1900, 2300 trong cùng màn tạo áp lực quyết định sớm.",
     "Việc đưa NoAds, rương và tiền tệ sự kiện vào chung một hệ CurrencyType giúp mọi tính năng dùng lại nguyên hạ tầng thưởng."

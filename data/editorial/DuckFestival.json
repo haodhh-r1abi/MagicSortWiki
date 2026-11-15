@@ -1,0 +1,126 @@
+{
+  "id": "DuckFestival",
+  "schema_version": 1,
+  "scope": "Thiết kế đọc từ dossier và nguồn đã đối chiếu. Outcome là expected; câu ghi round2 là actual theo case, không phải full-feature pass.",
+  "design_intent": "Kết hợp tiến độ cá nhân với đua hạng để người chơi có quà mốc ngay cả khi không đứng đầu bảng.",
+  "player_loop": "Thu điểm sự kiện → vượt mốc → theo dõi rank → nhận kết quả cuối đợt.",
+  "flow": [
+    {
+      "title": "Qua cửa Pre-Join",
+      "actor": "Người chơi và hệ thống",
+      "action": "Tích điều kiện đầu vào của event.",
+      "rule": "preJoinScore và joinWindowEndEpoch thuộc instance; không lấy mốc unlock làm đã Join.",
+      "outcome": "Đủ điều kiện ghép bảng khi cửa còn mở.",
+      "uc_ids": [
+        "UC-02"
+      ],
+      "source_refs": [
+        "gdd/DuckFestival.json#use_cases/1"
+      ]
+    },
+    {
+      "title": "Nhận quà tiến độ",
+      "actor": "Người chơi và hệ thống",
+      "action": "Vượt NeededDuckCount của từng bước.",
+      "rule": "Có 20 mốc; DuckMultiplier là tài nguyên theo thời gian, khác điểm bảng xếp hạng.",
+      "outcome": "Quà mốc không phụ thuộc việc nằm top3.",
+      "uc_ids": [
+        "UC-06"
+      ],
+      "source_refs": [
+        "gdd/DuckFestival.json#use_cases/5"
+      ]
+    },
+    {
+      "title": "Đọc kết quả cuối đợt",
+      "actor": "Người chơi và hệ thống",
+      "action": "Mở popup Finished và xem rank/reward.",
+      "rule": "Round2 thấy rank 45 và dấu gạch reward; help ghi Normal/Hard/SuperHard 1/3/5, không phải runtime đã kiếm đủ các loại điểm.",
+      "outcome": "Chỉ ghi nhận nhánh result UI; Continue báo No Internet chưa phải claim.",
+      "uc_ids": [
+        "UC-12"
+      ],
+      "source_refs": [
+        "gdd/DuckFestival.json#use_cases/11",
+        "facts/review_cases_20261116_round2.json"
+      ]
+    }
+  ],
+  "rules": [
+    {
+      "title": "Qua cửa Pre-Join",
+      "text": "preJoinScore và joinWindowEndEpoch thuộc instance; không lấy mốc unlock làm đã Join.",
+      "source_refs": [
+        "gdd/DuckFestival.json#use_cases/1"
+      ]
+    },
+    {
+      "title": "Nhận quà tiến độ",
+      "text": "Có 20 mốc; DuckMultiplier là tài nguyên theo thời gian, khác điểm bảng xếp hạng.",
+      "source_refs": [
+        "gdd/DuckFestival.json#use_cases/5"
+      ]
+    },
+    {
+      "title": "Đọc kết quả cuối đợt",
+      "text": "Round2 thấy rank 45 và dấu gạch reward; help ghi Normal/Hard/SuperHard 1/3/5, không phải runtime đã kiếm đủ các loại điểm.",
+      "source_refs": [
+        "gdd/DuckFestival.json#use_cases/11",
+        "facts/review_cases_20261116_round2.json"
+      ]
+    }
+  ],
+  "decisions": [
+    {
+      "question": "Vì sao cần phân biệt điểm mốc và rank?",
+      "answer": "Một giá trị đóng góp có thể đẩy hai mục tiêu nhưng reward và thời điểm claim khác nhau; result rank 45 không phủ định quà mốc trước đó.",
+      "basis": "Nhận định thiết kế dựa trên cơ chế, không phải kết quả A/B.",
+      "source_refs": [
+        "gdd/DuckFestival.json#flow",
+        "gdd/DuckFestival.json#configs"
+      ]
+    }
+  ],
+  "segments_ab": {
+    "summary": "Pre-Join, Elo và Collection: Thay điều kiện vào bảng và reward; multiplier có tác dụng theo thời hạn.",
+    "axes": [
+      {
+        "axis": "Pre-Join, Elo và Collection",
+        "selection": "Response mang thông tin bảng/nhóm; bảng reward có nhánh Collection.",
+        "effect": "Thay điều kiện vào bảng và reward; multiplier có tác dụng theo thời hạn.",
+        "evidence_limit": "Không suy từ field Elo ra thuật toán ghép; luật help1/3/5không chứng minh mọi điểm chỉ đến từ DuckHouse.",
+        "source_refs": [
+          "gdd/DuckFestival.json#segment_ab_review_20261115",
+          "gdd/DuckFestival.json#flow",
+          "gdd/DuckFestival.json#configs"
+        ]
+      }
+    ],
+    "unknowns": [
+      "Không suy từ field Elo ra thuật toán ghép; luật help1/3/5không chứng minh mọi điểm chỉ đến từ DuckHouse."
+    ]
+  },
+  "recovery": [
+    {
+      "condition": "Gián đoạn hoặc kết thúc Lễ hội Vịt (Duck Festival)",
+      "expected": "Offline result có thể đọc cache; chưa xác nhận grant cuối event hoặc điểm mới gửi server.",
+      "verified_scope": "Đọc source/UC; không thực hiện runtime mới trong lượt biên tập.",
+      "uc_ids": [
+        "UC-15",
+        "UC-16"
+      ]
+    }
+  ],
+  "takeaways": [
+    {
+      "text": "Một giá trị đóng góp có thể đẩy hai mục tiêu nhưng reward và thời điểm claim khác nhau; result rank 45 không phủ định quà mốc trước đó.",
+      "basis": "Phân tích thiết kế, chưa đo retention/conversion."
+    }
+  ],
+  "reviewed_source_paths": [
+    "gdd/DuckFestival.json",
+    "site_meta/DuckFestival.json",
+    "facts/review_20261116/public_current_config_3129/defaults/DuckFestivalConfigModel.json",
+    "facts/review_cases_20261116_round2.json"
+  ]
+}

@@ -1,0 +1,124 @@
+{
+  "id": "MagicLab",
+  "schema_version": 1,
+  "scope": "Thiết kế đọc từ dossier và nguồn đã đối chiếu. Outcome là expected; câu ghi round2 là actual theo case, không phải full-feature pass.",
+  "design_intent": "Gom nhiều hoạt động thành một mục tiêu nhiệm vụ chung; người chơi tiến ở nơi khác rồi quay lại Lab nhận phần thưởng chặng.",
+  "player_loop": "Xem nhiệm vụ → chơi hoạt động nguồn → hoàn tất đủ nhiệm vụ → mở rương stage → sang stage tiếp.",
+  "flow": [
+    {
+      "title": "Nạp trạng thái mục tiêu",
+      "actor": "Người chơi và hệ thống",
+      "action": "Mở event và xem nhiệm vụ đạt mốc.",
+      "rule": "Task đạt bước có thể cần đồng bộ từ tiến độ sẵn có lúc bắt đầu, khác task cộng dồn hành động mới.",
+      "outcome": "Không bắt người chơi lặp một mốc đã đạt nếu luật task đã tính.",
+      "uc_ids": [
+        "UC-03"
+      ],
+      "source_refs": [
+        "gdd/MagicLab.json#use_cases/2"
+      ]
+    },
+    {
+      "title": "Thực hiện nhiệm vụ nguồn",
+      "actor": "Người chơi và hệ thống",
+      "action": "Chơi level hoặc event được task chỉ định.",
+      "rule": "Task types nối Collection/Duck/Jetpack/Merge…; hoàn thành event bất kỳ không tự tăng mọi task.",
+      "outcome": "Đúng loại nhiệm vụ được cập nhật.",
+      "uc_ids": [
+        "UC-04"
+      ],
+      "source_refs": [
+        "gdd/MagicLab.json#use_cases/3"
+      ]
+    },
+    {
+      "title": "Hoàn tất một stage",
+      "actor": "Người chơi và hệ thống",
+      "action": "Làm xong tất cả nhiệm vụ trong stage.",
+      "rule": "Rương stage chỉ mở khi đủ toàn bộ task, không chỉ một chai phép.",
+      "outcome": "Chuyển tới nhận quà và stage tiếp theo.",
+      "uc_ids": [
+        "UC-06"
+      ],
+      "source_refs": [
+        "gdd/MagicLab.json#use_cases/5"
+      ]
+    }
+  ],
+  "rules": [
+    {
+      "title": "Nạp trạng thái mục tiêu",
+      "text": "Task đạt bước có thể cần đồng bộ từ tiến độ sẵn có lúc bắt đầu, khác task cộng dồn hành động mới.",
+      "source_refs": [
+        "gdd/MagicLab.json#use_cases/2"
+      ]
+    },
+    {
+      "title": "Thực hiện nhiệm vụ nguồn",
+      "text": "Task types nối Collection/Duck/Jetpack/Merge…; hoàn thành event bất kỳ không tự tăng mọi task.",
+      "source_refs": [
+        "gdd/MagicLab.json#use_cases/3"
+      ]
+    },
+    {
+      "title": "Hoàn tất một stage",
+      "text": "Rương stage chỉ mở khi đủ toàn bộ task, không chỉ một chai phép.",
+      "source_refs": [
+        "gdd/MagicLab.json#use_cases/5"
+      ]
+    }
+  ],
+  "decisions": [
+    {
+      "question": "Vì sao phân biệt task cộng dồn với task đạt bước?",
+      "answer": "Một task đếm hành động sau khi mở, task kia so trạng thái đạt mốc; dùng cùng cách cập nhật có thể bỏ sót hoặc đếm lại tiến độ.",
+      "basis": "Nhận định thiết kế dựa trên cơ chế, không phải kết quả A/B.",
+      "source_refs": [
+        "gdd/MagicLab.json#flow",
+        "gdd/MagicLab.json#configs"
+      ]
+    }
+  ],
+  "segments_ab": {
+    "summary": "Stage/task và nhánh Collection: Đổi mục tiêu và quà theo bộ event.",
+    "axes": [
+      {
+        "axis": "Stage/task và nhánh Collection",
+        "selection": "Response chứa Stages và Segment; reward có WithCollection.",
+        "effect": "Đổi mục tiêu và quà theo bộ event.",
+        "evidence_limit": "Cache nhãn non-purchaser có thật nhưng chưa phải allocation mới; chưa biết selector chọn stage backend.",
+        "source_refs": [
+          "gdd/MagicLab.json#segment_ab_review_20261115",
+          "gdd/MagicLab.json#flow",
+          "gdd/MagicLab.json#configs"
+        ]
+      }
+    ],
+    "unknowns": [
+      "Cache nhãn non-purchaser có thật nhưng chưa phải allocation mới; chưa biết selector chọn stage backend."
+    ]
+  },
+  "recovery": [
+    {
+      "condition": "Gián đoạn hoặc kết thúc Magic Lab",
+      "expected": "AutoClaimEnabled có nguồn default/cache khác nhau; hết giờ chỉ auto-claim khi nhánh hợp lệ bật.",
+      "verified_scope": "Đọc source/UC; không thực hiện runtime mới trong lượt biên tập.",
+      "uc_ids": [
+        "UC-09",
+        "UC-14",
+        "UC-15"
+      ]
+    }
+  ],
+  "takeaways": [
+    {
+      "text": "Một task đếm hành động sau khi mở, task kia so trạng thái đạt mốc; dùng cùng cách cập nhật có thể bỏ sót hoặc đếm lại tiến độ.",
+      "basis": "Phân tích thiết kế, chưa đo retention/conversion."
+    }
+  ],
+  "reviewed_source_paths": [
+    "gdd/MagicLab.json",
+    "site_meta/MagicLab.json",
+    "facts/review_20261116/public_current_config_3129/defaults/MagicLabConfigModel.json"
+  ]
+}

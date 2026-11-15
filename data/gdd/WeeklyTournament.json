@@ -1667,5 +1667,134 @@
       "UC-10"
     ],
     "full_uc_pass": false
+  },
+  "design_spec_20261116": {
+    "source": "editorial/WeeklyTournament.json",
+    "sha256": "eb19eb34f1b0cf19aebcbe67cd3c2a40c8514e80ef0eb947e307f1195a04b237",
+    "scope": "Designer-facing interpretation; no new runtime verification. Original use_cases and evidence remain unchanged.",
+    "content": {
+      "id": "WeeklyTournament",
+      "schema_version": 1,
+      "scope": "Diễn giải thiết kế từ nguồn đã đối chiếu; outcome là expected, không phải lượt playtest mới. Các giá trị default/native có build riêng, không tự coi đang hiệu lực production.",
+      "design_intent": "Một cuộc đua nền dễ hiểu: mỗi thắng là một điểm và kết quả tuần nối thẳng sang lượt kế tiếp.",
+      "player_loop": "Thắng level → tăng điểm tuần → xem rank → hết tuần → nhận thưởng và bảng mới.",
+      "flow": [
+        {
+          "title": "Ghi một điểm",
+          "actor": "Người chơi và hệ thống",
+          "action": "Thắng một level.",
+          "rule": "Mỗi chiến thắng cho 1 điểm theo luật nguồn; không dùng hệ số của Magic Streak.",
+          "outcome": "Điểm được lưu để đẩy lên server theo luồng.",
+          "uc_ids": [
+            "UC-03"
+          ],
+          "source_refs": [
+            "gdd/WeeklyTournament.json#use_cases/2"
+          ]
+        },
+        {
+          "title": "Đọc kết quả",
+          "actor": "Người chơi và hệ thống",
+          "action": "Mở bảng khi giải đã kết thúc.",
+          "rule": "Bảng có field IsBot; xem rank trong cache không chứng minh đã làm mới từ server.",
+          "outcome": "Đọc kết quả của giải cũ trước khi chuyển tuần.",
+          "uc_ids": [
+            "UC-06"
+          ],
+          "source_refs": [
+            "gdd/WeeklyTournament.json#use_cases/5"
+          ]
+        },
+        {
+          "title": "Nhận quà và sang giải mới",
+          "actor": "Người chơi và hệ thống",
+          "action": "Claim phần thưởng theo hạng.",
+          "rule": "Top 3 mặc định nhận 1.000/500/250 coin; request claim trả cả bảng tuần mới.",
+          "outcome": "Tách phần thưởng giải cũ và danh tính giải mới.",
+          "uc_ids": [
+            "UC-08"
+          ],
+          "source_refs": [
+            "gdd/WeeklyTournament.json#use_cases/7"
+          ]
+        }
+      ],
+      "rules": [
+        {
+          "title": "Ghi một điểm",
+          "text": "Mỗi chiến thắng cho 1 điểm theo luật nguồn; không dùng hệ số của Magic Streak.",
+          "source_refs": [
+            "gdd/WeeklyTournament.json#use_cases/2"
+          ]
+        },
+        {
+          "title": "Đọc kết quả",
+          "text": "Bảng có field IsBot; xem rank trong cache không chứng minh đã làm mới từ server.",
+          "source_refs": [
+            "gdd/WeeklyTournament.json#use_cases/5"
+          ]
+        },
+        {
+          "title": "Nhận quà và sang giải mới",
+          "text": "Top 3 mặc định nhận 1.000/500/250 coin; request claim trả cả bảng tuần mới.",
+          "source_refs": [
+            "gdd/WeeklyTournament.json#use_cases/7"
+          ]
+        }
+      ],
+      "decisions": [
+        {
+          "question": "Vì sao claim là một bước chuyển vòng đời?",
+          "answer": "Request vừa xử lý quà cũ vừa lấy bảng mới; retry cần tránh gán điểm của giải cũ sang tuần tiếp theo.",
+          "basis": "Suy luận thiết kế từ cơ chế có nguồn, chưa đo hiệu quả.",
+          "source_refs": [
+            "gdd/WeeklyTournament.json#flow",
+            "gdd/WeeklyTournament.json#configs"
+          ]
+        }
+      ],
+      "segments_ab": {
+        "summary": "Nhóm giải và hạng: Đổi đối thủ và giá trị quà theo vị trí.",
+        "axes": [
+          {
+            "axis": "Nhóm giải và hạng",
+            "selection": "Backend trả leaderboard; rank chọn phần thưởng.",
+            "effect": "Đổi đối thủ và giá trị quà theo vị trí.",
+            "evidence_limit": "IsBot không cho biết tỉ lệ bot hay thuật toán ghép; chưa có bằng chứng phân bổ A/B.",
+            "source_refs": [
+              "gdd/WeeklyTournament.json#segment_ab_review_20261115",
+              "gdd/WeeklyTournament.json#flow",
+              "gdd/WeeklyTournament.json#configs"
+            ]
+          }
+        ],
+        "unknowns": [
+          "IsBot không cho biết tỉ lệ bot hay thuật toán ghép; chưa có bằng chứng phân bổ A/B."
+        ]
+      },
+      "recovery": [
+        {
+          "condition": "Gián đoạn hoặc kết thúc Giải đấu tuần (Weekly)",
+          "expected": "Xem bảng cache khi offline không phải refresh thành công. Round2 chỉ kiểm nhánh bảng xếp hạng, chưa claim thưởng tuần.",
+          "verified_scope": "Theo source và UC trong dossier; các dependency backend/sync/RNG vẫn cần kiểm riêng.",
+          "uc_ids": [
+            "UC-12",
+            "UC-13"
+          ]
+        }
+      ],
+      "takeaways": [
+        {
+          "text": "Request vừa xử lý quà cũ vừa lấy bảng mới; retry cần tránh gán điểm của giải cũ sang tuần tiếp theo.",
+          "basis": "Phân tích thiết kế, không phải kết quả đo cohort."
+        }
+      ],
+      "reviewed_source_paths": [
+        "gdd/WeeklyTournament.json",
+        "site_meta/WeeklyTournament.json",
+        "facts/review_20261116/public_current_config_3129/defaults/WeeklyTournamentConfigModel.json",
+        "facts/review_cases_20261116_round2.json"
+      ]
+    }
   }
 }

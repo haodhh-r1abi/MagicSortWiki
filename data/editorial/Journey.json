@@ -1,0 +1,123 @@
+{
+  "id": "Journey",
+  "schema_version": 1,
+  "scope": "Lớp diễn giải thiết kế từ source và dossier hiện có; outcome là expected. Quan sát round2 được gọi rõ; chưa phát sinh playtest hoặc xác nhận backend mới.",
+  "design_intent": "Biến level đã vượt thành một hành trình có cảnh nền và phần thưởng, giúp tiến độ không chỉ là một con số trên nút Play.",
+  "player_loop": "Xem hành trình → vượt mốc level → nhận quà/mở poster → chọn cảnh Home → tiếp tục mốc lặp.",
+  "flow": [
+    {
+      "title": "Xem vị trí hiện tại",
+      "actor": "Người chơi",
+      "action": "Mở Journey và cuộn các mốc phía trước.",
+      "rule": "Danh sách trộn mốc reward và poster; nội dung đã cấu hình không phải toàn bộ level sinh runtime.",
+      "outcome": "Người chơi thấy mục tiêu gần tiếp theo.",
+      "uc_ids": [
+        "UC-12"
+      ],
+      "source_refs": [
+        "gdd/Journey.json#use_cases/11"
+      ]
+    },
+    {
+      "title": "Đổi cảnh Home",
+      "actor": "Người chơi",
+      "action": "Chọn poster đã mở khóa để dùng làm nền.",
+      "rule": "Poster/thumbnail tải dần trong khoảng 20 level; thiếu asset có loading/fallback.",
+      "outcome": "Lựa chọn nền khác với quyền mở poster.",
+      "uc_ids": [
+        "UC-06"
+      ],
+      "source_refs": [
+        "gdd/Journey.json#use_cases/5"
+      ]
+    },
+    {
+      "title": "Tiếp tục sau bảng tĩnh",
+      "actor": "Người chơi",
+      "action": "Vượt phần thưởng cấu hình sẵn.",
+      "rule": "LoopRewards dùng LevelInterval sinh mốc lặp; reward Collection không chạy có backoff.",
+      "outcome": "Không hết mục tiêu chỉ vì qua dòng cuối của bảng tĩnh.",
+      "uc_ids": [
+        "UC-07"
+      ],
+      "source_refs": [
+        "gdd/Journey.json#use_cases/6"
+      ]
+    }
+  ],
+  "rules": [
+    {
+      "title": "Xem vị trí hiện tại",
+      "text": "Danh sách trộn mốc reward và poster; nội dung đã cấu hình không phải toàn bộ level sinh runtime.",
+      "source_refs": [
+        "gdd/Journey.json#use_cases/11"
+      ]
+    },
+    {
+      "title": "Đổi cảnh Home",
+      "text": "Poster/thumbnail tải dần trong khoảng 20 level; thiếu asset có loading/fallback.",
+      "source_refs": [
+        "gdd/Journey.json#use_cases/5"
+      ]
+    },
+    {
+      "title": "Tiếp tục sau bảng tĩnh",
+      "text": "LoopRewards dùng LevelInterval sinh mốc lặp; reward Collection không chạy có backoff.",
+      "source_refs": [
+        "gdd/Journey.json#use_cases/6"
+      ]
+    }
+  ],
+  "decisions": [
+    {
+      "question": "Vì sao không gộp mở poster với chọn poster?",
+      "answer": "Một hành động trao quyền, hành động còn lại là tùy biến; phải giữ lựa chọn người chơi qua tải lại.",
+      "basis": "Nhận định thiết kế từ cơ chế có nguồn; không phải hiệu quả đã đo.",
+      "source_refs": [
+        "gdd/Journey.json#flow",
+        "gdd/Journey.json#configs"
+      ]
+    }
+  ],
+  "segments_ab": {
+    "summary": "Trạng thái Collection và league: Đổi reward hoặc cảnh có thể chọn.",
+    "axes": [
+      {
+        "axis": "Trạng thái Collection và league",
+        "selection": "Collection đang chạy chọn pack/backoff; ChampionsLeague có poster MasterLeague riêng.",
+        "effect": "Đổi reward hoặc cảnh có thể chọn.",
+        "evidence_limit": "Chưa có bằng chứng A/B của poster hay lịch mốc; CDN load thành công chưa đảm bảo mọi poster đã được quan sát.",
+        "source_refs": [
+          "gdd/Journey.json#flow",
+          "gdd/Journey.json#segment_ab_review_20261115"
+        ]
+      }
+    ],
+    "unknowns": [
+      "Chưa có bằng chứng A/B của poster hay lịch mốc; CDN load thành công chưa đảm bảo mọi poster đã được quan sát."
+    ]
+  },
+  "recovery": [
+    {
+      "condition": "Nhánh lỗi, gián đoạn hoặc chuyển trạng thái của Journey (lộ trình & poster)",
+      "expected": "Offline/tải poster lỗi dùng loading/fallback có nguồn, không đánh dấu poster mới đã tải.",
+      "verified_scope": "Theo UC/source trong hồ sơ; runtime chỉ có giá trị ở đúng case và snapshot đã liên kết.",
+      "uc_ids": [
+        "UC-02",
+        "UC-08",
+        "UC-13"
+      ]
+    }
+  ],
+  "takeaways": [
+    {
+      "text": "Một hành động trao quyền, hành động còn lại là tùy biến; phải giữ lựa chọn người chơi qua tải lại.",
+      "basis": "Suy luận thiết kế; không thay bảng cấu hình hoặc giới hạn thực nghiệm."
+    }
+  ],
+  "reviewed_source_paths": [
+    "gdd/Journey.json",
+    "site_meta/Journey.json",
+    "facts/review_20261116/public_current_config_3129/defaults/JourneyConfigModel.json"
+  ]
+}

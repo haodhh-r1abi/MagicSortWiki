@@ -1,0 +1,211 @@
+{
+  "id": "Referral",
+  "schema_version": 1,
+  "scope": "Diễn giải thiết kế từ client, default và bằng chứng ngày 15–16/11 đã ghi nguồn. Nội dung mã/default không được nâng thành runtime pass; giữ nguyên full data và UC của hồ sơ.",
+  "design_intent": "Biến lời mời thành một quan hệ được xác nhận và thưởng theo tiến độ người được mời; tránh trao thưởng chỉ vì mở chooser.",
+  "player_loop": "Lấy link → chia sẻ → người mới cài và đăng ký referrer → đạt milestone → người mời claim thưởng trong giới hạn.",
+  "flow": [
+    {
+      "title": "Nạp dữ liệu mời và link riêng",
+      "actor": "Client và server",
+      "action": "Tải invite_link và trạng thái reward.",
+      "rule": "UseBackendUrl chọn link backend; nếu false lấy store URL theo nền tảng.",
+      "outcome": "Link sử dụng phụ thuộc nguồn config và response.",
+      "uc_ids": [
+        "UC-01"
+      ],
+      "source_refs": [
+        "gdd/Referral.json#/use_cases/0",
+        "gdd/Referral.json",
+        "site_meta/Referral.json",
+        "facts/review_cases_20261116_round2.json",
+        "facts/review_20261116_round2/cross_feature_evidence_context.json",
+        "facts/review_20261116/public_current_config_3129/defaults/ReferralConfigModel.json"
+      ]
+    },
+    {
+      "title": "Mở hộp thoại chia sẻ link mời",
+      "actor": "Người chơi và OS",
+      "action": "Mở chooser chia sẻ text/plain.",
+      "rule": "Payload là câu mời đã localize cộng URL; mở chooser chưa chứng minh lời mời đã đến người nhận.",
+      "outcome": "Có đường gửi hoặc hủy mà không tự cấp thưởng.",
+      "uc_ids": [
+        "UC-02"
+      ],
+      "source_refs": [
+        "gdd/Referral.json#/use_cases/1",
+        "gdd/Referral.json",
+        "site_meta/Referral.json",
+        "facts/review_cases_20261116_round2.json",
+        "facts/review_20261116_round2/cross_feature_evidence_context.json",
+        "facts/review_20261116/public_current_config_3129/defaults/ReferralConfigModel.json"
+      ]
+    },
+    {
+      "title": "Người được mời đạt mốc level",
+      "actor": "Người được mời và server",
+      "action": "Báo đạt mốc level.",
+      "rule": "Default milestone 5; ConfirmReferralMilestone mới báo server về referrer.",
+      "outcome": "Quan hệ và tiến độ đều cần xác nhận.",
+      "uc_ids": [
+        "UC-06"
+      ],
+      "source_refs": [
+        "gdd/Referral.json#/use_cases/5",
+        "gdd/Referral.json",
+        "site_meta/Referral.json",
+        "facts/review_cases_20261116_round2.json",
+        "facts/review_20261116_round2/cross_feature_evidence_context.json",
+        "facts/review_20261116/public_current_config_3129/defaults/ReferralConfigModel.json"
+      ]
+    },
+    {
+      "title": "Người mời nhận thưởng giới thiệu",
+      "actor": "Người mời và server",
+      "action": "Claim reward đủ điều kiện.",
+      "rule": "Response có claimed_count; lưu reward đã nhận và so trần MaxRewardLimit.",
+      "outcome": "Chống nhận lặp qua state đã claim.",
+      "uc_ids": [
+        "UC-07"
+      ],
+      "source_refs": [
+        "gdd/Referral.json#/use_cases/6",
+        "gdd/Referral.json",
+        "site_meta/Referral.json",
+        "facts/review_cases_20261116_round2.json",
+        "facts/review_20261116_round2/cross_feature_evidence_context.json",
+        "facts/review_20261116/public_current_config_3129/defaults/ReferralConfigModel.json"
+      ]
+    }
+  ],
+  "rules": [
+    {
+      "title": "Default không phải chương trình đang mở",
+      "text": "Default IsEnabled=false, MaxRewardLimit 3; runtime mới chưa vào được referral.",
+      "source_refs": [
+        "gdd/Referral.json",
+        "site_meta/Referral.json",
+        "facts/review_cases_20261116_round2.json",
+        "facts/review_20261116_round2/cross_feature_evidence_context.json",
+        "facts/review_20261116/public_current_config_3129/defaults/ReferralConfigModel.json"
+      ]
+    },
+    {
+      "title": "Reward có nhiều loại",
+      "text": "Default gồm CurrencyType 1 amount 100, type 6 amount 1 và type 2 amount 1 TimeSpan 30 phút; không cộng timed reward thành số item vĩnh viễn.",
+      "source_refs": [
+        "gdd/Referral.json",
+        "site_meta/Referral.json",
+        "facts/review_cases_20261116_round2.json",
+        "facts/review_20261116_round2/cross_feature_evidence_context.json",
+        "facts/review_20261116/public_current_config_3129/defaults/ReferralConfigModel.json"
+      ]
+    },
+    {
+      "title": "Tách sự kiện chia sẻ",
+      "text": "invite_send và referral_registered là hai mốc khác nhau; không đo conversion bằng một click.",
+      "source_refs": [
+        "gdd/Referral.json",
+        "site_meta/Referral.json",
+        "facts/review_cases_20261116_round2.json",
+        "facts/review_20261116_round2/cross_feature_evidence_context.json",
+        "facts/review_20261116/public_current_config_3129/defaults/ReferralConfigModel.json"
+      ]
+    }
+  ],
+  "decisions": [
+    {
+      "question": "Có thưởng khi mở share không?",
+      "answer": "Không có cơ sở; thưởng gắn eligibility và claim server.",
+      "basis": "Flow milestone/claim riêng.",
+      "source_refs": [
+        "gdd/Referral.json",
+        "site_meta/Referral.json",
+        "facts/review_cases_20261116_round2.json",
+        "facts/review_20261116_round2/cross_feature_evidence_context.json",
+        "facts/review_20261116/public_current_config_3129/defaults/ReferralConfigModel.json"
+      ]
+    },
+    {
+      "question": "Có được coi Friends lỗi là Referral đã test?",
+      "answer": "Không; Friends No Internet chưa truy cập Invite.",
+      "basis": "Lượt mới không có Referral executedcase.",
+      "source_refs": [
+        "gdd/Referral.json",
+        "site_meta/Referral.json",
+        "facts/review_cases_20261116_round2.json",
+        "facts/review_20261116_round2/cross_feature_evidence_context.json",
+        "facts/review_20261116/public_current_config_3129/defaults/ReferralConfigModel.json"
+      ]
+    }
+  ],
+  "segments_ab": {
+    "summary": "Các trục bên dưới mô tả điều kiện chọn hoặc trạng thái; chưa có assignment hay uplift để khẳng định A/B.",
+    "axes": [
+      {
+        "axis": "Link nguồn",
+        "selection": "UseBackendUrl và nền tảng",
+        "effect": "Thay URL người nhận mở.",
+        "evidence_limit": "Không chứng minh attribution thành công.",
+        "source_refs": [
+          "gdd/Referral.json",
+          "site_meta/Referral.json",
+          "facts/review_cases_20261116_round2.json",
+          "facts/review_20261116_round2/cross_feature_evidence_context.json",
+          "facts/review_20261116/public_current_config_3129/defaults/ReferralConfigModel.json"
+        ]
+      },
+      {
+        "axis": "Tiến độ và trần thưởng",
+        "selection": "Milestone5 và MaxRewardLimit 3 trong default",
+        "effect": "Thay điều kiện và số lần nhận.",
+        "evidence_limit": "Chưa có effective assignment hoặc A/B.",
+        "source_refs": [
+          "gdd/Referral.json",
+          "site_meta/Referral.json",
+          "facts/review_cases_20261116_round2.json",
+          "facts/review_20261116_round2/cross_feature_evidence_context.json",
+          "facts/review_20261116/public_current_config_3129/defaults/ReferralConfigModel.json"
+        ]
+      }
+    ],
+    "unknowns": [
+      "Chưa có phân bổ ngẫu nhiên, cohort và kết quả nhân quả để đánh giá thử nghiệm."
+    ]
+  },
+  "recovery": [
+    {
+      "condition": "Chooser bị hủy",
+      "expected": "Không biến cancel thành người được mời hay claim.",
+      "verified_scope": "Nhánh nguồn; không gửi cho người ngoài.",
+      "uc_ids": [
+        "UC-11"
+      ]
+    },
+    {
+      "condition": "Lấy invite data lỗi",
+      "expected": "Hiển thị lỗi/đường thử lại; không chế link cá nhân hoặc reward.",
+      "verified_scope": "Chưa thực thi entry Referral ở lượt mới.",
+      "uc_ids": [
+        "UC-12"
+      ]
+    }
+  ],
+  "takeaways": [
+    {
+      "text": "Đặc tả referral cần toàn bộ funnel, không chỉ share button.",
+      "basis": "Attribution, milestone và claim độc lập."
+    },
+    {
+      "text": "Trần và sổ đã claim là hàng rào kinh tế.",
+      "basis": "Tránh cấp thưởng lặp."
+    }
+  ],
+  "reviewed_source_paths": [
+    "gdd/Referral.json",
+    "site_meta/Referral.json",
+    "facts/review_cases_20261116_round2.json",
+    "facts/review_20261116_round2/cross_feature_evidence_context.json",
+    "facts/review_20261116/public_current_config_3129/defaults/ReferralConfigModel.json"
+  ]
+}

@@ -1,0 +1,123 @@
+{
+  "id": "EndlessPortal",
+  "schema_version": 1,
+  "scope": "Lớp diễn giải thiết kế từ source và dossier hiện có; outcome là expected. Quan sát round2 được gọi rõ; chưa phát sinh playtest hoặc xác nhận backend mới.",
+  "design_intent": "Cho một chuỗi mua/nhận liên tục với điểm hiện tại luôn rõ ràng, vừa cho thấy bước gần vừa gợi phần thưởng lớn phía sau.",
+  "player_loop": "Mở chuỗi → xem bước hiện tại → nhận miễn phí hoặc mua → mở bước tiếp → lặp theo index.",
+  "flow": [
+    {
+      "title": "Đọc cửa sổ chuỗi",
+      "actor": "Người chơi",
+      "action": "Xem sáu bước đang được trưng bày.",
+      "rule": "StepCountInUI=6; cửa sổ UI không phải toàn bộ chuỗi nguồn có 44 phần tử.",
+      "outcome": "Phân biệt bước hiện tại và bước còn khóa.",
+      "uc_ids": [
+        "UC-03"
+      ],
+      "source_refs": [
+        "gdd/EndlessPortal.json#use_cases/2"
+      ]
+    },
+    {
+      "title": "Hoàn tất bước hiện tại",
+      "actor": "Người chơi",
+      "action": "Chọn bước đang mở để nhận hoặc mua.",
+      "rule": "Bước paid đi qua IAP; bước miễn phí có nhánh riêng, không mô tả mọi bước đều trả tiền.",
+      "outcome": "Tiến độ chuyển sang bước tiếp theo sau kết quả hợp lệ.",
+      "uc_ids": [
+        "UC-04"
+      ],
+      "source_refs": [
+        "gdd/EndlessPortal.json#use_cases/3"
+      ]
+    },
+    {
+      "title": "Xử lý giao dịch tới trễ",
+      "actor": "Người chơi",
+      "action": "Quay lại khi kết quả purchase không còn khớp bước đang hiển thị.",
+      "rule": "Reward phải đối chiếu dữ liệu giao dịch/index thay vì lấy card hiện tại.",
+      "outcome": "Tránh trao nhầm hàng của bước kế.",
+      "uc_ids": [
+        "UC-07"
+      ],
+      "source_refs": [
+        "gdd/EndlessPortal.json#use_cases/6"
+      ]
+    }
+  ],
+  "rules": [
+    {
+      "title": "Đọc cửa sổ chuỗi",
+      "text": "StepCountInUI=6; cửa sổ UI không phải toàn bộ chuỗi nguồn có 44 phần tử.",
+      "source_refs": [
+        "gdd/EndlessPortal.json#use_cases/2"
+      ]
+    },
+    {
+      "title": "Hoàn tất bước hiện tại",
+      "text": "Bước paid đi qua IAP; bước miễn phí có nhánh riêng, không mô tả mọi bước đều trả tiền.",
+      "source_refs": [
+        "gdd/EndlessPortal.json#use_cases/3"
+      ]
+    },
+    {
+      "title": "Xử lý giao dịch tới trễ",
+      "text": "Reward phải đối chiếu dữ liệu giao dịch/index thay vì lấy card hiện tại.",
+      "source_refs": [
+        "gdd/EndlessPortal.json#use_cases/6"
+      ]
+    }
+  ],
+  "decisions": [
+    {
+      "question": "Vì sao UI chỉ cần sáu bước khi chuỗi dài?",
+      "answer": "Cửa sổ nhỏ giữ bước có thể hành động dễ thấy; bảng đầy đủ vẫn cần cho designer kiểm giá, miễn phí/paid và vòng lặp.",
+      "basis": "Nhận định thiết kế từ cơ chế có nguồn; không phải hiệu quả đã đo.",
+      "source_refs": [
+        "gdd/EndlessPortal.json#flow",
+        "gdd/EndlessPortal.json#configs"
+      ]
+    }
+  ],
+  "segments_ab": {
+    "summary": "Response và fallback: Đổi chuỗi giá/reward và phép lặp.",
+    "axes": [
+      {
+        "axis": "Response và fallback",
+        "selection": "Dùng bước server; fallback dùng cấu hình khi thiếu/hỏng dữ liệu.",
+        "effect": "Đổi chuỗi giá/reward và phép lặp.",
+        "evidence_limit": "Catalog 44 bậc là dữ liệu có nguồn, không phải44purchase đã chạy hoặc allocation A/B.",
+        "source_refs": [
+          "gdd/EndlessPortal.json#flow",
+          "gdd/EndlessPortal.json#segment_ab_review_20261115"
+        ]
+      }
+    ],
+    "unknowns": [
+      "Catalog 44 bậc là dữ liệu có nguồn, không phải44purchase đã chạy hoặc allocation A/B."
+    ]
+  },
+  "recovery": [
+    {
+      "condition": "Nhánh lỗi, gián đoạn hoặc chuyển trạng thái của Endless Portal",
+      "expected": "Thiếu response cần fallback có nguồn; purchase lỗi không tự tăng index.",
+      "verified_scope": "Theo UC/source trong hồ sơ; runtime chỉ có giá trị ở đúng case và snapshot đã liên kết.",
+      "uc_ids": [
+        "UC-06",
+        "UC-07",
+        "UC-12"
+      ]
+    }
+  ],
+  "takeaways": [
+    {
+      "text": "Cửa sổ nhỏ giữ bước có thể hành động dễ thấy; bảng đầy đủ vẫn cần cho designer kiểm giá, miễn phí/paid và vòng lặp.",
+      "basis": "Suy luận thiết kế; không thay bảng cấu hình hoặc giới hạn thực nghiệm."
+    }
+  ],
+  "reviewed_source_paths": [
+    "gdd/EndlessPortal.json",
+    "site_meta/EndlessPortal.json",
+    "facts/review_20261116/public_current_config_3129/defaults/EndlessPortalV2ConfigModel.json"
+  ]
+}

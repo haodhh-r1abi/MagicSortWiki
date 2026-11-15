@@ -1,0 +1,122 @@
+{
+  "id": "Compensation",
+  "schema_version": 1,
+  "scope": "Lớp diễn giải thiết kế từ source và dossier hiện có; outcome là expected. Quan sát round2 được gọi rõ; chưa phát sinh playtest hoặc xác nhận backend mới.",
+  "design_intent": "Khôi phục niềm tin bằng một gói đền bù nhận một lần; nguyên nhân và người được nhận do vận hành xác định, client xử lý nhận và xác nhận.",
+  "player_loop": "Vào game → kiểm gói bù → xem quà ở Home → nhận → ghi ID đã xử lý.",
+  "flow": [
+    {
+      "title": "Kiểm gói đền bù",
+      "actor": "Người chơi và hệ thống",
+      "action": "Vào game và chờ dữ liệu vận hành.",
+      "rule": "Response chứa CompensationId, RewardModels và cờ Supercharger; không suy client tự tính thiệt hại.",
+      "outcome": "Có gói chưa nhận mới đưa vào hàng chờ.",
+      "uc_ids": [
+        "UC-01"
+      ],
+      "source_refs": [
+        "gdd/Compensation.json#use_cases/0"
+      ]
+    },
+    {
+      "title": "Đọc thông báo và quà",
+      "actor": "Người chơi",
+      "action": "Xem popup thưởng tại Home.",
+      "rule": "Dùng reward presentation chung; không cần giả định một popup asset riêng cho mọi loại bù.",
+      "outcome": "Người chơi nhận biết quà được bù.",
+      "uc_ids": [
+        "UC-03"
+      ],
+      "source_refs": [
+        "gdd/Compensation.json#use_cases/2"
+      ]
+    },
+    {
+      "title": "Nhận gói một lần",
+      "actor": "Người chơi",
+      "action": "Xác nhận nhận quà.",
+      "rule": "Lưu CompensationId đã nhận rồi báo trạng thái tới server theo flow hồ sơ.",
+      "outcome": "Không nhận lặp chỉ vì mở lại Home.",
+      "uc_ids": [
+        "UC-04"
+      ],
+      "source_refs": [
+        "gdd/Compensation.json#use_cases/3"
+      ]
+    }
+  ],
+  "rules": [
+    {
+      "title": "Kiểm gói đền bù",
+      "text": "Response chứa CompensationId, RewardModels và cờ Supercharger; không suy client tự tính thiệt hại.",
+      "source_refs": [
+        "gdd/Compensation.json#use_cases/0"
+      ]
+    },
+    {
+      "title": "Đọc thông báo và quà",
+      "text": "Dùng reward presentation chung; không cần giả định một popup asset riêng cho mọi loại bù.",
+      "source_refs": [
+        "gdd/Compensation.json#use_cases/2"
+      ]
+    },
+    {
+      "title": "Nhận gói một lần",
+      "text": "Lưu CompensationId đã nhận rồi báo trạng thái tới server theo flow hồ sơ.",
+      "source_refs": [
+        "gdd/Compensation.json#use_cases/3"
+      ]
+    }
+  ],
+  "decisions": [
+    {
+      "question": "Vì sao cần ID gói thay vì chỉ cờ đã nhận?",
+      "answer": "Có thể có nhiều đợt bù; ID tách từng đợt và chống phát lại gói cũ.",
+      "basis": "Nhận định thiết kế từ cơ chế có nguồn; không phải hiệu quả đã đo.",
+      "source_refs": [
+        "gdd/Compensation.json#flow",
+        "gdd/Compensation.json#configs"
+      ]
+    }
+  ],
+  "segments_ab": {
+    "summary": "Loại gói vận hành: Đổi loại thông báo/gói thưởng.",
+    "axes": [
+      {
+        "axis": "Loại gói vận hành",
+        "selection": "Backend chọn CompensationId và IsSuperchargerCompensation.",
+        "effect": "Đổi loại thông báo/gói thưởng.",
+        "evidence_limit": "Chưa biết điều kiện phân phối theo user; flag loại bù không phải A/B.",
+        "source_refs": [
+          "gdd/Compensation.json#flow",
+          "gdd/Compensation.json#segment_ab_review_20261115"
+        ]
+      }
+    ],
+    "unknowns": [
+      "Chưa biết điều kiện phân phối theo user; flag loại bù không phải A/B."
+    ]
+  },
+  "recovery": [
+    {
+      "condition": "Nhánh lỗi, gián đoạn hoặc chuyển trạng thái của Compensation (đền bù)",
+      "expected": "API lỗi có RetryLimit = 5 và RetryDelay = 30 giây trong source; chưa kiểm lịch retry bằng runtime.",
+      "verified_scope": "Theo UC/source trong hồ sơ; runtime chỉ có giá trị ở đúng case và snapshot đã liên kết.",
+      "uc_ids": [
+        "UC-02",
+        "UC-07",
+        "UC-10"
+      ]
+    }
+  ],
+  "takeaways": [
+    {
+      "text": "Có thể có nhiều đợt bù; ID tách từng đợt và chống phát lại gói cũ.",
+      "basis": "Suy luận thiết kế; không thay bảng cấu hình hoặc giới hạn thực nghiệm."
+    }
+  ],
+  "reviewed_source_paths": [
+    "gdd/Compensation.json",
+    "site_meta/Compensation.json"
+  ]
+}

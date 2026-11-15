@@ -1,635 +1,635 @@
 {
- "id": "EndlessPortal",
- "title": "Cổng Vô Tận (Endless Portal)",
- "tagline": "Chuỗi ưu đãi bậc thang không điểm kết: mua bậc hiện tại để mở bậc kế, hết chuỗi thì quay vòng lại từ đầu.",
- "infobox": [
-  [
-   "Loại",
-   "Offer"
+  "id": "EndlessPortal",
+  "title": "Cổng Vô Tận (Endless Portal)",
+  "tagline": "Chuỗi ưu đãi bậc thang không điểm kết: mua bậc hiện tại để mở bậc kế, hết chuỗi thì quay vòng lại từ đầu.",
+  "infobox": [
+    [
+      "Loại",
+      "Offer"
+    ],
+    [
+      "Mở khóa",
+      "Level 100 (EndlessPortalV2ConfigModel.json: FirstLevelToShow)"
+    ],
+    [
+      "Thời lượng",
+      "Theo StartTime / FinishTime của EndlessPortalResponse (server)"
+    ],
+    [
+      "Chu kỳ / lịch",
+      "Sự kiện có hạn, hết giờ tự lấy phiên mới; chỉ số bậc quay vòng nên chuỗi không có điểm kết"
+    ],
+    [
+      "Tham gia",
+      "Cá nhân"
+    ],
+    [
+      "Tiền tệ",
+      "Tiền thật (IAP) cho bậc trả phí; bậc miễn phí trao thẳng vật phẩm"
+    ],
+    [
+      "Thưởng chính",
+      "Coin (200–100000), Undo, Shuffle, Extra Bottle, Unlimited Lives, rương ChestType 1–7"
+    ],
+    [
+      "Điều kiện / phụ thuộc",
+      "EndlessPortalV2ConfigModel.IsEnable = true và có cache EndlessPortalResponse"
+    ],
+    [
+      "Manager",
+      "EndlessPortalService"
+    ]
   ],
-  [
-   "Mở khóa",
-   "Level 100 (EndlessPortalV2ConfigModel.json: FirstLevelToShow)"
+  "description": [
+    "Endless Portal là chuỗi ưu đãi bậc thang: mỗi bậc là một phần thưởng, có bậc miễn phí và có bậc phải mua bằng gói IAP.",
+    "Mua hoặc nhận bậc hiện tại sẽ mở bậc kế tiếp; các bậc phía sau bị khóa với thông báo 'Accept previous offer to open'.",
+    "Giao diện luôn hiển thị đúng 6 bậc: bậc trước, bậc đang mở và các bậc khóa phía sau (StepCountInUI = 6).",
+    "Bậc thứ 6 trong cửa sổ đóng vai trò mồi nhử: người chơi luôn nhìn thấy một phần thưởng lớn ở cuối tầm mắt.",
+    "Sau bậc cuối, chỉ số quay vòng đưa chuỗi về đầu nên ưu đãi được gọi là 'endless'.",
+    "Bậc của event đến từ EndlessPortalResponse. Khi danh sách Steps không dùng được, consumer có nhánh FallbackSteps; mất mạng chưa có cache vẫn có thể bị chặn ở NoCache, không mặc nhiên mở được offer.",
+    "Có bảng dự phòng thứ hai tra theo productId để trao bù nếu giao dịch tới trễ hoặc app bị kill giữa lúc mua.",
+    "Chỉ CurrentStepIndex được đồng bộ giữa các thiết bị, phần cache response thì không.",
+    "Popup tự bật khi sự kiện bắt đầu và khi người chơi quay lại Home, ngoài lối vào từ icon lobby."
   ],
-  [
-   "Thời lượng",
-   "Theo StartTime / FinishTime của EndlessPortalResponse (server)"
+  "notes": [
+    "Lưu ý: bảng bậc thật (thưởng, product id, giá) đến từ server; bảng dưới đây là FallbackSteps mặc định trong client (json default).",
+    "Lưu ý: GDD chỉ liệt kê 40 bậc đầu của FallbackSteps, còn 4 phần tử [40..43] nằm ở appendix/default-configs.md.",
+    "Lưu ý: trong 40 bậc dự phòng được liệt kê chỉ có 7 bậc phải trả tiền (bậc 3, 9, 15, 21, 27, 33, 39 với giá 2.99 đến 89.99 USD), phần còn lại là bậc miễn phí.",
+    "Lưu ý: FallbackStepsForUniqueInApps có 11 sản phẩm, nhiều hơn số bậc trả phí trong FallbackSteps, gồm cả các gói 3.99, 6.99, 119.99 và 199.99 USD không xuất hiện trong chuỗi mặc định.",
+    "Lưu ý: nếu tra không ra productId, analytics endless_portal_claim_with_fallback ghi giá trị 'empty'.",
+    "Lưu ý: EndlessPortalStateService có giữ tham chiếu AdService nhưng không thấy lời gọi trong dossier; mục đích chưa xác định (gaps).",
+    "Lưu ý: không xác định được CurrentStepIndex có reset khi sang sự kiện mới hay tiếp tục quay vòng (gaps)."
   ],
-  [
-   "Chu kỳ / lịch",
-   "Sự kiện có hạn, hết giờ tự lấy phiên mới; chỉ số bậc quay vòng nên chuỗi không có điểm kết"
+  "how_it_works": [
+    "Sự kiện chỉ chạy khi IsEnable = true (json default false) và level đạt FirstLevelToShow = 100, nếu không trạng thái là Disable (0) hoặc ProgressNotEnough (1).",
+    "Chưa có cache thì trạng thái là NoCache (2) và icon lobby bị ẩn (ShouldShowLobbyIcon).",
+    "Client gửi EndlessPortalRequestModel{EventId, EventType} (json default EventType = 3) để lấy phiên sự kiện (TryFetchCurrentEvent).",
+    "Server trả EndlessPortalResponse{EventId, StartTime, FinishTime, IsFinished, Segment, Steps}; client lưu vào cache (CacheBackendResponse).",
+    "Analytics endless_portal_started ghi event_id, segment, current_step, start_time, remaining_duration.",
+    "Nếu Steps rỗng, client rơi về FallbackSteps trong remote config; nếu bảng đó cũng null thì log '[EndlessPortalService]::GetFallbackStepsForUniqueInApps - null!'.",
+    "Cửa sổ hiển thị cắt đúng 6 bậc quanh vị trí hiện tại dựa trên CurrentStepIndex và chỉ số quay vòng (GetSixSteps, GetLoopedIndex).",
+    "Mỗi bậc là EndlessPortalRewardStepModel gồm RewardModels (thưởng) và IAPConfigModel (sản phẩm phải mua); bậc không có IAPConfigModel là bậc miễn phí.",
+    "Bậc trả phí hiện nút giá; bấm mua sẽ gọi IAP với IAPOrigin.EndlessPortal (3) và IAPReason.Endless (5), rồi xác thực receipt.",
+    "Mua hoặc nhận thành công thì thưởng được trao với CurrencyEarnReason.EndlessPortal (14) và CurrentStepIndex tăng 1 (ClaimStepRewards, SetCurrentStepIndex).",
+    "Analytics endless_portal_claim ghi claimed_step cùng step_type Free hoặc Paid; bậc trả phí bắn thêm endless_portal_purchase với product_id, price, dollar_equivalent.",
+    "Client gửi claim request lên server để báo đã nhận bậc (SendClaimRequest).",
+    "Nếu giao dịch tới trễ và không khớp bậc nào, client tra FallbackStepsForUniqueInApps theo productId và trao thưởng tương ứng (ClaimWithFallbackStepsForUniqueInApps).",
+    "Popup tự bật khi state = WaitingIntroduce (5) với impression source EventStart (1), hoặc từ icon lobby với LobbyIcon (0).",
+    "Đồng hồ đếm ngược tới FinishTime; hết giờ trạng thái chuyển TimeIsUp (4) và client hẹn lấy phiên sự kiện mới.",
+    "Chỉ CurrentStepIndex nằm trong khối đồng bộ 'EndlessPortalSyncDataModel'; cờ ForceShownAtEventStart và cache response chỉ ở máy."
   ],
-  [
-   "Tham gia",
-   "Cá nhân"
+  "reward_tables": [
+    {
+      "title": "CHUỖI BẬC DỰ PHÒNG (EndlessPortalV2ConfigModel.json: FallbackSteps, 40/44 bậc có trong GDD)",
+      "columns": [
+        "Bậc",
+        "Giá",
+        "Phần thưởng"
+      ],
+      "rows": [
+        [
+          "Bậc 1",
+          "Miễn phí",
+          "1 Undo"
+        ],
+        [
+          "Bậc 2",
+          "Miễn phí",
+          "1 giờ Unlimited Lives"
+        ],
+        [
+          "Bậc 3",
+          "2.99 USD (sort.endlessnv3)",
+          "1300 coin"
+        ],
+        [
+          "Bậc 4",
+          "Miễn phí",
+          "1 Extra Bottle"
+        ],
+        [
+          "Bậc 5",
+          "Miễn phí",
+          "rương ChestType 1 gồm 1 Undo, 1 Shuffle"
+        ],
+        [
+          "Bậc 6",
+          "Miễn phí",
+          "1 giờ Unlimited Lives"
+        ],
+        [
+          "Bậc 7",
+          "Miễn phí",
+          "200 coin"
+        ],
+        [
+          "Bậc 8",
+          "Miễn phí",
+          "2 Shuffle"
+        ],
+        [
+          "Bậc 9",
+          "5.99 USD (sort.endlessnv6)",
+          "2000 coin"
+        ],
+        [
+          "Bậc 10",
+          "Miễn phí",
+          "rương ChestType 2 gồm 2 Undo, 2 Shuffle, 1 giờ Unlimited Lives"
+        ],
+        [
+          "Bậc 11",
+          "Miễn phí",
+          "2 Extra Bottle"
+        ],
+        [
+          "Bậc 12",
+          "Miễn phí",
+          "300 coin"
+        ],
+        [
+          "Bậc 13",
+          "Miễn phí",
+          "2 giờ Unlimited Lives"
+        ],
+        [
+          "Bậc 14",
+          "Miễn phí",
+          "200 coin"
+        ],
+        [
+          "Bậc 15",
+          "7.99 USD (sort.endlessnv8)",
+          "3000 coin"
+        ],
+        [
+          "Bậc 16",
+          "Miễn phí",
+          "rương ChestType 3 gồm 2 Undo, 2 Shuffle, 1 giờ Unlimited Lives"
+        ],
+        [
+          "Bậc 17",
+          "Miễn phí",
+          "3 Extra Bottle"
+        ],
+        [
+          "Bậc 18",
+          "Miễn phí",
+          "200 coin"
+        ],
+        [
+          "Bậc 19",
+          "Miễn phí",
+          "3 giờ Unlimited Lives"
+        ],
+        [
+          "Bậc 20",
+          "Miễn phí",
+          "300 coin"
+        ],
+        [
+          "Bậc 21",
+          "11.99 USD (sort.endlessnv12)",
+          "4500 coin"
+        ],
+        [
+          "Bậc 22",
+          "Miễn phí",
+          "rương ChestType 4 gồm 4 Undo, 4 Shuffle, 2 giờ Unlimited Lives"
+        ],
+        [
+          "Bậc 23",
+          "Miễn phí",
+          "4 Extra Bottle"
+        ],
+        [
+          "Bậc 24",
+          "Miễn phí",
+          "300 coin"
+        ],
+        [
+          "Bậc 25",
+          "Miễn phí",
+          "4 giờ Unlimited Lives"
+        ],
+        [
+          "Bậc 26",
+          "Miễn phí",
+          "300 coin"
+        ],
+        [
+          "Bậc 27",
+          "24.99 USD (sort.endlessnv25)",
+          "10000 coin"
+        ],
+        [
+          "Bậc 28",
+          "Miễn phí",
+          "8 giờ Unlimited Lives"
+        ],
+        [
+          "Bậc 29",
+          "Miễn phí",
+          "500 coin"
+        ],
+        [
+          "Bậc 30",
+          "Miễn phí",
+          "rương ChestType 5 gồm 10 Undo, 10 Shuffle, 4 giờ Unlimited Lives"
+        ],
+        [
+          "Bậc 31",
+          "Miễn phí",
+          "10 Extra Bottle"
+        ],
+        [
+          "Bậc 32",
+          "Miễn phí",
+          "1000 coin"
+        ],
+        [
+          "Bậc 33",
+          "44.99 USD (sort.endlessnv45)",
+          "15000 coin"
+        ],
+        [
+          "Bậc 34",
+          "Miễn phí",
+          "rương ChestType 6 gồm 16 Undo, 16 Shuffle, 12 giờ Unlimited Lives"
+        ],
+        [
+          "Bậc 35",
+          "Miễn phí",
+          "1500 coin"
+        ],
+        [
+          "Bậc 36",
+          "Miễn phí",
+          "12 giờ Unlimited Lives"
+        ],
+        [
+          "Bậc 37",
+          "Miễn phí",
+          "2500 coin"
+        ],
+        [
+          "Bậc 38",
+          "Miễn phí",
+          "16 Extra Bottle"
+        ],
+        [
+          "Bậc 39",
+          "89.99 USD (sort.endlessnv90)",
+          "50000 coin"
+        ],
+        [
+          "Bậc 40",
+          "Miễn phí",
+          "rương ChestType 7 gồm 30 Undo, 30 Shuffle, 12 giờ Unlimited Lives"
+        ]
+      ]
+    },
+    {
+      "title": "BẢNG TRA THEO PRODUCT ID ĐỂ TRAO BÙ (FallbackStepsForUniqueInApps)",
+      "columns": [
+        "Product Id",
+        "Giá",
+        "Phần thưởng"
+      ],
+      "rows": [
+        [
+          "sort.endlessnv3",
+          "2.99 USD",
+          "1300 coin"
+        ],
+        [
+          "sort.endlessnv6",
+          "5.99 USD",
+          "2000 coin"
+        ],
+        [
+          "sort.endlessnv8",
+          "7.99 USD",
+          "3000 coin"
+        ],
+        [
+          "sort.endlessnv12",
+          "11.99 USD",
+          "4500 coin"
+        ],
+        [
+          "sort.endlessnv25",
+          "24.99 USD",
+          "10000 coin"
+        ],
+        [
+          "sort.endlessnv45",
+          "44.99 USD",
+          "15000 coin"
+        ],
+        [
+          "sort.endlessnv90",
+          "89.99 USD",
+          "50000 coin"
+        ],
+        [
+          "sort.endlessnv4",
+          "3.99 USD",
+          "1500 coin"
+        ],
+        [
+          "sort.endlessnv7",
+          "6.99 USD",
+          "2400 coin"
+        ],
+        [
+          "sort.endlessnv120",
+          "119.99 USD",
+          "65000 coin"
+        ],
+        [
+          "sort.endlessnv200",
+          "199.99 USD",
+          "100000 coin"
+        ]
+      ]
+    }
   ],
-  [
-   "Tiền tệ",
-   "Tiền thật (IAP) cho bậc trả phí; bậc miễn phí trao thẳng vật phẩm"
+  "key_numbers": [
+    {
+      "label": "Level mở khóa",
+      "value": "100",
+      "source": "EndlessPortalV2ConfigModel.json: FirstLevelToShow"
+    },
+    {
+      "label": "IsEnable mặc định",
+      "value": "false (chờ remote config bật)",
+      "source": "EndlessPortalV2ConfigModel.json: IsEnable"
+    },
+    {
+      "label": "EventType mặc định",
+      "value": "3",
+      "source": "EndlessPortalV2ConfigModel.json: EventType"
+    },
+    {
+      "label": "Số bậc hiển thị cùng lúc",
+      "value": "6",
+      "source": "EndlessPortalService.StepCountInUI"
+    },
+    {
+      "label": "Số thẻ bậc dựng trong UI",
+      "value": "6",
+      "source": "EndlessPortalController.MaxStep"
+    },
+    {
+      "label": "Số bậc trong bảng dự phòng (GDD liệt kê)",
+      "value": "40 trên tổng 44",
+      "source": "EndlessPortalV2ConfigModel.json: FallbackSteps"
+    },
+    {
+      "label": "Số bậc trả phí trong 40 bậc dự phòng",
+      "value": "7",
+      "source": "EndlessPortalV2ConfigModel.json: FallbackSteps"
+    },
+    {
+      "label": "Giá bậc trả phí thấp nhất",
+      "value": "2.99 USD (sort.endlessnv3) đổi 1300 coin",
+      "source": "EndlessPortalV2ConfigModel.json: FallbackSteps[2]"
+    },
+    {
+      "label": "Giá bậc trả phí cao nhất trong chuỗi dự phòng",
+      "value": "89.99 USD (sort.endlessnv90) đổi 50000 coin",
+      "source": "EndlessPortalV2ConfigModel.json: FallbackSteps[38]"
+    },
+    {
+      "label": "Gói đắt nhất trong bảng trao bù",
+      "value": "199.99 USD (sort.endlessnv200) đổi 100000 coin",
+      "source": "EndlessPortalV2ConfigModel.json: FallbackStepsForUniqueInApps[10]"
+    },
+    {
+      "label": "Số sản phẩm trong bảng trao bù",
+      "value": "11",
+      "source": "EndlessPortalV2ConfigModel.json: FallbackStepsForUniqueInApps"
+    },
+    {
+      "label": "Số loại rương trong chuỗi dự phòng",
+      "value": "7 (ChestType 1–7)",
+      "source": "EndlessPortalV2ConfigModel.json: FallbackSteps"
+    },
+    {
+      "label": "Rương lớn nhất",
+      "value": "ChestType 7: 30 Undo, 30 Shuffle, 12 giờ Unlimited Lives",
+      "source": "EndlessPortalV2ConfigModel.json: FallbackSteps[39]"
+    },
+    {
+      "label": "Coin thấp nhất trong chuỗi dự phòng",
+      "value": "200 coin",
+      "source": "EndlessPortalV2ConfigModel.json: FallbackSteps[6]"
+    },
+    {
+      "label": "Coin miễn phí cao nhất trong chuỗi dự phòng",
+      "value": "2500 coin",
+      "source": "EndlessPortalV2ConfigModel.json: FallbackSteps[36]"
+    },
+    {
+      "label": "Các mức Unlimited Lives miễn phí",
+      "value": "1, 2, 3, 4, 8, 12 giờ",
+      "source": "EndlessPortalV2ConfigModel.json: FallbackSteps"
+    },
+    {
+      "label": "CurrencyEarnReason khi trao thưởng",
+      "value": "EndlessPortal = 14",
+      "source": "Modules.Contexts.Application.Inventory.Scripts.CurrencyEarnReason"
+    },
+    {
+      "label": "Phân loại giao dịch IAP",
+      "value": "IAPOrigin.EndlessPortal = 3, IAPReason.Endless = 5",
+      "source": "Modules.Contexts.Application.IAP.Scripts"
+    },
+    {
+      "label": "Số trạng thái sự kiện",
+      "value": "6 (Disable=0 … WaitingIntroduce=5)",
+      "source": "EndlessPortalStateService.GetState"
+    },
+    {
+      "label": "Số nguồn mở popup",
+      "value": "2 (LobbyIcon=0, EventStart=1)",
+      "source": "EndlessPortalPopupImpressionSource"
+    },
+    {
+      "label": "Tên bản ghi đồng bộ",
+      "value": "EndlessPortalSyncDataModel (chỉ chứa CurrentStepIndex)",
+      "source": "EndlessPortalDataService.GetSyncName"
+    },
+    {
+      "label": "Kích thước config hoạt ảnh",
+      "value": "EndlessPortalAnimationConfig 44 field, EndlessPortalLobbyButtonAnimationConfig 37 field",
+      "source": "Modules.Contexts.Home.Monetization.EndlessPortal.Scripts.UI"
+    }
   ],
-  [
-   "Thưởng chính",
-   "Coin (200–100000), Undo, Shuffle, Extra Bottle, Unlimited Lives, rương ChestType 1–7"
+  "config_highlights": [
+    {
+      "key": "EndlessPortalV2ConfigModel.json: IsEnable",
+      "value": "false",
+      "meaning": "Mặc định tắt, remote config bật ưu đãi"
+    },
+    {
+      "key": "EndlessPortalV2ConfigModel.json: FirstLevelToShow",
+      "value": "100",
+      "meaning": "Level tối thiểu để thấy Endless Portal"
+    },
+    {
+      "key": "EndlessPortalV2ConfigModel.json: EventType",
+      "value": "3",
+      "meaning": "Loại sự kiện gửi kèm get và claim request"
+    },
+    {
+      "key": "EndlessPortalService.StepCountInUI",
+      "value": "6",
+      "meaning": "Số bậc luôn hiển thị trong cửa sổ popup"
+    },
+    {
+      "key": "EndlessPortalController.MaxStep",
+      "value": "6",
+      "meaning": "Số thẻ bậc được factory dựng"
+    },
+    {
+      "key": "FallbackSteps[0]",
+      "value": "1 Undo, miễn phí",
+      "meaning": "Bậc đầu chuỗi dự phòng, mồi người chơi vào chuỗi"
+    },
+    {
+      "key": "FallbackSteps[2]",
+      "value": "sort.endlessnv3, 2.99 USD đổi 1300 coin",
+      "meaning": "Bậc trả phí đầu tiên"
+    },
+    {
+      "key": "FallbackSteps[8]",
+      "value": "sort.endlessnv6, 5.99 USD đổi 2000 coin",
+      "meaning": "Bậc trả phí thứ hai"
+    },
+    {
+      "key": "FallbackSteps[14]",
+      "value": "sort.endlessnv8, 7.99 USD đổi 3000 coin",
+      "meaning": "Bậc trả phí thứ ba"
+    },
+    {
+      "key": "FallbackSteps[20]",
+      "value": "sort.endlessnv12, 11.99 USD đổi 4500 coin",
+      "meaning": "Bậc trả phí thứ tư"
+    },
+    {
+      "key": "FallbackSteps[26]",
+      "value": "sort.endlessnv25, 24.99 USD đổi 10000 coin",
+      "meaning": "Bậc trả phí thứ năm"
+    },
+    {
+      "key": "FallbackSteps[32]",
+      "value": "sort.endlessnv45, 44.99 USD đổi 15000 coin",
+      "meaning": "Bậc trả phí thứ sáu"
+    },
+    {
+      "key": "FallbackSteps[38]",
+      "value": "sort.endlessnv90, 89.99 USD đổi 50000 coin",
+      "meaning": "Bậc trả phí cuối trong 40 bậc được liệt kê"
+    },
+    {
+      "key": "FallbackSteps[4] ChestType 1",
+      "value": "1 Undo, 1 Shuffle",
+      "meaning": "Rương nhỏ nhất của chuỗi"
+    },
+    {
+      "key": "FallbackSteps[39] ChestType 7",
+      "value": "30 Undo, 30 Shuffle, 12 giờ Unlimited Lives",
+      "meaning": "Rương lớn nhất của chuỗi, đóng vai trò mồi nhử cuối"
+    },
+    {
+      "key": "FallbackStepsForUniqueInApps",
+      "value": "11 sản phẩm từ 2.99 đến 199.99 USD",
+      "meaning": "Bảng tra theo productId để trao bù giao dịch tới trễ"
+    },
+    {
+      "key": "sort.endlessnv120",
+      "value": "119.99 USD đổi 65000 coin",
+      "meaning": "Gói lớn chỉ có trong bảng trao bù"
+    },
+    {
+      "key": "sort.endlessnv200",
+      "value": "199.99 USD đổi 100000 coin",
+      "meaning": "Gói đắt nhất trong bảng trao bù"
+    },
+    {
+      "key": "EndlessPortalStateType",
+      "value": "Disable=0, ProgressNotEnough=1, NoCache=2, InProgress=3, TimeIsUp=4, WaitingIntroduce=5",
+      "meaning": "Máy trạng thái điều khiển icon và popup"
+    },
+    {
+      "key": "EndlessPortalPopupImpressionSource",
+      "value": "LobbyIcon=0, EventStart=1",
+      "meaning": "Nguồn mở popup gửi kèm analytics"
+    },
+    {
+      "key": "IAPOrigin.EndlessPortal / IAPReason.Endless",
+      "value": "3 / 5",
+      "meaning": "Phân loại giao dịch mua bậc"
+    },
+    {
+      "key": "CurrencyEarnReason.EndlessPortal",
+      "value": "14",
+      "meaning": "Lý do nhận thưởng khi mở bậc"
+    },
+    {
+      "key": "EndlessPortalResponse",
+      "value": "EventId, StartTime, FinishTime, IsFinished, Segment, Steps (server)",
+      "meaning": "Phiên sự kiện và danh sách bậc thật"
+    },
+    {
+      "key": "EndlessPortalRewardStepModel",
+      "value": "{RewardModels, IAPConfigModel}",
+      "meaning": "Cấu trúc một bậc: thưởng cộng sản phẩm phải mua"
+    },
+    {
+      "key": "EndlessPortalSyncDataModel",
+      "value": "chỉ chứa CurrentStepIndex",
+      "meaning": "Khối đồng bộ duy nhất của tính năng"
+    },
+    {
+      "key": "EndlessPortalDataModel.ForceShownAtEventStart",
+      "value": "client, không đồng bộ",
+      "meaning": "Cờ đã ép mở popup khi sự kiện bắt đầu"
+    },
+    {
+      "key": "Localization: EndlessPortal",
+      "value": "\"Endless Portal\"",
+      "meaning": "Tên hiển thị của tính năng"
+    },
+    {
+      "key": "Localization: EndlessPortalPopupInfo",
+      "value": "\"Claim each offer to unlock free rewards!\"",
+      "meaning": "Câu mô tả trong popup"
+    },
+    {
+      "key": "Localization: EndlessPortalWarning",
+      "value": "\"Accept previous offer to open\"",
+      "meaning": "Text trên bậc bị khóa"
+    },
+    {
+      "key": "StorePurchaseFailureReason",
+      "value": "NotInitialized=1, NotRequestedInApp=2, ProductIdIsNull=3, ProductIdIsNotAvailableToPurchaseSomehow=4, CouldNotVerifyFromBackend=5",
+      "meaning": "Lý do mua thất bại gửi kèm purchase_failed"
+    }
   ],
-  [
-   "Điều kiện / phụ thuộc",
-   "EndlessPortalV2ConfigModel.IsEnable = true và có cache EndlessPortalResponse"
+  "tips": [
+    "Xen kẽ bậc miễn phí giữa các bậc trả phí giữ người chơi tiếp tục leo chuỗi ngay cả khi không mua.",
+    "Cửa sổ 6 bậc luôn để lộ một phần thưởng lớn phía sau, biến chuỗi thành một chuỗi mục tiêu ngắn nối tiếp nhau.",
+    "Chỉ số quay vòng cho phép lặp các bậc theo cấu hình trong thời hạn event. Event hết hạn, dữ liệu không dùng được hoặc gate không đạt vẫn có thể chặn lượt mua tiếp.",
+    "Giá bậc trả phí trong chuỗi dự phòng leo từ 2.99 lên 89.99 USD, mỗi nấc cách nhau 6 bậc.",
+    "Bảng tra theo productId là lưới an toàn: người chơi vẫn nhận đúng hàng dù app bị kill giữa giao dịch."
   ],
-  [
-   "Manager",
-   "EndlessPortalService"
+  "categories": [
+    "Offer/IAP",
+    "Kinh tế",
+    "Live-ops",
+    "Meta"
   ]
- ],
- "description": [
-  "Endless Portal là chuỗi ưu đãi bậc thang: mỗi bậc là một phần thưởng, có bậc miễn phí và có bậc phải mua bằng gói IAP.",
-  "Mua hoặc nhận bậc hiện tại sẽ mở bậc kế tiếp; các bậc phía sau bị khóa với thông báo 'Accept previous offer to open'.",
-  "Giao diện luôn hiển thị đúng 6 bậc: bậc trước, bậc đang mở và các bậc khóa phía sau (StepCountInUI = 6).",
-  "Bậc thứ 6 trong cửa sổ đóng vai trò mồi nhử: người chơi luôn nhìn thấy một phần thưởng lớn ở cuối tầm mắt.",
-  "Sau bậc cuối, chỉ số quay vòng đưa chuỗi về đầu nên ưu đãi được gọi là 'endless'.",
-  "Cấu hình bậc thật do server gửi trong EndlessPortalResponse; khi mất mạng hoặc dữ liệu hỏng thì client dùng FallbackSteps.",
-  "Có bảng dự phòng thứ hai tra theo productId để trao bù nếu giao dịch tới trễ hoặc app bị kill giữa lúc mua.",
-  "Chỉ CurrentStepIndex được đồng bộ giữa các thiết bị, phần cache response thì không.",
-  "Popup tự bật khi sự kiện bắt đầu và khi người chơi quay lại Home, ngoài lối vào từ icon lobby."
- ],
- "notes": [
-  "Lưu ý: bảng bậc thật (thưởng, product id, giá) đến từ server; bảng dưới đây là FallbackSteps mặc định trong client (json default).",
-  "Lưu ý: GDD chỉ liệt kê 40 bậc đầu của FallbackSteps, còn 4 phần tử [40..43] nằm ở appendix/default-configs.md.",
-  "Lưu ý: trong 40 bậc dự phòng được liệt kê chỉ có 7 bậc phải trả tiền (bậc 3, 9, 15, 21, 27, 33, 39 với giá 2.99 đến 89.99 USD), phần còn lại là bậc miễn phí.",
-  "Lưu ý: FallbackStepsForUniqueInApps có 11 sản phẩm, nhiều hơn số bậc trả phí trong FallbackSteps, gồm cả các gói 3.99, 6.99, 119.99 và 199.99 USD không xuất hiện trong chuỗi mặc định.",
-  "Lưu ý: nếu tra không ra productId, analytics endless_portal_claim_with_fallback ghi giá trị 'empty'.",
-  "Lưu ý: EndlessPortalStateService có giữ tham chiếu AdService nhưng không thấy lời gọi trong dossier; mục đích chưa xác định (gaps).",
-  "Lưu ý: không xác định được CurrentStepIndex có reset khi sang sự kiện mới hay tiếp tục quay vòng (gaps)."
- ],
- "how_it_works": [
-  "Sự kiện chỉ chạy khi IsEnable = true (json default false) và level đạt FirstLevelToShow = 100, nếu không trạng thái là Disable (0) hoặc ProgressNotEnough (1).",
-  "Chưa có cache thì trạng thái là NoCache (2) và icon lobby bị ẩn (ShouldShowLobbyIcon).",
-  "Client gửi EndlessPortalRequestModel{EventId, EventType} (json default EventType = 3) để lấy phiên sự kiện (TryFetchCurrentEvent).",
-  "Server trả EndlessPortalResponse{EventId, StartTime, FinishTime, IsFinished, Segment, Steps}; client lưu vào cache (CacheBackendResponse).",
-  "Analytics endless_portal_started ghi event_id, segment, current_step, start_time, remaining_duration.",
-  "Nếu Steps rỗng, client rơi về FallbackSteps trong remote config; nếu bảng đó cũng null thì log '[EndlessPortalService]::GetFallbackStepsForUniqueInApps - null!'.",
-  "Cửa sổ hiển thị cắt đúng 6 bậc quanh vị trí hiện tại dựa trên CurrentStepIndex và chỉ số quay vòng (GetSixSteps, GetLoopedIndex).",
-  "Mỗi bậc là EndlessPortalRewardStepModel gồm RewardModels (thưởng) và IAPConfigModel (sản phẩm phải mua); bậc không có IAPConfigModel là bậc miễn phí.",
-  "Bậc trả phí hiện nút giá; bấm mua sẽ gọi IAP với IAPOrigin.EndlessPortal (3) và IAPReason.Endless (5), rồi xác thực receipt.",
-  "Mua hoặc nhận thành công thì thưởng được trao với CurrencyEarnReason.EndlessPortal (14) và CurrentStepIndex tăng 1 (ClaimStepRewards, SetCurrentStepIndex).",
-  "Analytics endless_portal_claim ghi claimed_step cùng step_type Free hoặc Paid; bậc trả phí bắn thêm endless_portal_purchase với product_id, price, dollar_equivalent.",
-  "Client gửi claim request lên server để báo đã nhận bậc (SendClaimRequest).",
-  "Nếu giao dịch tới trễ và không khớp bậc nào, client tra FallbackStepsForUniqueInApps theo productId và trao thưởng tương ứng (ClaimWithFallbackStepsForUniqueInApps).",
-  "Popup tự bật khi state = WaitingIntroduce (5) với impression source EventStart (1), hoặc từ icon lobby với LobbyIcon (0).",
-  "Đồng hồ đếm ngược tới FinishTime; hết giờ trạng thái chuyển TimeIsUp (4) và client hẹn lấy phiên sự kiện mới.",
-  "Chỉ CurrentStepIndex nằm trong khối đồng bộ 'EndlessPortalSyncDataModel'; cờ ForceShownAtEventStart và cache response chỉ ở máy."
- ],
- "reward_tables": [
-  {
-   "title": "CHUỖI BẬC DỰ PHÒNG (EndlessPortalV2ConfigModel.json: FallbackSteps, 40/44 bậc có trong GDD)",
-   "columns": [
-    "Bậc",
-    "Giá",
-    "Phần thưởng"
-   ],
-   "rows": [
-    [
-     "Bậc 1",
-     "Miễn phí",
-     "1 Undo"
-    ],
-    [
-     "Bậc 2",
-     "Miễn phí",
-     "1 giờ Unlimited Lives"
-    ],
-    [
-     "Bậc 3",
-     "2.99 USD (sort.endlessnv3)",
-     "1300 coin"
-    ],
-    [
-     "Bậc 4",
-     "Miễn phí",
-     "1 Extra Bottle"
-    ],
-    [
-     "Bậc 5",
-     "Miễn phí",
-     "rương ChestType 1 gồm 1 Undo, 1 Shuffle"
-    ],
-    [
-     "Bậc 6",
-     "Miễn phí",
-     "1 giờ Unlimited Lives"
-    ],
-    [
-     "Bậc 7",
-     "Miễn phí",
-     "200 coin"
-    ],
-    [
-     "Bậc 8",
-     "Miễn phí",
-     "2 Shuffle"
-    ],
-    [
-     "Bậc 9",
-     "5.99 USD (sort.endlessnv6)",
-     "2000 coin"
-    ],
-    [
-     "Bậc 10",
-     "Miễn phí",
-     "rương ChestType 2 gồm 2 Undo, 2 Shuffle, 1 giờ Unlimited Lives"
-    ],
-    [
-     "Bậc 11",
-     "Miễn phí",
-     "2 Extra Bottle"
-    ],
-    [
-     "Bậc 12",
-     "Miễn phí",
-     "300 coin"
-    ],
-    [
-     "Bậc 13",
-     "Miễn phí",
-     "2 giờ Unlimited Lives"
-    ],
-    [
-     "Bậc 14",
-     "Miễn phí",
-     "200 coin"
-    ],
-    [
-     "Bậc 15",
-     "7.99 USD (sort.endlessnv8)",
-     "3000 coin"
-    ],
-    [
-     "Bậc 16",
-     "Miễn phí",
-     "rương ChestType 3 gồm 2 Undo, 2 Shuffle, 1 giờ Unlimited Lives"
-    ],
-    [
-     "Bậc 17",
-     "Miễn phí",
-     "3 Extra Bottle"
-    ],
-    [
-     "Bậc 18",
-     "Miễn phí",
-     "200 coin"
-    ],
-    [
-     "Bậc 19",
-     "Miễn phí",
-     "3 giờ Unlimited Lives"
-    ],
-    [
-     "Bậc 20",
-     "Miễn phí",
-     "300 coin"
-    ],
-    [
-     "Bậc 21",
-     "11.99 USD (sort.endlessnv12)",
-     "4500 coin"
-    ],
-    [
-     "Bậc 22",
-     "Miễn phí",
-     "rương ChestType 4 gồm 4 Undo, 4 Shuffle, 2 giờ Unlimited Lives"
-    ],
-    [
-     "Bậc 23",
-     "Miễn phí",
-     "4 Extra Bottle"
-    ],
-    [
-     "Bậc 24",
-     "Miễn phí",
-     "300 coin"
-    ],
-    [
-     "Bậc 25",
-     "Miễn phí",
-     "4 giờ Unlimited Lives"
-    ],
-    [
-     "Bậc 26",
-     "Miễn phí",
-     "300 coin"
-    ],
-    [
-     "Bậc 27",
-     "24.99 USD (sort.endlessnv25)",
-     "10000 coin"
-    ],
-    [
-     "Bậc 28",
-     "Miễn phí",
-     "8 giờ Unlimited Lives"
-    ],
-    [
-     "Bậc 29",
-     "Miễn phí",
-     "500 coin"
-    ],
-    [
-     "Bậc 30",
-     "Miễn phí",
-     "rương ChestType 5 gồm 10 Undo, 10 Shuffle, 4 giờ Unlimited Lives"
-    ],
-    [
-     "Bậc 31",
-     "Miễn phí",
-     "10 Extra Bottle"
-    ],
-    [
-     "Bậc 32",
-     "Miễn phí",
-     "1000 coin"
-    ],
-    [
-     "Bậc 33",
-     "44.99 USD (sort.endlessnv45)",
-     "15000 coin"
-    ],
-    [
-     "Bậc 34",
-     "Miễn phí",
-     "rương ChestType 6 gồm 16 Undo, 16 Shuffle, 12 giờ Unlimited Lives"
-    ],
-    [
-     "Bậc 35",
-     "Miễn phí",
-     "1500 coin"
-    ],
-    [
-     "Bậc 36",
-     "Miễn phí",
-     "12 giờ Unlimited Lives"
-    ],
-    [
-     "Bậc 37",
-     "Miễn phí",
-     "2500 coin"
-    ],
-    [
-     "Bậc 38",
-     "Miễn phí",
-     "16 Extra Bottle"
-    ],
-    [
-     "Bậc 39",
-     "89.99 USD (sort.endlessnv90)",
-     "50000 coin"
-    ],
-    [
-     "Bậc 40",
-     "Miễn phí",
-     "rương ChestType 7 gồm 30 Undo, 30 Shuffle, 12 giờ Unlimited Lives"
-    ]
-   ]
-  },
-  {
-   "title": "BẢNG TRA THEO PRODUCT ID ĐỂ TRAO BÙ (FallbackStepsForUniqueInApps)",
-   "columns": [
-    "Product Id",
-    "Giá",
-    "Phần thưởng"
-   ],
-   "rows": [
-    [
-     "sort.endlessnv3",
-     "2.99 USD",
-     "1300 coin"
-    ],
-    [
-     "sort.endlessnv6",
-     "5.99 USD",
-     "2000 coin"
-    ],
-    [
-     "sort.endlessnv8",
-     "7.99 USD",
-     "3000 coin"
-    ],
-    [
-     "sort.endlessnv12",
-     "11.99 USD",
-     "4500 coin"
-    ],
-    [
-     "sort.endlessnv25",
-     "24.99 USD",
-     "10000 coin"
-    ],
-    [
-     "sort.endlessnv45",
-     "44.99 USD",
-     "15000 coin"
-    ],
-    [
-     "sort.endlessnv90",
-     "89.99 USD",
-     "50000 coin"
-    ],
-    [
-     "sort.endlessnv4",
-     "3.99 USD",
-     "1500 coin"
-    ],
-    [
-     "sort.endlessnv7",
-     "6.99 USD",
-     "2400 coin"
-    ],
-    [
-     "sort.endlessnv120",
-     "119.99 USD",
-     "65000 coin"
-    ],
-    [
-     "sort.endlessnv200",
-     "199.99 USD",
-     "100000 coin"
-    ]
-   ]
-  }
- ],
- "key_numbers": [
-  {
-   "label": "Level mở khóa",
-   "value": "100",
-   "source": "EndlessPortalV2ConfigModel.json: FirstLevelToShow"
-  },
-  {
-   "label": "IsEnable mặc định",
-   "value": "false (chờ remote config bật)",
-   "source": "EndlessPortalV2ConfigModel.json: IsEnable"
-  },
-  {
-   "label": "EventType mặc định",
-   "value": "3",
-   "source": "EndlessPortalV2ConfigModel.json: EventType"
-  },
-  {
-   "label": "Số bậc hiển thị cùng lúc",
-   "value": "6",
-   "source": "EndlessPortalService.StepCountInUI"
-  },
-  {
-   "label": "Số thẻ bậc dựng trong UI",
-   "value": "6",
-   "source": "EndlessPortalController.MaxStep"
-  },
-  {
-   "label": "Số bậc trong bảng dự phòng (GDD liệt kê)",
-   "value": "40 trên tổng 44",
-   "source": "EndlessPortalV2ConfigModel.json: FallbackSteps"
-  },
-  {
-   "label": "Số bậc trả phí trong 40 bậc dự phòng",
-   "value": "7",
-   "source": "EndlessPortalV2ConfigModel.json: FallbackSteps"
-  },
-  {
-   "label": "Giá bậc trả phí thấp nhất",
-   "value": "2.99 USD (sort.endlessnv3) đổi 1300 coin",
-   "source": "EndlessPortalV2ConfigModel.json: FallbackSteps[2]"
-  },
-  {
-   "label": "Giá bậc trả phí cao nhất trong chuỗi dự phòng",
-   "value": "89.99 USD (sort.endlessnv90) đổi 50000 coin",
-   "source": "EndlessPortalV2ConfigModel.json: FallbackSteps[38]"
-  },
-  {
-   "label": "Gói đắt nhất trong bảng trao bù",
-   "value": "199.99 USD (sort.endlessnv200) đổi 100000 coin",
-   "source": "EndlessPortalV2ConfigModel.json: FallbackStepsForUniqueInApps[10]"
-  },
-  {
-   "label": "Số sản phẩm trong bảng trao bù",
-   "value": "11",
-   "source": "EndlessPortalV2ConfigModel.json: FallbackStepsForUniqueInApps"
-  },
-  {
-   "label": "Số loại rương trong chuỗi dự phòng",
-   "value": "7 (ChestType 1–7)",
-   "source": "EndlessPortalV2ConfigModel.json: FallbackSteps"
-  },
-  {
-   "label": "Rương lớn nhất",
-   "value": "ChestType 7: 30 Undo, 30 Shuffle, 12 giờ Unlimited Lives",
-   "source": "EndlessPortalV2ConfigModel.json: FallbackSteps[39]"
-  },
-  {
-   "label": "Coin thấp nhất trong chuỗi dự phòng",
-   "value": "200 coin",
-   "source": "EndlessPortalV2ConfigModel.json: FallbackSteps[6]"
-  },
-  {
-   "label": "Coin miễn phí cao nhất trong chuỗi dự phòng",
-   "value": "2500 coin",
-   "source": "EndlessPortalV2ConfigModel.json: FallbackSteps[36]"
-  },
-  {
-   "label": "Các mức Unlimited Lives miễn phí",
-   "value": "1, 2, 3, 4, 8, 12 giờ",
-   "source": "EndlessPortalV2ConfigModel.json: FallbackSteps"
-  },
-  {
-   "label": "CurrencyEarnReason khi trao thưởng",
-   "value": "EndlessPortal = 14",
-   "source": "Modules.Contexts.Application.Inventory.Scripts.CurrencyEarnReason"
-  },
-  {
-   "label": "Phân loại giao dịch IAP",
-   "value": "IAPOrigin.EndlessPortal = 3, IAPReason.Endless = 5",
-   "source": "Modules.Contexts.Application.IAP.Scripts"
-  },
-  {
-   "label": "Số trạng thái sự kiện",
-   "value": "6 (Disable=0 … WaitingIntroduce=5)",
-   "source": "EndlessPortalStateService.GetState"
-  },
-  {
-   "label": "Số nguồn mở popup",
-   "value": "2 (LobbyIcon=0, EventStart=1)",
-   "source": "EndlessPortalPopupImpressionSource"
-  },
-  {
-   "label": "Tên bản ghi đồng bộ",
-   "value": "EndlessPortalSyncDataModel (chỉ chứa CurrentStepIndex)",
-   "source": "EndlessPortalDataService.GetSyncName"
-  },
-  {
-   "label": "Kích thước config hoạt ảnh",
-   "value": "EndlessPortalAnimationConfig 44 field, EndlessPortalLobbyButtonAnimationConfig 37 field",
-   "source": "Modules.Contexts.Home.Monetization.EndlessPortal.Scripts.UI"
-  }
- ],
- "config_highlights": [
-  {
-   "key": "EndlessPortalV2ConfigModel.json: IsEnable",
-   "value": "false",
-   "meaning": "Mặc định tắt, remote config bật ưu đãi"
-  },
-  {
-   "key": "EndlessPortalV2ConfigModel.json: FirstLevelToShow",
-   "value": "100",
-   "meaning": "Level tối thiểu để thấy Endless Portal"
-  },
-  {
-   "key": "EndlessPortalV2ConfigModel.json: EventType",
-   "value": "3",
-   "meaning": "Loại sự kiện gửi kèm get và claim request"
-  },
-  {
-   "key": "EndlessPortalService.StepCountInUI",
-   "value": "6",
-   "meaning": "Số bậc luôn hiển thị trong cửa sổ popup"
-  },
-  {
-   "key": "EndlessPortalController.MaxStep",
-   "value": "6",
-   "meaning": "Số thẻ bậc được factory dựng"
-  },
-  {
-   "key": "FallbackSteps[0]",
-   "value": "1 Undo, miễn phí",
-   "meaning": "Bậc đầu chuỗi dự phòng, mồi người chơi vào chuỗi"
-  },
-  {
-   "key": "FallbackSteps[2]",
-   "value": "sort.endlessnv3, 2.99 USD đổi 1300 coin",
-   "meaning": "Bậc trả phí đầu tiên"
-  },
-  {
-   "key": "FallbackSteps[8]",
-   "value": "sort.endlessnv6, 5.99 USD đổi 2000 coin",
-   "meaning": "Bậc trả phí thứ hai"
-  },
-  {
-   "key": "FallbackSteps[14]",
-   "value": "sort.endlessnv8, 7.99 USD đổi 3000 coin",
-   "meaning": "Bậc trả phí thứ ba"
-  },
-  {
-   "key": "FallbackSteps[20]",
-   "value": "sort.endlessnv12, 11.99 USD đổi 4500 coin",
-   "meaning": "Bậc trả phí thứ tư"
-  },
-  {
-   "key": "FallbackSteps[26]",
-   "value": "sort.endlessnv25, 24.99 USD đổi 10000 coin",
-   "meaning": "Bậc trả phí thứ năm"
-  },
-  {
-   "key": "FallbackSteps[32]",
-   "value": "sort.endlessnv45, 44.99 USD đổi 15000 coin",
-   "meaning": "Bậc trả phí thứ sáu"
-  },
-  {
-   "key": "FallbackSteps[38]",
-   "value": "sort.endlessnv90, 89.99 USD đổi 50000 coin",
-   "meaning": "Bậc trả phí cuối trong 40 bậc được liệt kê"
-  },
-  {
-   "key": "FallbackSteps[4] ChestType 1",
-   "value": "1 Undo, 1 Shuffle",
-   "meaning": "Rương nhỏ nhất của chuỗi"
-  },
-  {
-   "key": "FallbackSteps[39] ChestType 7",
-   "value": "30 Undo, 30 Shuffle, 12 giờ Unlimited Lives",
-   "meaning": "Rương lớn nhất của chuỗi, đóng vai trò mồi nhử cuối"
-  },
-  {
-   "key": "FallbackStepsForUniqueInApps",
-   "value": "11 sản phẩm từ 2.99 đến 199.99 USD",
-   "meaning": "Bảng tra theo productId để trao bù giao dịch tới trễ"
-  },
-  {
-   "key": "sort.endlessnv120",
-   "value": "119.99 USD đổi 65000 coin",
-   "meaning": "Gói lớn chỉ có trong bảng trao bù"
-  },
-  {
-   "key": "sort.endlessnv200",
-   "value": "199.99 USD đổi 100000 coin",
-   "meaning": "Gói đắt nhất trong bảng trao bù"
-  },
-  {
-   "key": "EndlessPortalStateType",
-   "value": "Disable=0, ProgressNotEnough=1, NoCache=2, InProgress=3, TimeIsUp=4, WaitingIntroduce=5",
-   "meaning": "Máy trạng thái điều khiển icon và popup"
-  },
-  {
-   "key": "EndlessPortalPopupImpressionSource",
-   "value": "LobbyIcon=0, EventStart=1",
-   "meaning": "Nguồn mở popup gửi kèm analytics"
-  },
-  {
-   "key": "IAPOrigin.EndlessPortal / IAPReason.Endless",
-   "value": "3 / 5",
-   "meaning": "Phân loại giao dịch mua bậc"
-  },
-  {
-   "key": "CurrencyEarnReason.EndlessPortal",
-   "value": "14",
-   "meaning": "Lý do nhận thưởng khi mở bậc"
-  },
-  {
-   "key": "EndlessPortalResponse",
-   "value": "EventId, StartTime, FinishTime, IsFinished, Segment, Steps (server)",
-   "meaning": "Phiên sự kiện và danh sách bậc thật"
-  },
-  {
-   "key": "EndlessPortalRewardStepModel",
-   "value": "{RewardModels, IAPConfigModel}",
-   "meaning": "Cấu trúc một bậc: thưởng cộng sản phẩm phải mua"
-  },
-  {
-   "key": "EndlessPortalSyncDataModel",
-   "value": "chỉ chứa CurrentStepIndex",
-   "meaning": "Khối đồng bộ duy nhất của tính năng"
-  },
-  {
-   "key": "EndlessPortalDataModel.ForceShownAtEventStart",
-   "value": "client, không đồng bộ",
-   "meaning": "Cờ đã ép mở popup khi sự kiện bắt đầu"
-  },
-  {
-   "key": "Localization: EndlessPortal",
-   "value": "\"Endless Portal\"",
-   "meaning": "Tên hiển thị của tính năng"
-  },
-  {
-   "key": "Localization: EndlessPortalPopupInfo",
-   "value": "\"Claim each offer to unlock free rewards!\"",
-   "meaning": "Câu mô tả trong popup"
-  },
-  {
-   "key": "Localization: EndlessPortalWarning",
-   "value": "\"Accept previous offer to open\"",
-   "meaning": "Text trên bậc bị khóa"
-  },
-  {
-   "key": "StorePurchaseFailureReason",
-   "value": "NotInitialized=1, NotRequestedInApp=2, ProductIdIsNull=3, ProductIdIsNotAvailableToPurchaseSomehow=4, CouldNotVerifyFromBackend=5",
-   "meaning": "Lý do mua thất bại gửi kèm purchase_failed"
-  }
- ],
- "tips": [
-  "Xen kẽ bậc miễn phí giữa các bậc trả phí giữ người chơi tiếp tục leo chuỗi ngay cả khi không mua.",
-  "Cửa sổ 6 bậc luôn để lộ một phần thưởng lớn phía sau, biến chuỗi thành một chuỗi mục tiêu ngắn nối tiếp nhau.",
-  "Chỉ số quay vòng khiến chuỗi không bao giờ hết, nên người chi tiêu mạnh vẫn luôn có bậc kế tiếp để mua.",
-  "Giá bậc trả phí trong chuỗi dự phòng leo từ 2.99 lên 89.99 USD, mỗi nấc cách nhau 6 bậc.",
-  "Bảng tra theo productId là lưới an toàn: người chơi vẫn nhận đúng hàng dù app bị kill giữa giao dịch."
- ],
- "categories": [
-  "Offer/IAP",
-  "Kinh tế",
-  "Live-ops",
-  "Meta"
- ]
 }

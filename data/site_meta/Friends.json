@@ -1,411 +1,411 @@
 {
- "id": "Friends",
- "title": "Bạn bè (Friends)",
- "tagline": "Danh sách bạn 1-1 tách khỏi Teams: tìm bằng User ID, gợi ý từ server, đồng bộ bạn Facebook và nhận thưởng liên kết một lần.",
- "infobox": [
-  [
-   "Loại",
-   "Xã hội"
+  "id": "Friends",
+  "title": "Bạn bè (Friends)",
+  "tagline": "Danh sách bạn 1-1 tách khỏi Teams: tìm bằng User ID, gợi ý từ server, đồng bộ bạn Facebook và nhận thưởng liên kết một lần.",
+  "infobox": [
+    [
+      "Loại",
+      "Xã hội"
+    ],
+    [
+      "Mở khóa",
+      "Theo cờ FriendsConfigModel.IsEnabled, không có điều kiện level trong client (suy luận)"
+    ],
+    [
+      "Tham gia",
+      "Cá nhân, quan hệ 1-1"
+    ],
+    [
+      "Tiền tệ",
+      "Coin (thưởng liên kết Facebook)"
+    ],
+    [
+      "Thưởng chính",
+      "300 coin khi liên kết Facebook lần đầu (FbConnectReward, json default)"
+    ],
+    [
+      "Điều kiện / phụ thuộc",
+      "Nhánh bạn Facebook cần IsFacebookFriendsEnabled; giới hạn 100 bạn (MaxFriendCount)"
+    ],
+    [
+      "Manager",
+      "FriendsService"
+    ]
   ],
-  [
-   "Mở khóa",
-   "Theo cờ FriendsConfigModel.IsEnabled, không có điều kiện level trong client (suy luận)"
+  "description": [
+    "Friends là danh sách bạn bè 1-1, hoàn toàn tách biệt với hệ thống Teams.",
+    "Người chơi tìm bạn bằng User ID công khai, nhận gợi ý từ backend, gửi và trả lời lời mời kết bạn, hoặc xóa bạn.",
+    "Mỗi người bạn hiển thị avatar, khung, name style, tiến độ level và tên đội.",
+    "Danh sách bạn còn là nguồn dữ liệu cho bảng xếp hạng bạn bè.",
+    "Khi liên kết Facebook lần đầu, game tự thêm bạn Facebook đang chơi và trao một phần thưởng chỉ một lần.",
+    "Mọi thao tác đều gửi analytics friend_interaction kèm nhãn nguồn để phân tích kênh kết bạn nào hiệu quả.",
+    "Toàn bộ quan hệ bạn bè nằm trên backend; client chỉ lưu danh sách id lời mời đến, cờ chưa xem và cờ đã nhận thưởng Facebook.",
+    "Có thể kết bạn qua deeplink mời, liên thông trực tiếp với tính năng Referral.",
+    "Chấm đỏ trên tab Friends bật khi có lời mời mới và tắt ngay khi người chơi mở tab."
   ],
-  [
-   "Tham gia",
-   "Cá nhân, quan hệ 1-1"
+  "notes": [
+    "Lưu ý: giới hạn 100 bạn là giá trị mặc định trong client; remote config có thể ghi đè MaxFriendCount (server).",
+    "Lưu ý: khi danh sách đầy, người chơi không gửi được lời mời và cũng không chấp nhận được lời mời đến.",
+    "Cờ DidClaimSyncReward được đưa vào dữ liệu đồng bộ để ngăn nhận lại thưởng Facebook. Đây là cơ chế client có nguồn; chưa kiểm chống nhận lặp qua hai thiết bị hoặc mọi lỗi backend.",
+    "Lưu ý: ô tìm kiếm User ID giới hạn 11 ký tự.",
+    "Lưu ý: nhánh tự thêm bạn Facebook vẫn chịu giới hạn MaxFriendCount như thao tác thủ công.",
+    "Lưu ý: nội dung FbConnectReward thật do Firebase Remote Config quyết định; 300 coin chỉ là bản mặc định trong build (gaps).",
+    "Lưu ý: cách backend sinh lý do gợi ý (SuggestionReason) không nhìn thấy được từ client (gaps)."
   ],
-  [
-   "Tiền tệ",
-   "Coin (thưởng liên kết Facebook)"
+  "how_it_works": [
+    "Sau khi có dữ liệu người chơi, trạng thái chuyển Initializing (1) và bắn tín hiệu bắt đầu khởi tạo (InitializeData).",
+    "Bốn request chạy để nạp dữ liệu: danh sách bạn, lời mời đến, lời mời đã gửi và gợi ý kết bạn (RefreshAll).",
+    "Mỗi bản ghi FriendUserData được map sang view model, rồi avatar được nạp qua bộ cache ảnh hồ sơ.",
+    "Danh sách được sắp xếp, trạng thái chuyển Synced (2) hoặc SyncFailed (3) nếu lỗi mạng, và bắn tín hiệu hoàn tất.",
+    "Tab Friends gộp ba nhóm trong một danh sách cuộn, ngăn cách bằng tiêu đề nhóm Friend Requests và Suggested.",
+    "Gợi ý được nạp theo trang, mỗi trang 5 mục (SuggestionPageSize); mỗi mục kèm lý do gợi ý từ server.",
+    "Tìm bạn theo User ID: ô nhập giới hạn 11 ký tự, client gọi FindFriend(FindFriendRequestModel{user_public_id}) và lấy hồ sơ qua /v2/get-profile; không thấy thì hiện 'FriendsUserNotFound'.",
+    "Nút kết bạn đổi nhãn theo quan hệ hiện tại: 'FriendsAdd', 'FriendsPending' hoặc 'FriendsAdded'.",
+    "Gửi lời mời qua /v1/send-friend-request kèm nhãn nguồn directory (friends_tab, profile, suggest, deeplink, fb, auto); analytics ghi action 'send'.",
+    "Nếu danh sách đã đủ MaxFriendCount thì hiện 'FriendListFullErrorMessage'; đã gửi rồi thì 'FriendsAlreadySentRequest'; đã là bạn thì 'FriendsAlreadyAdded'.",
+    "Người nhận chấp nhận hoặc từ chối qua /v1/answer-friend-request; chấp nhận thì bản ghi chuyển sang danh sách bạn và bắn FriendAddedSignal.",
+    "Xóa bạn cần xác nhận trong popup riêng rồi gọi /v1/delete-friend (action 'delete'); bỏ qua gợi ý gọi /v1/dismiss-friend-suggestion (action 'dismiss').",
+    "Khi Facebook trả về danh sách bạn, client lọc id không hợp lệ rồi gọi /v1/auto-add-fb-friends để kết bạn hàng loạt với nhãn nguồn fb hoặc auto.",
+    "Nếu chưa nhận thưởng liên kết, phần thưởng FbConnectReward (json default 300 coin) được trao một lần và cờ DidClaimSyncReward được đặt true.",
+    "Deeplink mời tách id người mời bằng biểu thức adj_label=([^\\s]+) rồi gọi /v1/auto-add-friend với nhãn nguồn deeplink.",
+    "Sau mỗi lần thắng level, cờ đồng bộ được bật và lần cập nhật định kỳ kế tiếp sẽ làm mới toàn bộ dữ liệu bạn bè; dữ liệu cục bộ lưu qua khối 'FriendsSyncModel' và bị xóa sạch khi xóa tài khoản."
   ],
-  [
-   "Thưởng chính",
-   "300 coin khi liên kết Facebook lần đầu (FbConnectReward, json default)"
+  "reward_tables": [
+    {
+      "title": "PHẦN THƯỞNG CỦA FRIENDS",
+      "columns": [
+        "Mốc",
+        "Điều kiện",
+        "Phần thưởng"
+      ],
+      "rows": [
+        [
+          "Liên kết Facebook lần đầu",
+          "Đăng nhập Facebook khi IsFacebookFriendsEnabled bật, chỉ một lần trong đời tài khoản",
+          "300 coin (FbConnectReward, json default; giá trị thật do remote config)"
+        ],
+        [
+          "Mời bạn mới đạt mốc level",
+          "Bạn được mời qua deeplink đạt mốc tiến độ",
+          "Do ReferralService quản lý (xem tính năng Referral)"
+        ]
+      ]
+    },
+    {
+      "title": "GIỚI HẠN VÀ THAM SỐ CẤU HÌNH",
+      "columns": [
+        "Tham số",
+        "Giá trị mặc định",
+        "Ghi chú"
+      ],
+      "rows": [
+        [
+          "FriendsConfigModel.IsEnabled",
+          "false",
+          "Server phải bật thì Friends mới sống"
+        ],
+        [
+          "FriendsConfigModel.MaxFriendCount",
+          "100",
+          "Số bạn tối đa, remote config ghi đè (server)"
+        ],
+        [
+          "FriendsConfigModel.IsFacebookFriendsEnabled",
+          "false",
+          "Bật nhánh tự thêm bạn Facebook"
+        ],
+        [
+          "FriendsConfigModel.FbConnectReward",
+          "CurrencyType 1, Amount 300",
+          "300 coin cho lần liên kết Facebook đầu tiên"
+        ],
+        [
+          "FriendsService.SuggestionPageSize",
+          "5",
+          "Số gợi ý nạp mỗi trang"
+        ],
+        [
+          "FindFriendPopup._maxSearchTermLength",
+          "11",
+          "Độ dài tối đa của User ID nhập khi tìm bạn"
+        ]
+      ]
+    }
   ],
-  [
-   "Điều kiện / phụ thuộc",
-   "Nhánh bạn Facebook cần IsFacebookFriendsEnabled; giới hạn 100 bạn (MaxFriendCount)"
+  "key_numbers": [
+    {
+      "label": "Số bạn tối đa",
+      "value": "100",
+      "source": "FriendsConfigModel.json: MaxFriendCount"
+    },
+    {
+      "label": "IsEnabled mặc định",
+      "value": "false",
+      "source": "FriendsConfigModel.json: IsEnabled"
+    },
+    {
+      "label": "IsFacebookFriendsEnabled mặc định",
+      "value": "false",
+      "source": "FriendsConfigModel.json: IsFacebookFriendsEnabled"
+    },
+    {
+      "label": "Thưởng liên kết Facebook",
+      "value": "300 coin (CurrencyType 1)",
+      "source": "FriendsConfigModel.json: FbConnectReward"
+    },
+    {
+      "label": "Số gợi ý mỗi trang",
+      "value": "5",
+      "source": "FriendsService.SuggestionPageSize"
+    },
+    {
+      "label": "Độ dài tối đa của User ID khi tìm",
+      "value": "11 ký tự",
+      "source": "FindFriendPopup._maxSearchTermLength"
+    },
+    {
+      "label": "Số trạng thái đồng bộ",
+      "value": "4 (None=0, Initializing=1, Synced=2, SyncFailed=3)",
+      "source": "FriendsServiceStatus"
+    },
+    {
+      "label": "Số nhãn nguồn gửi lời mời",
+      "value": "6 (friends_tab, profile, suggest, deeplink, fb, auto)",
+      "source": "FriendsService (directory)"
+    },
+    {
+      "label": "Số loại hành động analytics",
+      "value": "5 (send, accept, reject, delete, dismiss)",
+      "source": "friend_interaction"
+    },
+    {
+      "label": "Số endpoint Friends",
+      "value": "11 endpoint /v1/* cộng /v2/get-profile",
+      "source": "BackendEnvironmentConfig.asset"
+    },
+    {
+      "label": "Số request khi khởi tạo",
+      "value": "4 (danh sách bạn, lời mời đến, lời mời đã gửi, gợi ý)",
+      "source": "FriendsService.RefreshAll"
+    },
+    {
+      "label": "Regex tách id từ deeplink",
+      "value": "adj_label=([^\\s]+)",
+      "source": "FriendsService.TryAddFriendsFromDeeplink"
+    },
+    {
+      "label": "Tên khối đồng bộ",
+      "value": "FriendsSyncModel",
+      "source": "FriendsDataService.GetSyncName"
+    },
+    {
+      "label": "Cờ đã nhận thưởng Facebook",
+      "value": "DidClaimSyncReward, mặc định false",
+      "source": "FriendsSyncModel.DidClaimSyncReward"
+    },
+    {
+      "label": "Số trường của một bản ghi bạn từ server",
+      "value": "10 (FriendPublicId … FriendTeamName)",
+      "source": "FriendUserData / FriendListResponse"
+    },
+    {
+      "label": "Số trường view model người chơi",
+      "value": "10 (IsMe, PublicId, UserName, AvatarUrl, AvatarId, Progress, FrameId, NameStyleId, TeamName, TokenId)",
+      "source": "FriendUserViewModel"
+    },
+    {
+      "label": "Dữ liệu lưu cục bộ",
+      "value": "IncomingRequestIds, HasUnseenRequests, SyncModel",
+      "source": "FriendsModel"
+    },
+    {
+      "label": "Nhãn trạng thái nút kết bạn",
+      "value": "FriendsAdd, FriendsPending, FriendsAdded",
+      "source": "FindFriendPopup / FriendProfileController"
+    },
+    {
+      "label": "Thông báo khi không tìm thấy",
+      "value": "FriendsUserNotFound",
+      "source": "FindFriendPopup"
+    },
+    {
+      "label": "Thông báo khi danh sách đầy",
+      "value": "FriendListFullErrorMessage",
+      "source": "FriendsService.IsFriendListFull"
+    },
+    {
+      "label": "Chuỗi lỗi mạng của backend",
+      "value": "unknown_error",
+      "source": "FriendsWebResponse"
+    },
+    {
+      "label": "Số sự kiện analytics",
+      "value": "5 (friend_interaction, friends_count, friends_tab_impression, invite_popup_impression, invite_send)",
+      "source": "Friends analytics"
+    }
   ],
-  [
-   "Manager",
-   "FriendsService"
+  "config_highlights": [
+    {
+      "key": "FriendsConfigModel.json: IsEnabled",
+      "value": "false",
+      "meaning": "Mặc định tắt, server bật tính năng Friends"
+    },
+    {
+      "key": "FriendsConfigModel.json: MaxFriendCount",
+      "value": "100",
+      "meaning": "Số bạn tối đa trước khi danh sách bị coi là đầy"
+    },
+    {
+      "key": "FriendsConfigModel.json: IsFacebookFriendsEnabled",
+      "value": "false",
+      "meaning": "Bật nhánh tự thêm bạn Facebook"
+    },
+    {
+      "key": "FriendsConfigModel.json: FbConnectReward.CurrencyType",
+      "value": "1",
+      "meaning": "Thưởng liên kết Facebook trả bằng coin"
+    },
+    {
+      "key": "FriendsConfigModel.json: FbConnectReward.Amount",
+      "value": "300",
+      "meaning": "Số coin thưởng cho lần liên kết Facebook đầu tiên"
+    },
+    {
+      "key": "FriendsService.SuggestionPageSize",
+      "value": "5",
+      "meaning": "Số gợi ý kết bạn nạp mỗi trang"
+    },
+    {
+      "key": "FindFriendPopup._maxSearchTermLength",
+      "value": "11",
+      "meaning": "Độ dài tối đa của User ID nhập khi tìm bạn"
+    },
+    {
+      "key": "FriendsServiceStatus",
+      "value": "None=0, Initializing=1, Synced=2, SyncFailed=3",
+      "meaning": "Trạng thái đồng bộ dữ liệu bạn bè"
+    },
+    {
+      "key": "directory (nguồn gửi lời mời)",
+      "value": "friends_tab, profile, suggest, deeplink, fb, auto",
+      "meaning": "Nhãn nguồn dùng cho analytics"
+    },
+    {
+      "key": "friend_interaction.action",
+      "value": "send, accept, reject, delete, dismiss",
+      "meaning": "Loại tương tác gửi lên analytics"
+    },
+    {
+      "key": "regex deeplink",
+      "value": "adj_label=([^\\s]+)",
+      "meaning": "Mẫu tách id người mời từ deeplink Adjust"
+    },
+    {
+      "key": "FriendsModel",
+      "value": "IncomingRequestIds, HasUnseenRequests, SyncModel",
+      "meaning": "Dữ liệu Friends lưu cục bộ"
+    },
+    {
+      "key": "FriendsSyncModel.DidClaimSyncReward",
+      "value": "false",
+      "meaning": "Đã nhận thưởng liên kết Facebook chưa"
+    },
+    {
+      "key": "FriendsSyncModel",
+      "value": "\"FriendsSyncModel\"",
+      "meaning": "Tên khối dữ liệu trong SyncService"
+    },
+    {
+      "key": "FriendUserViewModel",
+      "value": "IsMe, PublicId, UserName, AvatarUrl, AvatarId, Progress, FrameId, NameStyleId, TeamName, TokenId",
+      "meaning": "Thông tin hiển thị của một người chơi trong hệ Friends"
+    },
+    {
+      "key": "FriendUserData",
+      "value": "FriendPublicId, FriendNickName, FriendImageUrl, FriendImageId, FriendProgress, FriendFrameId, FriendNameStyle, FriendTokenId, FriendTeamId, FriendTeamName",
+      "meaning": "Bản ghi bạn bè trả về từ backend"
+    },
+    {
+      "key": "/v1/send-friend-request",
+      "value": "SendFriendRequestModel{to_user_public_id}",
+      "meaning": "Gửi lời mời kết bạn"
+    },
+    {
+      "key": "/v1/get-my-friend-requests",
+      "value": "FriendRequestListResponse",
+      "meaning": "Lấy lời mời đến"
+    },
+    {
+      "key": "/v1/get-my-sent-friend-requests",
+      "value": "FriendRequestListResponse",
+      "meaning": "Lấy lời mời đã gửi"
+    },
+    {
+      "key": "/v1/answer-friend-request",
+      "value": "AnswerFriendRequestModel{from_user_public_id, is_accepted}",
+      "meaning": "Chấp nhận hoặc từ chối lời mời"
+    },
+    {
+      "key": "/v1/cancel-friend-request",
+      "value": "CancelFriendRequestModel{to_user_public_id}",
+      "meaning": "Hủy lời mời đã gửi"
+    },
+    {
+      "key": "/v1/get-my-friend-list",
+      "value": "FriendListResponse",
+      "meaning": "Lấy danh sách bạn"
+    },
+    {
+      "key": "/v1/delete-friend",
+      "value": "DeleteFriendRequestModel{friend_user_public_id}",
+      "meaning": "Xóa bạn"
+    },
+    {
+      "key": "/v1/get-friend-suggestions",
+      "value": "FriendSuggestionsResponse",
+      "meaning": "Lấy gợi ý kết bạn"
+    },
+    {
+      "key": "/v1/dismiss-friend-suggestion",
+      "value": "DismissFriendSuggestionRequestModel{user_public_id}",
+      "meaning": "Bỏ qua một gợi ý"
+    },
+    {
+      "key": "/v1/auto-add-fb-friends",
+      "value": "AutoAddFacebookFriendsRequestModel{facebook_ids}",
+      "meaning": "Tự kết bạn hàng loạt với bạn Facebook"
+    },
+    {
+      "key": "/v1/auto-add-friend",
+      "value": "AutoAddFriendRequestModel{target_user_public_id}",
+      "meaning": "Kết bạn tự động qua deeplink"
+    },
+    {
+      "key": "/v2/get-profile",
+      "value": "FriendProfileData",
+      "meaning": "Tra cứu hồ sơ người chơi theo User ID"
+    },
+    {
+      "key": "Localization nhóm danh sách",
+      "value": "FriendsFriendRequests, FriendsSuggested",
+      "meaning": "Tiêu đề hai nhóm trong tab Friends"
+    },
+    {
+      "key": "Localization thao tác",
+      "value": "FriendsDismiss, FriendRemoveFriendTitle, FriendsAreYouSureToRemoveFriend, FriendsUserIdCopied",
+      "meaning": "Text nút và popup xác nhận"
+    }
+  ],
+  "tips": [
+    "Nhãn directory hỗ trợ so sánh nguồn gửi lời mời. Muốn đo kênh tạo nhiều bạn được chấp nhận cần nối request với kết quả accept; nhãn nguồn riêng không chứng minh attribution hoặc hiệu quả nhân quả chính xác.",
+    "Thưởng Facebook có cờ đã nhận để khuyến khích liên kết một lần theo tài khoản; không suy từ cờ này rằng mọi hình thức nhận lặp hoặc lạm dụng đều bị chặn.",
+    "Tự thêm bạn Facebook hàng loạt giúp danh sách bạn có nội dung ngay, tránh trạng thái trống rỗng ban đầu.",
+    "Gợi ý theo trang 5 mục giữ danh sách gọn và cho phép backend luân phiên nhóm gợi ý.",
+    "Việc tách Friends khỏi Teams cho phép hai hệ xã hội có nhịp và mục tiêu khác nhau mà không đụng nhau."
+  ],
+  "categories": [
+    "Xã hội",
+    "Meta",
+    "Tiến trình"
   ]
- ],
- "description": [
-  "Friends là danh sách bạn bè 1-1, hoàn toàn tách biệt với hệ thống Teams.",
-  "Người chơi tìm bạn bằng User ID công khai, nhận gợi ý từ backend, gửi và trả lời lời mời kết bạn, hoặc xóa bạn.",
-  "Mỗi người bạn hiển thị avatar, khung, name style, tiến độ level và tên đội.",
-  "Danh sách bạn còn là nguồn dữ liệu cho bảng xếp hạng bạn bè.",
-  "Khi liên kết Facebook lần đầu, game tự thêm bạn Facebook đang chơi và trao một phần thưởng chỉ một lần.",
-  "Mọi thao tác đều gửi analytics friend_interaction kèm nhãn nguồn để phân tích kênh kết bạn nào hiệu quả.",
-  "Toàn bộ quan hệ bạn bè nằm trên backend; client chỉ lưu danh sách id lời mời đến, cờ chưa xem và cờ đã nhận thưởng Facebook.",
-  "Có thể kết bạn qua deeplink mời, liên thông trực tiếp với tính năng Referral.",
-  "Chấm đỏ trên tab Friends bật khi có lời mời mới và tắt ngay khi người chơi mở tab."
- ],
- "notes": [
-  "Lưu ý: giới hạn 100 bạn là giá trị mặc định trong client; remote config có thể ghi đè MaxFriendCount (server).",
-  "Lưu ý: khi danh sách đầy, người chơi không gửi được lời mời và cũng không chấp nhận được lời mời đến.",
-  "Lưu ý: cờ DidClaimSyncReward đồng bộ theo tài khoản nên đổi máy vẫn không nhận lại được thưởng Facebook.",
-  "Lưu ý: ô tìm kiếm User ID giới hạn 11 ký tự.",
-  "Lưu ý: nhánh tự thêm bạn Facebook vẫn chịu giới hạn MaxFriendCount như thao tác thủ công.",
-  "Lưu ý: nội dung FbConnectReward thật do Firebase Remote Config quyết định; 300 coin chỉ là bản mặc định trong build (gaps).",
-  "Lưu ý: cách backend sinh lý do gợi ý (SuggestionReason) không nhìn thấy được từ client (gaps)."
- ],
- "how_it_works": [
-  "Sau khi có dữ liệu người chơi, trạng thái chuyển Initializing (1) và bắn tín hiệu bắt đầu khởi tạo (InitializeData).",
-  "Bốn request chạy để nạp dữ liệu: danh sách bạn, lời mời đến, lời mời đã gửi và gợi ý kết bạn (RefreshAll).",
-  "Mỗi bản ghi FriendUserData được map sang view model, rồi avatar được nạp qua bộ cache ảnh hồ sơ.",
-  "Danh sách được sắp xếp, trạng thái chuyển Synced (2) hoặc SyncFailed (3) nếu lỗi mạng, và bắn tín hiệu hoàn tất.",
-  "Tab Friends gộp ba nhóm trong một danh sách cuộn, ngăn cách bằng tiêu đề nhóm Friend Requests và Suggested.",
-  "Gợi ý được nạp theo trang, mỗi trang 5 mục (SuggestionPageSize); mỗi mục kèm lý do gợi ý từ server.",
-  "Tìm bạn theo User ID: ô nhập giới hạn 11 ký tự, client gọi FindFriend(FindFriendRequestModel{user_public_id}) và lấy hồ sơ qua /v2/get-profile; không thấy thì hiện 'FriendsUserNotFound'.",
-  "Nút kết bạn đổi nhãn theo quan hệ hiện tại: 'FriendsAdd', 'FriendsPending' hoặc 'FriendsAdded'.",
-  "Gửi lời mời qua /v1/send-friend-request kèm nhãn nguồn directory (friends_tab, profile, suggest, deeplink, fb, auto); analytics ghi action 'send'.",
-  "Nếu danh sách đã đủ MaxFriendCount thì hiện 'FriendListFullErrorMessage'; đã gửi rồi thì 'FriendsAlreadySentRequest'; đã là bạn thì 'FriendsAlreadyAdded'.",
-  "Người nhận chấp nhận hoặc từ chối qua /v1/answer-friend-request; chấp nhận thì bản ghi chuyển sang danh sách bạn và bắn FriendAddedSignal.",
-  "Xóa bạn cần xác nhận trong popup riêng rồi gọi /v1/delete-friend (action 'delete'); bỏ qua gợi ý gọi /v1/dismiss-friend-suggestion (action 'dismiss').",
-  "Khi Facebook trả về danh sách bạn, client lọc id không hợp lệ rồi gọi /v1/auto-add-fb-friends để kết bạn hàng loạt với nhãn nguồn fb hoặc auto.",
-  "Nếu chưa nhận thưởng liên kết, phần thưởng FbConnectReward (json default 300 coin) được trao một lần và cờ DidClaimSyncReward được đặt true.",
-  "Deeplink mời tách id người mời bằng biểu thức adj_label=([^\\s]+) rồi gọi /v1/auto-add-friend với nhãn nguồn deeplink.",
-  "Sau mỗi lần thắng level, cờ đồng bộ được bật và lần cập nhật định kỳ kế tiếp sẽ làm mới toàn bộ dữ liệu bạn bè; dữ liệu cục bộ lưu qua khối 'FriendsSyncModel' và bị xóa sạch khi xóa tài khoản."
- ],
- "reward_tables": [
-  {
-   "title": "PHẦN THƯỞNG CỦA FRIENDS",
-   "columns": [
-    "Mốc",
-    "Điều kiện",
-    "Phần thưởng"
-   ],
-   "rows": [
-    [
-     "Liên kết Facebook lần đầu",
-     "Đăng nhập Facebook khi IsFacebookFriendsEnabled bật, chỉ một lần trong đời tài khoản",
-     "300 coin (FbConnectReward, json default; giá trị thật do remote config)"
-    ],
-    [
-     "Mời bạn mới đạt mốc level",
-     "Bạn được mời qua deeplink đạt mốc tiến độ",
-     "Do ReferralService quản lý (xem tính năng Referral)"
-    ]
-   ]
-  },
-  {
-   "title": "GIỚI HẠN VÀ THAM SỐ CẤU HÌNH",
-   "columns": [
-    "Tham số",
-    "Giá trị mặc định",
-    "Ghi chú"
-   ],
-   "rows": [
-    [
-     "FriendsConfigModel.IsEnabled",
-     "false",
-     "Server phải bật thì Friends mới sống"
-    ],
-    [
-     "FriendsConfigModel.MaxFriendCount",
-     "100",
-     "Số bạn tối đa, remote config ghi đè (server)"
-    ],
-    [
-     "FriendsConfigModel.IsFacebookFriendsEnabled",
-     "false",
-     "Bật nhánh tự thêm bạn Facebook"
-    ],
-    [
-     "FriendsConfigModel.FbConnectReward",
-     "CurrencyType 1, Amount 300",
-     "300 coin cho lần liên kết Facebook đầu tiên"
-    ],
-    [
-     "FriendsService.SuggestionPageSize",
-     "5",
-     "Số gợi ý nạp mỗi trang"
-    ],
-    [
-     "FindFriendPopup._maxSearchTermLength",
-     "11",
-     "Độ dài tối đa của User ID nhập khi tìm bạn"
-    ]
-   ]
-  }
- ],
- "key_numbers": [
-  {
-   "label": "Số bạn tối đa",
-   "value": "100",
-   "source": "FriendsConfigModel.json: MaxFriendCount"
-  },
-  {
-   "label": "IsEnabled mặc định",
-   "value": "false",
-   "source": "FriendsConfigModel.json: IsEnabled"
-  },
-  {
-   "label": "IsFacebookFriendsEnabled mặc định",
-   "value": "false",
-   "source": "FriendsConfigModel.json: IsFacebookFriendsEnabled"
-  },
-  {
-   "label": "Thưởng liên kết Facebook",
-   "value": "300 coin (CurrencyType 1)",
-   "source": "FriendsConfigModel.json: FbConnectReward"
-  },
-  {
-   "label": "Số gợi ý mỗi trang",
-   "value": "5",
-   "source": "FriendsService.SuggestionPageSize"
-  },
-  {
-   "label": "Độ dài tối đa của User ID khi tìm",
-   "value": "11 ký tự",
-   "source": "FindFriendPopup._maxSearchTermLength"
-  },
-  {
-   "label": "Số trạng thái đồng bộ",
-   "value": "4 (None=0, Initializing=1, Synced=2, SyncFailed=3)",
-   "source": "FriendsServiceStatus"
-  },
-  {
-   "label": "Số nhãn nguồn gửi lời mời",
-   "value": "6 (friends_tab, profile, suggest, deeplink, fb, auto)",
-   "source": "FriendsService (directory)"
-  },
-  {
-   "label": "Số loại hành động analytics",
-   "value": "5 (send, accept, reject, delete, dismiss)",
-   "source": "friend_interaction"
-  },
-  {
-   "label": "Số endpoint Friends",
-   "value": "11 endpoint /v1/* cộng /v2/get-profile",
-   "source": "BackendEnvironmentConfig.asset"
-  },
-  {
-   "label": "Số request khi khởi tạo",
-   "value": "4 (danh sách bạn, lời mời đến, lời mời đã gửi, gợi ý)",
-   "source": "FriendsService.RefreshAll"
-  },
-  {
-   "label": "Regex tách id từ deeplink",
-   "value": "adj_label=([^\\s]+)",
-   "source": "FriendsService.TryAddFriendsFromDeeplink"
-  },
-  {
-   "label": "Tên khối đồng bộ",
-   "value": "FriendsSyncModel",
-   "source": "FriendsDataService.GetSyncName"
-  },
-  {
-   "label": "Cờ đã nhận thưởng Facebook",
-   "value": "DidClaimSyncReward, mặc định false",
-   "source": "FriendsSyncModel.DidClaimSyncReward"
-  },
-  {
-   "label": "Số trường của một bản ghi bạn từ server",
-   "value": "10 (FriendPublicId … FriendTeamName)",
-   "source": "FriendUserData / FriendListResponse"
-  },
-  {
-   "label": "Số trường view model người chơi",
-   "value": "10 (IsMe, PublicId, UserName, AvatarUrl, AvatarId, Progress, FrameId, NameStyleId, TeamName, TokenId)",
-   "source": "FriendUserViewModel"
-  },
-  {
-   "label": "Dữ liệu lưu cục bộ",
-   "value": "IncomingRequestIds, HasUnseenRequests, SyncModel",
-   "source": "FriendsModel"
-  },
-  {
-   "label": "Nhãn trạng thái nút kết bạn",
-   "value": "FriendsAdd, FriendsPending, FriendsAdded",
-   "source": "FindFriendPopup / FriendProfileController"
-  },
-  {
-   "label": "Thông báo khi không tìm thấy",
-   "value": "FriendsUserNotFound",
-   "source": "FindFriendPopup"
-  },
-  {
-   "label": "Thông báo khi danh sách đầy",
-   "value": "FriendListFullErrorMessage",
-   "source": "FriendsService.IsFriendListFull"
-  },
-  {
-   "label": "Chuỗi lỗi mạng của backend",
-   "value": "unknown_error",
-   "source": "FriendsWebResponse"
-  },
-  {
-   "label": "Số sự kiện analytics",
-   "value": "5 (friend_interaction, friends_count, friends_tab_impression, invite_popup_impression, invite_send)",
-   "source": "Friends analytics"
-  }
- ],
- "config_highlights": [
-  {
-   "key": "FriendsConfigModel.json: IsEnabled",
-   "value": "false",
-   "meaning": "Mặc định tắt, server bật tính năng Friends"
-  },
-  {
-   "key": "FriendsConfigModel.json: MaxFriendCount",
-   "value": "100",
-   "meaning": "Số bạn tối đa trước khi danh sách bị coi là đầy"
-  },
-  {
-   "key": "FriendsConfigModel.json: IsFacebookFriendsEnabled",
-   "value": "false",
-   "meaning": "Bật nhánh tự thêm bạn Facebook"
-  },
-  {
-   "key": "FriendsConfigModel.json: FbConnectReward.CurrencyType",
-   "value": "1",
-   "meaning": "Thưởng liên kết Facebook trả bằng coin"
-  },
-  {
-   "key": "FriendsConfigModel.json: FbConnectReward.Amount",
-   "value": "300",
-   "meaning": "Số coin thưởng cho lần liên kết Facebook đầu tiên"
-  },
-  {
-   "key": "FriendsService.SuggestionPageSize",
-   "value": "5",
-   "meaning": "Số gợi ý kết bạn nạp mỗi trang"
-  },
-  {
-   "key": "FindFriendPopup._maxSearchTermLength",
-   "value": "11",
-   "meaning": "Độ dài tối đa của User ID nhập khi tìm bạn"
-  },
-  {
-   "key": "FriendsServiceStatus",
-   "value": "None=0, Initializing=1, Synced=2, SyncFailed=3",
-   "meaning": "Trạng thái đồng bộ dữ liệu bạn bè"
-  },
-  {
-   "key": "directory (nguồn gửi lời mời)",
-   "value": "friends_tab, profile, suggest, deeplink, fb, auto",
-   "meaning": "Nhãn nguồn dùng cho analytics"
-  },
-  {
-   "key": "friend_interaction.action",
-   "value": "send, accept, reject, delete, dismiss",
-   "meaning": "Loại tương tác gửi lên analytics"
-  },
-  {
-   "key": "regex deeplink",
-   "value": "adj_label=([^\\s]+)",
-   "meaning": "Mẫu tách id người mời từ deeplink Adjust"
-  },
-  {
-   "key": "FriendsModel",
-   "value": "IncomingRequestIds, HasUnseenRequests, SyncModel",
-   "meaning": "Dữ liệu Friends lưu cục bộ"
-  },
-  {
-   "key": "FriendsSyncModel.DidClaimSyncReward",
-   "value": "false",
-   "meaning": "Đã nhận thưởng liên kết Facebook chưa"
-  },
-  {
-   "key": "FriendsSyncModel",
-   "value": "\"FriendsSyncModel\"",
-   "meaning": "Tên khối dữ liệu trong SyncService"
-  },
-  {
-   "key": "FriendUserViewModel",
-   "value": "IsMe, PublicId, UserName, AvatarUrl, AvatarId, Progress, FrameId, NameStyleId, TeamName, TokenId",
-   "meaning": "Thông tin hiển thị của một người chơi trong hệ Friends"
-  },
-  {
-   "key": "FriendUserData",
-   "value": "FriendPublicId, FriendNickName, FriendImageUrl, FriendImageId, FriendProgress, FriendFrameId, FriendNameStyle, FriendTokenId, FriendTeamId, FriendTeamName",
-   "meaning": "Bản ghi bạn bè trả về từ backend"
-  },
-  {
-   "key": "/v1/send-friend-request",
-   "value": "SendFriendRequestModel{to_user_public_id}",
-   "meaning": "Gửi lời mời kết bạn"
-  },
-  {
-   "key": "/v1/get-my-friend-requests",
-   "value": "FriendRequestListResponse",
-   "meaning": "Lấy lời mời đến"
-  },
-  {
-   "key": "/v1/get-my-sent-friend-requests",
-   "value": "FriendRequestListResponse",
-   "meaning": "Lấy lời mời đã gửi"
-  },
-  {
-   "key": "/v1/answer-friend-request",
-   "value": "AnswerFriendRequestModel{from_user_public_id, is_accepted}",
-   "meaning": "Chấp nhận hoặc từ chối lời mời"
-  },
-  {
-   "key": "/v1/cancel-friend-request",
-   "value": "CancelFriendRequestModel{to_user_public_id}",
-   "meaning": "Hủy lời mời đã gửi"
-  },
-  {
-   "key": "/v1/get-my-friend-list",
-   "value": "FriendListResponse",
-   "meaning": "Lấy danh sách bạn"
-  },
-  {
-   "key": "/v1/delete-friend",
-   "value": "DeleteFriendRequestModel{friend_user_public_id}",
-   "meaning": "Xóa bạn"
-  },
-  {
-   "key": "/v1/get-friend-suggestions",
-   "value": "FriendSuggestionsResponse",
-   "meaning": "Lấy gợi ý kết bạn"
-  },
-  {
-   "key": "/v1/dismiss-friend-suggestion",
-   "value": "DismissFriendSuggestionRequestModel{user_public_id}",
-   "meaning": "Bỏ qua một gợi ý"
-  },
-  {
-   "key": "/v1/auto-add-fb-friends",
-   "value": "AutoAddFacebookFriendsRequestModel{facebook_ids}",
-   "meaning": "Tự kết bạn hàng loạt với bạn Facebook"
-  },
-  {
-   "key": "/v1/auto-add-friend",
-   "value": "AutoAddFriendRequestModel{target_user_public_id}",
-   "meaning": "Kết bạn tự động qua deeplink"
-  },
-  {
-   "key": "/v2/get-profile",
-   "value": "FriendProfileData",
-   "meaning": "Tra cứu hồ sơ người chơi theo User ID"
-  },
-  {
-   "key": "Localization nhóm danh sách",
-   "value": "FriendsFriendRequests, FriendsSuggested",
-   "meaning": "Tiêu đề hai nhóm trong tab Friends"
-  },
-  {
-   "key": "Localization thao tác",
-   "value": "FriendsDismiss, FriendRemoveFriendTitle, FriendsAreYouSureToRemoveFriend, FriendsUserIdCopied",
-   "meaning": "Text nút và popup xác nhận"
-  }
- ],
- "tips": [
-  "Nhãn nguồn directory cho phép đo chính xác kênh nào mang lại nhiều bạn nhất: tab, hồ sơ, gợi ý, deeplink hay Facebook.",
-  "Thưởng liên kết Facebook chỉ trao một lần theo tài khoản, đủ để mồi hành vi liên kết mà không bị lạm dụng.",
-  "Tự thêm bạn Facebook hàng loạt giúp danh sách bạn có nội dung ngay, tránh trạng thái trống rỗng ban đầu.",
-  "Gợi ý theo trang 5 mục giữ danh sách gọn và cho phép backend luân phiên nhóm gợi ý.",
-  "Việc tách Friends khỏi Teams cho phép hai hệ xã hội có nhịp và mục tiêu khác nhau mà không đụng nhau."
- ],
- "categories": [
-  "Xã hội",
-  "Meta",
-  "Tiến trình"
- ]
 }
