@@ -53,12 +53,17 @@
     const link=shots[index],img=dialog.querySelector('img'),caption=dialog.querySelector('figcaption'),original=dialog.querySelector('.original-link');
     img.src=link.href;img.alt=link.dataset.caption||link.querySelector('img')?.alt||'Ảnh gốc';caption.textContent=img.alt;
     original.href=link.href;dialog.querySelector('.image-count').textContent=`${index+1} / ${shots.length}`;
+    const focused=document.activeElement;
     dialog.querySelector('[data-prev]').disabled=index===0;dialog.querySelector('[data-next]').disabled=index===shots.length-1;
+    // Disabling the focused arrow can blur focus to BODY; keep keyboard navigation in the modal.
+    if(dialog.open&&dialog.contains(focused)&&focused.matches('button:disabled')){
+      (dialog.querySelector('[data-next]:not(:disabled),[data-prev]:not(:disabled)')||dialog.querySelector('[data-close]')).focus({preventScroll:true});
+    }
   }
   document.addEventListener('click',e=>{
     const link=e.target.closest('a.reader-shot,a.shot');if(!link||!link.querySelector('img'))return;
     e.preventDefault();e.stopImmediatePropagation();opener=link;
-    const group=link.closest('.storyboard,.gallery,.uc-shots,.review-thumbs')||link.parentElement;
+    const group=link.closest('.design-thumbs,.storyboard,.gallery,.uc-shots,.review-thumbs')||link.parentElement;
     shots=Array.from(group.querySelectorAll('a.reader-shot,a.shot'));if(!shots.includes(link))shots=[link];index=shots.indexOf(link);
     if(!dialog){
       dialog=document.createElement('dialog');dialog.className='reader-lightbox';dialog.setAttribute('aria-label','Ảnh gốc và chú thích');
